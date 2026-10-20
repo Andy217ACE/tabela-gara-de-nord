@@ -243,3 +243,11 @@ def test_read_board_speed():
     t0 = time.perf_counter()
     read_board(data)
     assert time.perf_counter() - t0 < 4.0  # target ~2 s; generous for CI noise
+
+
+def test_package_exports_ocrerror_and_read_board():
+    import app.ocr as pkg
+    from app.ocr import OcrError, read_board
+    from app.ocr import reader
+    assert OcrError is reader.OcrError and read_board is reader.read_board
+    assert set(pkg.__all__) >= {"OcrError", "read_board"}
