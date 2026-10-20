@@ -14,6 +14,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.models import Event, Row
+from app.normalize import clean_station
 
 TZ = ZoneInfo("Europe/Bucharest")
 MIN_ROWS = 4
@@ -339,3 +340,63 @@ class Store:
         if ts is None:
             return None
         return (_local(now) - datetime.fromisoformat(ts)).total_seconds()
+
+    # -- history ----------------------------------------------------------
+
+    def history(self, day: date, train: int | None = None, station: str | None = None,
+                board: str | None = None, time_from: str | None = None,
+                time_to: str | None = None) -> list[dict]:
+        """One dict per service of `day`, ordered by sched_time then board.
+
+        `station` is a case/diacritics-insensitive substring (LIKE wildcards are
+        matched literally). `time_from`/`time_to` are inclusive "HH:MM" bounds,
+        compared as strings (zero-padded HH:MM sorts chronologically; a malformed
+        bound simply compares lexicographically). `max_delay` covers every delay
+        seen: the current one plus the old/new values of all delay events.
+        """
+        where, args = ["s.service_date = ?"], [day.isoformat()]
+        if train is not None:
+            where.append("s.train_no = ?")
+            args.append(train)
+        if board is not None:
+            where.append("s.board = ?")
+            args.append(board)
+        if station is not None:
+            q = clean_station(station) or station.strip().upper()
+            esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            where.append("s.station LIKE ? ESCAPE '!'")
+            args.append(f"%{esc}%")
+        if time_from is not None:
+            where.append("s.sched_time >= ?")
+            args.append(time_from)
+        if time_to is not None:
+            where.append("s.sched_time <= ?")
+            args.append(time_to)
+        sql = (
+            "SELECT s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
+            " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen,"
+            " (SELECT MAX(MAX(CAST(e.old AS INTEGER), CAST(e.new AS INTEGER)))"
+            "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
+            " FROM services s WHERE " + " AND ".join(where) +
+            " ORDER BY s.sched_time, s.board, s.train_no"
+        )
+        with self._lock:
+            found = self._conn.execute(sql, args).fetchall()
+        return [{
+            "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
+            "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
+            "max_delay": max(s["last_delay"], s["ev_max"] or 0),
+            "final_delay": s["last_delay"], "platform": s["last_platform"],
+            "status": s["status"], "first_seen": s["first_seen"], "last_seen": s["last_seen"],
+        } for s in found]
+
+    def train_events(self, train_no: int, day: date) -> list[dict]:
+        """Events of every service of `train_no` on `day`, chronological."""
+        with self._lock:
+            found = self._conn.execute(
+                "SELECT e.ts, e.kind, e.old, e.new, s.board, s.sched_time, s.station"
+                " FROM events e JOIN services s ON s.id = e.service_id"
+                " WHERE s.train_no = ? AND s.service_date = ? ORDER BY e.ts, e.id",
+                (train_no, day.isoformat()),
+            ).fetchall()
+        return [dict(r) for r in found]
