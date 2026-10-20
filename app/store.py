@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from app.models import Event, Row
@@ -118,6 +119,30 @@ def service_date(sched_time: str, now: datetime) -> date:
 
 def _plat(p: int | None) -> str | None:
     return None if p is None else str(p)
+
+
+MAX_ENDPOINT_LEN = 500
+MAX_KEY_LEN = 256
+MAX_FOLLOWS = 20
+
+
+@dataclass(frozen=True)
+class Subscription:
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+def _iso(d: date | str) -> str:
+    return d if isinstance(d, str) else d.isoformat()
+
+
+def _check_endpoint(endpoint: str) -> None:
+    if not isinstance(endpoint, str) or len(endpoint) > MAX_ENDPOINT_LEN:
+        raise ValueError("endpoint invalid")
+    u = urlsplit(endpoint)
+    if u.scheme != "https" or not u.hostname:
+        raise ValueError("endpoint invalid")
 
 
 class Store:
@@ -375,7 +400,8 @@ class Store:
         sql = (
             "SELECT s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
             " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen,"
-            " (SELECT MAX(MAX(CAST(e.old AS INTEGER), CAST(e.new AS INTEGER)))"
+            " (SELECT MAX(MAX(COALESCE(CAST(e.old AS INTEGER), 0),"
+            "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
             " FROM services s WHERE " + " AND ".join(where) +
             " ORDER BY s.sched_time, s.board, s.train_no"
@@ -385,8 +411,8 @@ class Store:
         return [{
             "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
             "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
-            "max_delay": max(s["last_delay"], s["ev_max"] or 0),
-            "final_delay": s["last_delay"], "platform": s["last_platform"],
+            "max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
+            "final_delay": s["last_delay"] or 0, "platform": s["last_platform"],
             "status": s["status"], "first_seen": s["first_seen"], "last_seen": s["last_seen"],
         } for s in found]
 
@@ -400,3 +426,97 @@ class Store:
                 (train_no, day.isoformat()),
             ).fetchall()
         return [dict(r) for r in found]
+
+    # -- notifier support -------------------------------------------------
+
+    def last_ok_run_id(self) -> int | None:
+        """Id of the latest successful reading (advances once per ok ingest)."""
+        with self._lock:
+            r = self._conn.execute("SELECT MAX(id) FROM runs WHERE ok=1").fetchone()
+        return r[0]
+
+    def service_state(self, board: str, service_date: str, train_no: int,
+                      sched_time: str) -> dict | None:
+        """Current {status, delay, platform} of one service, or None."""
+        with self._lock:
+            s = self._conn.execute(
+                "SELECT status, last_delay, last_platform FROM services WHERE board=?"
+                " AND service_date=? AND train_no=? AND sched_time=?",
+                (board, service_date, train_no, sched_time),
+            ).fetchone()
+        if s is None:
+            return None
+        return {"status": s["status"], "delay": s["last_delay"], "platform": s["last_platform"]}
+
+    # -- subscriptions & follows -----------------------------------------
+
+    def subscribe(self, endpoint: str, p256dh: str, auth: str) -> int:
+        _check_endpoint(endpoint)
+        for k in (p256dh, auth):
+            if not isinstance(k, str) or not k or len(k) > MAX_KEY_LEN:
+                raise ValueError("cheie invalidă")
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO subscriptions(endpoint, p256dh, auth, created_at) VALUES (?,?,?,?)"
+                " ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth",
+                (endpoint, p256dh, auth, datetime.now(TZ).isoformat()),
+            )
+            return self._conn.execute("SELECT id FROM subscriptions WHERE endpoint=?",
+                                      (endpoint,)).fetchone()[0]
+
+    def unsubscribe(self, endpoint: str) -> None:
+        with self._lock:  # follows go via ON DELETE CASCADE
+            self._conn.execute("DELETE FROM subscriptions WHERE endpoint=?", (endpoint,))
+
+    def _sub_id(self, endpoint: str) -> int | None:
+        r = self._conn.execute("SELECT id FROM subscriptions WHERE endpoint=?",
+                               (endpoint,)).fetchone()
+        return r[0] if r else None
+
+    def follow(self, endpoint: str, train_no: int, date: date | str) -> None:
+        day = _iso(date)
+        with self._lock:
+            c = self._conn
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                sid = self._sub_id(endpoint)
+                if sid is None:
+                    raise ValueError("abonare necunoscută")
+                exists = c.execute(
+                    "SELECT 1 FROM follows WHERE subscription_id=? AND train_no=?"
+                    " AND service_date=?", (sid, train_no, day)).fetchone()
+                if not exists:
+                    n = c.execute("SELECT COUNT(*) FROM follows WHERE subscription_id=?",
+                                  (sid,)).fetchone()[0]
+                    if n >= MAX_FOLLOWS:
+                        raise ValueError(f"limită de {MAX_FOLLOWS} de trenuri")
+                    c.execute("INSERT INTO follows(subscription_id, train_no, service_date)"
+                              " VALUES (?,?,?)", (sid, train_no, day))
+                c.execute("COMMIT")
+            except BaseException:
+                c.execute("ROLLBACK")
+                raise
+
+    def unfollow(self, endpoint: str, train_no: int, date: date | str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM follows WHERE train_no=? AND service_date=? AND subscription_id ="
+                " (SELECT id FROM subscriptions WHERE endpoint=?)",
+                (train_no, _iso(date), endpoint))
+
+    def followers(self, train_no: int, date: date | str) -> list[Subscription]:
+        with self._lock:
+            found = self._conn.execute(
+                "SELECT s.endpoint, s.p256dh, s.auth FROM follows f"
+                " JOIN subscriptions s ON s.id = f.subscription_id"
+                " WHERE f.train_no=? AND f.service_date=? ORDER BY s.id",
+                (train_no, _iso(date))).fetchall()
+        return [Subscription(r["endpoint"], r["p256dh"], r["auth"]) for r in found]
+
+    def list_follows(self, endpoint: str) -> list[dict]:
+        with self._lock:
+            found = self._conn.execute(
+                "SELECT f.train_no, f.service_date FROM follows f"
+                " JOIN subscriptions s ON s.id = f.subscription_id"
+                " WHERE s.endpoint=? ORDER BY f.rowid", (endpoint,)).fetchall()
+        return [{"train_no": r["train_no"], "date": r["service_date"]} for r in found]
