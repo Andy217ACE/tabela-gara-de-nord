@@ -14,9 +14,9 @@ from app.store import Store, Subscription
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
 DAY = date(2026, 10, 20)
-EP = "https://push.example.com/sub/abc"
-EP2 = "https://push.example.com/sub/def"
-EP3 = "https://push.example.com/sub/ghi"
+EP = "https://fcm.googleapis.com/fcm/send/abc"
+EP2 = "https://fcm.googleapis.com/fcm/send/def"
+EP3 = "https://fcm.googleapis.com/fcm/send/ghi"
 
 
 def board(delay=0, platform=13, with_1636=True, conf=1.0):

@@ -10,8 +10,8 @@ from app.store import Store, Subscription
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
 DAY = date(2026, 10, 20)
-EP = "https://push.example.com/sub/abc"
-EP2 = "https://push.example.com/sub/def"
+EP = "https://fcm.googleapis.com/fcm/send/abc"
+EP2 = "https://fcm.googleapis.com/fcm/send/def"
 
 
 @pytest.fixture(autouse=True)
@@ -175,3 +175,17 @@ def test_lookup_indexes_used(store):
     assert "INDEX" in plan("SELECT * FROM events WHERE service_id=?", (1,))
     assert "INDEX" in plan("SELECT * FROM services WHERE service_date=? AND train_no=?",
                            ("2026-10-20", 1))
+
+
+@pytest.mark.parametrize("bad", [
+    "https://fcm.googleapis.com.nip.io/x", "https://fcm.googleapis.com:8443/x",
+    "https://u:p@fcm.googleapis.com/x", "https://fcm.googleapis.com./x",
+    "https://push.example.com/sub/abc",
+])
+def test_subscribe_rejects_non_allowlisted(store, bad):
+    with pytest.raises(ValueError, match="Endpoint de notificare invalid"):
+        store.subscribe(bad, "p", "a")
+
+
+def test_subscribe_host_case_insensitive(store):
+    assert isinstance(store.subscribe("https://FCM.googleapis.com/fcm/send/x", "p", "a"), int)

@@ -13,26 +13,26 @@ over MAX_BODY bytes are 413.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import logging
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app import poller
 from app.config import Settings, get_settings
+from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
-from app.store import MAX_ENDPOINT_LEN, TZ, Store, _check_endpoint
+from app.store import TZ, Store
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,6 @@ BOARDS = ("arrival", "departure")
 
 _HHMM = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_NUMERIC_LABEL = re.compile(r"^(?:0x[0-9a-f]*|\d+)$")
 
 CSP = "; ".join([
     "default-src 'self'",
@@ -118,32 +117,11 @@ def _parse_hhmm(value: str | None, name: str) -> str | None:
 
 
 def _check_push_endpoint(endpoint) -> str:
-    """https URL on a plausible public DNS name (first line; the Store re-checks)."""
-    msg = "Endpoint de notificare invalid."
-    if not isinstance(endpoint, str) or not endpoint or len(endpoint) > MAX_ENDPOINT_LEN:
-        raise _bad(msg)
+    """Allowlisted push-service URL (see app.endpoints); 422 otherwise."""
     try:
-        u = urlsplit(endpoint)
-        host = (u.hostname or "").rstrip(".").lower()
-    except ValueError:
-        raise _bad(msg) from None
-    if u.scheme != "https" or not host:
-        raise _bad(msg)
-    labels = host.split(".")
-    # Numeric / hex-like hosts (127.1, 0x7f.1, 2130706433) resolve to IPs in
-    # many resolvers; a real TLD is never numeric.
-    if all(_NUMERIC_LABEL.match(lb) for lb in labels) or _NUMERIC_LABEL.match(labels[-1]):
-        raise _bad(msg)
-    try:
-        ipaddress.ip_address(host.strip("[]"))
-    except ValueError:
-        pass
-    else:
-        raise _bad(msg)
-    try:
-        _check_endpoint(endpoint)
-    except ValueError:
-        raise _bad(msg) from None
+        check_push_endpoint(endpoint)
+    except ValueError as e:
+        raise _bad(str(e)) from None
     return endpoint
 
 
@@ -310,6 +288,8 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             raise _bad("Numele stației este prea lung.")
         time_from = _parse_hhmm(q.get("from"), "de la")
         time_to = _parse_hhmm(q.get("to"), "până la")
+        if time_from and time_to and time_from > time_to:
+            raise _bad("Ora „de la” este după ora „până la”.")
         services = store_of(request).history(day, train=train, station=station, board=board_,
                                              time_from=time_from, time_to=time_to)
         return {"date": day.isoformat(), "services": services}
@@ -386,7 +366,22 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         await run_in_threadpool(store_of(request).unfollow, ep, n, day)
         return {"ok": True}
 
-    # Static frontend last, so /api/* routes win.
-    WEB_DIR.mkdir(exist_ok=True)
-    app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
+    @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
+                   include_in_schema=False)
+    def api_not_found(request: Request, rest: str):
+        # A full match here beats a method mismatch on a real route: restore 405.
+        path = request.url.path
+        allowed = sorted({m for r in request.app.router.routes
+                          if isinstance(r, APIRoute) and r.name != "api_not_found"
+                          and r.path_regex.match(path) for m in (r.methods or ())})
+        if allowed:
+            return JSONResponse({"detail": "Metodă nepermisă."}, status_code=405,
+                                headers={"Allow": ", ".join(allowed)})
+        raise _bad("Nu există.", 404)
+
+    # Static frontend last, so /api/* routes win. No disk writes here.
+    if WEB_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
+    else:
+        log.warning("web directory %s missing; static frontend not served", WEB_DIR)
     return app

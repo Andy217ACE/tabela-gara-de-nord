@@ -7,14 +7,13 @@ miss a whole board are recorded as failed runs (`ok=0`) and touch nothing else.
 """
 from __future__ import annotations
 
-import ipaddress
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
 from app.normalize import clean_station
 
@@ -123,7 +122,6 @@ def _plat(p: int | None) -> str | None:
     return None if p is None else str(p)
 
 
-MAX_ENDPOINT_LEN = 500
 MAX_KEY_LEN = 256
 MAX_FOLLOWS = 20
 
@@ -142,29 +140,6 @@ def _iso(d: date | str) -> str:
 def _today() -> date:
     """Today in Europe/Bucharest (patched in tests)."""
     return datetime.now(TZ).date()
-
-
-def _check_endpoint(endpoint: str) -> None:
-    """https URL on a public DNS name, at most MAX_ENDPOINT_LEN chars.
-
-    Real push services use DNS names, so IP literals and local-only names
-    (localhost, *.local, *.internal) are refused (SSRF hardening).
-    """
-    if not isinstance(endpoint, str) or len(endpoint) > MAX_ENDPOINT_LEN:
-        raise ValueError("endpoint invalid")
-    u = urlsplit(endpoint)  # may itself raise ValueError
-    host = (u.hostname or "").rstrip(".").lower()
-    if u.scheme != "https" or not host:
-        raise ValueError("endpoint invalid")
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:
-        raise ValueError("endpoint invalid")
-    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")) \
-            or "." not in host:
-        raise ValueError("endpoint invalid")
 
 
 class Store:
@@ -496,7 +471,7 @@ class Store:
     # -- subscriptions & follows -----------------------------------------
 
     def subscribe(self, endpoint: str, p256dh: str, auth: str) -> int:
-        _check_endpoint(endpoint)
+        check_push_endpoint(endpoint)
         for k in (p256dh, auth):
             if not isinstance(k, str) or not k or len(k) > MAX_KEY_LEN:
                 raise ValueError("cheie invalidă")

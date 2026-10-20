@@ -16,7 +16,7 @@ from app.models import Row
 BUC = ZoneInfo("Europe/Bucharest")
 DAY = date(2026, 10, 20)
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
-EP = "https://push.example.com/sub/abc"
+EP = "https://fcm.googleapis.com/fcm/send/abc"
 SUB = {"endpoint": EP, "keys": {"p256dh": "p" * 20, "auth": "a" * 10}}
 
 
@@ -312,3 +312,70 @@ def test_on_rows_ingests_and_schedules_notifier_without_waiting(monkeypatch):
         assert result["today"] == DAY
         assert len(c.get("/api/board").json()["arrivals"]) == 2
     assert time.monotonic() - t0 < 10  # shutdown cancelled the slow notify task
+
+
+# -- fix round 1 ----------------------------------------------------------
+
+@pytest.mark.parametrize("ep", [
+    "https://fcm.googleapis.com.nip.io/x", "https://127.0.0.1.nip.io/x",
+    "https://fcm.googleapis.com:8443/fcm/send/x", "https://fcm.googleapis.com:80/x",
+    "https://user:pw@fcm.googleapis.com/x", "https://user@fcm.googleapis.com/x",
+    "https://fcm.googleapis.com./x", "https://evil.com/fcm.googleapis.com",
+    "https://googleapis.com/x", "https://push.services.mozilla.com/x",
+    "https://xnotify.windows.com/x", "https://push.example.com/sub/abc",
+    "https://fcm.googleapis.com\@evil.com/x", "https://fcm.googleapis.com:abc/x",
+])
+def test_endpoint_allowlist_rejects(client, ep):
+    r = client.post("/api/push/subscribe", json={"endpoint": ep, "keys": SUB["keys"]})
+    assert r.status_code == 422
+    assert r.json()["detail"] == "Endpoint de notificare invalid."
+
+
+@pytest.mark.parametrize("ep", [
+    "https://fcm.googleapis.com/fcm/send/abc",
+    "https://FCM.GoogleAPIs.com/fcm/send/abc",
+    "https://fcm.googleapis.com:443/fcm/send/abc",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://autopush.prod.push.services.mozilla.com/wpush/v2/abc",
+    "https://wns2-db5p.notify.windows.com/w/?token=x",
+    "https://web.push.apple.com/QX", "https://api.push.apple.com/3/x",
+])
+def test_endpoint_allowlist_accepts(client, ep):
+    r = client.post("/api/push/subscribe", json={"endpoint": ep, "keys": SUB["keys"]})
+    assert r.status_code == 200, r.text
+
+
+def test_api_and_store_share_endpoint_check():
+    import app.api as api_mod
+    import app.store as store_mod
+    from app.endpoints import check_push_endpoint
+    assert store_mod.check_push_endpoint is check_push_endpoint
+    assert not hasattr(store_mod, "_check_endpoint")
+    assert "_check_endpoint" not in vars(api_mod)
+
+
+def test_history_from_after_to_rejected(client):
+    r = client.get("/api/history", params={"from": "13:00", "to": "12:00"})
+    assert r.status_code == 422
+    assert "după" in r.json()["detail"]
+    assert client.get("/api/history", params={"from": "12:00", "to": "12:00"}).status_code == 200
+
+
+def test_create_app_without_web_dir(monkeypatch, tmp_path):
+    missing = tmp_path / "nu-exista"
+    monkeypatch.setattr("app.api.WEB_DIR", missing)
+    app = create_app(settings(), start_poller=False)
+    assert not missing.exists()
+    with TestClient(app) as c:
+        assert c.get("/api/health").status_code == 200
+        assert c.get("/").status_code == 404
+
+
+def test_unknown_api_path_is_romanian_404(client):
+    for path in ("/api/nimic", "/api/push/altceva", "/api/"):
+        r = client.get(path)
+        assert r.status_code == 404
+        assert r.json() == {"detail": "Nu există."}
+    assert client.post("/api/nimic", json={}).status_code == 404
+    assert client.post("/api/board").status_code == 405
+    assert client.put("/api/follow", json={}).status_code == 405
