@@ -8,7 +8,7 @@ import os
 import statistics
 import time
 from collections import deque
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Iterable
 
 import httpx
 
@@ -121,7 +121,13 @@ async def run_poller(
     clock: Callable[[], float] = time.time,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     last_image_path: str | None = "data/last.jpg",
+    known_stations: Callable[[], Iterable[str]] | None = None,
 ) -> None:
+    """Poll the board image and hand new readings to `on_rows`.
+
+    `known_stations` (e.g. ``Store.known_stations``) supplies the station names
+    learned from the history for OCR canonicalisation.
+    """
     tracker = PhaseTracker()
     backoff = Backoff()
     requests: deque[float] = deque(maxlen=MAX_PER_MIN)
@@ -167,7 +173,15 @@ async def run_poller(
                 tracker.observe_change(ts)
                 last_change = ts
             try:
-                rows = await asyncio.to_thread(read_board, data)
+                if known_stations is None:
+                    rows = await asyncio.to_thread(read_board, data)
+                else:
+                    try:
+                        stations = await asyncio.to_thread(known_stations)
+                    except Exception:  # canonicalisation then uses the seed only
+                        log.warning("known stations unavailable", exc_info=True)
+                        stations = ()
+                    rows = await asyncio.to_thread(read_board, data, stations=stations)
             except (OcrError, ValueError):
                 log.exception("OCR failed for new image")
             else:

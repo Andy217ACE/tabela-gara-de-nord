@@ -23,7 +23,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS services (
     status TEXT NOT NULL DEFAULT 'listed' CHECK (status IN ('listed', 'gone')),
     miss_count INTEGER NOT NULL DEFAULT 0,
     last_read TEXT,
+    operator_raw TEXT NOT NULL DEFAULT '',
+    station_raw TEXT NOT NULL DEFAULT '',
+    uncertain INTEGER NOT NULL DEFAULT 0,
     UNIQUE (board, service_date, train_no, sched_time)
 );
 CREATE INDEX IF NOT EXISTS ix_services_date ON services(service_date);
@@ -87,6 +90,15 @@ CREATE TABLE IF NOT EXISTS follows (
 );
 CREATE INDEX IF NOT EXISTS ix_follows_train ON follows(train_no, service_date);
 """
+
+# Columns added after v1, in order: (column, definition). Old databases get the
+# missing ones via ALTER TABLE (guarded by PRAGMA table_info, so re-runnable).
+_ADDED_COLUMNS = (
+    ("last_read", "TEXT"),                              # v2
+    ("operator_raw", "TEXT NOT NULL DEFAULT ''"),       # v3: OCR text as read
+    ("station_raw", "TEXT NOT NULL DEFAULT ''"),        # v3
+    ("uncertain", "INTEGER NOT NULL DEFAULT 0"),        # v3: name not matched
+)
 
 
 def _local(dt: datetime) -> datetime:
@@ -170,9 +182,11 @@ class Store:
                 self._conn.executescript(
                     "BEGIN;" + _SCHEMA + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
                 return
-            # v1 -> v2: services.last_read (ts of the last confident reading).
+            # v1/v2 -> v3: add the missing services columns, then bump the version,
+            # all in one transaction (a failure leaves the old version in place).
             cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
-            add = "" if "last_read" in cols else "ALTER TABLE services ADD COLUMN last_read TEXT;"
+            add = "".join(f"ALTER TABLE services ADD COLUMN {name} {decl};"
+                          for name, decl in _ADDED_COLUMNS if name not in cols)
             self._conn.executescript(
                 "BEGIN;" + _SCHEMA + add + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
 
@@ -293,10 +307,12 @@ class Store:
                 sid = c.execute(
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
                     " operator, sched_time, first_seen, last_seen, last_delay, last_platform,"
-                    " flagged, status, miss_count, last_read)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?)",
+                    " flagged, status, miss_count, last_read, operator_raw, station_raw,"
+                    " uncertain)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?)",
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
-                     r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s),
+                     r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s,
+                     r.operator_raw, r.station_raw, int(r.uncertain)),
                 ).lastrowid
                 seen.add(sid)
                 emit(sid, "appeared", r, sd)
@@ -309,11 +325,16 @@ class Store:
                 emit(sid, "delay", row, sd, str(cur["last_delay"]), str(r.delay_min))
             if cur["last_platform"] != r.platform:
                 emit(sid, "platform", row, sd, _plat(cur["last_platform"]), _plat(r.platform))
+            names = (r.station, r.operator, r.station_raw, r.operator_raw, int(r.uncertain))
+            if r.uncertain and not cur["uncertain"]:
+                # Never replace names matched to a known value by unmatched OCR text.
+                names = (cur["station"], cur["operator"], cur["station_raw"],
+                         cur["operator_raw"], 0)
             c.execute(
-                "UPDATE services SET train_type=?, station=?, operator=?, last_seen=?,"
-                " last_delay=?, last_platform=?, flagged=?, status='listed', miss_count=0,"
-                " last_read=? WHERE id=?",
-                (r.train_type, r.station, r.operator, ts_s, r.delay_min, r.platform,
+                "UPDATE services SET train_type=?, station=?, operator=?, station_raw=?,"
+                " operator_raw=?, uncertain=?, last_seen=?, last_delay=?, last_platform=?,"
+                " flagged=?, status='listed', miss_count=0, last_read=? WHERE id=?",
+                (r.train_type, *names, ts_s, r.delay_min, r.platform,
                  int(r.flagged), ts_s, sid),
             )
 
@@ -347,7 +368,8 @@ class Store:
         return Row(board=s["board"], train_type=s["train_type"], train_no=s["train_no"],
                    station=s["station"], operator=s["operator"], sched_time=s["sched_time"],
                    delay_min=s["last_delay"], platform=s["last_platform"],
-                   flagged=bool(s["flagged"]))
+                   flagged=bool(s["flagged"]), operator_raw=s["operator_raw"],
+                   station_raw=s["station_raw"], uncertain=bool(s["uncertain"]))
 
     # -- reads ------------------------------------------------------------
 
@@ -360,7 +382,8 @@ class Store:
             out: dict = {"updated_at": self._last_ok_ts(), "arrivals": [], "departures": []}
             rows = self._conn.execute(
                 "SELECT board, train_type, train_no, station, operator, sched_time,"
-                " last_delay, last_platform, flagged, status, service_date FROM services"
+                " last_delay, last_platform, flagged, status, service_date, uncertain"
+                " FROM services"
                 " WHERE status='listed' ORDER BY service_date, sched_time, train_no"
             ).fetchall()
         for s in rows:
@@ -370,6 +393,7 @@ class Store:
                 "sched_time": s["sched_time"], "delay_min": s["last_delay"],
                 "platform": s["last_platform"], "flagged": bool(s["flagged"]),
                 "status": s["status"], "service_date": s["service_date"],
+                "uncertain": bool(s["uncertain"]),
             })
         return out
 
@@ -379,6 +403,17 @@ class Store:
         if ts is None:
             return None
         return (_local(now) - datetime.fromisoformat(ts)).total_seconds()
+
+    def known_stations(self, min_services: int = 2) -> set[str]:
+        """Distinct station names seen on at least `min_services` services.
+
+        Feeds station canonicalisation; the threshold keeps one-off misreads out.
+        """
+        with self._lock:
+            found = self._conn.execute(
+                "SELECT station FROM services WHERE station != '' GROUP BY station"
+                " HAVING COUNT(*) >= ?", (min_services,)).fetchall()
+        return {r[0] for r in found}
 
     # -- history ----------------------------------------------------------
 
@@ -413,7 +448,7 @@ class Store:
             args.append(time_to)
         sql = (
             "SELECT s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
-            " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen,"
+            " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen, s.uncertain,"
             " (SELECT MAX(MAX(COALESCE(CAST(e.old AS INTEGER), 0),"
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
@@ -428,6 +463,7 @@ class Store:
             "max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
             "final_delay": s["last_delay"] or 0, "platform": s["last_platform"],
             "status": s["status"], "first_seen": s["first_seen"], "last_seen": s["last_seen"],
+            "uncertain": bool(s["uncertain"]),
         } for s in found]
 
     def train_events(self, train_no: int, day: date) -> list[dict]:

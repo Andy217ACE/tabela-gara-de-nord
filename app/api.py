@@ -152,14 +152,15 @@ async def _json_body(request: Request) -> dict:
 # -- poller wiring ----------------------------------------------------------
 
 async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClient,
-                            stop: asyncio.Event) -> None:
+                            stop: asyncio.Event, known_stations=None) -> None:
     """Run the poller; on crash (or unexpected return) log and restart with backoff."""
     first = max(0.0, settings.poller_restart_backoff)
     delay = first
     while not stop.is_set():
         try:
             await poller.run_poller(settings, on_rows, client, stop,
-                                    last_image_path=settings.last_image_path)
+                                    last_image_path=settings.last_image_path,
+                                    known_stations=known_stations)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -222,7 +223,8 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         if start_poller and settings.poller_enabled:
             client = httpx.AsyncClient()
             stop = asyncio.Event()
-            poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop))
+            poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop,
+                                                               store.known_stations))
         try:
             yield
         finally:

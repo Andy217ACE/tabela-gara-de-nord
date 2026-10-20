@@ -8,18 +8,21 @@ with a column-specific whitelist. Words are mapped back to rows by their line sl
 Numeric columns (number, time, delay, platform) are additionally read by glyph
 template matching (``digits.py``), which is preferred when its match is trusted:
 Tesseract alone misreads isolated digits and the board's "1" on this font.
+
+The OCR call itself goes through an ``OcrEngine`` (``engine.py``; Tesseract by
+default). Operator and station names are then canonicalised against the known
+names (``app.canonical``); the text as read is kept in ``*_raw``.
 """
 from __future__ import annotations
 
 import logging
-import re
-import unicodedata
+from collections.abc import Iterable
 
 import cv2
 import numpy as np
-import pytesseract
+import pytesseract  # noqa: F401  (kept importable: tests patch reader.pytesseract)
 
-from app.config import get_settings
+from app import canonical
 from app.models import Row
 from app.normalize import (
     clean_station,
@@ -31,12 +34,14 @@ from app.normalize import (
 )
 from app.ocr import preprocess
 from app.ocr.digits import DigitMatcher
+from app.ocr.engine import TESSERACT_TIMEOUT, OcrEngine, OcrError, TesseractEngine
+
+__all__ = ["OcrError", "TESSERACT_TIMEOUT", "read_board", "cell_grid", "COLUMNS"]
 
 log = logging.getLogger(__name__)
 
 BOARDS = ("arrival", "departure")
 MIN_WIDTH, MIN_HEIGHT = 200, 60  # smaller images cannot hold the board layout
-TESSERACT_TIMEOUT = 10  # seconds per Tesseract call
 
 # Column extents as fractions of the blue panel width (calibrated on board_1.jpg;
 # both panels share the same layout).
@@ -55,15 +60,17 @@ _ORDER = ("type", "no", "station", "operator", "time", "delay", "platform")
 # snapping to the emptiest pixel column (text sometimes nearly touches the next column).
 SNAP = 0.012
 
-_DIGITS = "-c tessedit_char_whitelist=0123456789"
-_TESS: dict[str, tuple[str, str]] = {
-    "type": ("eng", "--psm 6 -c tessedit_char_whitelist=*IRNECMD"),
-    "no": ("eng", f"--psm 6 {_DIGITS}"),
-    "station": ("ron+eng", "--psm 6"),
-    "operator": ("ron+eng", "--psm 6"),
-    "time": ("eng", f"--psm 6 {_DIGITS}:"),
-    "delay": ("eng", f"--psm 6 {_DIGITS}+"),
-    "platform": ("eng", f"--psm 6 {_DIGITS}"),
+_DIGITS = "0123456789"
+_PSM = 6  # one uniform block of text: the composite, one cell per line
+# Per column: (character whitelist or None, language).
+_TESS: dict[str, tuple[str | None, str]] = {
+    "type": ("*IRNECMD", "eng"),
+    "no": (_DIGITS, "eng"),
+    "station": (None, "ron+eng"),
+    "operator": (None, "ron+eng"),
+    "time": (_DIGITS + ":", "eng"),
+    "delay": (_DIGITS + "+", "eng"),
+    "platform": (_DIGITS, "eng"),
 }
 
 _PAD = 12  # white margin (px, in the x3 mask) around the composite
@@ -71,10 +78,6 @@ _PAD = 12  # white margin (px, in the x3 mask) around the composite
 # Numeric columns are also read by glyph template matching (fixed board font).
 _ALLOWED = {"no": "0123456789", "time": "0123456789:",
             "delay": "0123456789+", "platform": "0123456789"}
-
-
-class OcrError(Exception):
-    """Tesseract failed or timed out (the image itself was fine)."""
 
 
 def _decode(image_bytes: bytes) -> np.ndarray:
@@ -118,24 +121,18 @@ class _Composite:
             canvas[y:y + c.shape[0], _PAD:_PAD + c.shape[1]] = c
         self.image = canvas
 
-    def read(self, lang: str, config: str) -> list[tuple[str, float | None]]:
-        try:
-            data = pytesseract.image_to_data(
-                self.image, lang=lang, config=config,
-                output_type=pytesseract.Output.DICT, timeout=TESSERACT_TIMEOUT)
-        except (RuntimeError, pytesseract.TesseractError, OSError) as e:
-            # pytesseract signals a timeout with RuntimeError; a missing binary
-            # (TesseractNotFoundError) is an OSError.
-            raise OcrError(f"tesseract failed: {e}") from e
+    def read(self, engine: OcrEngine, whitelist: str | None,
+             lang: str) -> list[tuple[str, float | None]]:
+        """(text, mean confidence or None) per line slot, words in reading order."""
         words: list[list[tuple[int, str, float]]] = [[] for _ in range(self.n)]
-        for text, left, top, height, conf in zip(
-                data["text"], data["left"], data["top"], data["height"], data["conf"]):
-            text = (text or "").strip()
+        for res in engine.read_cells(self.image, whitelist, lang, _PSM):
+            text = (res.text or "").strip()
             if not text:
                 continue
+            left, top, _, height = res.bbox
             slot = int((top + height / 2 - _PAD) // self.pitch)
             if 0 <= slot < self.n:
-                words[slot].append((int(left), text, float(conf)))
+                words[slot].append((int(left), text, float(res.conf)))
         out: list[tuple[str, float | None]] = []
         for ws in words:
             ws.sort()
@@ -145,14 +142,8 @@ class _Composite:
         return out
 
 
-def _ascii_text(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s or "")
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", s).strip(" .,;:|_-")
-
-
 def _train_no(s: str) -> int:
-    digits = re.sub(r"\D", "", s or "")
+    digits = "".join(c for c in (s or "") if c in _DIGITS)
     return int(digits) if digits else 0
 
 
@@ -206,9 +197,13 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     return m_text, m_score * 100
 
 
-def read_board(image_bytes: bytes) -> list[Row]:
+def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
+               stations: Iterable[str] = ()) -> list[Row]:
+    """Rows of both boards. `engine` defaults to Tesseract; `stations` are the
+    station names learned from the history (added to the curated seed)."""
     img = _decode(image_bytes)
-    pytesseract.pytesseract.tesseract_cmd = get_settings().tesseract_cmd
+    if engine is None:
+        engine = TesseractEngine()
 
     slots: list[tuple[str, dict[str, np.ndarray]]] = [
         (board, cells)
@@ -218,9 +213,11 @@ def read_board(image_bytes: bytes) -> list[Row]:
     if not slots:
         return []
 
-    reads = {name: _Composite([c[name] for _, c in slots]).read(*_TESS[name])
+    reads = {name: _Composite([c[name] for _, c in slots]).read(engine, *_TESS[name])
              for name in _ORDER}
     matcher = _get_matcher()
+    seed = canonical.seed_stations()
+    known_stations = set(stations) | seed
 
     rows: list[Row] = []
     for i, (board, cells) in enumerate(slots):
@@ -234,16 +231,24 @@ def read_board(image_bytes: bytes) -> list[Row]:
             continue
         confs = [c for _, c in cell.values() if c is not None]
         conf = sum(confs) / len(confs) / 100 if confs else 0.0
+        station_raw = clean_station(cell["station"][0])
+        operator_raw = canonical.clean_operator(cell["operator"][0])
+        station, s_score = canonical.canonical_station(
+            station_raw, known_stations, preferred=seed)
+        operator, o_score = canonical.canonical_operator(operator_raw)
         rows.append(Row(
             board=board,
             train_type=train_type,
             train_no=_train_no(cell["no"][0]),
-            station=clean_station(cell["station"][0]),
-            operator=_ascii_text(cell["operator"][0]),
+            station=station,
+            operator=operator,
             sched_time=sched,
             delay_min=parse_delay(cell["delay"][0]),
             platform=parse_platform(cell["platform"][0]),
             flagged=flagged,
             confidence=min(1.0, max(0.0, conf)),
+            operator_raw=operator_raw,
+            station_raw=station_raw,
+            uncertain=min(s_score, o_score) < canonical.DEFAULT_THRESHOLD,
         ))
     return rows

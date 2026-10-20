@@ -410,3 +410,19 @@ def test_history_caps_at_500_rows_with_truncated_header(client):
     r2 = client.get("/api/history", params={"date": "2026-10-20", "board": "arrival",
                                             "to": "00:10"})
     assert "x-truncated" not in r2.headers
+
+
+def test_poller_gets_known_stations_from_store(monkeypatch):
+    seen = {}
+    got = threading.Event()
+
+    async def fake_run_poller(settings, on_rows, client, stop, **kw):
+        seen.update(kw)
+        got.set()
+        await stop.wait()
+
+    monkeypatch.setattr("app.poller.run_poller", fake_run_poller)
+    app = create_app(settings(), start_poller=True)
+    with TestClient(app):
+        assert got.wait(2)
+        assert seen["known_stations"]() == set()

@@ -198,3 +198,48 @@ async def test_run_survives_ocr_and_callback_errors(world):
     assert len(w.requests) > 3
     assert w.stop.is_set()
     assert w.read_calls.count(b"img-16") == 1  # failed-OCR hash not retried
+
+
+async def test_run_passes_learned_stations_to_reader(world, monkeypatch):
+    w = world
+    got = []
+
+    def fake_read(data, *, stations=()):
+        got.append(set(stations))
+        return ["row"]
+
+    monkeypatch.setattr(poller, "read_board", fake_read)
+
+    async def on_rows(rows, ts):
+        pass
+
+    await asyncio.wait_for(
+        poller.run_poller(S(), on_rows, None, w.stop, clock=w.clock, sleep=w.sleep,
+                          last_image_path=w.path, known_stations=lambda: {"BRASOV"}),
+        timeout=5,
+    )
+    assert got and all(s == {"BRASOV"} for s in got)
+
+
+async def test_run_survives_known_stations_failure(world, monkeypatch):
+    w = world
+    got = []
+
+    def fake_read(data, *, stations=()):
+        got.append(tuple(stations))
+        return ["row"]
+
+    def broken():
+        raise RuntimeError("db locked")
+
+    monkeypatch.setattr(poller, "read_board", fake_read)
+
+    async def on_rows(rows, ts):
+        pass
+
+    await asyncio.wait_for(
+        poller.run_poller(S(), on_rows, None, w.stop, clock=w.clock, sleep=w.sleep,
+                          last_image_path=w.path, known_stations=broken),
+        timeout=5,
+    )
+    assert got and all(s == () for s in got)
