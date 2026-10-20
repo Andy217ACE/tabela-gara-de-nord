@@ -24,6 +24,7 @@ MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit eve
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 2
+HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
 
@@ -417,7 +418,7 @@ class Store:
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
             " FROM services s WHERE " + " AND ".join(where) +
-            " ORDER BY s.sched_time, s.board, s.train_no"
+            " ORDER BY s.sched_time, s.board, s.train_no LIMIT " + str(HISTORY_MAX + 1)
         )
         with self._lock:
             found = self._conn.execute(sql, args).fetchall()
