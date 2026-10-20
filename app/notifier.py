@@ -147,7 +147,9 @@ class Notifier:
     async def handle(self, events: list[Event], today: date) -> None:
         """Process one ingest's events. Calls are serialized (safe to overlap)."""
         async with self._get_lock():
-            to_push = self._process(events, today)
+            # _process only touches the Store (blocking sqlite) and this notifier's state,
+            # which the lock serialises: run it off the event loop.
+            to_push = await asyncio.to_thread(self._process, events, today)
             for ev in to_push:
                 await self._push(ev)
 
@@ -199,14 +201,15 @@ class Notifier:
                     await asyncio.wait_for(self.send(sub, data), self.send_timeout)
                 except SubscriptionGone:
                     log.info("push subscription gone; removing")
-                    self.store.unsubscribe(sub.endpoint)
+                    await asyncio.to_thread(self.store.unsubscribe, sub.endpoint)
                 except asyncio.TimeoutError:
                     log.warning("push failed: timeout after %.0fs", self.send_timeout)
                 except Exception as e:  # one bad endpoint must not stop the others
                     log.warning("push failed: %s: %s", type(e).__name__, e)
 
-        await asyncio.gather(*(one(s) for s in
-                               self.store.followers(ev.row.train_no, ev.service_date)))
+        followers = await asyncio.to_thread(self.store.followers, ev.row.train_no,
+                                            ev.service_date)
+        await asyncio.gather(*(one(s) for s in followers))
 
 
 def make_webpush_sender(settings) -> Callable[[Subscription, dict], Awaitable[None]]:
