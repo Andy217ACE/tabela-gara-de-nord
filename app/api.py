@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime
@@ -73,6 +74,27 @@ SECURITY_HEADERS = {
 def _today() -> date:
     """Today in Europe/Bucharest (patched in tests)."""
     return datetime.now(TZ).date()
+
+
+DEFAULT_DELAY_THRESHOLDS = (5, 15, 30)
+REFRESH_S = 10  # web/app.js polls /api/board this often
+
+
+def panel_config() -> dict:
+    """Read-only UI settings for the „Panou" view (GET /api/config).
+
+    Delay colour thresholds in minutes come from env `DELAY_THRESHOLDS="low,mid,high"`
+    (strictly increasing positive ints); anything else falls back to the defaults.
+    """
+    low, mid, high = DEFAULT_DELAY_THRESHOLDS
+    raw = os.environ.get("DELAY_THRESHOLDS", "")
+    parts = [p.strip() for p in raw.split(",")] if raw else []
+    if len(parts) == 3 and all(p.isascii() and p.isdigit() for p in parts):
+        a, b, c = (int(p) for p in parts)
+        if 0 < a < b < c <= 1440:
+            low, mid, high = a, b, c
+    return {"delay_thresholds": {"low": low, "mid": mid, "high": high},
+            "stale_after_s": int(STALE_S), "refresh_s": REFRESH_S}
 
 
 def _bad(msg: str, status: int = 422) -> HTTPException:
@@ -278,6 +300,10 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     def health(request: Request):
         age = store_of(request).last_ok_age(datetime.now(TZ))
         return {"ok": age is not None and age <= STALE_S, "age_s": age}
+
+    @app.get("/api/config")
+    def config():
+        return panel_config()
 
     @app.get("/api/history")
     def history(request: Request):

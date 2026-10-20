@@ -307,6 +307,9 @@
         if (state.inflight === ctrl) state.inflight = null;
         renderLive();
         schedule(REFRESH_MS);
+        // mod „Panou" (panel.js) listens for every fetch outcome
+        document.dispatchEvent(new CustomEvent("tabela:board",
+          { detail: { data: state.data, failed: state.failed } }));
       });
   }
 
