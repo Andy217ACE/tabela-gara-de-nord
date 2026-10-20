@@ -77,7 +77,7 @@
   }
 
   function trainKey(t) {
-    return t.train_no + "|" + t.sched_time;
+    return (t.service_date || "") + "|" + t.train_no + "|" + t.sched_time;
   }
 
   function typeClass(type) {
@@ -99,8 +99,10 @@
     var meta = el("p", "t-meta");
     var type = el("span", "type");
     var no = el("span", "t-no");
-    var flag = el("span", "t-flag", "*");
+    var flag = el("span", "t-flag");
     flag.title = "Marcat cu * pe tabela CFR";
+    flag.append(el("span", null, "*"), el("span", "sr-only", "marcat cu asterisc pe tabela CFR"));
+    flag.firstChild.setAttribute("aria-hidden", "true");
     var op = el("span", "t-op");
     meta.append(type, no, flag, op);
 
@@ -212,6 +214,7 @@
       }
     });
 
+    empty.textContent = EMPTY_TEXT;
     empty.hidden = trains.length > 0;
     list.hidden = trains.length === 0;
     $("count-" + board).textContent = trains.length ? String(trains.length) : "";
@@ -279,6 +282,21 @@
     state.timer = setTimeout(refresh, ms);
   }
 
+  var EMPTY_TEXT = "Momentan nu sunt trenuri afișate.";
+
+  // First fetch failed: swap the skeleton cards for a message and drop aria-busy.
+  function showLoadFailure() {
+    BOARDS.forEach(function (b) {
+      var list = $("list-" + b);
+      list.querySelectorAll(".skeleton").forEach(function (n) { n.remove(); });
+      list.removeAttribute("aria-busy");
+      list.hidden = true;
+      var empty = $("panel-" + b).querySelector(".empty");
+      empty.textContent = "Nu am putut încărca tabela. Reîncerc automat.";
+      empty.hidden = false;
+    });
+  }
+
   function refresh() {
     if (state.inflight) state.inflight.abort();
     var ctrl = new AbortController();
@@ -300,11 +318,14 @@
         BOARDS.forEach(function (b) { renderBoard(b, data[b]); });
       })
       .catch(function () {
+        if (state.inflight !== ctrl) return; // superseded (e.g. visibilitychange): not an outage
         state.failed = true;
+        if (!state.data) showLoadFailure();
       })
       .then(function () {
         clearTimeout(to);
-        if (state.inflight === ctrl) state.inflight = null;
+        if (state.inflight !== ctrl) return; // a newer refresh owns the UI and the timer
+        state.inflight = null;
         renderLive();
         schedule(REFRESH_MS);
       });

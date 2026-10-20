@@ -352,7 +352,7 @@ class Store:
             out: dict = {"updated_at": self._last_ok_ts(), "arrivals": [], "departures": []}
             rows = self._conn.execute(
                 "SELECT board, train_type, train_no, station, operator, sched_time,"
-                " last_delay, last_platform, flagged, status FROM services"
+                " last_delay, last_platform, flagged, status, service_date FROM services"
                 " WHERE status='listed' ORDER BY service_date, sched_time, train_no"
             ).fetchall()
         for s in rows:
@@ -361,7 +361,7 @@ class Store:
                 "station": s["station"], "operator": s["operator"],
                 "sched_time": s["sched_time"], "delay_min": s["last_delay"],
                 "platform": s["last_platform"], "flagged": bool(s["flagged"]),
-                "status": s["status"],
+                "status": s["status"], "service_date": s["service_date"],
             })
         return out
 

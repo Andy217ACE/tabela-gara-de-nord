@@ -128,3 +128,16 @@ def test_last_image_path_env(monkeypatch, val, expected):
     else:
         monkeypatch.setenv("LAST_IMAGE_PATH", val)
     assert get_settings().last_image_path == expected
+
+
+def test_app_js_quality_fixes():
+    js = (WEB / "app.js").read_text(encoding="utf-8")
+    # superseded (aborted by visibilitychange) request must not flag offline
+    assert "state.inflight !== ctrl" in js
+    # train key includes the service date
+    assert re.search(r"function trainKey\(t\)\s*\{[^}]*service_date", js)
+    # first-fetch failure replaces the skeleton and drops aria-busy
+    assert "function showLoadFailure" in js
+    # '*' flag has screen-reader text
+    assert "marcat cu asterisc pe tabela CFR" in js
+    assert "sr-only" in js

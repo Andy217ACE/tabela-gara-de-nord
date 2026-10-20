@@ -241,7 +241,8 @@ def test_current_board(store):
     a = b["arrivals"][0]
     assert a == {"train_type": "IR", "train_no": 1621, "station": "Brasov",
                  "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
-                 "platform": 3, "flagged": True, "status": "listed"}
+                 "platform": 3, "flagged": True, "status": "listed",
+                 "service_date": "2026-10-20"}
     assert a["flagged"] is True and b["arrivals"][1]["flagged"] is False
     # failed run doesn't move updated_at
     store.ingest([], T0 + timedelta(minutes=1))

@@ -64,6 +64,7 @@ def test_board_returns_arrivals_and_departures(client):
     assert [x["train_no"] for x in b["arrivals"]] == [1636, 3001]
     assert [x["train_no"] for x in b["departures"]] == [531, 1741]
     assert b["updated_at"].startswith("2026-10-20T12:00")
+    assert all(x["service_date"] == "2026-10-20" for x in b["arrivals"] + b["departures"])
     assert b["stale"] is True and b["age_s"] > 180  # T0 is in the past
     assert b["attribution"] == {"source": "CFR", "url": "https://cfr.ro", "author": "Andy217Ace"}
 
