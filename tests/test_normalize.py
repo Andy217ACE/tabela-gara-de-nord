@@ -29,6 +29,14 @@ def test_parse_delay(s, exp):
 
 
 @pytest.mark.parametrize("s,exp", [
+    ("SOS", 0), ("+SO", 0), ("OO", 0), ("BIG", 0), ("+S5", 55),
+    ("999", 999), ("+1000", 0), ("123456", 0),
+])
+def test_parse_delay_rejects_noise_and_huge(s, exp):
+    assert parse_delay(s) == exp
+
+
+@pytest.mark.parametrize("s,exp", [
     ("1", 1), ("12", 12), ("30", 30), ("0", None), ("31", None),
     ("", None), ("x", None), ("l2", 12), ("O", None), ("1O", 10),
 ])

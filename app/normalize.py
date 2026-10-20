@@ -35,9 +35,16 @@ def parse_time(s: str) -> str | None:
     return f"{h:02d}:{mi:02d}"
 
 
+MAX_DELAY = 999
+
+
 def parse_delay(s: str) -> int:
     m = _DELAY.match((s or "").strip())
-    return int(_digits(m.group(1))) if m else 0
+    # Require at least one real digit: letter-only noise ("SOS") is not a delay.
+    if not m or not any(c.isdigit() for c in m.group(1)):
+        return 0
+    n = int(_digits(m.group(1)))
+    return n if n <= MAX_DELAY else 0
 
 
 def parse_platform(s: str) -> int | None:
