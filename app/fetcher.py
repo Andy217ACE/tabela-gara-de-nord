@@ -10,7 +10,7 @@ import httpx
 
 USER_AGENT = (
     "tabela-gara-de-nord/1.0 (+https://github.com/Andy217Ace/tabela-gara-de-nord; "
-    "© 2026 Andy217Ace; date CFR)"
+    "(c) 2026 Andy217Ace; date CFR)"
 )
 TIMEOUT = 15.0
 
@@ -40,7 +40,7 @@ def image_hash(data: bytes) -> str:
 
 async def fetch_board_image(client: httpx.AsyncClient, url: str) -> bytes:
     try:
-        resp = await client.get(url, headers={"User-Agent": USER_AGENT.encode("utf-8")}, timeout=TIMEOUT)
+        resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
     except httpx.TransportError as e:
         raise FetchError(f"transport error: {e!r}") from e
     if resp.status_code >= 400:

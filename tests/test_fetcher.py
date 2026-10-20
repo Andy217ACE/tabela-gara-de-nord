@@ -53,8 +53,9 @@ async def test_fetch_ok_and_headers():
     assert data.startswith(b"\xff\xd8")
     assert seen["ua"] == (
         "tabela-gara-de-nord/1.0 (+https://github.com/Andy217Ace/tabela-gara-de-nord; "
-        "© 2026 Andy217Ace; date CFR)"
+        "(c) 2026 Andy217Ace; date CFR)"
     )
+    assert seen["ua"].isascii()
 
 
 async def test_fetch_status_error():
