@@ -4,12 +4,22 @@
 Debounce: `handle(events, today)` is called after every ingest. Each pushable
 event (delay / platform / gone) becomes a *pending* change keyed by
 (service, kind) holding its new value and the id of the ok run it came from.
-On later calls, once the store's latest ok run id has advanced (i.e. a new
-successful reading exists; failed readings do not count), every pending change
-is checked against the service's current stored state: still the same value
-(or still `gone`) -> seen once more; different -> dropped silently. A change is
-pushed once it has been seen in `confirm` consecutive successful readings, so a
-one-frame OCR misread never produces a push.
+On later calls, once the store's latest ok run has advanced (failed readings do
+not count), every pending change is checked against `store.service_state`:
+- delay/platform: only if the service was re-read with a *confident* row in
+  that run (`last_read == run ts`). Same value -> seen once more; different ->
+  dropped. Not re-read (row missing or low confidence) -> held: neither
+  confirmed nor dropped; dropped after MAX_HOLD consecutive such runs.
+- gone: back on the board -> dropped; seen only at low confidence in that run
+  (`last_seen == run ts`) -> held; otherwise (still absent) -> seen once more.
+A change is pushed once seen in `confirm` successful readings, so a one-frame
+OCR misread never produces a push. If several ingests happen between two
+`handle` calls, only the latest run is checked.
+
+Concurrency: `handle` calls are serialized with an asyncio.Lock; pushes go to
+all followers concurrently (at most MAX_CONCURRENCY at once), each bounded by
+`send_timeout`. The API wiring (Task 9) runs `handle` as a background task,
+not inline in the poller path.
 
 Dedup: per (service, kind) the last pushed value is remembered (seeded from the
 value at first sighting / the event's `old` value), and a confirmed change equal
@@ -38,6 +48,9 @@ log = logging.getLogger(__name__)
 
 PUSH_KINDS = ("delay", "platform", "gone")
 TITLE = "Gara de Nord"
+MAX_HOLD = 3          # drop a pending change after this many ok runs without a re-read
+SEND_TIMEOUT = 10.0   # seconds per push
+MAX_CONCURRENCY = 10  # simultaneous pushes per notification
 
 
 class SubscriptionGone(Exception):
@@ -50,6 +63,7 @@ class _Pending:
     value: str | None
     run_id: int | None
     seen: int = 1
+    misses: int = 0  # consecutive ok runs without a confident re-read
 
 
 def _svc(ev: Event) -> tuple[str, int, str, str]:
@@ -75,27 +89,36 @@ def payload(ev: Event) -> dict:
 
 class Notifier:
     def __init__(self, store, send: Callable[[Subscription, dict], Awaitable[None]],
-                 confirm: int = 2):
+                 confirm: int = 2, *, send_timeout: float = SEND_TIMEOUT,
+                 max_concurrency: int = MAX_CONCURRENCY):
         self.store = store
         self.send = send
         self.confirm = max(1, confirm)
+        self.send_timeout = send_timeout
+        self.max_concurrency = max_concurrency
         self._pending: dict[tuple, _Pending] = {}
         self._last: dict[tuple, str | None] = {}  # (svc, kind) -> last pushed / baseline
+        self._lock: asyncio.Lock | None = None
+        self._lock_loop = None
 
     # -- state helpers ----------------------------------------------------
 
-    def _still_true(self, p: _Pending) -> bool:
+    def _check(self, p: _Pending, run_ts: str) -> str:
+        """'confirm' | 'hold' | 'drop' for a pending change against the latest ok run."""
         svc = _svc(p.event)
         st = self.store.service_state(p.event.row.board, svc[0], p.event.row.train_no,
                                       p.event.row.sched_time)
         if st is None:
-            return False
+            return "drop"
         if p.event.kind == "gone":
-            return st["status"] == "gone"
-        if st["status"] != "listed":
-            return False
+            if st["status"] == "listed":
+                return "drop"  # back on the board
+            # Still gone; a low-confidence sighting in this run is no proof of absence.
+            return "hold" if st["last_seen"] == run_ts else "confirm"
+        if st["last_read"] != run_ts:
+            return "hold"  # not re-read confidently in this run: neither confirm nor drop
         cur = st["delay"] if p.event.kind == "delay" else st["platform"]
-        return (None if cur is None else str(cur)) == p.value
+        return "confirm" if (None if cur is None else str(cur)) == p.value else "drop"
 
     def _baseline(self, ev: Event) -> None:
         svc = _svc(ev)
@@ -115,23 +138,44 @@ class Notifier:
 
     # -- main entry -------------------------------------------------------
 
+    def _get_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._lock is None or self._lock_loop is not loop:
+            self._lock, self._lock_loop = asyncio.Lock(), loop
+        return self._lock
+
     async def handle(self, events: list[Event], today: date) -> None:
-        run_id = self.store.last_ok_run_id()
-        # 1. Re-check older pending changes against the new reading.
+        """Process one ingest's events. Calls are serialized (safe to overlap)."""
+        async with self._get_lock():
+            to_push = self._process(events, today)
+            for ev in to_push:
+                await self._push(ev)
+
+    def _process(self, events: list[Event], today: date) -> list[Event]:
+        run = self.store.last_ok_run()
+        run_id, run_ts = run if run else (None, None)
+        # 1. Re-check older pending changes against the latest ok reading.
         for key, p in list(self._pending.items()):
             if p.run_id == run_id:
                 continue  # no new successful reading since
-            if self._still_true(p):
+            p.run_id = run_id
+            verdict = self._check(p, run_ts)
+            if verdict == "confirm":
                 p.seen += 1
-                p.run_id = run_id
+                p.misses = 0
+            elif verdict == "hold":
+                p.misses += 1
+                if p.misses >= MAX_HOLD:
+                    del self._pending[key]
             else:
                 del self._pending[key]
-        # 2. Record this reading's changes.
+        # 2. Record this reading's changes (a newer value replaces a pending one).
         for ev in events:
             self._baseline(ev)
             if ev.kind in PUSH_KINDS and ev.service_date:
                 self._pending[(_svc(ev), ev.kind)] = _Pending(ev, ev.new, run_id)
-        # 3. Push the confirmed ones.
+        # 3. Collect the confirmed ones.
+        out: list[Event] = []
         for key, p in list(self._pending.items()):
             if p.seen < self.confirm:
                 continue
@@ -139,21 +183,30 @@ class Notifier:
             if key in self._last and (p.event.kind == "gone" or self._last[key] == p.value):
                 continue  # same transition already pushed (or unchanged vs. baseline)
             self._last[key] = p.value
-            if message(p.event) is None:
-                continue
-            await self._push(p.event)
+            if message(p.event) is not None:
+                out.append(p.event)
         self._prune(today)
+        return out
 
     async def _push(self, ev: Event) -> None:
+        """Send to all followers concurrently (bounded); each send has a timeout."""
         data = payload(ev)
-        for sub in self.store.followers(ev.row.train_no, ev.service_date):
-            try:
-                await self.send(sub, data)
-            except SubscriptionGone:
-                log.info("push subscription gone; removing")
-                self.store.unsubscribe(sub.endpoint)
-            except Exception as e:  # one bad endpoint must not stop the others
-                log.warning("push failed: %s", type(e).__name__)
+        sem = asyncio.Semaphore(self.max_concurrency)
+
+        async def one(sub: Subscription) -> None:
+            async with sem:
+                try:
+                    await asyncio.wait_for(self.send(sub, data), self.send_timeout)
+                except SubscriptionGone:
+                    log.info("push subscription gone; removing")
+                    self.store.unsubscribe(sub.endpoint)
+                except asyncio.TimeoutError:
+                    log.warning("push failed: timeout after %.0fs", self.send_timeout)
+                except Exception as e:  # one bad endpoint must not stop the others
+                    log.warning("push failed: %s: %s", type(e).__name__, e)
+
+        await asyncio.gather(*(one(s) for s in
+                               self.store.followers(ev.row.train_no, ev.service_date)))
 
 
 def make_webpush_sender(settings) -> Callable[[Subscription, dict], Awaitable[None]]:

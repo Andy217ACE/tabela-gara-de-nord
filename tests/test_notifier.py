@@ -19,7 +19,7 @@ EP2 = "https://push.example.com/sub/def"
 EP3 = "https://push.example.com/sub/ghi"
 
 
-def board(delay=0, platform=13, with_1636=True):
+def board(delay=0, platform=13, with_1636=True, conf=1.0):
     rows = [
         Row("arrival", "IR", 1621, "Brasov", "CFR", "12:10"),
         Row("arrival", "IR", 1622, "Brasov", "CFR", "12:20"),
@@ -28,8 +28,13 @@ def board(delay=0, platform=13, with_1636=True):
     ]
     if with_1636:
         rows.append(Row("departure", "IR", 1636, "Constanta", "CFR", "12:40",
-                        delay_min=delay, platform=platform))
+                        delay_min=delay, platform=platform, confidence=conf))
     return rows
+
+
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch):
+    monkeypatch.setattr("app.store._today", lambda: DAY)
 
 
 class Harness:
@@ -210,6 +215,141 @@ def test_confirm_one_sends_immediately(store):
     h.tick(board(delay=0))
     h.tick(board(delay=7))
     assert h.bodies() == ["IR 1636: întârziere +7 min"]
+
+
+# -- re-read requirement (fix round 1) ----------------------------------------
+
+def test_misread_then_row_missing_then_back_no_push(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))              # misread
+    h.tick(board(with_1636=False))       # row missing: must not confirm
+    h.tick(board(delay=0))
+    h.tick(board(delay=0))
+    h.tick(board(delay=0))
+    assert h.sent == []
+
+
+def test_misread_then_low_confidence_row_then_back_no_push(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))              # misread
+    h.tick(board(delay=0, conf=0.1))     # low confidence: must not confirm
+    h.tick(board(delay=0))
+    h.tick(board(delay=0))
+    assert h.sent == []
+
+
+def test_hold_while_not_reread_then_confirm(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))
+    h.tick(board(delay=10, conf=0.1))    # hold 1
+    h.tick(board(delay=10, conf=0.1))    # hold 2
+    assert h.sent == []
+    h.tick(board(delay=10))              # re-read -> confirmed
+    assert h.bodies() == ["IR 1636: întârziere +10 min"]
+
+
+def test_dropped_after_three_runs_without_reread(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))
+    for _ in range(3):
+        h.tick(board(delay=10, conf=0.1))
+    h.tick(board(delay=10))
+    h.tick(board(delay=10))
+    assert h.sent == []
+
+
+def test_successive_changes_before_confirmation(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))
+    h.tick(board(delay=15))
+    h.tick(board(delay=20))
+    h.tick(board(delay=20))
+    h.tick(board(delay=20))
+    assert h.bodies() == ["IR 1636: întârziere +20 min"]
+
+
+def test_change_and_resurrection_in_same_reading(h):
+    gone_msg = "IR 1636: a ieșit de pe panou"
+    h.tick(board(delay=0))
+    h.tick(board(with_1636=False))
+    h.tick(board(with_1636=False))       # gone
+    h.tick(board(with_1636=False))       # gone confirmed
+    ev = h.tick(board(delay=10))         # resurrection + delay change together
+    assert {e.kind for e in ev if e.row.train_no == 1636} == {"appeared", "delay"}
+    h.tick(board(delay=10))
+    assert h.bodies() == [gone_msg, "IR 1636: întârziere +10 min"]
+    h.tick(board(with_1636=False))
+    h.tick(board(with_1636=False))
+    h.tick(board(with_1636=False))
+    assert h.bodies() == [gone_msg, "IR 1636: întârziere +10 min", gone_msg]
+
+
+# -- concurrency (fix round 1) ------------------------------------------------
+
+def test_overlapping_handle_calls_do_not_raise(store):
+    sent = []
+
+    async def slow_send(sub, payload):
+        await asyncio.sleep(0.05)
+        sent.append(payload["body"])
+
+    n = Notifier(store, slow_send)
+    store.ingest(board(delay=0), T0)
+    e1 = store.ingest(board(delay=10), T0 + timedelta(minutes=1))
+
+    async def main():
+        await n.handle(e1, DAY)
+        e2 = store.ingest(board(delay=10), T0 + timedelta(minutes=2))
+        await asyncio.gather(n.handle(e2, DAY), n.handle(e2, DAY), n.handle([], DAY))
+
+    asyncio.run(main())
+    assert sent == ["IR 1636: întârziere +10 min"]
+
+
+def test_slow_send_does_not_delay_others(store):
+    for ep in (EP2, EP3):
+        store.subscribe(ep, "q", "b")
+        store.follow(ep, 1636, DAY)
+    done = []
+
+    async def send(sub, payload):
+        if sub.endpoint == EP:           # first follower, dead endpoint
+            await asyncio.sleep(5)
+        done.append((sub.endpoint, asyncio.get_running_loop().time()))
+
+    n = Notifier(store, send, send_timeout=0.6)
+    store.ingest(board(delay=0), T0)
+    e1 = store.ingest(board(delay=10), T0 + timedelta(minutes=1))
+
+    async def main():
+        await n.handle(e1, DAY)
+        e2 = store.ingest(board(delay=10), T0 + timedelta(minutes=2))
+        t = asyncio.get_running_loop().time()
+        await n.handle(e2, DAY)
+        return t, asyncio.get_running_loop().time() - t
+
+    t0, elapsed = asyncio.run(main())
+    assert sorted(ep for ep, _ in done) == sorted([EP2, EP3])
+    assert all(at - t0 < 0.3 for _, at in done)   # not queued behind the dead one
+    assert elapsed < 1.5                           # dead one cut off by the timeout
+    assert store.followers(1636, DAY)[0].endpoint == EP  # timeout != gone: kept
+
+
+def test_send_failure_logs_type_and_message(store, caplog):
+    async def send(sub, payload):
+        raise RuntimeError("web push failed: HTTP 500")
+
+    n = Notifier(store, send)
+    store.ingest(board(delay=0), T0)
+    e1 = store.ingest(board(delay=10), T0 + timedelta(minutes=1))
+
+    async def main():
+        await n.handle(e1, DAY)
+        await n.handle(store.ingest(board(delay=10), T0 + timedelta(minutes=2)), DAY)
+
+    with caplog.at_level("WARNING", logger="app.notifier"):
+        asyncio.run(main())
+    assert "RuntimeError" in caplog.text and "HTTP 500" in caplog.text
 
 
 # -- web push sender ----------------------------------------------------------

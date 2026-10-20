@@ -7,6 +7,7 @@ miss a whole board are recorded as failed runs (`ok=0`) and touch nothing else.
 """
 from __future__ import annotations
 
+import ipaddress
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
@@ -23,7 +24,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
 
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS services (
     flagged INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'listed' CHECK (status IN ('listed', 'gone')),
     miss_count INTEGER NOT NULL DEFAULT 0,
+    last_read TEXT,
     UNIQUE (board, service_date, train_no, sched_time)
 );
 CREATE INDEX IF NOT EXISTS ix_services_date ON services(service_date);
@@ -137,11 +139,31 @@ def _iso(d: date | str) -> str:
     return d if isinstance(d, str) else d.isoformat()
 
 
+def _today() -> date:
+    """Today in Europe/Bucharest (patched in tests)."""
+    return datetime.now(TZ).date()
+
+
 def _check_endpoint(endpoint: str) -> None:
+    """https URL on a public DNS name, at most MAX_ENDPOINT_LEN chars.
+
+    Real push services use DNS names, so IP literals and local-only names
+    (localhost, *.local, *.internal) are refused (SSRF hardening).
+    """
     if not isinstance(endpoint, str) or len(endpoint) > MAX_ENDPOINT_LEN:
         raise ValueError("endpoint invalid")
-    u = urlsplit(endpoint)
-    if u.scheme != "https" or not u.hostname:
+    u = urlsplit(endpoint)  # may itself raise ValueError
+    host = (u.hostname or "").rstrip(".").lower()
+    if u.scheme != "https" or not host:
+        raise ValueError("endpoint invalid")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("endpoint invalid")
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")) \
+            or "." not in host:
         raise ValueError("endpoint invalid")
 
 
@@ -168,7 +190,15 @@ class Store:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version >= SCHEMA_VERSION:
                 return
-            self._conn.executescript("BEGIN;" + _SCHEMA + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
+            if version == 0:  # fresh database: full current schema
+                self._conn.executescript(
+                    "BEGIN;" + _SCHEMA + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
+                return
+            # v1 -> v2: services.last_read (ts of the last confident reading).
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
+            add = "" if "last_read" in cols else "ALTER TABLE services ADD COLUMN last_read TEXT;"
+            self._conn.executescript(
+                "BEGIN;" + _SCHEMA + add + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
 
     # -- ingest -----------------------------------------------------------
 
@@ -280,9 +310,10 @@ class Store:
                 sid = c.execute(
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
                     " operator, sched_time, first_seen, last_seen, last_delay, last_platform,"
-                    " flagged, status, miss_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0)",
+                    " flagged, status, miss_count, last_read)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?)",
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
-                     r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged)),
+                     r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s),
                 ).lastrowid
                 seen.add(sid)
                 emit(sid, "appeared", r, sd)
@@ -297,10 +328,10 @@ class Store:
                 emit(sid, "platform", row, sd, _plat(cur["last_platform"]), _plat(r.platform))
             c.execute(
                 "UPDATE services SET train_type=?, station=?, operator=?, last_seen=?,"
-                " last_delay=?, last_platform=?, flagged=?, status='listed', miss_count=0"
-                " WHERE id=?",
+                " last_delay=?, last_platform=?, flagged=?, status='listed', miss_count=0,"
+                " last_read=? WHERE id=?",
                 (r.train_type, r.station, r.operator, ts_s, r.delay_min, r.platform,
-                 int(r.flagged), sid),
+                 int(r.flagged), ts_s, sid),
             )
 
         # Low-confidence rows: only keep an exactly matching service alive.
@@ -435,18 +466,32 @@ class Store:
             r = self._conn.execute("SELECT MAX(id) FROM runs WHERE ok=1").fetchone()
         return r[0]
 
+    def last_ok_run(self) -> tuple[int, str] | None:
+        """(id, ts) of the latest successful reading."""
+        with self._lock:
+            r = self._conn.execute(
+                "SELECT id, ts FROM runs WHERE ok=1 ORDER BY id DESC LIMIT 1").fetchone()
+        return (r[0], r[1]) if r else None
+
     def service_state(self, board: str, service_date: str, train_no: int,
                       sched_time: str) -> dict | None:
-        """Current {status, delay, platform} of one service, or None."""
+        """Current {status, delay, platform, last_read, last_seen} of one service, or None.
+
+        `last_read` is the ts of the last ok run that matched the service with a
+        confident row (low-confidence sightings do not update it).
+        """
         with self._lock:
             s = self._conn.execute(
-                "SELECT status, last_delay, last_platform FROM services WHERE board=?"
+                "SELECT status, last_delay, last_platform, last_read, last_seen FROM services"
+                " WHERE board=?"
                 " AND service_date=? AND train_no=? AND sched_time=?",
                 (board, service_date, train_no, sched_time),
             ).fetchone()
         if s is None:
             return None
-        return {"status": s["status"], "delay": s["last_delay"], "platform": s["last_platform"]}
+        return {"status": s["status"], "delay": s["last_delay"],
+                "platform": s["last_platform"], "last_read": s["last_read"],
+                "last_seen": s["last_seen"]}
 
     # -- subscriptions & follows -----------------------------------------
 
@@ -473,8 +518,16 @@ class Store:
                                (endpoint,)).fetchone()
         return r[0] if r else None
 
-    def follow(self, endpoint: str, train_no: int, date: date | str) -> None:
+    def follow(self, endpoint: str, train_no: int, date: date | str, *,
+               today: date | None = None) -> None:
+        """Follow a train for one service date.
+
+        Only follows dated `today - 1` or later count towards MAX_FOLLOWS; older
+        ones of this subscription are deleted here (lazy cleanup). `today`
+        defaults to the current date in Europe/Bucharest.
+        """
         day = _iso(date)
+        cutoff = ((today or _today()) - timedelta(days=1)).isoformat()
         with self._lock:
             c = self._conn
             c.execute("BEGIN IMMEDIATE")
@@ -482,6 +535,8 @@ class Store:
                 sid = self._sub_id(endpoint)
                 if sid is None:
                     raise ValueError("abonare necunoscută")
+                c.execute("DELETE FROM follows WHERE subscription_id=? AND service_date < ?",
+                          (sid, cutoff))
                 exists = c.execute(
                     "SELECT 1 FROM follows WHERE subscription_id=? AND train_no=?"
                     " AND service_date=?", (sid, train_no, day)).fetchone()

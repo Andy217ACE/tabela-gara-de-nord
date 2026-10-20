@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.models import Row
-from app.store import MIN_ROWS, Store, service_date
+from app.store import MIN_ROWS, SCHEMA_VERSION, Store, service_date
 
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
@@ -45,10 +45,37 @@ def test_min_rows_constant():
 
 def test_migrate_idempotent_and_versioned(store):
     store.migrate()
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
     names = {r[0] for r in store._conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"runs", "services", "events", "subscriptions", "follows"} <= names
+
+
+def test_migrate_v1_db_adds_last_read(tmp_path):
+    s = Store(str(tmp_path / "old.db"))
+    s.migrate()
+    # Simulate a database created by schema version 1 (no last_read column).
+    s._conn.execute("ALTER TABLE services DROP COLUMN last_read")
+    s._conn.execute("PRAGMA user_version = 1")
+    s.migrate()
+    s.migrate()  # idempotent
+    cols = {r[1] for r in s._conn.execute("PRAGMA table_info(services)")}
+    assert "last_read" in cols
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    s.close()
+
+
+def test_last_read_only_set_by_confident_rows(store):
+    store.ingest(base_rows(), T0)
+    t1 = T0 + timedelta(minutes=1)
+    rows = base_rows() + [R("departure", 1733, "12:45")]  # stays a valid reading
+    rows[0] = R("arrival", 1621, "12:10", platform=3, confidence=0.1)
+    store.ingest(rows, t1)
+    assert store.last_ok_run()[1] == t1.isoformat()
+    st = store.service_state("arrival", "2026-10-20", 1621, "12:10")
+    assert st["last_read"] == T0.isoformat()
+    st2 = store.service_state("arrival", "2026-10-20", 1622, "12:20")
+    assert st2["last_read"] == t1.isoformat()
 
 
 def test_wal_on_file_db(tmp_path):

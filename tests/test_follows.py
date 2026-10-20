@@ -14,6 +14,11 @@ EP = "https://push.example.com/sub/abc"
 EP2 = "https://push.example.com/sub/def"
 
 
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch):
+    monkeypatch.setattr("app.store._today", lambda: DAY)
+
+
 @pytest.fixture
 def store():
     s = Store(":memory:")
@@ -33,10 +38,21 @@ def test_subscribe_returns_id_and_upserts(store):
 @pytest.mark.parametrize("bad", [
     "http://push.example.com/x", "ftp://x", "not a url", "", "https://",
     "https://example.com/" + "a" * 500,
+    "https://127.0.0.1/x", "https://10.0.0.5:8443/x", "https://[::1]/x",
+    "https://localhost/x", "https://LOCALHOST/x", "https://printer.local/x",
+    "https://metadata.google.internal/x", "https://169.254.169.254/latest",
 ])
 def test_subscribe_rejects_bad_endpoint(store, bad):
     with pytest.raises(ValueError):
         store.subscribe(bad, "p", "a")
+
+
+@pytest.mark.parametrize("good", [
+    "https://fcm.googleapis.com/fcm/send/abc", "https://updates.push.services.mozilla.com/wpush/v2/x",
+    "https://web.push.apple.com/QX", "https://wns2-db5p.notify.windows.com/w/?token=x",
+])
+def test_subscribe_accepts_real_push_services(store, good):
+    assert isinstance(store.subscribe(good, "p", "a"), int)
 
 
 def test_subscribe_rejects_empty_keys(store):
@@ -69,11 +85,38 @@ def test_follow_unknown_subscription(store):
 def test_follow_limit_20(store):
     store.subscribe(EP, "p", "a")
     for n in range(20):
-        store.follow(EP, 1000 + n, DAY)
+        store.follow(EP, 1000 + n, DAY, today=DAY)
     with pytest.raises(ValueError, match="limită de 20 de trenuri"):
-        store.follow(EP, 2000, DAY)
-    store.follow(EP, 1000, DAY)  # re-following an existing one is fine
+        store.follow(EP, 2000, DAY, today=DAY)
+    store.follow(EP, 1000, DAY, today=DAY)  # re-following an existing one is fine
     assert len(store.list_follows(EP)) == 20
+
+
+def test_follow_limit_counts_only_current_dates(store):
+    store.subscribe(EP, "p", "a")
+    old = DAY - timedelta(days=5)
+    for n in range(20):
+        store.follow(EP, 1000 + n, old, today=old)
+    # The 20 follows from 5 days ago neither block nor survive...
+    store.follow(EP, 2000, DAY, today=DAY)
+    store.follow(EP, 1000, DAY - timedelta(days=1), today=DAY)  # ...yesterday is kept
+    assert store.list_follows(EP) == [
+        {"train_no": 2000, "date": "2026-10-20"},
+        {"train_no": 1000, "date": "2026-10-19"},
+    ]
+    for n in range(18):
+        store.follow(EP, 3000 + n, DAY, today=DAY)
+    with pytest.raises(ValueError, match="limită de 20 de trenuri"):  # yesterday counts
+        store.follow(EP, 4000, DAY, today=DAY)
+
+
+def test_follow_default_today_is_bucharest(store, monkeypatch):
+    from app.store import TZ
+    monkeypatch.undo()  # real clock
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1000, date(2020, 1, 1))
+    store.follow(EP, 1001, datetime.now(TZ).date())  # old one pruned lazily
+    assert [f["train_no"] for f in store.list_follows(EP)] == [1001]
 
 
 def test_followers_only_for_train_and_date(store):
@@ -104,7 +147,9 @@ def test_service_state_and_last_run(store):
     rid = store.last_ok_run_id()
     assert isinstance(rid, int)
     st = store.service_state("arrival", "2026-10-20", 1621, "12:10")
-    assert st == {"status": "listed", "delay": 5, "platform": 3}
+    assert st == {"status": "listed", "delay": 5, "platform": 3,
+                  "last_read": T0.isoformat(), "last_seen": T0.isoformat()}
+    assert store.last_ok_run() == (rid, T0.isoformat())
     assert store.service_state("arrival", "2026-10-20", 9999, "12:10") is None
     store.ingest(rows[:1], T0 + timedelta(minutes=1))  # failed run: id unchanged
     assert store.last_ok_run_id() == rid
