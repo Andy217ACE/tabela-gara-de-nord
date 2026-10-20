@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Tabela Gara de Nord">
+  <!-- © 2026 Andy217Ace — placeholder logo, to be replaced -->
+  <rect width="48" height="48" rx="13" fill="#141a23"/>
+  <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="12.25" fill="none" stroke="#2f3a4b" stroke-width="1.5"/>
+  <g fill="none" stroke="#ffb547" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 10.5h16a4 4 0 0 1 4 4V30a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4V14.5a4 4 0 0 1 4-4z"/>
+    <path d="M12.5 22h23"/>
+    <path d="M19 15h10"/>
+    <path d="M18 34l-4 5M30 34l4 5"/>
+  </g>
+  <circle cx="18" cy="28" r="1.9" fill="#ffb547"/>
+  <circle cx="30" cy="28" r="1.9" fill="#ffb547"/>
+</svg>

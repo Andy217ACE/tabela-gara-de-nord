@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tabela Gara de Nord">
+  <!-- © 2026 Andy217Ace — placeholder PWA icon, to be replaced -->
+  <rect width="512" height="512" rx="112" fill="#0a0d12"/>
+  <g fill="none" stroke="#ffb547" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M176 112h160a40 40 0 0 1 40 40v168a40 40 0 0 1-40 40H176a40 40 0 0 1-40-40V152a40 40 0 0 1 40-40z"/>
+    <path d="M140 236h232"/>
+    <path d="M206 170h100"/>
+    <path d="M196 360l-42 56M316 360l42 56"/>
+  </g>
+  <circle cx="196" cy="300" r="20" fill="#ffb547"/>
+  <circle cx="316" cy="300" r="20" fill="#ffb547"/>
+</svg>

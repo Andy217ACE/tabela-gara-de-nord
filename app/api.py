@@ -218,7 +218,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         app.state.on_rows = on_rows
 
         client = stop = poller_task = None
-        if start_poller:
+        if start_poller and settings.poller_enabled:
             client = httpx.AsyncClient()
             stop = asyncio.Event()
             poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop))
@@ -249,6 +249,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
+        if not request.url.path.startswith("/api/"):
+            # static frontend: always revalidate (ETag) so a deploy is picked up at once
+            response.headers.setdefault("Cache-Control", "no-cache")
         return response
 
     @app.exception_handler(RequestValidationError)

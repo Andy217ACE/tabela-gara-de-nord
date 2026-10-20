@@ -3,17 +3,133 @@
 <html lang="ro">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tabela Gara de Nord</title>
+  <meta name="description" content="Sosirile și plecările din Gara de Nord București, actualizate în timp real: ore, întârzieri și linii. Proiect independent, cu date preluate de la CFR.">
   <meta name="author" content="Andy217Ace">
-  <title>Gara de Nord</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0a0d12" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
 </head>
 <body>
-  <main>
-    <h1>Gara de Nord</h1>
-    <p>Tabela de sosiri și plecări — în curând.</p>
+  <a class="skip-link" href="#main">Sari la tabelă</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#">
+        <img id="logo" src="icons/logo.svg" alt="Sigla Tabela Gara de Nord" width="40" height="40">
+        <span class="brand-text">
+          <span class="brand-title">Gara de Nord</span>
+          <span class="brand-sub">Sosiri și plecări</span>
+        </span>
+      </a>
+
+      <div class="live" id="live" data-state="loading">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="live-text" id="updated">Se încarcă…</span>
+        <span class="live-sep" aria-hidden="true">·</span>
+        <span class="live-src">Sursa: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">CFR</a></span>
+      </div>
+
+      <nav class="mainnav" aria-label="Navigare principală">
+        <a class="nav-item" href="#" data-route="tabela">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7.5 13h4M7.5 16.5h4M14.5 13h2M14.5 16.5h2"/></svg>
+          <span>Tabelă</span>
+        </a>
+        <a class="nav-item" href="#istoric" data-route="istoric">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+          <span>Istoric</span>
+        </a>
+        <a class="nav-item" href="#urmarite" data-route="urmarite">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+          <span>Urmărite</span>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <p class="sr-only" id="sr-status" role="status" aria-live="polite"></p>
+
+  <main id="main" tabindex="-1">
+    <section class="view view-board" id="view-tabela" aria-labelledby="board-heading">
+      <h1 class="sr-only" id="board-heading">Tabela Gara de Nord</h1>
+
+      <div class="banner" id="banner" hidden>
+        <svg class="banner-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>
+        <span class="banner-text" id="banner-text"></span>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Panou">
+        <button class="tab" type="button" role="tab" id="tab-arrivals" aria-controls="panel-arrivals" aria-selected="true" data-board="arrivals">
+          <span>Sosiri</span><span class="tab-count" id="count-arrivals"></span>
+        </button>
+        <button class="tab" type="button" role="tab" id="tab-departures" aria-controls="panel-departures" aria-selected="false" tabindex="-1" data-board="departures">
+          <span>Plecări</span><span class="tab-count" id="count-departures"></span>
+        </button>
+      </div>
+
+      <div class="boards" id="boards" data-active="arrivals">
+        <section class="board" id="panel-arrivals" role="tabpanel" aria-labelledby="tab-arrivals" data-board="arrivals">
+          <h2 class="board-title">
+            <svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+            <span>Sosiri</span>
+          </h2>
+          <ol class="trains" id="list-arrivals" aria-busy="true">
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+          </ol>
+          <p class="empty" hidden>Momentan nu sunt trenuri afișate.</p>
+        </section>
+
+        <section class="board" id="panel-departures" role="tabpanel" aria-labelledby="tab-departures" data-board="departures">
+          <h2 class="board-title">
+            <svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            <span>Plecări</span>
+          </h2>
+          <ol class="trains" id="list-departures" aria-busy="true">
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+            <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
+          </ol>
+          <p class="empty" hidden>Momentan nu sunt trenuri afișate.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="view view-soon" id="view-istoric" aria-labelledby="istoric-heading" hidden>
+      <div class="soon">
+        <svg class="soon-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+        <h1 id="istoric-heading">Istoric</h1>
+        <p>Întârzierile și liniile din zilele trecute, cu filtre după tren, stație și oră.</p>
+        <p class="soon-tag">În curând</p>
+        <a class="btn" href="#">Înapoi la tabelă</a>
+      </div>
+    </section>
+
+    <section class="view view-soon" id="view-urmarite" aria-labelledby="urmarite-heading" hidden>
+      <div class="soon">
+        <svg class="soon-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+        <h1 id="urmarite-heading">Trenuri urmărite</h1>
+        <p>Urmărește un tren și primești notificare când i se schimbă întârzierea sau linia.</p>
+        <p class="soon-tag">În curând</p>
+        <a class="btn" href="#">Înapoi la tabelă</a>
+      </div>
+    </section>
   </main>
-  <footer>
-    <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro">cfr.ro</a></p>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <footer class="footer">
+    <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
   </footer>
 </body>
 </html>
