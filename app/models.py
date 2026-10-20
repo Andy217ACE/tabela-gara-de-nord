@@ -28,3 +28,4 @@ class Event:
     row: Row
     old: str | None
     new: str | None
+    service_date: str | None = None  # ISO date of the service (set by the store)

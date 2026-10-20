@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from datetime import date, datetime, timedelta
+from dataclasses import replace
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.models import Event, Row
@@ -17,6 +18,9 @@ from app.models import Event, Row
 TZ = ZoneInfo("Europe/Bucharest")
 MIN_ROWS = 4
 GONE_AFTER_MISSES = 2
+MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
+JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
+STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 1
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
@@ -88,6 +92,11 @@ def _local(dt: datetime) -> datetime:
     return dt.astimezone(TZ)
 
 
+def _hm(sched_time: str) -> time:
+    hh, mm = (int(p) for p in sched_time.split(":"))
+    return time(hh, mm)
+
+
 def service_date(sched_time: str, now: datetime) -> date:
     """Day a scheduled time belongs to, given the moment it was read.
 
@@ -138,6 +147,19 @@ class Store:
     # -- ingest -----------------------------------------------------------
 
     @staticmethod
+    def _split(rows: list[Row]) -> tuple[list[Row], list[Row]]:
+        """Deduplicate by Row.key (confident rows win) and split by confidence."""
+        good: dict[tuple, Row] = {}
+        low: dict[tuple, Row] = {}
+        for r in rows:
+            if r.confidence >= MIN_CONFIDENCE:
+                good.setdefault(r.key, r)
+        for r in rows:
+            if r.confidence < MIN_CONFIDENCE and r.key not in good:
+                low.setdefault(r.key, r)
+        return list(good.values()), list(low.values())
+
+    @staticmethod
     def _valid(rows: list[Row]) -> bool:
         boards = {r.board for r in rows}
         return len(rows) >= MIN_ROWS and {"arrival", "departure"} <= boards
@@ -156,36 +178,78 @@ class Store:
             c = self._conn
             c.execute("BEGIN IMMEDIATE")
             try:
-                if not self._valid(rows):
+                good, low = self._split(rows)
+                if not self._valid(good):
                     c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,0,?)",
                               (ts_s, image_hash, len(rows)))
                     c.execute("COMMIT")
                     return []
                 c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,1,?)",
                           (ts_s, image_hash, len(rows)))
-                events = self._diff(rows, local, ts_s)
+                events = self._diff(good, low, local, ts_s)
                 c.execute("COMMIT")
                 return events
             except BaseException:
                 c.execute("ROLLBACK")
                 raise
 
-    def _diff(self, rows: list[Row], local: datetime, ts_s: str) -> list[Event]:
+    def _find_exact(self, r: Row, sd: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM services WHERE board=? AND service_date=? AND train_no=?"
+            " AND sched_time=?", (r.board, sd, r.train_no, r.sched_time),
+        ).fetchone()
+
+    def _find_jitter(self, r: Row, sd: str, claimed: set[int]) -> sqlite3.Row | None:
+        """Closest listed service of the same train/board within JITTER_MIN minutes.
+
+        The scheduled time never changes legitimately, so a near miss is an OCR
+        misread of the same service.
+        """
+        target = datetime.combine(date.fromisoformat(sd), _hm(r.sched_time))
+        d = date.fromisoformat(sd)
+        cands = self._conn.execute(
+            "SELECT * FROM services WHERE status='listed' AND board=? AND train_no=?"
+            " AND service_date IN (?,?,?)",
+            (r.board, r.train_no, (d - timedelta(days=1)).isoformat(), sd,
+             (d + timedelta(days=1)).isoformat()),
+        ).fetchall()
+        best, best_diff = None, None
+        for s in cands:
+            if s["id"] in claimed:
+                continue
+            at = datetime.combine(date.fromisoformat(s["service_date"]), _hm(s["sched_time"]))
+            diff = abs(at - target)
+            if diff <= timedelta(minutes=JITTER_MIN) and (best_diff is None or diff < best_diff):
+                best, best_diff = s, diff
+        return best
+
+    def _diff(self, good: list[Row], low: list[Row], local: datetime,
+              ts_s: str) -> list[Event]:
         c = self._conn
         events: list[Event] = []
         seen: set[int] = set()
-        keys: set[tuple] = set()
-        for r in rows:
-            sd = service_date(r.sched_time, local).isoformat()
-            key = (r.board, sd, r.train_no, r.sched_time)
-            if key in keys:  # duplicate line in one reading: first wins
-                continue
-            keys.add(key)
-            cur = c.execute(
-                "SELECT id, last_delay, last_platform, status FROM services "
-                "WHERE board=? AND service_date=? AND train_no=? AND sched_time=?",
-                key,
-            ).fetchone()
+
+        def emit(sid: int, kind: str, row: Row, sd: str, old=None, new=None) -> None:
+            self._insert_event(sid, ts_s, kind, old, new)
+            events.append(Event(kind, row, old, new, sd))
+
+        # Pass 1: exact key matches (claim them so jitter can't steal them).
+        dated = [(r, service_date(r.sched_time, local).isoformat()) for r in good]
+        matches: list[tuple[Row, str, sqlite3.Row | None]] = []
+        for r, sd in dated:
+            cur = self._find_exact(r, sd)
+            if cur is not None:
+                seen.add(cur["id"])
+            matches.append((r, sd, cur))
+        # Pass 2: sched_time jitter for the unmatched rows.
+        for i, (r, sd, cur) in enumerate(matches):
+            if cur is None:
+                cur = self._find_jitter(r, sd, seen)
+                if cur is not None:
+                    seen.add(cur["id"])
+                    matches[i] = (r, sd, cur)
+
+        for r, sd, cur in matches:
             if cur is None:
                 sid = c.execute(
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
@@ -194,23 +258,17 @@ class Store:
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
                      r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged)),
                 ).lastrowid
-                self._insert_event(sid, ts_s, "appeared", None, None)
-                events.append(Event("appeared", r, None, None))
                 seen.add(sid)
+                emit(sid, "appeared", r, sd)
                 continue
-            sid = cur["id"]
-            seen.add(sid)
+            sid, sd = cur["id"], cur["service_date"]
+            row = replace(r, sched_time=cur["sched_time"])  # stored sched_time wins
             if cur["status"] == "gone":
-                self._insert_event(sid, ts_s, "appeared", None, None)
-                events.append(Event("appeared", r, None, None))
+                emit(sid, "appeared", row, sd)
             if cur["last_delay"] != r.delay_min:
-                old, new = str(cur["last_delay"]), str(r.delay_min)
-                self._insert_event(sid, ts_s, "delay", old, new)
-                events.append(Event("delay", r, old, new))
+                emit(sid, "delay", row, sd, str(cur["last_delay"]), str(r.delay_min))
             if cur["last_platform"] != r.platform:
-                old, new = _plat(cur["last_platform"]), _plat(r.platform)
-                self._insert_event(sid, ts_s, "platform", old, new)
-                events.append(Event("platform", r, old, new))
+                emit(sid, "platform", row, sd, _plat(cur["last_platform"]), _plat(r.platform))
             c.execute(
                 "UPDATE services SET train_type=?, station=?, operator=?, last_seen=?,"
                 " last_delay=?, last_platform=?, flagged=?, status='listed', miss_count=0"
@@ -219,15 +277,27 @@ class Store:
                  int(r.flagged), sid),
             )
 
+        # Low-confidence rows: only keep an exactly matching service alive.
+        for r in low:
+            cur = self._find_exact(r, service_date(r.sched_time, local).isoformat())
+            if cur is not None and cur["id"] not in seen:
+                seen.add(cur["id"])
+                c.execute("UPDATE services SET last_seen=?, miss_count=0 WHERE id=?",
+                          (ts_s, cur["id"]))
+
+        stale_before = local - timedelta(minutes=STALE_MIN)
         for s in c.execute("SELECT * FROM services WHERE status='listed'").fetchall():
             if s["id"] in seen:
                 continue
             misses = s["miss_count"] + 1
-            if misses >= GONE_AFTER_MISSES:
+            if datetime.fromisoformat(s["last_seen"]) < stale_before:
+                # Not seen for a long time (e.g. downtime): retire without an event.
                 c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
                           (misses, s["id"]))
-                self._insert_event(s["id"], ts_s, "gone", None, None)
-                events.append(Event("gone", self._row_of(s), None, None))
+            elif misses >= GONE_AFTER_MISSES:
+                c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
+                          (misses, s["id"]))
+                emit(s["id"], "gone", self._row_of(s), s["service_date"])
             else:
                 c.execute("UPDATE services SET miss_count=? WHERE id=?", (misses, s["id"]))
         return events
@@ -258,7 +328,7 @@ class Store:
                 "train_type": s["train_type"], "train_no": s["train_no"],
                 "station": s["station"], "operator": s["operator"],
                 "sched_time": s["sched_time"], "delay_min": s["last_delay"],
-                "platform": s["last_platform"], "flagged": s["flagged"],
+                "platform": s["last_platform"], "flagged": bool(s["flagged"]),
                 "status": s["status"],
             })
         return out

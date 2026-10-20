@@ -214,7 +214,8 @@ def test_current_board(store):
     a = b["arrivals"][0]
     assert a == {"train_type": "IR", "train_no": 1621, "station": "Brasov",
                  "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
-                 "platform": 3, "flagged": 1, "status": "listed"}
+                 "platform": 3, "flagged": True, "status": "listed"}
+    assert a["flagged"] is True and b["arrivals"][1]["flagged"] is False
     # failed run doesn't move updated_at
     store.ingest([], T0 + timedelta(minutes=1))
     assert store.current_board()["updated_at"] == T0.isoformat()
@@ -256,3 +257,112 @@ def test_ingest_rolls_back_on_error(store, monkeypatch):
     assert count(store, "runs") == 1
     assert store._conn.execute(
         "SELECT last_delay FROM services WHERE train_no=1621").fetchone()[0] == 0
+
+
+# --- fix round 1 -----------------------------------------------------------
+
+def test_min_confidence_constant():
+    from app.store import MIN_CONFIDENCE
+    assert MIN_CONFIDENCE == 0.5
+
+
+def test_low_confidence_delay_misread_is_ignored(store):
+    rows = base_rows() + [R("arrival", 1650, "13:00")]  # stays valid without the low row
+    rows[0] = R("arrival", 1621, "12:10", delay=10, platform=3)
+    store.ingest(rows, T0)
+    low = list(rows)
+    low[0] = R("arrival", 1621, "12:10", delay=16, platform=4, confidence=0.3)
+    assert store.ingest(low, T0 + timedelta(minutes=1)) == []
+    s = store._conn.execute(
+        "SELECT last_delay, last_platform, last_seen FROM services WHERE train_no=1621").fetchone()
+    assert (s[0], s[1]) == (10, 3)
+    assert s[2] == (T0 + timedelta(minutes=1)).isoformat()  # last_seen refreshed
+    assert store.ingest(rows, T0 + timedelta(minutes=2)) == []
+    assert count(store, "events", "kind IN ('delay','platform')") == 0
+
+
+def test_low_confidence_misread_train_no_creates_nothing(store):
+    store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0)
+    rows = base_rows() + [R("arrival", 1650, "13:00")]
+    rows[0] = R("arrival", 1627, "12:10", platform=3, confidence=0.2)  # misread 1621
+    assert store.ingest(rows, T0 + timedelta(minutes=1)) == []
+    ev = store.ingest(rows, T0 + timedelta(minutes=2))
+    # the misread row creates nothing; the real 1621 (unmatched) follows normal miss rules
+    assert [(e.kind, e.row.train_no) for e in ev] == [("gone", 1621)]
+    assert count(store, "services", "train_no=1627") == 0
+    assert count(store, "events", "kind='appeared'") == 5
+
+
+def test_low_confidence_rows_do_not_count_for_validity(store):
+    rows = [R("arrival", 1, "12:00"), R("arrival", 2, "12:05"), R("departure", 3, "12:10"),
+            R("departure", 4, "12:15", confidence=0.1)]
+    assert store.ingest(rows, T0) == []
+    assert count(store, "runs", "ok=0") == 1
+    rows = [R("arrival", 1, "12:00"), R("arrival", 2, "12:05"), R("arrival", 5, "12:20"),
+            R("departure", 4, "12:15", confidence=0.1)]
+    assert store.ingest(rows, T0) == []  # departure board only low-confidence
+    assert count(store, "services") == 0
+
+
+def test_validity_uses_deduplicated_rows(store):
+    rows = [R("arrival", 1, "12:00"), R("arrival", 1, "12:00"),
+            R("departure", 3, "12:10"), R("departure", 3, "12:10")]
+    assert store.ingest(rows, T0) == []
+    assert count(store, "runs", "ok=0") == 1
+
+
+def test_sched_time_jitter_merges(store):
+    rows = base_rows() + [R("arrival", 1636, "20:04", delay=5)]
+    store.ingest(rows, T0)
+    jit = base_rows() + [R("arrival", 1636, "20:01", delay=10)]
+    ev = store.ingest(jit, T0 + timedelta(minutes=1))
+    assert [(e.kind, e.row.train_no, e.row.sched_time, e.old, e.new) for e in ev] == [
+        ("delay", 1636, "20:04", "5", "10")]
+    ev = store.ingest(jit, T0 + timedelta(minutes=2))
+    assert ev == []
+    assert count(store, "services", "train_no=1636") == 1
+    assert store._conn.execute(
+        "SELECT sched_time, status FROM services WHERE train_no=1636").fetchone()[:] == ("20:04", "listed")
+    arr = store.current_board()["arrivals"]
+    assert [r["train_no"] for r in arr].count(1636) == 1
+
+
+def test_jitter_does_not_merge_far_apart_or_claimed(store):
+    rows = base_rows() + [R("arrival", 1636, "20:04"), R("arrival", 1636, "21:04")]
+    ev = store.ingest(rows, T0)
+    assert count(store, "services", "train_no=1636") == 2
+    # exact match for 20:04 must not be stolen by a jittered 20:06 row
+    rows2 = base_rows() + [R("arrival", 1636, "20:04"), R("arrival", 1636, "20:06"),
+                           R("arrival", 1636, "21:04")]
+    ev = store.ingest(rows2, T0 + timedelta(minutes=1))
+    assert [(e.kind, e.row.sched_time) for e in ev] == [("appeared", "20:06")]
+
+
+def test_stale_services_go_silently(store):
+    store.ingest(base_rows(), T0)
+    rows = [R("arrival", 1, "13:00"), R("arrival", 2, "13:05"),
+            R("departure", 3, "13:10"), R("departure", 4, "13:15")]
+    ev = store.ingest(rows, T0 + timedelta(minutes=45))
+    assert all(e.kind == "appeared" for e in ev) and len(ev) == 4
+    assert count(store, "services", "status='gone'") == 4
+    assert count(store, "events", "kind='gone'") == 0
+
+
+def test_events_carry_service_date(store):
+    now = datetime(2026, 10, 20, 23, 58, tzinfo=BUC)
+    rows = [R("arrival", 1, "00:05"), R("arrival", 2, "23:50"),
+            R("departure", 3, "00:20"), R("departure", 4, "23:59")]
+    ev = store.ingest(rows, now)
+    assert {e.row.train_no: e.service_date for e in ev} == {
+        1: "2026-10-21", 2: "2026-10-20", 3: "2026-10-21", 4: "2026-10-20"}
+    rows[0] = R("arrival", 1, "00:05", delay=3)
+    ev = store.ingest(rows[:3] + [R("departure", 5, "00:30")], now + timedelta(minutes=1))
+    ev += store.ingest(rows[:3] + [R("departure", 5, "00:30")], now + timedelta(minutes=2))
+    assert ev and all(e.service_date for e in ev)
+    assert ("gone", 4, "2026-10-20") in {(e.kind, e.row.train_no, e.service_date) for e in ev}
+
+
+def test_event_service_date_default():
+    from app.models import Event
+    e = Event("delay", base_rows()[0], "0", "5")
+    assert e.service_date is None
