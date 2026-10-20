@@ -19,6 +19,8 @@
 - Fără conturi, fără date personale; abonarea push e anonimă.
 - Ore `HH:MM`; întârziere `+N` minute (absentă = 0); `board` ∈ `arrival|departure`.
 - Design: dark implicit + light după sistem; cifre tabulare mono (JetBrains Mono), text Inter; contrast AA; respectă `prefers-reduced-motion`; loc pentru siglă în antet și icon PWA (placeholder până la siglă).
+- Atribuire și drepturi (cerință utilizator): în subsolul fiecărei pagini apare `© 2026 Andy217Ace` și mențiunea „Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: cfr.ro". `Andy217Ace` apare și în: `LICENSE` (MIT, `Copyright (c) 2026 Andy217Ace`), `README.md`, `<meta name="author">`, `manifest.webmanifest` (`description`), User-Agent-ul pollerului și headerul fiecărui fișier sursă (`# © 2026 Andy217Ace`, în JS/CSS `/* © 2026 Andy217Ace */`). Sursa „CFR" este citată în UI lângă ora „actualizat acum".
+- Git (cerință utilizator): lucru pe branch-uri `feat/*`, commit-uri mici, PR către `main` și merge după CI/teste verzi; push și merge le face controllerul. Deploy imediat ce există părți funcționale (după Task 10, apoi după Task 11), nu doar la final.
 - Fără secrete în repo (chei VAPID și credențiale server doar în variabile de mediu / fișier în afara repo-ului).
 - Etapa 1 fără domeniu/HTTPS: push și instalare se testează ulterior; logica push se verifică cu endpoint simulat.
 
@@ -229,10 +231,11 @@ deploy/tabela.service, deploy/nginx.conf, deploy/install.sh
 - [ ] **Step 2–4:** FAIL → implementează → PASS; Playwright: deschide Istoric, alege o zi cu date de test, filtrează, verifică lista; activarea push se ascunde elegant când `Notification`/`PushManager` lipsesc sau pagina nu e HTTPS (mesaj „Notificările necesită conexiune sigură (HTTPS)").
 - [ ] **Step 5:** Commit.
 
-### Task 12: Deploy pe serverul Azure
+### Task 12: Deploy pe serverul Azure (se execută imediat după Task 10, redeploy după Task 11)
 
 **Files:** Create `deploy/tabela.service`, `deploy/nginx.conf`, `deploy/install.sh`; Modify `README.md`
 
+- [ ] **Step 0:** Adaugă `LICENSE` (MIT, Copyright (c) 2026 Andy217Ace) și secțiunea de atribuire CFR în `README.md` (dacă nu există deja).
 - [ ] **Step 1:** Backup înainte de orice: listă a ce există (`ls /opt`, `systemctl list-units --type=service`), nu se atinge nimic existent.
 - [ ] **Step 2:** `deploy/install.sh` idempotent: `apt install tesseract-ocr tesseract-ocr-ron python3-venv nginx`, utilizator de serviciu, `/opt/tabela`, venv, `pip install -r requirements.txt`, generare chei VAPID în `/etc/tabela.env` (cu permisiuni 600, în afara repo-ului), `systemd` unit, nginx (proxy pe `127.0.0.1:8000`, rate limit `limit_req` 10 r/s pe `/api/`), `ufw allow 80,443`.
 - [ ] **Step 3:** Deploy din repo (clone/pull pe server), pornire serviciu.
