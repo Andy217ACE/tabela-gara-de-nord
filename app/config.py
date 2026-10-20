@@ -13,6 +13,7 @@ class Settings:
     vapid_public_key: str
     vapid_subject: str
     tesseract_cmd: str
+    poller_restart_backoff: float = 5.0  # first delay before restarting a crashed poller
 
 
 def get_settings() -> Settings:
@@ -25,4 +26,5 @@ def get_settings() -> Settings:
         vapid_public_key=os.environ.get("VAPID_PUBLIC_KEY", ""),
         vapid_subject=os.environ.get("VAPID_SUBJECT", "mailto:admin@example.com"),
         tesseract_cmd=os.environ.get("TESSERACT_CMD", "tesseract"),
+        poller_restart_backoff=float(os.environ.get("POLLER_RESTART_BACKOFF", "5")),
     )
