@@ -395,3 +395,19 @@ def test_unknown_api_path_is_romanian_404(client):
     assert client.post("/api/nimic", json={}).status_code == 404
     assert client.post("/api/board").status_code == 405
     assert client.put("/api/follow", json={}).status_code == 405
+
+
+def test_poller_gets_known_stations_from_store(monkeypatch):
+    seen = {}
+    got = threading.Event()
+
+    async def fake_run_poller(settings, on_rows, client, stop, **kw):
+        seen.update(kw)
+        got.set()
+        await stop.wait()
+
+    monkeypatch.setattr("app.poller.run_poller", fake_run_poller)
+    app = create_app(settings(), start_poller=True)
+    with TestClient(app):
+        assert got.wait(2)
+        assert seen["known_stations"]() == set()

@@ -6,4 +6,6 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-data/
+data/*
+!data/operators.txt
+!data/stations_seed.txt

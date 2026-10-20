@@ -16,6 +16,9 @@ class Row:
     platform: int | None = None
     flagged: bool = False
     confidence: float = 1.0
+    operator_raw: str = ""  # text as read by OCR (operator/station hold canonical names)
+    station_raw: str = ""
+    uncertain: bool = False  # operator or station did not match a known name
 
     @property
     def key(self) -> tuple[str, int, str]:

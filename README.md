@@ -19,6 +19,20 @@ Aplicație web (PWA) care citește prin OCR clasic (OpenCV + Tesseract, fără A
   `python -m app.ocr.digits tests/fixtures/board_1.jpg tests/fixtures/board_1.json`
   (implicit doar panoul de sosiri, ca plecările să rămână verificare independentă).
 
+## OCR și canonicalizare
+
+- Apelul OCR trece prin interfața `OcrEngine` (`app/ocr/engine.py`); implementarea
+  folosită e `TesseractEngine` (timeout 10 s, `OcrError` la eșec). Preprocesarea și
+  interpretarea rândurilor nu depind de motor: `read_board(imagine, engine=...)`.
+- Operatorul și stația citite sunt aduse la forma canonică (`app/canonical.py`, potrivire
+  `difflib`, prag implicit 0,82): ex. „Transferovlar” → „Transferoviar”, „CFR Calatorl” →
+  „CFR Calatori”. Operatorii cunoscuți sunt în `data/operators.txt`, stațiile în
+  `data/stations_seed.txt` plus cele învățate din istoric (stații văzute la cel puțin
+  2 servicii). Listele conțin doar nume văzute efectiv pe tabelă — se completează manual.
+- Sub prag se păstrează textul citit și rândul e marcat `uncertain` (expus în `/api/board`
+  și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
+  (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
+
 ## Deploy (server Ubuntu 24.04)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).

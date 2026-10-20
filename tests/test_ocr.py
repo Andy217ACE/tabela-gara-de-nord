@@ -243,3 +243,98 @@ def test_read_board_speed():
     t0 = time.perf_counter()
     read_board(data)
     assert time.perf_counter() - t0 < 4.0  # target ~2 s; generous for CI noise
+
+
+# -- engine injection and canonicalisation ------------------------------------
+
+def test_tesseract_engine_returns_cell_results():
+    from app.ocr.engine import CellResult, TesseractEngine
+
+    img = np.full((80, 300), 255, np.uint8)
+    cv2.putText(img, "1234", (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.6, 0, 4)
+    out = TesseractEngine().read_cells(img, "0123456789", "eng", 6)
+    assert out and all(isinstance(c, CellResult) for c in out)
+    assert "".join(c.text for c in out) == "1234"
+    x, y, w, h = out[0].bbox
+    assert w > 0 and h > 0 and 0 <= out[0].conf <= 100
+
+
+class RecordingEngine:
+    """Delegates to Tesseract and records every call (proves injection)."""
+
+    def __init__(self):
+        from app.ocr.engine import TesseractEngine
+
+        self.inner = TesseractEngine()
+        self.calls = []
+
+    def read_cells(self, image, whitelist, lang, psm):
+        self.calls.append((whitelist, lang, psm))
+        return self.inner.read_cells(image, whitelist, lang, psm)
+
+
+def test_engine_is_injectable(rows):
+    eng = RecordingEngine()
+    got = read_board(_bytes(), engine=eng)
+    assert len(eng.calls) == 7  # one composite per column
+    assert ("*IRNECMD", "eng", 6) in eng.calls
+    assert (None, "ron+eng", 6) in eng.calls
+    assert [(r.train_no, r.sched_time, r.operator) for r in got] == \
+        [(r.train_no, r.sched_time, r.operator) for r in rows]
+
+
+def test_stub_engine_never_calls_tesseract(monkeypatch):
+    from app.ocr import reader
+
+    def boom(*a, **k):
+        raise AssertionError("tesseract must not be called")
+
+    monkeypatch.setattr(reader.pytesseract, "image_to_data", boom)
+
+    class Empty:
+        def read_cells(self, image, whitelist, lang, psm):
+            return []
+
+    assert read_board(_bytes(), engine=Empty()) == []  # no train type -> no rows
+
+
+def test_engine_error_propagates():
+    from app.ocr.reader import OcrError
+
+    class Broken:
+        def read_cells(self, image, whitelist, lang, psm):
+            raise OcrError("down")
+
+    with pytest.raises(OcrError):
+        read_board(_bytes(), engine=Broken())
+
+
+def test_operators_canonical_and_raw_kept(rows):
+    pairs = _pairs(rows)
+    assert _accuracy(pairs, "operator") == 1.0
+    assert all(r.operator_raw for r in rows)
+    assert any(r.operator_raw != r.operator for r in rows)  # noise was corrected
+
+
+def test_stations_canonical_against_seed(rows):
+    pairs = _pairs(rows)
+    assert _accuracy(pairs, "station") >= 23 / 24
+    assert all(r.station_raw for r in rows)
+    assert not any(r.uncertain for r in rows)
+
+
+def test_unknown_station_marked_uncertain(monkeypatch):
+    from app import canonical
+
+    monkeypatch.setattr(canonical, "seed_stations", lambda: frozenset({"XYZ"}))
+    got = read_board(_bytes())
+    brasov = [r for r in got if r.station_raw == "BRASOV"]
+    assert brasov and all(r.uncertain and r.station == "BRASOV" for r in brasov)
+
+
+def test_learned_stations_used(monkeypatch):
+    from app import canonical
+
+    monkeypatch.setattr(canonical, "seed_stations", lambda: frozenset())
+    got = read_board(_bytes(), stations={"BRASOV"})
+    assert any(r.station_raw == "BRASOY" and r.station == "BRASOV" for r in got)

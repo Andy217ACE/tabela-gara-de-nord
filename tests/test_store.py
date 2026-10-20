@@ -45,7 +45,7 @@ def test_min_rows_constant():
 
 def test_migrate_idempotent_and_versioned(store):
     store.migrate()
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
     names = {r[0] for r in store._conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"runs", "services", "events", "subscriptions", "follows"} <= names
@@ -61,7 +61,7 @@ def test_migrate_v1_db_adds_last_read(tmp_path):
     s.migrate()  # idempotent
     cols = {r[1] for r in s._conn.execute("PRAGMA table_info(services)")}
     assert "last_read" in cols
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     s.close()
 
 
@@ -241,7 +241,8 @@ def test_current_board(store):
     a = b["arrivals"][0]
     assert a == {"train_type": "IR", "train_no": 1621, "station": "Brasov",
                  "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
-                 "platform": 3, "flagged": True, "status": "listed"}
+                 "platform": 3, "flagged": True, "status": "listed",
+                 "uncertain": False}
     assert a["flagged"] is True and b["arrivals"][1]["flagged"] is False
     # failed run doesn't move updated_at
     store.ingest([], T0 + timedelta(minutes=1))
@@ -393,3 +394,103 @@ def test_event_service_date_default():
     from app.models import Event
     e = Event("delay", base_rows()[0], "0", "5")
     assert e.service_date is None
+
+
+# -- schema v3: raw OCR text + uncertain flag ---------------------------------
+
+V3_COLS = {"operator_raw", "station_raw", "uncertain"}
+
+
+def _cols(s):
+    return {r[1] for r in s._conn.execute("PRAGMA table_info(services)")}
+
+
+def _downgrade(s, version):
+    for col in V3_COLS:
+        s._conn.execute(f"ALTER TABLE services DROP COLUMN {col}")
+    if version == 1:
+        s._conn.execute("ALTER TABLE services DROP COLUMN last_read")
+    s._conn.execute(f"PRAGMA user_version = {version}")
+
+
+def test_fresh_db_has_v3_columns(store):
+    assert V3_COLS <= _cols(store)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_migrate_old_db_to_v3_keeps_data(tmp_path, version):
+    s = Store(str(tmp_path / "old.db"))
+    s.migrate()
+    s.ingest(base_rows(), T0)
+    _downgrade(s, version)
+    s.migrate()
+    s.migrate()  # idempotent
+    assert V3_COLS | {"last_read"} <= _cols(s)
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+    assert count(s, "services") == 4
+    row = s._conn.execute("SELECT operator_raw, station_raw, uncertain FROM services"
+                          " LIMIT 1").fetchone()
+    assert tuple(row) == ("", "", 0)
+    assert all(not r["uncertain"] for r in s.current_board()["arrivals"])
+    s.close()
+
+
+def test_migrate_partially_applied_v3_columns(tmp_path):
+    """A column already present (e.g. interrupted earlier attempt) is not re-added."""
+    s = Store(str(tmp_path / "p.db"))
+    s.migrate()
+    s._conn.execute("ALTER TABLE services DROP COLUMN uncertain")
+    s._conn.execute("PRAGMA user_version = 2")
+    s.migrate()
+    assert V3_COLS <= _cols(s)
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    s.close()
+
+
+def test_ingest_stores_raw_and_uncertain(store):
+    rows = base_rows()
+    rows[0] = R("arrival", 1621, "12:10", platform=3, operator_raw="CFR Calatorl",
+                station_raw="BRASOY", uncertain=True)
+    store.ingest(rows, T0)
+    got = store._conn.execute(
+        "SELECT operator, operator_raw, station, station_raw, uncertain FROM services"
+        " WHERE train_no=1621").fetchone()
+    assert tuple(got) == ("CFR Calatori", "CFR Calatorl", "Brasov", "BRASOY", 1)
+    a = store.current_board()["arrivals"]
+    assert a[0]["uncertain"] is True and a[1]["uncertain"] is False
+    h = store.history(date(2026, 10, 20), train=1621)
+    assert h[0]["uncertain"] is True and h[0]["operator"] == "CFR Calatori"
+
+
+def test_canonical_value_does_not_create_new_service(store):
+    rows = base_rows()
+    rows[0] = R("arrival", 1621, "12:10", platform=3, operator_raw="Calatorl",
+                uncertain=True)
+    rows[0] = Row(**{**rows[0].__dict__, "operator": "Calatorl", "station": "BRASOY"})
+    store.ingest(rows, T0)
+    store.ingest(base_rows(), T0 + timedelta(minutes=1))
+    assert count(store, "services") == 4
+    got = store._conn.execute(
+        "SELECT operator, station, uncertain FROM services WHERE train_no=1621").fetchone()
+    assert tuple(got) == ("CFR Calatori", "Brasov", 0)
+
+
+def test_uncertain_reading_does_not_overwrite_certain_names(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()
+    rows[0] = Row(**{**rows[0].__dict__, "operator": "Xyz", "station": "BRAS",
+                     "operator_raw": "Xyz", "station_raw": "BRAS", "uncertain": True})
+    ev = store.ingest(rows, T0 + timedelta(minutes=1))
+    assert ev == []
+    got = store._conn.execute(
+        "SELECT operator, station, uncertain FROM services WHERE train_no=1621").fetchone()
+    assert tuple(got) == ("CFR Calatori", "Brasov", 0)
+
+
+def test_known_stations(store):
+    assert store.known_stations() == set()
+    rows = base_rows()
+    rows[2] = Row(**{**rows[2].__dict__, "station": "PLOIESTI SUD"})
+    store.ingest(rows, T0)
+    assert store.known_stations() == {"Brasov"}  # seen on >= 2 services
+    assert store.known_stations(min_services=1) == {"Brasov", "PLOIESTI SUD"}
