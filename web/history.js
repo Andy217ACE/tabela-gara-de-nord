@@ -418,8 +418,10 @@
     chartBox.append(el("h3", "detail-h", "Întârzierea observată în timp"));
     if (pts.length >= 2) {
       chartBox.append(buildChart(pts));
+      var nChanges = pts.filter(function (p) { return p.change; }).length;
       chartBox.append(el("p", "detail-note",
-        "Axa X: ora citirii tabelei (ora României). Axa Y: întârzierea afișată, în minute. " +
+        plural(nChanges, "schimbare de întârziere observată", "schimbări de întârziere observate") +
+        ". Axa X: ora citirii tabelei (ora României). Axa Y: întârzierea afișată, în minute. " +
         "Valori observate, nu ora reală de sosire/plecare."));
     } else {
       chartBox.append(el("p", "detail-note", "Prea puține observații pentru grafic."));
