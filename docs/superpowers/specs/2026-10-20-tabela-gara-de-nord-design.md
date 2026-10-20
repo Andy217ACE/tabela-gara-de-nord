@@ -25,14 +25,27 @@ Public țintă: oricine. Fără domeniu în prima etapă.
 - Poza este doar intrare pentru OCR; nu o publicăm și nu o stocăm (în afară de ultima, pentru
   depanare).
 
-Notă: sursa e un serviciu CFR neoficial pentru acest scop. Interogăm cel mult 1×/minut,
-cu User-Agent identificabil, și nu redistribuim imaginea.
+Măsurat pe 2026-10-20: imaginea se schimbă **exact o dată pe minut**, la secunda ~:10–:13;
+răspunsul nu are ETag/Last-Modified/Cache-Control (fiecare cerere = ~145 KB); după ~13 cereri
+la 10 s CFR a închis o conexiune fără răspuns (posibilă limitare de ritm).
+
+### Poller sincronizat pe faza sursei
+- Pornire: câteva probe rare pentru a afla secunda din minut la care se schimbă poza (faza).
+- Regim normal: pauză până la `faza − 1 s`, apoi cereri la ~2–3 s până apare hash nou
+  (maxim ~20 s), apoi pauză până în minutul următor. Rezultat: latență 2–3 s față de sursă,
+  ~1–4 cereri/min, fără suprapunere cu momentul scrierii fișierului de către CFR.
+- Readaptare: faza se reestimează la fiecare schimbare detectată (alunecări, schimbări de
+  program ale sursei); dacă poza nu se schimbă 5 min, trece pe sondare rară (30 s).
+- Erori: backoff exponențial (5 s → 5 min) la conexiuni închise/5xx; revenire automată.
+- Limite dure: niciodată mai mult de 1 cerere la 2 s; maxim ~10 cereri/min.
+- Hash identic = fără OCR. OCR rulează doar pe poze noi.
+- User-Agent identificabil; imaginea nu e redistribuită.
 
 ## Arhitectură
 Un singur server (Azure Ubuntu 24.04), un proces backend, SQLite.
 
 ```
-CFR webcam page ──(1/min)──► poller ──► OCR ──► diff ──► SQLite ──► API ──► PWA
+CFR webcam page ──(sincronizat pe faza lor)──► poller ──► OCR ──► diff ──► SQLite ──► API ──► PWA
                                                    └──► Web Push (abonați care urmăresc trenul)
 ```
 
@@ -93,6 +106,21 @@ atribuie zilei corecte prin ora programată.
 - `POST /api/push/subscribe`, `POST /api/push/unsubscribe`
 - `POST /api/follow`, `DELETE /api/follow`
 - `GET /api/health` — vârsta ultimei citiri reușite.
+
+## Design (modern, nu generic)
+- Direcție: „panou de gară reinterpretat" — mobil-first, **dark implicit** + light, comutare
+  automată după sistem.
+- Tipografie: Inter pentru text, cifre tabulare (ore, numere de tren) cu font mono
+  (JetBrains Mono) ca la afișajele de gară.
+- Rânduri ca **carduri** cu ierarhie clară: ora mare, destinația, operatorul în subtitlu;
+  insigne colorate: tip tren (IR/RE/R/RM/IRN), linie (cerc), întârziere (verde = la timp,
+  chihlimbar = mică, roșu = mare).
+- Indicator „live" cu puls și „actualizat acum X s"; animație fină la schimbarea unui rând
+  (întârziere nouă = flash scurt), respectă `prefers-reduced-motion`.
+- Mobil: bară de navigare jos (Tabelă · Istoric · Urmărite). Desktop: sosiri și plecări
+  alăturate, ca panourile reale.
+- Spațiu rezervat pentru siglă în antet și icon PWA; până la siglă, un placeholder simplu.
+- Accesibilitate: contrast AA, culoarea nu e singurul semnal (iconițe + text).
 
 ## Frontend (PWA)
 - Ecran principal: tab-uri Sosiri / Plecări, actualizare automată, indicator „actualizat
