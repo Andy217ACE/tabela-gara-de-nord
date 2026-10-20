@@ -1,6 +1,6 @@
 # © 2026 Andy217Ace
 import asyncio
-import hashlib
+import os
 
 import pytest
 
@@ -71,6 +71,17 @@ def test_delay_window_wrapping_past_minute():
     assert t.next_poll_delay(65, None) == pytest.approx(2.5)  # :05 still in window
     assert t.next_poll_delay(65, 59.7) == pytest.approx(118.5 - 65)
     assert t.next_poll_delay(30, None) == pytest.approx(28.5)
+
+
+def test_delay_phase_below_one_second():
+    t = PhaseTracker()
+    t.observe_change(0.3)  # window starts at :59.3 of the previous minute
+    assert t.phase == pytest.approx(0.3)
+    assert t.next_poll_delay(59.5, None) == pytest.approx(2.5)
+    assert t.next_poll_delay(30, None) == pytest.approx(59.3 - 30)
+    # change already seen inside this window (started at 59.3) -> next window
+    assert t.next_poll_delay(60.5, 60.3) == pytest.approx(119.3 - 60.5)
+    assert t.next_poll_delay(59.5, 59.4) == pytest.approx(119.3 - 59.5)
 
 
 def test_backoff():
@@ -158,14 +169,12 @@ async def test_run_rate_limits_and_on_rows_only_on_change(world):
     assert len(calls) == len(distinct)
     # phase-locked: far fewer requests than 1 per 2.5 s
     assert len(w.requests) < 400 / 2.5 / 2
-    import os
     assert os.path.exists(w.path)
 
 
 async def test_run_fetch_error_backoff(world):
     w = world
     w.fail_at = {1, 2}
-    starts = []
 
     async def on_rows(rows, ts):
         pass

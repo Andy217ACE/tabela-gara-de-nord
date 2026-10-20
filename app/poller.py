@@ -59,9 +59,10 @@ class PhaseTracker:
         if last_change is not None and now - last_change > STALE_AFTER:
             return STALE_DELAY
         minute0 = now - (now % 60.0)
-        # Window instances: [minute0 + 60k + phase - 1, ... + 21]; k=-1 covers
-        # windows that started in the previous minute and wrap past :00.
-        for k in (-1, 0):
+        # Window instances: [minute0 + 60k + phase - 1, ... + 21]. k=-1 covers
+        # windows wrapping past :00; k=1 covers phase < 1 s, where the window
+        # starts at :59.x of the current minute's end.
+        for k in (-1, 0, 1):
             start = minute0 + 60.0 * k + phase - WINDOW_BEFORE
             if start <= now <= start + WINDOW_BEFORE + WINDOW_AFTER:
                 if last_change is not None and last_change >= start:
@@ -71,7 +72,7 @@ class PhaseTracker:
             start = minute0 + 60.0 * k + phase - WINDOW_BEFORE
             if start > now:
                 return start - now
-        return NO_PHASE_DELAY  # unreachable
+        return NO_PHASE_DELAY  # defensive; cannot happen (k=1 start > now)
 
 
 class Backoff:
@@ -161,12 +162,12 @@ async def run_poller(
         if h != last_hash:
             first = last_hash is None
             last_hash = h  # remembered even if OCR fails: no retry every 2 s
-            _save_image(last_image_path, data)
+            await asyncio.to_thread(_save_image, last_image_path, data)
             if not first:
                 tracker.observe_change(ts)
                 last_change = ts
             try:
-                rows = read_board(data)
+                rows = await asyncio.to_thread(read_board, data)
             except (OcrError, ValueError):
                 log.exception("OCR failed for new image")
             else:
