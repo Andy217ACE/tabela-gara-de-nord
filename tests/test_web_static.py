@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
 """Static frontend: served by the app, CSP-compatible, attribution present."""
+import json
 import re
 from pathlib import Path
 
@@ -72,10 +73,108 @@ def test_index_is_csp_compatible():
                                "https://cfr.ro")), url
 
 
-def test_manifest_only_linked_when_present():
+FOOTER = ('<footer class="footer">\n    <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro)'
+          ' — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro"'
+          ' target="_blank" rel="noopener noreferrer">cfr.ro</a></p>\n  </footer>')
+
+
+def test_footer_unchanged():
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    if not (WEB / "manifest.webmanifest").exists():
-        assert "manifest.webmanifest" not in html
+    assert FOOTER in html
+
+
+def test_manifest_valid_and_linked(client):
+    r = client.get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/manifest+json")
+    m = json.loads(r.text)
+    assert m["name"] == "Tabela Gara de Nord"
+    assert m["short_name"] == "Gara de Nord"
+    assert m["start_url"] == "/" and m["scope"] == "/"
+    assert m["display"] == "standalone"
+    assert m["lang"] == "ro"
+    assert "© 2026 Andy217Ace" in m["description"]
+    assert re.match(r"^#[0-9a-f]{6}$", m["theme_color"])
+    assert re.match(r"^#[0-9a-f]{6}$", m["background_color"])
+    icons = {(i["src"], i["type"], i["sizes"], i.get("purpose", "any")) for i in m["icons"]}
+    assert ("icons/icon.svg", "image/svg+xml", "any", "any") in icons
+    assert ("icons/icon-192.png", "image/png", "192x192", "any") in icons
+    assert ("icons/icon-512.png", "image/png", "512x512", "any") in icons
+    assert ("icons/icon-maskable-512.png", "image/png", "512x512", "maskable") in icons
+    for src, typ, sizes, _ in icons:
+        path = WEB / src
+        assert path.is_file(), src
+        if typ == "image/png":
+            from PIL import Image
+            with Image.open(path) as im:
+                assert f"{im.width}x{im.height}" == sizes, src
+        assert client.get("/" + src).status_code == 200
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert '<link rel="manifest" href="manifest.webmanifest">' in html
+    assert re.search(r'<link rel="apple-touch-icon" href="icons/icon-192.png">', html)
+
+
+def test_service_worker_served_as_js_no_cache(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert r.headers["content-type"].split(";")[0].strip() == "text/javascript"
+    assert r.headers["cache-control"] == "no-cache"
+    assert "worker-src 'self'" in r.headers["content-security-policy"]
+    h = client.head("/sw.js")
+    assert h.headers["content-type"].split(";")[0].strip() == "text/javascript"
+    js = r.text
+    assert js.startswith("// © 2026 Andy217Ace")
+    for needle in ('addEventListener("install"', 'addEventListener("activate"',
+                   'addEventListener("fetch"', 'addEventListener("push"',
+                   'addEventListener("notificationclick"', "/api/board", "caches.delete",
+                   "Gara de Nord", "skipWaiting", "clients.claim"):
+        assert needle in js, needle
+    m = re.search(r'var VERSION = "([^"]+)"', js)
+    assert m, "versioned cache name"
+    # every precached file exists
+    shell = re.search(r"var SHELL = \[(.*?)\];", js, re.S).group(1)
+    for path in re.findall(r'"([^"]+)"', shell):
+        assert client.get(path).status_code == 200, path
+    for f in ("history.js", "follows.js", "app.js", "style.css", "manifest.webmanifest",
+              "icons/icon-192.png"):
+        assert f'"/{f}"' in shell, f
+
+
+@pytest.mark.parametrize("name", ["app.js", "history.js", "follows.js", "sw.js"])
+def test_js_files_safe_dom(client, name):
+    r = client.get("/" + name)
+    assert r.status_code == 200
+    js = r.text
+    assert js.startswith("// © 2026 Andy217Ace"), name
+    for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
+                "new Function", ".style.", "setAttribute(\"style\""):
+        assert bad not in js, (name, bad)
+
+
+def test_index_loads_split_scripts_and_real_views():
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    for src in ("app.js", "history.js", "follows.js"):
+        assert re.search(rf'<script src="{src}" defer></script>', html), src
+    assert "În curând" not in html
+    assert 'id="view-istoric"' in html and 'id="view-urmarite"' in html
+    assert 'id="h-date"' in html and 'id="h-results"' in html
+    assert 'id="f-list"' in html and 'id="f-switch"' in html
+
+
+def test_history_js_uses_api():
+    js = (WEB / "history.js").read_text(encoding="utf-8")
+    for needle in ("/api/history", "/api/train/", "Europe/Bucharest", "createElementNS",
+                   "rezultat", "AbortController"):
+        assert needle in js, needle
+
+
+def test_follows_js_uses_api():
+    js = (WEB / "follows.js").read_text(encoding="utf-8")
+    for needle in ("/api/push/key", "/api/push/subscribe", "/api/push/unsubscribe",
+                   "/api/follow", "/api/follows", "urlBase64ToUint8Array", "onFollow",
+                   "Notificările necesită conexiune sigură (HTTPS) și un browser compatibil.",
+                   "Pe iPhone, adaugă mai întâi aplicația pe ecranul principal."):
+        assert needle in js, needle
 
 
 def test_style_defines_theme_variables(client):

@@ -23,7 +23,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
-  // ---- small DOM helpers ---------------------------------------------------
+  // ---- small DOM helpers (shared with history.js / follows.js) ----------------
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -108,7 +108,8 @@
     var delay = el("span", "delay");
     var follow = el("button", "follow");
     follow.type = "button";
-    follow.append(icon(ICONS.bell), el("span", null, "urmărește"));
+    var followText = el("span", null, "urmărește");
+    follow.append(icon(ICONS.bell), followText);
     row.append(delay, follow);
     main.append(station, meta);
 
@@ -120,7 +121,7 @@
 
     var card = { li: li, board: board, sched: sched, est: est, station: station, type: type,
                  no: no, flag: flag, op: op, delay: delay, follow: follow, plat: plat,
-                 train: null, sig: null };
+                 followText: followText, followLabel: "", train: null, sig: null };
     follow.addEventListener("click", function () {
       if (card.train) window.TabelaApp.onFollow(card.train, follow);
     });
@@ -169,8 +170,8 @@
     c.plat.setAttribute("aria-label", known ? "Linia " + t.platform : "Linie neanunțată");
     c.plat.title = known ? "Linia " + t.platform : "Linia nu a fost anunțată";
 
-    c.follow.setAttribute("aria-label", "Urmărește trenul " + (t.train_type || "") + " " +
-      t.train_no + " " + where + (t.station || ""));
+    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + (t.station || "");
+    applyFollow(c);
 
     var sig = d + "|" + (known ? t.platform : "-");
     if (prevSig != null && prevSig !== sig) {
@@ -179,6 +180,25 @@
       c.li.classList.add("flash");
     }
     c.sig = sig;
+  }
+
+  // Follow button state comes from follows.js (TabelaApp.followState); absent = enabled.
+  function applyFollow(c) {
+    var fs = window.TabelaApp.followState;
+    var st = typeof fs === "function" && c.train ? fs(c.train) : null;
+    var on = !!(st && st.followed);
+    var off = !!(st && st.unsupported);
+    c.follow.setAttribute("aria-pressed", on ? "true" : "false");
+    if (off) c.follow.setAttribute("aria-disabled", "true");
+    else c.follow.removeAttribute("aria-disabled");
+    c.follow.title = off ? st.reason : "";
+    c.followText.textContent = on ? "urmărit" : "urmărește";
+    c.follow.setAttribute("aria-label", (on ? "Nu mai urmări trenul " : "Urmărește trenul ") +
+      c.followLabel + (off ? ". " + st.reason : ""));
+  }
+
+  function refreshFollowButtons() {
+    BOARDS.forEach(function (b) { state.cards[b].forEach(applyFollow); });
   }
 
   function renderBoard(board, trains) {
@@ -221,6 +241,11 @@
 
   function currentAge() {
     if (!state.data || state.data.age_s == null) return null;
+    var extra = 0;
+    if (state.data.sw_offline && typeof state.data.sw_cached_at === "number") {
+      extra = Math.max(0, (Date.now() - state.data.sw_cached_at) / 1000); // age of the cached copy
+      return state.data.age_s + extra + (performance.now() - state.receivedAt) / 1000;
+    }
     return state.data.age_s + (performance.now() - state.receivedAt) / 1000;
   }
 
@@ -294,9 +319,15 @@
         if (!data || !Array.isArray(data.arrivals) || !Array.isArray(data.departures)) {
           throw new Error("răspuns invalid");
         }
+        if (data.sw_offline && state.data && !state.data.sw_offline) {
+          // offline: the in-memory copy is at least as new as the cached one
+          state.failed = true;
+          return;
+        }
         state.data = data;
         state.receivedAt = performance.now();
-        state.failed = false;
+        state.failed = !!data.sw_offline; // served from the service worker cache
+
         BOARDS.forEach(function (b) { renderBoard(b, data[b]); });
       })
       .catch(function () {
@@ -340,14 +371,26 @@
     selectTab(BOARDS.indexOf(saved) >= 0 ? saved : "arrivals", false);
   }
 
-  // ---- routing (#istoric / #urmarite are placeholders until Task 11) ---------------
+  // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
-  var ROUTES = { "": "tabela", "#istoric": "istoric", "#urmarite": "urmarite" };
+  var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite" };
+  var currentRoute = null;
+
+  function parseHash() {
+    var h = location.hash || "";
+    var q = h.indexOf("?");
+    var base = q >= 0 ? h.slice(0, q) : h;
+    var params = new URLSearchParams(q >= 0 ? h.slice(q + 1) : "");
+    return { name: ROUTES[base] || "tabela", params: params };
+  }
 
   function route() {
-    var name = ROUTES[location.hash] || "tabela";
-    ["tabela", "istoric", "urmarite"].forEach(function (r) {
-      $("view-" + r).hidden = r !== name;
+    var r = parseHash();
+    var name = r.name;
+    var changed = name !== currentRoute;
+    currentRoute = name;
+    ["tabela", "istoric", "urmarite"].forEach(function (v) {
+      $("view-" + v).hidden = v !== name;
     });
     document.querySelectorAll(".nav-item").forEach(function (a) {
       if (a.dataset.route === name) a.setAttribute("aria-current", "page");
@@ -355,6 +398,9 @@
     });
     document.title = name === "tabela" ? "Tabela Gara de Nord"
       : (name === "istoric" ? "Istoric" : "Urmărite") + " · Tabela Gara de Nord";
+    var view = window.TabelaApp.views[name];
+    if (view && typeof view.show === "function") view.show(r.params);
+    if (changed) window.scrollTo(0, 0);
   }
 
   // ---- toast -----------------------------------------------------------------------
@@ -371,6 +417,7 @@
   // ---- public hooks (Task 11 replaces onFollow) ------------------------------------
 
   window.TabelaApp = window.TabelaApp || {};
+  window.TabelaApp.views = window.TabelaApp.views || {};
   if (typeof window.TabelaApp.onFollow !== "function") {
     window.TabelaApp.onFollow = function () {
       toast("Urmărirea trenurilor vine în curând.");
@@ -378,6 +425,25 @@
   }
   window.TabelaApp.toast = toast;
   window.TabelaApp.refresh = refresh;
+  window.TabelaApp.el = el;
+  window.TabelaApp.icon = icon;
+  window.TabelaApp.ICONS = ICONS;
+  window.TabelaApp.typeClass = typeClass;
+  window.TabelaApp.refreshFollowButtons = refreshFollowButtons;
+  window.TabelaApp.boardTrains = function () {
+    return state.data ? state.data.arrivals.concat(state.data.departures) : [];
+  };
+
+  // Offline support: register the service worker on secure origins (HTTPS / localhost).
+  function registerSW() {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext) return null;
+    if (!window.TabelaApp.swReady) {
+      window.TabelaApp.swReady = navigator.serviceWorker.register("/sw.js", { scope: "/" })
+        .catch(function (e) { window.TabelaApp.swReady = null; throw e; });
+    }
+    return window.TabelaApp.swReady;
+  }
+  window.TabelaApp.registerSW = registerSW;
 
   // ---- boot ------------------------------------------------------------------------
 
@@ -390,8 +456,12 @@
       if (document.visibilityState === "visible") refresh();
     });
     refresh();
+    var sw = registerSW();
+    if (sw) sw.catch(function () { /* offline mode unavailable; the page still works */ });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-  else init();
+  // Deferred scripts (history.js, follows.js) run before DOMContentLoaded and register
+  // their views first, so the initial route can show them.
+  if (document.readyState === "complete") init();
+  else document.addEventListener("DOMContentLoaded", init);
 })();

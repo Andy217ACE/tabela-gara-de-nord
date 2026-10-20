@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -382,6 +382,19 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             return JSONResponse({"detail": "Metodă nepermisă."}, status_code=405,
                                 headers={"Allow": ", ".join(allowed)})
         raise _bad("Nu există.", 404)
+
+    # PWA files with explicit types (the OS mimetypes table may lack them).
+    # The service worker must always be revalidated so a deploy reaches clients.
+    @app.api_route("/sw.js", methods=["GET", "HEAD"], include_in_schema=False)
+    def service_worker():
+        return FileResponse(WEB_DIR / "sw.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
+
+    @app.api_route("/manifest.webmanifest", methods=["GET", "HEAD"], include_in_schema=False)
+    def manifest():
+        return FileResponse(WEB_DIR / "manifest.webmanifest",
+                            media_type="application/manifest+json",
+                            headers={"Cache-Control": "no-cache"})
 
     # Static frontend last, so /api/* routes win. No disk writes here.
     if WEB_DIR.is_dir():

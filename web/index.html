@@ -11,11 +11,16 @@
   <meta name="theme-color" content="#0a0d12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="Gara de Nord">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap">
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
+  <script src="history.js" defer></script>
+  <script src="follows.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -105,24 +110,81 @@
       </div>
     </section>
 
-    <section class="view view-soon" id="view-istoric" aria-labelledby="istoric-heading" hidden>
-      <div class="soon">
-        <svg class="soon-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+    <section class="view view-history" id="view-istoric" aria-labelledby="istoric-heading" hidden>
+      <div class="page-head">
         <h1 id="istoric-heading">Istoric</h1>
-        <p>Întârzierile și liniile din zilele trecute, cu filtre după tren, stație și oră.</p>
-        <p class="soon-tag">În curând</p>
-        <a class="btn" href="#">Înapoi la tabelă</a>
+        <p class="page-sub">Ce a afișat tabela CFR într-o zi: ore programate, întârzieri observate și linii.</p>
       </div>
+
+      <form class="filters" id="h-form" role="search" aria-label="Filtre istoric" novalidate>
+        <label class="field field-date">
+          <span class="field-label">Ziua</span>
+          <input type="date" id="h-date" name="date" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Nr. tren</span>
+          <input type="text" id="h-train" name="train" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="ex. 1636">
+        </label>
+        <label class="field field-wide">
+          <span class="field-label">Stație</span>
+          <input type="search" id="h-station" name="station" maxlength="64" autocomplete="off" placeholder="ex. Brașov">
+        </label>
+        <label class="field">
+          <span class="field-label">De la</span>
+          <input type="time" id="h-from" name="from">
+        </label>
+        <label class="field">
+          <span class="field-label">Până la</span>
+          <input type="time" id="h-to" name="to">
+        </label>
+        <label class="field">
+          <span class="field-label">Panou</span>
+          <select id="h-board" name="board">
+            <option value="">Toate</option>
+            <option value="arrival">Sosiri</option>
+            <option value="departure">Plecări</option>
+          </select>
+        </label>
+        <button class="btn btn-ghost" type="reset" id="h-reset">Resetează</button>
+      </form>
+
+      <p class="h-count" id="h-count" role="status" aria-live="polite"></p>
+      <p class="notice notice-error" id="h-error" role="alert" hidden></p>
+      <div class="h-results" id="h-results"></div>
+      <p class="empty" id="h-empty" hidden></p>
+
+      <dialog class="sheet" id="h-detail" aria-labelledby="h-detail-title">
+        <div class="sheet-head">
+          <h2 class="sheet-title" id="h-detail-title">Tren</h2>
+          <button class="icon-btn" type="button" id="h-detail-close" aria-label="Închide detaliile">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <p class="sheet-sub" id="h-detail-sub"></p>
+        <div class="sheet-body" id="h-detail-body"></div>
+      </dialog>
     </section>
 
-    <section class="view view-soon" id="view-urmarite" aria-labelledby="urmarite-heading" hidden>
-      <div class="soon">
-        <svg class="soon-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+    <section class="view view-follows" id="view-urmarite" aria-labelledby="urmarite-heading" hidden>
+      <div class="page-head">
         <h1 id="urmarite-heading">Trenuri urmărite</h1>
-        <p>Urmărește un tren și primești notificare când i se schimbă întârzierea sau linia.</p>
-        <p class="soon-tag">În curând</p>
-        <a class="btn" href="#">Înapoi la tabelă</a>
+        <p class="page-sub">Primești o notificare când unui tren urmărit i se schimbă întârzierea sau linia, ori dispare de pe tabelă.</p>
       </div>
+
+      <div class="panel">
+        <label class="switch">
+          <input type="checkbox" role="switch" id="f-switch">
+          <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          <span class="switch-label">Notificări pe acest dispozitiv</span>
+        </label>
+        <p class="panel-status" id="f-status" role="status" aria-live="polite"></p>
+        <p class="notice" id="f-support" hidden></p>
+        <p class="notice" id="f-ios" hidden></p>
+      </div>
+
+      <p class="h-count" id="f-count"></p>
+      <ul class="f-list" id="f-list"></ul>
+      <p class="empty" id="f-empty" hidden>Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
     </section>
   </main>
 
