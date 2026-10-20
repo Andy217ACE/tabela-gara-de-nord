@@ -394,3 +394,19 @@ def test_event_service_date_default():
     from app.models import Event
     e = Event("delay", base_rows()[0], "0", "5")
     assert e.service_date is None
+
+
+def test_jitter_claim_is_globally_closest_not_row_order():
+    # two listed services of one train; two incoming rows each within 10 min of both
+    for order in (0, 1):
+        a, b = R("arrival", 1636, "20:05", delay=5), R("arrival", 1636, "20:09", delay=9)
+        rows = base_rows() + ([a, b] if order == 0 else [b, a])
+        s = Store(":memory:")
+        s.migrate()
+        s.ingest(base_rows() + [R("arrival", 1636, "20:00"), R("arrival", 1636, "20:08")], T0)
+        s.ingest(rows, T0 + timedelta(minutes=1))
+        got = dict(s._conn.execute(
+            "SELECT sched_time, last_delay FROM services WHERE train_no=1636").fetchall())
+        s.close()
+        # globally closest pair first: 20:09->20:08 (1 min), then 20:05->20:00
+        assert got == {"20:00": 5, "20:08": 9}, order
