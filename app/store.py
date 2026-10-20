@@ -24,6 +24,7 @@ MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit eve
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 2
+HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
 
@@ -230,8 +231,8 @@ class Store:
             " AND sched_time=?", (r.board, sd, r.train_no, r.sched_time),
         ).fetchone()
 
-    def _find_jitter(self, r: Row, sd: str, claimed: set[int]) -> sqlite3.Row | None:
-        """Closest listed service of the same train/board within JITTER_MIN minutes.
+    def _jitter_candidates(self, r: Row, sd: str) -> list[tuple[timedelta, sqlite3.Row]]:
+        """Listed services of the same train/board within JITTER_MIN minutes of `r`.
 
         The scheduled time never changes legitimately, so a near miss is an OCR
         misread of the same service.
@@ -240,19 +241,17 @@ class Store:
         d = date.fromisoformat(sd)
         cands = self._conn.execute(
             "SELECT * FROM services WHERE status='listed' AND board=? AND train_no=?"
-            " AND service_date IN (?,?,?)",
+            " AND service_date IN (?,?,?) ORDER BY id",
             (r.board, r.train_no, (d - timedelta(days=1)).isoformat(), sd,
              (d + timedelta(days=1)).isoformat()),
         ).fetchall()
-        best, best_diff = None, None
+        out = []
         for s in cands:
-            if s["id"] in claimed:
-                continue
             at = datetime.combine(date.fromisoformat(s["service_date"]), _hm(s["sched_time"]))
             diff = abs(at - target)
-            if diff <= timedelta(minutes=JITTER_MIN) and (best_diff is None or diff < best_diff):
-                best, best_diff = s, diff
-        return best
+            if diff <= timedelta(minutes=JITTER_MIN):
+                out.append((diff, s))
+        return out
 
     def _diff(self, good: list[Row], low: list[Row], local: datetime,
               ts_s: str) -> list[Event]:
@@ -272,13 +271,22 @@ class Store:
             if cur is not None:
                 seen.add(cur["id"])
             matches.append((r, sd, cur))
-        # Pass 2: sched_time jitter for the unmatched rows.
+        # Pass 2: sched_time jitter for the unmatched rows. Claim globally by
+        # smallest |delta sched_time| (ties: row order, then service id) so the
+        # outcome does not depend on the order of the incoming rows.
+        pairs = []
         for i, (r, sd, cur) in enumerate(matches):
             if cur is None:
-                cur = self._find_jitter(r, sd, seen)
-                if cur is not None:
-                    seen.add(cur["id"])
-                    matches[i] = (r, sd, cur)
+                for diff, s in self._jitter_candidates(r, sd):
+                    pairs.append((diff, i, s["id"], s))
+        pairs.sort(key=lambda p: p[:3])
+        done: set[int] = set()
+        for _diff_, i, sid_, s in pairs:
+            if i in done or sid_ in seen:
+                continue
+            done.add(i)
+            seen.add(sid_)
+            matches[i] = (matches[i][0], matches[i][1], s)
 
         for r, sd, cur in matches:
             if cur is None:
@@ -312,7 +320,7 @@ class Store:
         # Low-confidence rows: only keep an exactly matching service alive.
         for r in low:
             cur = self._find_exact(r, service_date(r.sched_time, local).isoformat())
-            if cur is not None and cur["id"] not in seen:
+            if cur is not None and cur["status"] == "listed" and cur["id"] not in seen:
                 seen.add(cur["id"])
                 c.execute("UPDATE services SET last_seen=?, miss_count=0 WHERE id=?",
                           (ts_s, cur["id"]))
@@ -410,7 +418,7 @@ class Store:
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
             " FROM services s WHERE " + " AND ".join(where) +
-            " ORDER BY s.sched_time, s.board, s.train_no"
+            " ORDER BY s.sched_time, s.board, s.train_no LIMIT " + str(HISTORY_MAX + 1)
         )
         with self._lock:
             found = self._conn.execute(sql, args).fetchall()

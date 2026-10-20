@@ -399,3 +399,23 @@ def test_webpush_sender_other_error_hides_key(monkeypatch):
     assert not isinstance(ei.value, SubscriptionGone)
     assert "SECRET-KEY" not in str(ei.value)
     assert ei.value.__cause__ is None and ei.value.__suppress_context__
+
+
+def test_store_calls_run_off_the_event_loop_thread(store):
+    import threading
+    seen = []
+    for name in ("last_ok_run", "service_state", "followers"):
+        orig = getattr(store, name)
+
+        def wrap(*a, _o=orig, _n=name, **k):
+            seen.append((_n, threading.get_ident()))
+            return _o(*a, **k)
+        setattr(store, name, wrap)
+    h = Harness(store)
+    h.tick(board())
+    h.tick(board(delay=5))
+    h.tick(board(delay=5))
+    h.tick(board(delay=5))
+    names = {n for n, _ in seen}
+    assert {"last_ok_run", "followers"} <= names
+    assert all(t != threading.get_ident() for _, t in seen)

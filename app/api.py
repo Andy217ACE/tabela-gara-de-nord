@@ -21,7 +21,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
@@ -32,7 +32,7 @@ from app import poller
 from app.config import Settings, get_settings
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
-from app.store import TZ, Store
+from app.store import HISTORY_MAX, TZ, Store
 
 log = logging.getLogger(__name__)
 
@@ -280,7 +280,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         return {"ok": age is not None and age <= STALE_S, "age_s": age}
 
     @app.get("/api/history")
-    def history(request: Request):
+    def history(request: Request, response: Response):
         q = request.query_params
         day = _parse_date(q.get("date"))
         train = _parse_train(q["train"]) if q.get("train") else None
@@ -296,6 +296,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             raise _bad("Ora „de la” este după ora „până la”.")
         services = store_of(request).history(day, train=train, station=station, board=board_,
                                              time_from=time_from, time_to=time_to)
+        if len(services) > HISTORY_MAX:  # store fetched one extra row to detect truncation
+            services = services[:HISTORY_MAX]
+            response.headers["X-Truncated"] = "1"
         return {"date": day.isoformat(), "services": services}
 
     @app.get("/api/train/{no}")

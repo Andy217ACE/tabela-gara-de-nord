@@ -64,6 +64,7 @@ def test_board_returns_arrivals_and_departures(client):
     assert [x["train_no"] for x in b["arrivals"]] == [1636, 3001]
     assert [x["train_no"] for x in b["departures"]] == [531, 1741]
     assert b["updated_at"].startswith("2026-10-20T12:00")
+    assert all(x["service_date"] == "2026-10-20" for x in b["arrivals"] + b["departures"])
     assert b["stale"] is True and b["age_s"] > 180  # T0 is in the past
     assert b["attribution"] == {"source": "CFR", "url": "https://cfr.ro", "author": "Andy217Ace"}
 
@@ -395,3 +396,17 @@ def test_unknown_api_path_is_romanian_404(client):
     assert client.post("/api/nimic", json={}).status_code == 404
     assert client.post("/api/board").status_code == 405
     assert client.put("/api/follow", json={}).status_code == 405
+
+
+def test_history_caps_at_500_rows_with_truncated_header(client):
+    many = [Row("arrival" if i % 2 else "departure", "R", 2000 + i, "BRASOV", "CFR",
+                "%02d:%02d" % (i // 60 % 24, i % 60), 0, None) for i in range(520)]
+    client.app.state.store.ingest(many, T0)
+    r = client.get("/api/history", params={"date": "2026-10-20"})
+    assert r.status_code == 200
+    assert isinstance(r.json()["services"], list) and len(r.json()["services"]) == 500
+    assert r.headers.get("x-truncated") == "1"
+    # under the cap: no header
+    r2 = client.get("/api/history", params={"date": "2026-10-20", "board": "arrival",
+                                            "to": "00:10"})
+    assert "x-truncated" not in r2.headers

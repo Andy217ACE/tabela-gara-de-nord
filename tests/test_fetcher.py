@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.fetcher import FetchError, extract_image, fetch_board_image, image_hash
+from app.fetcher import MAX_BYTES, FetchError, extract_image, fetch_board_image, image_hash
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -78,4 +78,39 @@ async def test_fetch_page_without_image():
     transport = httpx.MockTransport(lambda r: httpx.Response(200, text="<html></html>"))
     async with httpx.AsyncClient(transport=transport) as c:
         with pytest.raises(FetchError):
+            await fetch_board_image(c, "http://x/")
+
+
+async def test_fetch_rejects_oversized_response():
+    big = b"x" * (MAX_BYTES + 1)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, content=big))
+    async with httpx.AsyncClient(transport=transport) as c:
+        with pytest.raises(FetchError, match="too large"):
+            await fetch_board_image(c, "http://x/")
+
+
+async def test_fetch_rejects_oversized_chunked_response():
+    async def gen():
+        for _ in range(MAX_BYTES // 65536 + 2):
+            yield b"x" * 65536
+
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, content=gen()))
+    async with httpx.AsyncClient(transport=transport) as c:
+        with pytest.raises(FetchError, match="too large"):
+            await fetch_board_image(c, "http://x/")
+
+
+async def test_fetch_invalid_base64_is_fetch_error():
+    html = '<img src="data:image/jpeg;base64,/9j/4AAQ=A=A">'
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, text=html))
+    async with httpx.AsyncClient(transport=transport) as c:
+        with pytest.raises(FetchError, match="base64"):
+            await fetch_board_image(c, "http://x/")
+
+
+async def test_fetch_redirect_response_is_fetch_error():
+    transport = httpx.MockTransport(
+        lambda r: httpx.Response(302, headers={"location": "http://y/"}, text=_page()))
+    async with httpx.AsyncClient(transport=transport) as c:
+        with pytest.raises(FetchError, match="HTTP 302"):
             await fetch_board_image(c, "http://x/")
