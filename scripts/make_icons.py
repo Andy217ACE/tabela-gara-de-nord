@@ -1,61 +1,77 @@
 # © 2026 Andy217Ace
-"""Dev-time helper: draw the PNG app icons from the geometry of web/icons/icon.svg.
+"""Dev-time helper: build every app icon from the logo artwork.
 
-    python scripts/make_icons.py
+    python scripts/make_icons.py "path/to/Gara de Nord Train Board.png"
 
-Writes web/icons/icon-192.png, icon-512.png (purpose "any", rounded corners like the SVG)
-and icon-maskable-512.png (full-bleed background, glyph inside the 80 % safe zone).
-Uses Pillow only (already a dependency); the output PNGs are committed, nothing runs at
-runtime. Drawn at 4x and downscaled for smooth edges.
+The source is the 1254x1254 logo render (rounded blue tile with a white reflection
+under it). The tile is cut out with a fitted rounded-rectangle mask (plus the station
+wings that stick out on the sides), then written to web/icons/ and web/:
+
+    icon-32.png, icon-192.png, icon-512.png   purpose "any", transparent corners
+    icon-maskable-512.png                      full-bleed blue, logo inside the safe zone
+    apple-touch-icon.png (180)                 opaque (iOS shows transparency as black)
+    ../favicon.ico (16, 32, 48)                for clients that ask /favicon.ico
+
+Pillow only (already a dependency); the PNGs are committed, nothing runs at runtime.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
-ICONS = Path(__file__).resolve().parent.parent / "web" / "icons"
-BG = "#0a0d12"
-FG = "#ffb547"
-SS = 4  # supersampling
+WEB = Path(__file__).resolve().parent.parent / "web"
+ICONS = WEB / "icons"
+BG = (10, 52, 110, 255)  # deep blue of the tile, for opaque/maskable variants
+
+# Geometry of the source render (1254x1254): tile and side wings, crop square.
+TILE = (97, 87, 1161, 1166)
+TILE_RADIUS = 215
+WINGS = (77, 280, 1177, 760)
+CROP = (77, 77, 1177, 1177)
 
 
-def draw(size: int, *, maskable: bool) -> Image.Image:
-    big = size * SS
-    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    unit = big / 512
-    if maskable:
-        d.rectangle([0, 0, big, big], fill=BG)
-        scale, off = unit * 0.72, big * 0.14  # glyph shrunk into the safe zone
-    else:
-        d.rounded_rectangle([0, 0, big - 1, big - 1], radius=112 * unit, fill=BG)
-        scale, off = unit, 0.0
+def cut_logo(src: Path) -> Image.Image:
+    im = Image.open(src).convert("RGBA")
+    if im.size != (1254, 1254):
+        raise SystemExit(f"unexpected source size {im.size}; adjust TILE/WINGS/CROP")
+    mask = Image.new("L", im.size, 0)
+    d = ImageDraw.Draw(mask)
+    d.rounded_rectangle(TILE, radius=TILE_RADIUS, fill=255)
+    d.rectangle(WINGS, fill=255)
+    im.putalpha(ImageChops.multiply(im.getchannel("A"), mask))
+    return im.crop(CROP)
 
-    def p(x: float, y: float) -> tuple[float, float]:
-        return (off + x * scale, off + y * scale)
 
-    w = round(26 * scale)
-    # body of the board: rounded rect 136..376 x 112..360, r=40
-    d.rounded_rectangle([*p(136, 112), *p(376, 360)], radius=40 * scale, outline=FG, width=w)
-    for a, b in (((140, 236), (372, 236)), ((206, 170), (306, 170)),
-                 ((196, 360), (154, 416)), ((316, 360), (358, 416))):
-        d.line([p(*a), p(*b)], fill=FG, width=w)
-        for pt in (a, b):  # round caps
-            cx, cy = p(*pt)
-            d.ellipse([cx - w / 2, cy - w / 2, cx + w / 2, cy + w / 2], fill=FG)
-    for cx, cy in ((196, 300), (316, 300)):
-        x, y = p(cx, cy)
-        r = 20 * scale
-        d.ellipse([x - r, y - r, x + r, y + r], fill=FG)
-    return img.resize((size, size), Image.LANCZOS)
+def scaled(logo: Image.Image, size: int) -> Image.Image:
+    return logo.resize((size, size), Image.LANCZOS)
+
+
+def on_background(logo: Image.Image, size: int, fraction: float) -> Image.Image:
+    canvas = Image.new("RGBA", (size, size), BG)
+    inner = round(size * fraction)
+    canvas.alpha_composite(scaled(logo, inner), ((size - inner) // 2, (size - inner) // 2))
+    return canvas
 
 
 def main() -> None:
-    for name, size, maskable in (("icon-192.png", 192, False), ("icon-512.png", 512, False),
-                                 ("icon-maskable-512.png", 512, True)):
-        draw(size, maskable=maskable).save(ICONS / name, optimize=True)
-        print("wrote", ICONS / name)
+    if len(sys.argv) != 2:
+        raise SystemExit(__doc__)
+    logo = cut_logo(Path(sys.argv[1]))
+    outputs = {
+        ICONS / "icon-32.png": scaled(logo, 32),
+        ICONS / "icon-192.png": scaled(logo, 192),
+        ICONS / "icon-512.png": scaled(logo, 512),
+        # maskable: launchers crop to a circle of 80 % diameter; keep the tile inside it
+        ICONS / "icon-maskable-512.png": on_background(logo, 512, 0.74),
+        ICONS / "apple-touch-icon.png": on_background(logo, 180, 1.0).convert("RGB"),
+    }
+    for path, img in outputs.items():
+        img.save(path, optimize=True)
+        print("wrote", path)
+    scaled(logo, 256).save(WEB / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
+    print("wrote", WEB / "favicon.ico")
 
 
 if __name__ == "__main__":

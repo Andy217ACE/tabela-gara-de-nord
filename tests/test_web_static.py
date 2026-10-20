@@ -42,7 +42,7 @@ def test_index_has_title_meta_and_footer(client):
 
 def test_index_has_logo_slot_and_landmarks(client):
     html = client.get("/").text
-    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/logo.svg"', html)
+    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/icon-192.png"', html)
     assert 'alt="Sigla Tabela Gara de Nord"' in html
     for tag in ("<header", "<main", "<nav", "<footer"):
         assert tag in html
@@ -50,12 +50,11 @@ def test_index_has_logo_slot_and_landmarks(client):
     assert re.search(r"Sursa: (?:<a [^>]*>)?CFR", html)
     for name in ("Sosiri", "Plecări", "Tabelă", "Istoric", "Urmărite"):
         assert name in html
-    assert client.get("/icons/logo.svg").status_code == 200
-    assert client.get("/icons/icon.svg").status_code == 200
+    assert client.get("/icons/icon-192.png").status_code == 200
 
 
 def test_static_files_revalidate(client):
-    for path in ("/", "/style.css", "/app.js", "/icons/logo.svg"):
+    for path in ("/", "/style.css", "/app.js", "/icons/icon-192.png"):
         assert client.get(path).headers.get("cache-control") == "no-cache", path
 
 
@@ -97,7 +96,8 @@ def test_manifest_valid_and_linked(client):
     assert re.match(r"^#[0-9a-f]{6}$", m["theme_color"])
     assert re.match(r"^#[0-9a-f]{6}$", m["background_color"])
     icons = {(i["src"], i["type"], i["sizes"], i.get("purpose", "any")) for i in m["icons"]}
-    assert ("icons/icon.svg", "image/svg+xml", "any", "any") in icons
+    # the logo artwork everywhere: no leftover placeholder SVG
+    assert not any(t == "image/svg+xml" for _, t, _, _ in icons)
     assert ("icons/icon-192.png", "image/png", "192x192", "any") in icons
     assert ("icons/icon-512.png", "image/png", "512x512", "any") in icons
     assert ("icons/icon-maskable-512.png", "image/png", "512x512", "maskable") in icons
@@ -111,7 +111,17 @@ def test_manifest_valid_and_linked(client):
         assert client.get("/" + src).status_code == 200
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert '<link rel="manifest" href="manifest.webmanifest">' in html
-    assert re.search(r'<link rel="apple-touch-icon" href="icons/icon-192.png">', html)
+    assert '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">' in html
+    assert '<link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">' in html
+    assert '<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">' in html
+    assert ".svg" not in html
+    from PIL import Image
+    with Image.open(WEB / "icons" / "apple-touch-icon.png") as im:
+        assert im.size == (180, 180) and im.mode == "RGB"  # iOS: no transparency
+    with Image.open(WEB / "icons" / "icon-32.png") as im:
+        assert im.size == (32, 32)
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200 and r.content[:4] == b"\x00\x00\x01\x00"
 
 
 def test_service_worker_served_as_js_no_cache(client):
@@ -136,7 +146,8 @@ def test_service_worker_served_as_js_no_cache(client):
     for path in re.findall(r'"([^"]+)"', shell):
         assert client.get(path).status_code == 200, path
     for f in ("history.js", "follows.js", "app.js", "style.css", "manifest.webmanifest",
-              "icons/icon-192.png"):
+              "icons/icon-192.png", "icons/icon-32.png", "icons/apple-touch-icon.png",
+              "favicon.ico"):
         assert f'"/{f}"' in shell, f
 
 

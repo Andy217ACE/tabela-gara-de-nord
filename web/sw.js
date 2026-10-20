@@ -8,7 +8,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v1";
+var VERSION = "v2";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -19,9 +19,10 @@ var SHELL = [
   "/history.js",
   "/follows.js",
   "/manifest.webmanifest",
-  "/icons/icon.svg",
-  "/icons/logo.svg",
+  "/favicon.ico",
+  "/icons/icon-32.png",
   "/icons/icon-192.png",
+  "/icons/apple-touch-icon.png",
   "/icons/icon-512.png",
   "/icons/icon-maskable-512.png"
 ];
