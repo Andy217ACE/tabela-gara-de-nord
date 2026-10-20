@@ -1,0 +1,258 @@
+# © 2026 Andy217Ace
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from app.models import Row
+from app.store import MIN_ROWS, Store, service_date
+
+BUC = ZoneInfo("Europe/Bucharest")
+T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
+
+
+def R(board, no, t, delay=0, platform=None, **kw):
+    return Row(board=board, train_type="IR", train_no=no, station="Brasov",
+               operator="CFR Calatori", sched_time=t, delay_min=delay,
+               platform=platform, **kw)
+
+
+def base_rows():
+    rows = [
+        R("arrival", 1621, "12:10", platform=3),
+        R("arrival", 1622, "12:20"),
+        R("departure", 1731, "12:15", platform=5),
+        R("departure", 1732, "12:30"),
+    ]
+    return rows
+
+
+@pytest.fixture
+def store():
+    s = Store(":memory:")
+    s.migrate()
+    yield s
+    s.close()
+
+
+def count(store, table, where="1=1"):
+    return store._conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}").fetchone()[0]
+
+
+def test_min_rows_constant():
+    assert MIN_ROWS == 4
+
+
+def test_migrate_idempotent_and_versioned(store):
+    store.migrate()
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    names = {r[0] for r in store._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"runs", "services", "events", "subscriptions", "follows"} <= names
+
+
+def test_wal_on_file_db(tmp_path):
+    s = Store(str(tmp_path / "t.db"))
+    s.migrate()
+    assert s._conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+    s.close()
+
+
+def test_first_read_all_appeared(store):
+    ev = store.ingest(base_rows(), T0, "h1")
+    assert len(ev) == 4
+    assert all(e.kind == "appeared" for e in ev)
+    assert count(store, "services") == 4
+    assert count(store, "events", "kind='appeared'") == 4
+    assert count(store, "runs", "ok=1") == 1
+
+
+def test_delay_change_event(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()
+    rows[0] = R("arrival", 1621, "12:10", delay=15, platform=3)
+    ev = store.ingest(rows, T0 + timedelta(minutes=1))
+    assert len(ev) == 1
+    e = ev[0]
+    assert e.kind == "delay" and e.old == "0" and e.new == "15"
+    assert e.row.train_no == 1621
+    assert count(store, "events", "kind='delay'") == 1
+
+
+def test_platform_assigned_and_changed(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()
+    rows[1] = R("arrival", 1622, "12:20", platform=7)
+    ev = store.ingest(rows, T0 + timedelta(minutes=1))
+    assert [(e.kind, e.old, e.new) for e in ev] == [("platform", None, "7")]
+    rows[1] = R("arrival", 1622, "12:20", platform=8)
+    ev = store.ingest(rows, T0 + timedelta(minutes=2))
+    assert [(e.kind, e.old, e.new) for e in ev] == [("platform", "7", "8")]
+
+
+def test_unchanged_read_no_events(store):
+    store.ingest(base_rows(), T0)
+    assert store.ingest(base_rows(), T0 + timedelta(minutes=1)) == []
+
+
+def test_too_few_rows_records_failed_run_only(store):
+    store.ingest(base_rows(), T0)
+    before = store._conn.execute("SELECT * FROM services ORDER BY id").fetchall()
+    ev = store.ingest([R("arrival", 1621, "12:10", delay=99)], T0 + timedelta(minutes=1))
+    assert ev == []
+    assert store._conn.execute("SELECT * FROM services ORDER BY id").fetchall() == before
+    assert count(store, "runs", "ok=0") == 1
+    assert count(store, "events") == 4
+
+
+def test_one_board_empty_is_failed_run(store):
+    rows = [R("arrival", n, f"12:{n % 60:02d}") for n in range(1, 7)]
+    assert store.ingest(rows, T0) == []
+    assert count(store, "runs", "ok=0") == 1
+    assert count(store, "services") == 0
+
+
+def test_failed_run_does_not_count_as_miss(store):
+    store.ingest(base_rows(), T0)
+    store.ingest(base_rows()[1:], T0 + timedelta(minutes=1))  # 3 rows -> fail
+    store.ingest(base_rows()[1:], T0 + timedelta(minutes=2))  # 3 rows -> fail
+    assert count(store, "services", "status='gone'") == 0
+
+
+def test_same_number_both_boards_and_two_times_are_separate(store):
+    rows = [
+        R("arrival", 1621, "12:10"),
+        R("departure", 1621, "12:40"),
+        R("arrival", 1621, "18:10"),
+        R("departure", 1732, "12:30"),
+    ]
+    ev = store.ingest(rows, T0)
+    assert len(ev) == 4
+    assert count(store, "services", "train_no=1621") == 3
+
+
+def test_service_date_after_midnight():
+    assert service_date("00:05", datetime(2026, 10, 20, 23, 58)) == date(2026, 10, 21)
+
+
+def test_service_date_before_midnight_seen_after():
+    assert service_date("23:50", datetime(2026, 10, 21, 0, 10)) == date(2026, 10, 20)
+
+
+def test_service_date_same_day_and_tz_conversion():
+    assert service_date("12:10", datetime(2026, 10, 20, 11, 0)) == date(2026, 10, 20)
+    # 22:30 UTC == 01:30 Bucharest (EEST, +3) on the 21st
+    now = datetime(2026, 10, 20, 22, 30, tzinfo=timezone.utc)
+    assert service_date("01:40", now) == date(2026, 10, 21)
+    assert Store.service_date("01:40", now) == date(2026, 10, 21)
+
+
+def test_ingest_uses_bucharest_service_date(store):
+    now = datetime(2026, 10, 20, 20, 58, tzinfo=timezone.utc)  # 23:58 local
+    rows = [
+        R("arrival", 1, "00:05"),
+        R("arrival", 2, "23:50"),
+        R("departure", 3, "00:20"),
+        R("departure", 4, "23:59"),
+    ]
+    store.ingest(rows, now)
+    got = dict(store._conn.execute("SELECT train_no, service_date FROM services"))
+    assert got == {1: "2026-10-21", 2: "2026-10-20", 3: "2026-10-21", 4: "2026-10-20"}
+    ts = store._conn.execute("SELECT ts FROM runs").fetchone()[0]
+    assert ts.endswith("+03:00")
+
+
+def test_gone_after_two_consecutive_misses(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
+    ev = store.ingest(rows, T0 + timedelta(minutes=1))
+    assert [(e.kind, e.row.train_no) for e in ev] == [("appeared", 1650)]
+    assert count(store, "services", "train_no=1621 AND status='listed'") == 1
+    ev = store.ingest(rows, T0 + timedelta(minutes=2))
+    assert [(e.kind, e.row.train_no) for e in ev] == [("gone", 1621)]
+    assert count(store, "services", "train_no=1621 AND status='gone'") == 1
+    assert count(store, "events", "kind='gone'") == 1
+    # stays gone, no duplicate event
+    assert store.ingest(rows, T0 + timedelta(minutes=3)) == []
+
+
+def test_miss_reset_when_seen_again(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
+    store.ingest(rows, T0 + timedelta(minutes=1))
+    store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0 + timedelta(minutes=2))
+    ev = store.ingest(rows, T0 + timedelta(minutes=3))
+    assert ev == []
+    assert count(store, "services", "status='gone'") == 0
+
+
+def test_gone_service_reappears(store):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
+    store.ingest(rows, T0 + timedelta(minutes=1))
+    store.ingest(rows, T0 + timedelta(minutes=2))
+    ev = store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0 + timedelta(minutes=3))
+    assert [(e.kind, e.row.train_no) for e in ev] == [("appeared", 1621)]
+    row = store._conn.execute(
+        "SELECT status, miss_count FROM services WHERE train_no=1621").fetchone()
+    assert tuple(row) == ("listed", 0)
+
+
+def test_current_board(store):
+    assert store.current_board() == {"updated_at": None, "arrivals": [], "departures": []}
+    rows = [
+        R("arrival", 1622, "12:20"),
+        R("arrival", 1621, "12:10", delay=5, platform=3, flagged=True),
+        R("departure", 1732, "12:30"),
+        R("departure", 1731, "12:15", platform=5),
+    ]
+    store.ingest(rows, T0)
+    b = store.current_board()
+    assert b["updated_at"] == T0.isoformat()
+    assert [r["train_no"] for r in b["arrivals"]] == [1621, 1622]
+    assert [r["train_no"] for r in b["departures"]] == [1731, 1732]
+    a = b["arrivals"][0]
+    assert a == {"train_type": "IR", "train_no": 1621, "station": "Brasov",
+                 "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
+                 "platform": 3, "flagged": 1, "status": "listed"}
+    # failed run doesn't move updated_at
+    store.ingest([], T0 + timedelta(minutes=1))
+    assert store.current_board()["updated_at"] == T0.isoformat()
+
+
+def test_current_board_orders_across_midnight_and_hides_gone(store):
+    now = datetime(2026, 10, 20, 23, 50, tzinfo=BUC)
+    rows = [
+        R("arrival", 1, "00:05"), R("arrival", 2, "23:55"),
+        R("departure", 3, "00:20"), R("departure", 4, "23:59"),
+    ]
+    store.ingest(rows, now)
+    b = store.current_board()
+    assert [r["train_no"] for r in b["arrivals"]] == [2, 1]
+    rows2 = rows[1:] + [R("arrival", 5, "00:30")]
+    store.ingest(rows2, now + timedelta(minutes=1))
+    store.ingest(rows2, now + timedelta(minutes=2))
+    assert [r["train_no"] for r in store.current_board()["arrivals"]] == [2, 5]
+
+
+def test_last_ok_age(store):
+    assert store.last_ok_age(T0) is None
+    store.ingest(base_rows(), T0)
+    store.ingest([], T0 + timedelta(seconds=30))
+    assert store.last_ok_age(T0 + timedelta(seconds=90)) == pytest.approx(90.0)
+
+
+def test_ingest_rolls_back_on_error(store, monkeypatch):
+    store.ingest(base_rows(), T0)
+    rows = base_rows()
+    rows[0] = R("arrival", 1621, "12:10", delay=20, platform=3)
+
+    def boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(store, "_insert_event", boom)
+    with pytest.raises(RuntimeError):
+        store.ingest(rows, T0 + timedelta(minutes=1))
+    assert count(store, "runs") == 1
+    assert store._conn.execute(
+        "SELECT last_delay FROM services WHERE train_no=1621").fetchone()[0] == 0
