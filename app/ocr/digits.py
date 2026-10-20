@@ -23,6 +23,8 @@ WIDE = 1.0    # a component wider than this x line height holds several glyphs
 MIN_SCORE = 0.60   # glyph match below this correlation is not trusted
 MIN_MARGIN = 0.01  # ...nor a near-tie with the runner-up template
 TEMPLATES_PATH = Path(__file__).with_name("digit_templates.npz")
+# Calibration panels used by default; departures are kept unseen as a held-out check.
+DEFAULT_BOARDS: tuple[str, ...] = ("arrival",)
 
 
 def segment(cell: np.ndarray) -> list[np.ndarray]:
@@ -101,14 +103,16 @@ def _normalise(crop: np.ndarray) -> np.ndarray:
 
 
 class DigitMatcher:
-    def __init__(self, labels: str, templates: np.ndarray):
+    def __init__(self, labels: str, templates: np.ndarray, boards: tuple[str, ...] = ()):
         self.labels = labels
         self.templates = templates.astype(np.float32)
+        self.boards = boards  # calibration panels the templates were built from
 
     @classmethod
-    def load(cls, path: Path = TEMPLATES_PATH) -> "DigitMatcher":
-        data = np.load(path)
-        return cls(str(data["labels"]), data["templates"])
+    def load(cls, path: Path | None = None) -> "DigitMatcher":
+        with np.load(path or TEMPLATES_PATH) as data:
+            boards = tuple(str(b) for b in data["boards"]) if "boards" in data else ()
+            return cls(str(data["labels"]), data["templates"], boards)
 
     def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
         """(best character, its score 0..1, margin over the runner-up)."""
@@ -174,16 +178,25 @@ def _calibration_samples(image_path: Path, golden_path: Path, boards: tuple[str,
     return samples
 
 
+def build_from_fixture(image_path: Path, golden_path: Path,
+                       boards: tuple[str, ...] = DEFAULT_BOARDS) -> tuple[str, np.ndarray]:
+    return build_templates(_calibration_samples(image_path, golden_path, boards))
+
+
 def main(argv: list[str]) -> int:
-    """python -m app.ocr.digits IMAGE GOLDEN_JSON [board ...] — rebuild the templates."""
+    """python -m app.ocr.digits IMAGE GOLDEN_JSON [board ...] — rebuild the templates.
+
+    Defaults to the arrivals panel only, so departures stay a held-out check
+    (tests/test_ocr.py::test_digit_templates_generalise_to_held_out_board).
+    """
     if len(argv) < 2:
         print(main.__doc__)
         return 2
-    boards = tuple(argv[2:]) or ("arrival", "departure")
-    labels, templates = build_templates(
-        _calibration_samples(Path(argv[0]), Path(argv[1]), boards))
-    np.savez_compressed(TEMPLATES_PATH, labels=np.array(labels), templates=templates)
-    print(f"saved {len(labels)} templates ({labels!r}) to {TEMPLATES_PATH}")
+    boards = tuple(argv[2:]) or DEFAULT_BOARDS
+    labels, templates = build_from_fixture(Path(argv[0]), Path(argv[1]), boards)
+    np.savez_compressed(TEMPLATES_PATH, labels=np.array(labels), templates=templates,
+                        boards=np.array(boards))
+    print(f"saved {len(labels)} templates ({labels!r}) from {boards} to {TEMPLATES_PATH}")
     return 0
 
 

@@ -11,6 +11,7 @@ Tesseract alone misreads isolated digits and the board's "1" on this font.
 """
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 
@@ -31,7 +32,11 @@ from app.normalize import (
 from app.ocr import preprocess
 from app.ocr.digits import DigitMatcher
 
+log = logging.getLogger(__name__)
+
 BOARDS = ("arrival", "departure")
+MIN_WIDTH, MIN_HEIGHT = 200, 60  # smaller images cannot hold the board layout
+TESSERACT_TIMEOUT = 10  # seconds per Tesseract call
 
 # Column extents as fractions of the blue panel width (calibrated on board_1.jpg;
 # both panels share the same layout).
@@ -68,11 +73,18 @@ _ALLOWED = {"no": "0123456789", "time": "0123456789:",
             "delay": "0123456789+", "platform": "0123456789"}
 
 
+class OcrError(Exception):
+    """Tesseract failed or timed out (the image itself was fine)."""
+
+
 def _decode(image_bytes: bytes) -> np.ndarray:
     buf = np.frombuffer(image_bytes or b"", np.uint8)
     img = cv2.imdecode(buf, cv2.IMREAD_COLOR) if buf.size else None
     if img is None:
         raise ValueError("image could not be decoded")
+    h, w = img.shape[:2]
+    if w < MIN_WIDTH or h < MIN_HEIGHT:
+        raise ValueError(f"imagine prea mică ({w}x{h}, minim {MIN_WIDTH}x{MIN_HEIGHT})")
     return img
 
 
@@ -107,8 +119,14 @@ class _Composite:
         self.image = canvas
 
     def read(self, lang: str, config: str) -> list[tuple[str, float | None]]:
-        data = pytesseract.image_to_data(
-            self.image, lang=lang, config=config, output_type=pytesseract.Output.DICT)
+        try:
+            data = pytesseract.image_to_data(
+                self.image, lang=lang, config=config,
+                output_type=pytesseract.Output.DICT, timeout=TESSERACT_TIMEOUT)
+        except (RuntimeError, pytesseract.TesseractError, OSError) as e:
+            # pytesseract signals a timeout with RuntimeError; a missing binary
+            # (TesseractNotFoundError) is an OSError.
+            raise OcrError(f"tesseract failed: {e}") from e
         words: list[list[tuple[int, str, float]]] = [[] for _ in range(self.n)]
         for text, left, top, height, conf in zip(
                 data["text"], data["left"], data["top"], data["height"], data["conf"]):
@@ -160,8 +178,11 @@ def _get_matcher() -> DigitMatcher | None:
         _matcher_loaded = True
         try:
             _matcher = DigitMatcher.load()
-        except (OSError, KeyError, ValueError):
+        except (OSError, KeyError, ValueError) as e:
             _matcher = None
+            log.warning(
+                "digit templates unavailable (%s: %s); numeric fields fall back to "
+                "Tesseract only and accuracy will drop", type(e).__name__, e)
     return _matcher
 
 

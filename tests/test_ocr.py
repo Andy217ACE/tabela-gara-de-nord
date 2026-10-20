@@ -130,6 +130,8 @@ def test_digit_templates_generalise_to_held_out_board():
     from app.ocr.reader import cell_grid
 
     matcher = DigitMatcher.load()
+    assert "arrival" in matcher.boards
+    assert "departure" not in matcher.boards  # otherwise this test is circular
     img = cv2.imdecode(np.frombuffer(_bytes(), np.uint8), cv2.IMREAD_COLOR)
     dep = preprocess.split_boards(img)[1]
     ok = 0
@@ -139,6 +141,73 @@ def test_digit_templates_generalise_to_held_out_board():
         plat = matcher.read(cells["platform"], "0123456789")[0]
         ok += plat == ("" if e["platform"] is None else str(e["platform"]))
     assert ok >= 35  # of 36
+
+
+def test_digit_templates_file_shipped_next_to_module():
+    from app.ocr import digits
+
+    assert digits.TEMPLATES_PATH.parent == Path(digits.__file__).parent
+    assert digits.TEMPLATES_PATH.is_file()
+
+
+def test_digit_templates_reproducible_from_fixture():
+    from app.ocr.digits import DEFAULT_BOARDS, DigitMatcher, build_from_fixture
+
+    assert DEFAULT_BOARDS == ("arrival",)
+    labels, templates = build_from_fixture(
+        FIX / "board_1.jpg", FIX / "board_1.json", DEFAULT_BOARDS)
+    committed = DigitMatcher.load()
+    assert labels == committed.labels
+    assert templates.shape == committed.templates.shape
+    assert np.abs(templates - committed.templates).max() < 1e-3
+
+
+def test_cli_defaults_to_arrival_only(tmp_path, monkeypatch):
+    from app.ocr import digits
+
+    out = tmp_path / "t.npz"
+    monkeypatch.setattr(digits, "TEMPLATES_PATH", out)
+    assert digits.main([str(FIX / "board_1.jpg"), str(FIX / "board_1.json")]) == 0
+    assert digits.DigitMatcher.load(out).boards == ("arrival",)
+
+
+def test_missing_templates_logs_warning(monkeypatch, caplog, tmp_path):
+    from app.ocr import digits, reader
+
+    monkeypatch.setattr(digits, "TEMPLATES_PATH", tmp_path / "missing.npz")
+    monkeypatch.setattr(reader, "_matcher", None)
+    monkeypatch.setattr(reader, "_matcher_loaded", False)
+    with caplog.at_level("WARNING", logger="app.ocr.reader"):
+        assert reader._get_matcher() is None
+    assert any("template" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_too_small_image_rejected():
+    tiny = np.zeros((40, 150, 3), np.uint8)
+    tiny[:] = (170, 40, 10)
+    ok, buf = cv2.imencode(".png", tiny)
+    with pytest.raises(ValueError, match="prea mică"):
+        read_board(buf.tobytes())
+
+
+@pytest.mark.parametrize("kind", ["timeout", "tesseract_error"])
+def test_tesseract_failure_raises_ocr_error(monkeypatch, kind):
+    import pytesseract
+
+    from app.ocr import reader
+
+    exc = (RuntimeError("Tesseract process timeout") if kind == "timeout"
+           else pytesseract.TesseractError(1, "boom"))
+    seen = {}
+
+    def boom(*args, **kwargs):
+        seen.update(kwargs)
+        raise exc
+
+    monkeypatch.setattr(reader.pytesseract, "image_to_data", boom)
+    with pytest.raises(reader.OcrError):
+        read_board(_bytes())
+    assert seen.get("timeout") == reader.TESSERACT_TIMEOUT == 10
 
 
 def test_segment_splits_touching_digits():
