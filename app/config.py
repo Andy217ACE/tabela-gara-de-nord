@@ -1,0 +1,28 @@
+# © 2026 Andy217Ace
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Settings:
+    db_path: str
+    source_url: str
+    vapid_private_key: str
+    vapid_public_key: str
+    vapid_subject: str
+    tesseract_cmd: str
+
+
+def get_settings() -> Settings:
+    return Settings(
+        db_path=os.environ.get("DB_PATH", "tabela.db"),
+        source_url=os.environ.get(
+            "SOURCE_URL", "https://cfr.ro/gari/camereweb/index.php?statie=BucurestiNord"
+        ),
+        vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
+        vapid_public_key=os.environ.get("VAPID_PUBLIC_KEY", ""),
+        vapid_subject=os.environ.get("VAPID_SUBJECT", "mailto:admin@example.com"),
+        tesseract_cmd=os.environ.get("TESSERACT_CMD", "tesseract"),
+    )

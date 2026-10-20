@@ -1,0 +1,246 @@
+{
+ "arrival": [
+  {
+   "train_type": "IR",
+   "train_no": 1636,
+   "station": "BRASOV",
+   "operator": "CFR Calatori",
+   "sched_time": "20:04",
+   "delay_min": 10,
+   "platform": 13,
+   "flagged": true
+  },
+  {
+   "train_type": "RE",
+   "train_no": 11038,
+   "station": "BRASOV",
+   "operator": "Regio Calatori",
+   "sched_time": "20:11",
+   "delay_min": 0,
+   "platform": 5,
+   "flagged": true
+  },
+  {
+   "train_type": "RM",
+   "train_no": 7944,
+   "station": "AEROPORT H COANDA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:17",
+   "delay_min": 5,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 5026,
+   "station": "PLOIESTI SUD",
+   "operator": "CFR Calatori",
+   "sched_time": "20:19",
+   "delay_min": 10,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10156,
+   "station": "ROSIORI NORD",
+   "operator": "Transferoviar",
+   "sched_time": "20:20",
+   "delay_min": 10,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 1734,
+   "station": "CLUJ NAPOCA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:34",
+   "delay_min": 20,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 1662,
+   "station": "IASI",
+   "operator": "CFR Calatori",
+   "sched_time": "20:40",
+   "delay_min": 25,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 16086,
+   "station": "CONSTANTA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:51",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 16016,
+   "station": "CRAIOVA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:54",
+   "delay_min": 10,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RM",
+   "train_no": 7946,
+   "station": "AEROPORT H COANDA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:57",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 16572,
+   "station": "BRASOV",
+   "operator": "InterRegional",
+   "sched_time": "20:58",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 11538,
+   "station": "BRASOV",
+   "operator": "Astra Trans Ca",
+   "sched_time": "21:04",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  }
+ ],
+ "departure": [
+  {
+   "train_type": "RE",
+   "train_no": 5003,
+   "station": "BUZAU",
+   "operator": "CFR Calatori",
+   "sched_time": "20:17",
+   "delay_min": 0,
+   "platform": 4,
+   "flagged": true
+  },
+  {
+   "train_type": "R",
+   "train_no": 3031,
+   "station": "BRASOV",
+   "operator": "CFR Calatori",
+   "sched_time": "20:23",
+   "delay_min": 0,
+   "platform": 3,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10159,
+   "station": "ROSIORI NORD",
+   "operator": "Transferoviar",
+   "sched_time": "20:30",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10117,
+   "station": "AEROPORT H COANDA",
+   "operator": "Transferoviar",
+   "sched_time": "20:30",
+   "delay_min": 0,
+   "platform": 10,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10079,
+   "station": "PLOIESTI SUD",
+   "operator": "Transferoviar",
+   "sched_time": "20:32",
+   "delay_min": 0,
+   "platform": 7,
+   "flagged": false
+  },
+  {
+   "train_type": "IR",
+   "train_no": 1589,
+   "station": "CONSTANTA",
+   "operator": "CFR Calatori",
+   "sched_time": "20:33",
+   "delay_min": 0,
+   "platform": 13,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 11039,
+   "station": "BRASOV",
+   "operator": "Regio Calatori",
+   "sched_time": "20:40",
+   "delay_min": 0,
+   "platform": 5,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 9217,
+   "station": "PITESTI",
+   "operator": "CFR Calatori",
+   "sched_time": "21:06",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10119,
+   "station": "AEROPORT H COANDA",
+   "operator": "Transferoviar",
+   "sched_time": "21:10",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IRN",
+   "train_no": 78,
+   "station": "BUDAPESTA KELETI",
+   "operator": "CFR Calatori",
+   "sched_time": "21:19",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "IRN",
+   "train_no": 1641,
+   "station": "SATU MARE",
+   "operator": "CFR Calatori",
+   "sched_time": "21:20",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  },
+  {
+   "train_type": "RE",
+   "train_no": 10121,
+   "station": "AEROPORT H COANDA",
+   "operator": "Transferoviar",
+   "sched_time": "21:50",
+   "delay_min": 0,
+   "platform": null,
+   "flagged": false
+  }
+ ]
+}

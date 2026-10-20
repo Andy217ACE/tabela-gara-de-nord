@@ -1,0 +1,30 @@
+# © 2026 Andy217Ace
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Row:
+    board: str
+    train_type: str
+    train_no: int
+    station: str
+    operator: str
+    sched_time: str
+    delay_min: int = 0
+    platform: int | None = None
+    flagged: bool = False
+    confidence: float = 1.0
+
+    @property
+    def key(self) -> tuple[str, int, str]:
+        return (self.board, self.train_no, self.sched_time)
+
+
+@dataclass(frozen=True)
+class Event:
+    kind: str  # delay | platform | appeared | gone
+    row: Row
+    old: str | None
+    new: str | None
