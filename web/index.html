@@ -22,6 +22,8 @@
   <script src="app.js" defer></script>
   <script src="history.js" defer></script>
   <script src="follows.js" defer></script>
+  <link rel="stylesheet" href="panel.css">
+  <script src="panel.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -70,6 +72,9 @@
         <svg class="banner-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>
         <span class="banner-text" id="banner-text"></span>
       </div>
+
+      <!-- mod „Panou" (web/panel.js): comutator Panou/Carduri + afișajul de gară -->
+      <div id="panel-root" class="pnl-root"></div>
 
       <div class="tabs" role="tablist" aria-label="Panou">
         <button class="tab" type="button" role="tab" id="tab-arrivals" aria-controls="panel-arrivals" aria-selected="true" data-board="arrivals">
