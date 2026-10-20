@@ -13,6 +13,7 @@ USER_AGENT = (
     "(c) 2026 Andy217Ace; date CFR)"
 )
 TIMEOUT = 15.0
+MAX_BYTES = 10 * 1024 * 1024  # the CFR page embeds the image as base64; refuse anything larger
 
 _DATA_URI = re.compile(r"data:image/(?:jpeg|jpg|png);base64,([A-Za-z0-9+/=\s]+)", re.I)
 
@@ -40,12 +41,24 @@ def image_hash(data: bytes) -> str:
 
 async def fetch_board_image(client: httpx.AsyncClient, url: str) -> bytes:
     try:
-        resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+        async with client.stream("GET", url, headers={"User-Agent": USER_AGENT},
+                                 timeout=TIMEOUT) as resp:
+            if resp.status_code >= 300:  # errors and (unfollowed) redirects
+                raise FetchError(f"HTTP {resp.status_code}")
+            declared = resp.headers.get("content-length")
+            if declared and declared.isdigit() and int(declared) > MAX_BYTES:
+                raise FetchError("response too large")
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                total += len(chunk)
+                if total > MAX_BYTES:
+                    raise FetchError("response too large")
+                chunks.append(chunk)
+            html = b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
     except httpx.TransportError as e:
         raise FetchError(f"transport error: {e!r}") from e
-    if resp.status_code >= 400:
-        raise FetchError(f"HTTP {resp.status_code}")
     try:
-        return extract_image(resp.text)
+        return extract_image(html)
     except ValueError as e:
         raise FetchError(str(e)) from e
