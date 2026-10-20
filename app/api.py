@@ -158,7 +158,8 @@ async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClie
     delay = first
     while not stop.is_set():
         try:
-            await poller.run_poller(settings, on_rows, client, stop)
+            await poller.run_poller(settings, on_rows, client, stop,
+                                    last_image_path=settings.last_image_path)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -1,0 +1,36 @@
+# © 2026 Andy217Ace
+# systemd unit for Tabela Gara de Nord. Installed by deploy/install.sh as
+# /etc/systemd/system/tabela.service. ONE worker only: the poller lives in the process.
+[Unit]
+Description=Tabela Gara de Nord (FastAPI + OCR poller)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tabela
+Group=tabela
+WorkingDirectory=/opt/tabela/app
+EnvironmentFile=/etc/tabela.env
+ExecStart=/opt/tabela/venv/bin/uvicorn app.main:create --factory --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tabela
+PrivateTmp=true
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

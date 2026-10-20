@@ -1,0 +1,5 @@
+# © 2026 Andy217Ace
+*.sh text eol=lf
+deploy/* text eol=lf
+*.npz binary
+*.jpg binary

@@ -116,3 +116,15 @@ def test_app_js_safe_dom(client):
     assert "textContent" in js
     assert "/api/board" in js
     assert "AbortController" in js
+
+
+@pytest.mark.parametrize("val,expected", [(None, "data/last.jpg"),
+                                          ("/var/lib/tabela/last.jpg", "/var/lib/tabela/last.jpg"),
+                                          ("", None)])
+def test_last_image_path_env(monkeypatch, val, expected):
+    from app.config import get_settings
+    if val is None:
+        monkeypatch.delenv("LAST_IMAGE_PATH", raising=False)
+    else:
+        monkeypatch.setenv("LAST_IMAGE_PATH", val)
+    assert get_settings().last_image_path == expected

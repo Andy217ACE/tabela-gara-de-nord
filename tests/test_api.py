@@ -258,6 +258,22 @@ def test_lifespan_starts_and_stops_poller(monkeypatch):
     assert stopped.is_set()
 
 
+def test_poller_gets_last_image_path_from_settings(monkeypatch):
+    seen = {}
+    got = threading.Event()
+
+    async def fake_run_poller(settings, on_rows, client, stop, **kw):
+        seen.update(kw)
+        got.set()
+        await stop.wait()
+
+    monkeypatch.setattr("app.poller.run_poller", fake_run_poller)
+    app = create_app(settings(last_image_path="/srv/x/last.jpg"), start_poller=True)
+    with TestClient(app):
+        assert got.wait(2)
+    assert seen.get("last_image_path") == "/srv/x/last.jpg"
+
+
 def test_poller_crash_is_logged_and_restarted(monkeypatch, caplog):
     calls = []
     restarted = threading.Event()
