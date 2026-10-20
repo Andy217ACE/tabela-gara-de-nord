@@ -1,4 +1,5 @@
 # © 2026 Andy217Ace
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -410,3 +411,18 @@ def test_jitter_claim_is_globally_closest_not_row_order():
         s.close()
         # globally closest pair first: 20:09->20:08 (1 min), then 20:05->20:00
         assert got == {"20:00": 5, "20:08": 9}, order
+
+
+def test_low_confidence_row_does_not_touch_gone_service(store):
+    store.ingest(base_rows() + [R("arrival", 1636, "12:40")], T0)
+    store.ingest(base_rows(), T0 + timedelta(minutes=1))
+    store.ingest(base_rows(), T0 + timedelta(minutes=2))
+    before = tuple(store._conn.execute(
+        "SELECT status, last_seen, miss_count FROM services WHERE train_no=1636").fetchone())
+    assert before[0] == "gone"
+    low = replace(R("arrival", 1636, "12:40"), confidence=0.1)
+    ev = store.ingest(base_rows() + [low], T0 + timedelta(minutes=3))
+    assert ev == []
+    after = tuple(store._conn.execute(
+        "SELECT status, last_seen, miss_count FROM services WHERE train_no=1636").fetchone())
+    assert after == before

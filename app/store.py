@@ -319,7 +319,7 @@ class Store:
         # Low-confidence rows: only keep an exactly matching service alive.
         for r in low:
             cur = self._find_exact(r, service_date(r.sched_time, local).isoformat())
-            if cur is not None and cur["id"] not in seen:
+            if cur is not None and cur["status"] == "listed" and cur["id"] not in seen:
                 seen.add(cur["id"])
                 c.execute("UPDATE services SET last_seen=?, miss_count=0 WHERE id=?",
                           (ts_s, cur["id"]))
