@@ -2,7 +2,8 @@
 // Tabela Gara de Nord — mod „Panou" (afișaj de gară). Consumă datele pe care app.js le
 // publică prin evenimentul `tabela:board` (nu face un al doilea polling). DOM construit
 // doar cu createElement/textContent; fără stiluri inline (CSP). Culorile vin din CSS
-// (panel.css) prin atributul data-level; pragurile vin din GET /api/config.
+// (panel.css) prin atributul data-level; pragurile vin din GET /api/config, încărcat o
+// singură dată de app.js (TabelaApp.config) — aceeași sursă și pentru intervalul de refresh.
 "use strict";
 
 (function () {
@@ -76,8 +77,11 @@
     close: ["M6 6l12 12", "M18 6 6 18"],
     cols: ["M4 5h16v14H4z", "M9.5 5v14", "M14.5 5v14"],
     reset: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"],
-    history: ["M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17z", "M12 7.5V12l3 2"]
+    history: ["M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17z", "M12 7.5V12l3 2"],
+    bell: ["M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z", "M10 20.5a2 2 0 0 0 4 0"],
+    theme: ["M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16z", "M12 4v16"]
   };
+  var UNSURE = "citire nesigură";
 
   function load(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -140,8 +144,9 @@
   }
 
   // Nivelul de culoare. Niciodată „la timp" fără o întârziere citită pe un rând sigur.
+  // `uncertain` (A2) privește doar numele stației/operatorului, nu cifrele întârzierii:
+  // numele primesc marcajul „citire nesigură", culoarea întârzierii rămâne.
   function levelOf(t) {
-    if (t.uncertain === true) return "unknown";
     if (typeof t.confidence === "number" && t.confidence < CONF_MIN) return "unknown";
     var d = t.delay_min;
     if (t.delay_min == null || typeof d !== "number" || !isFinite(d) || d < 0) return "unknown";
@@ -288,13 +293,21 @@
 
     // antet: titlu + ceas
     var head = el("div", "pnl-head");
+    var brand = el("div", "pnl-brand");
+    var logo = el("img", "logo pnl-logo");
+    logo.src = "icons/logo.png";
+    logo.srcset = "icons/icon-192.png 2x, icons/logo.png 3x";
+    logo.alt = "";
+    logo.width = 40;
+    logo.height = 40;
     d.title = el("h2", "pnl-title");
     d.title.id = "pnl-title";
+    brand.append(logo, d.title);
     var clock = el("div", "pnl-clock");
     d.clockTime = el("span", "pnl-clock-time", "--:--:--");
     d.clockDate = el("span", "pnl-clock-date", "");
     clock.append(d.clockTime, d.clockDate);
-    head.append(d.title, clock);
+    head.append(brand, clock);
 
     // linia de stare
     var status = el("ul", "pnl-status");
@@ -386,7 +399,14 @@
     d.btnFs = button("", "Ecran complet", ICONS.full);
     d.btnFs.setAttribute("aria-pressed", "false");
     d.btnFs.addEventListener("click", toggleFullscreen);
+    // tema (Auto / Luminoasă / Întunecată) — și aici, ca să fie la îndemână în ecran complet
+    if (window.TabelaTheme) {
+      d.btnTheme = button("pnl-theme", "Temă", ICONS.theme);
+      d.btnTheme.setAttribute("data-theme-toggle", "");
+      d.btnTheme.addEventListener("click", function () { window.TabelaTheme.next(); });
+    }
     actions.append(d.btnReset, d.cols, d.btnRefresh, d.btnFs);
+    if (d.btnTheme) actions.appendChild(d.btnTheme);
 
     // filtrele: deschise mereu pe ecrane late, pliate implicit pe telefon
     d.filters = el("details", "pnl-filters");
@@ -502,6 +522,7 @@
     else if (lvl === "unknown") parts.push("întârziere necitită");
     else parts.push("întârziat");
     if (t.flagged) parts.push("marcat * pe tabela CFR");
+    if (t.uncertain === true) parts.push("nume: " + UNSURE);
     if (isRecent(board, t)) parts.push("modificat recent");
     return parts.join(" · ");
   }
@@ -540,7 +561,11 @@
     star.setAttribute("aria-label", (isFav ? "Scoate din" : "Adaugă la") + " Favorite (local): tren " + t.train_no);
     star.title = "Favorite (local) — doar în acest browser";
     star.appendChild(icon(ICONS.star));
-    tr.appendChild(cell("fav", star));
+    var btns = el("span", "pnl-rowbtns");
+    btns.appendChild(star);
+    var fol = followButton(t);
+    if (fol) btns.appendChild(fol);
+    tr.appendChild(cell("fav", btns));
 
     tr.appendChild(cell("time", t.sched_time ? t.sched_time : unknown("oră")));
 
@@ -556,8 +581,8 @@
     }
     tr.appendChild(cell("train", train));
 
-    tr.appendChild(cell("station", t.station ? t.station : unknown("stație")));
-    tr.appendChild(cell("op", t.operator ? t.operator : unknown("operator")));
+    tr.appendChild(cell("station", t.station ? nameNode(t.station, t) : unknown("stație")));
+    tr.appendChild(cell("op", t.operator ? nameNode(t.operator, t) : unknown("operator")));
     tr.appendChild(cell("delay", delayNode(t, lvl, fresh)));
 
     var known = t.platform != null && t.platform !== "";
@@ -576,6 +601,32 @@
       tr.appendChild(cell("changed", unknown("ultima modificare")));
     }
     return tr;
+  }
+
+  // Nume canonic (A2). Dacă potrivirea a fost nesigură: subliniere punctată + titlu.
+  function nameNode(text, t) {
+    if (t.uncertain !== true) return document.createTextNode(text);
+    var s = el("span", "is-uncertain", text);
+    s.title = UNSURE;
+    s.appendChild(el("span", "sr-only", " (" + UNSURE + ")"));
+    return s;
+  }
+
+  // Butonul „urmărește" (notificări) din rând — logica e în follows.js (TabelaApp.onFollow).
+  function followButton(t) {
+    var App = window.TabelaApp;
+    if (!App || typeof App.onFollow !== "function") return null;
+    var st = typeof App.followState === "function" ? App.followState(t) : null;
+    var on = !!(st && st.followed), off = !!(st && st.unsupported);
+    var b = el("button", "pnl-star pnl-follow");
+    b.type = "button";
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (off) b.setAttribute("aria-disabled", "true");
+    var label = (on ? "Nu mai urmări trenul " : "Urmărește trenul ") + t.train_no + " (notificări)";
+    b.setAttribute("aria-label", label + (off ? ". " + st.reason : ""));
+    b.title = off ? st.reason : (on ? "Urmărit — primești notificări" : "Urmărește (notificări)");
+    b.appendChild(icon(ICONS.bell));
+    return b;
   }
 
   function typeClass(type) {
@@ -620,8 +671,9 @@
     var focused = document.activeElement && document.activeElement.closest &&
       document.activeElement.closest(".pnl-row");
     var focusKey = focused ? focused.dataset.key : null;
-    var focusStar = !!(document.activeElement && document.activeElement.classList &&
-      document.activeElement.classList.contains("pnl-star"));
+    var ae = document.activeElement;
+    var focusBtn = ae && ae.classList && ae.classList.contains("pnl-follow") ? ".pnl-follow"
+      : (ae && ae.classList && ae.classList.contains("pnl-star") ? ".pnl-star" : null);
 
     var shown = 0, total = 0;
     BOARDS.forEach(function (b) {
@@ -646,7 +698,7 @@
 
     if (focusKey) {
       var again = d.body.querySelector('.pnl-row[data-key="' + cssEscape(focusKey) + '"]');
-      if (again) (focusStar ? again.querySelector(".pnl-star") : again).focus({ preventScroll: true });
+      if (again) ((focusBtn && again.querySelector(focusBtn)) || again).focus({ preventScroll: true });
     }
     d.stCount.textContent = S.data ? (shown === total ? shown + " trenuri afișate" : shown + " din " + total + " trenuri afișate") : "— trenuri";
     renderStatus();
@@ -753,8 +805,10 @@
     if (found) S.lastTrain = found; else found = S.lastTrain;
     if (!found) { d.detail.hidden = true; return; }
     var t = found.t, b = found.board, fresh = freshness(), lvl = levelOf(t);
+    var fst = window.TabelaApp && typeof window.TabelaApp.followState === "function"
+      ? window.TabelaApp.followState(t) : null;
     var sig = JSON.stringify([S.selected, t, fresh, gone, changedAt(b, t), isRecent(b, t),
-                              S.favs.has(String(t.train_no))]);
+                              S.favs.has(String(t.train_no)), fst]);
     if (sig === S.detailSig && !d.detail.hidden) return;
     S.detailSig = sig;
 
@@ -774,7 +828,7 @@
       ? (station ? station : "?") + " → București Nord"
       : "București Nord → " + (station ? station : "?");
     dlRow(dl, "Panou", b === "arrivals" ? "Sosiri" : "Plecări");
-    dlRow(dl, "Rută (cum apare pe tabelă)", station ? route : unknown("rută"));
+    dlRow(dl, "Rută (cum apare pe tabelă)", station ? nameNode(route, t) : unknown("rută"));
     dlRow(dl, "Ora programată", t.sched_time || unknown("oră"));
     var dd = delayNode(t, lvl, fresh);
     var dWrap = el("span", "pnl-detail-delay");
@@ -783,7 +837,7 @@
     dlRow(dl, "Ultima întârziere citită", dWrap);
     var known = t.platform != null && t.platform !== "";
     dlRow(dl, "Linia", known ? String(t.platform) : unknown("linie"));
-    dlRow(dl, "Operator", t.operator || unknown("operator"));
+    dlRow(dl, "Operator", t.operator ? nameNode(t.operator, t) : unknown("operator"));
     dlRow(dl, "Stare", message(b, t, lvl, fresh));
     var at = changedAt(b, t);
     dlRow(dl, "Ultima modificare observată", at != null ? fmtTime.format(new Date(at)) : unknown("ultima modificare"));
@@ -802,7 +856,10 @@
     favBtn.addEventListener("click", function () { toggleFav(String(t.train_no)); });
     acts.append(hist, favBtn);
     if (window.TabelaApp && typeof window.TabelaApp.onFollow === "function") {
-      var follow = button("", "Urmărește (notificări)");
+      var on = !!(fst && fst.followed);
+      var follow = button("", on ? "Nu mai urmări (notificări)" : "Urmărește (notificări)", ICONS.bell);
+      follow.setAttribute("aria-pressed", on ? "true" : "false");
+      if (fst && fst.unsupported) { follow.setAttribute("aria-disabled", "true"); follow.title = fst.reason; }
       follow.addEventListener("click", function () { window.TabelaApp.onFollow(t, follow); });
       acts.appendChild(follow);
     }
@@ -817,8 +874,17 @@
   // ---- interactions ------------------------------------------------------------------
 
   function onRowClick(e) {
+    var fol = e.target.closest(".pnl-follow");
+    if (fol) {
+      var row0 = fol.closest(".pnl-row");
+      var found = row0 && findTrain(row0.dataset.key);
+      if (found && window.TabelaApp && typeof window.TabelaApp.onFollow === "function") {
+        window.TabelaApp.onFollow(found.t, fol);
+      }
+      return;
+    }
     var star = e.target.closest(".pnl-star");
-    if (star) { toggleFav(star.dataset.fav); return; }
+    if (star && star.dataset.fav) { toggleFav(star.dataset.fav); return; }
     var row = e.target.closest(".pnl-row");
     if (row) openDetail(row.dataset.key);
   }
@@ -946,9 +1012,11 @@
     render();
   }
 
+  // GET /api/config e încărcat o singură dată de app.js (sursă unică); aici doar îl aplicăm.
   function loadConfig() {
-    return fetch("/api/config", { cache: "no-store", headers: { Accept: "application/json" } })
-      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    var App = window.TabelaApp;
+    var p = App && typeof App.config === "function" ? App.config() : Promise.resolve(DEFAULTS);
+    return Promise.resolve(p)
       .then(function (c) {
         var th = c && c.delay_thresholds;
         if (th && th.low > 0 && th.low < th.mid && th.mid < th.high) {
@@ -982,6 +1050,8 @@
 
   // ascultăm imediat: primul fetch al app.js poate termina înainte de init
   document.addEventListener("tabela:board", onBoard);
+  // starea „urmărit" s-a schimbat (follows.js → TabelaApp.refreshFollowButtons)
+  document.addEventListener("tabela:follows", function () { if (S.view === "panou") render(); });
 
   function init() {
     restore();
@@ -998,6 +1068,9 @@
       if (S.selected && !S.dom.detail.hidden) closeDetail();
       else if (S.pseudoFs) setPseudoFs(false);
     });
+    if (window.TabelaApp && typeof window.TabelaApp.renderThemeButtons === "function") {
+      window.TabelaApp.renderThemeButtons();
+    }
     loadConfig().then(function () {
       setOptions(S.dom.fDelay, delayOptions());
       S.dom.fDelay.value = S.fDelay;

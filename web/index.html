@@ -10,11 +10,29 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0a0d12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)">
-  <link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">
+  <!-- tema salvată, aplicată sincron înainte de stiluri (fără flash); fișier extern (CSP) -->
+  <script src="theme-init.js"></script>
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="icons/favicon-16.png" sizes="16x16" type="image/png">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Gara de Nord">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Tabela Gara de Nord">
+  <meta property="og:title" content="Tabela Gara de Nord — sosiri și plecări live">
+  <meta property="og:description" content="Sosirile și plecările din Gara de Nord București: ore, întârzieri și linii, citite de pe tabela CFR. Proiect independent, neafiliat CFR.">
+  <meta property="og:url" content="https://tabelacfr.ddns.net/">
+  <meta property="og:locale" content="ro_RO">
+  <meta property="og:image" content="https://tabelacfr.ddns.net/icons/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Sigla Tabela Gara de Nord: gara, tabela de plecări și un tren, pe fond albastru">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Tabela Gara de Nord — sosiri și plecări live">
+  <meta name="twitter:description" content="Sosirile și plecările din Gara de Nord București, citite de pe tabela CFR. Proiect independent.">
+  <meta name="twitter:image" content="https://tabelacfr.ddns.net/icons/og-image.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap">
@@ -31,12 +49,18 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="#">
-        <img id="logo" src="icons/icon-192.png" alt="Sigla Tabela Gara de Nord" width="40" height="40">
+        <img id="logo" class="logo logo-header" src="icons/logo.png" srcset="icons/icon-192.png 2x, icons/logo.png 3x" alt="Sigla Tabela Gara de Nord" width="46" height="46" decoding="async">
         <span class="brand-text">
           <span class="brand-title">Gara de Nord</span>
           <span class="brand-sub">Sosiri și plecări</span>
         </span>
       </a>
+
+      <button class="theme-btn" type="button" id="theme-btn" aria-label="Temă: automată" aria-pressed="false" title="Temă: automată (urmează sistemul). Apasă pentru luminoasă.">
+        <svg class="theme-icon theme-icon-auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="theme-fill"/></svg>
+        <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+        <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+      </button>
 
       <div class="live" id="live" data-state="loading">
         <span class="live-dot" aria-hidden="true"></span>
@@ -71,6 +95,12 @@
       <div class="banner" id="banner" hidden>
         <svg class="banner-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>
         <span class="banner-text" id="banner-text"></span>
+      </div>
+
+      <!-- ecran de încărcare: sigla mică până sosesc primele date (app.js îl ascunde) -->
+      <div class="boot" id="boot" aria-hidden="true">
+        <img class="logo logo-boot" src="icons/logo.png" srcset="icons/icon-192.png 2x, icons/logo.png 3x" alt="" width="56" height="56" decoding="async">
+        <span class="boot-text">Se încarcă tabela…</span>
       </div>
 
       <!-- mod „Panou" (web/panel.js): comutator Panou/Carduri + afișajul de gară -->
@@ -197,6 +227,7 @@
   <div class="toast" id="toast" role="status" hidden></div>
 
   <footer class="footer">
+    <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
   </footer>
 </body>

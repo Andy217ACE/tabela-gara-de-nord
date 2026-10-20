@@ -8,19 +8,26 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v2";
+var VERSION = "v3";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
+var OFFLINE_URL = "/offline.html";
 var SHELL = [
   "/",
+  OFFLINE_URL,
+  "/theme-init.js",
   "/style.css",
+  "/panel.css",
   "/app.js",
   "/history.js",
   "/follows.js",
+  "/panel.js",
   "/manifest.webmanifest",
   "/favicon.ico",
-  "/icons/icon-32.png",
+  "/icons/logo.png",
+  "/icons/favicon-16.png",
+  "/icons/favicon-32.png",
   "/icons/icon-192.png",
   "/icons/apple-touch-icon.png",
   "/icons/icon-512.png",
@@ -77,10 +84,12 @@ function boardFromCache(err) {
     });
 }
 
-function shellNetworkFirst(request, fallbackUrl) {
+function shellNetworkFirst(request, fallbackUrl, lastResort) {
   return fetch(request).catch(function (err) {
     return caches.open(SHELL_CACHE).then(function (c) {
-      return c.match(fallbackUrl || request, { ignoreSearch: true });
+      return c.match(fallbackUrl || request, { ignoreSearch: true }).then(function (hit) {
+        return hit || (lastResort ? c.match(lastResort) : undefined);
+      });
     }).then(function (hit) {
       if (hit) return hit;
       throw err;
@@ -99,7 +108,8 @@ self.addEventListener("fetch", function (event) {
   }
   if (url.pathname.indexOf("/api/") === 0) return; // never cached
   if (req.mode === "navigate") {
-    event.respondWith(shellNetworkFirst(req, "/"));
+    // the cached app shell first (it shows the last board); the offline page otherwise
+    event.respondWith(shellNetworkFirst(req, url.pathname === OFFLINE_URL ? OFFLINE_URL : "/", OFFLINE_URL));
     return;
   }
   if (SHELL.indexOf(url.pathname) >= 0) {

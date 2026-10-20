@@ -4,9 +4,13 @@
 "use strict";
 
 (function () {
-  var REFRESH_MS = 10000;
   var TIMEOUT_MS = 8000;
-  var STALE_S = 180;
+  // UI settings: GET /api/config is the single source of truth (refresh interval,
+  // stale threshold, delay colour thresholds). These defaults mirror the server's and
+  // apply only until the config arrives (or if it cannot be loaded).
+  var CONFIG_DEFAULTS = { delay_thresholds: { low: 5, mid: 15, high: 30 }, stale_after_s: 180, refresh_s: 10 };
+  var cfg = CONFIG_DEFAULTS;
+  var configPromise = null;
   var SVG_NS = "http://www.w3.org/2000/svg";
   var BOARDS = ["arrivals", "departures"];
   var TAB_KEY = "tabela.tab";
@@ -22,6 +26,7 @@
   };
 
   var $ = function (id) { return document.getElementById(id); };
+  var UNSURE = "citire nesigură";
 
   // ---- small DOM helpers (shared with history.js / follows.js) ----------------
 
@@ -73,8 +78,35 @@
 
   function delayLevel(d) {
     if (!d || d <= 0) return "ok";
-    return d <= 15 ? "minor" : "major";
+    return d <= cfg.delay_thresholds.mid ? "minor" : "major";
   }
+
+  // ---- config (/api/config) ------------------------------------------------------
+
+  function validConfig(c) {
+    var th = c && c.delay_thresholds;
+    var num = function (v) { return typeof v === "number" && isFinite(v); };
+    if (!th || !num(th.low) || !num(th.mid) || !num(th.high) ||
+        !(th.low > 0 && th.low < th.mid && th.mid < th.high)) return CONFIG_DEFAULTS;
+    return {
+      delay_thresholds: { low: th.low, mid: th.mid, high: th.high },
+      stale_after_s: num(c.stale_after_s) && c.stale_after_s > 0 ? c.stale_after_s : CONFIG_DEFAULTS.stale_after_s,
+      // clamp: never hammer the server, never go silent for minutes
+      refresh_s: num(c.refresh_s) ? Math.min(300, Math.max(5, c.refresh_s)) : CONFIG_DEFAULTS.refresh_s
+    };
+  }
+
+  function loadConfig() {
+    if (!configPromise) {
+      configPromise = fetch("/api/config", { cache: "no-store", headers: { Accept: "application/json" } })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(function (c) { cfg = validConfig(c); return cfg; })
+        .catch(function () { return cfg; }); // keep the defaults
+    }
+    return configPromise;
+  }
+
+  function refreshMs() { return cfg.refresh_s * 1000; }
 
   function trainKey(t) {
     return (t.service_date || "") + "|" + t.train_no + "|" + t.sched_time;
@@ -149,8 +181,13 @@
       c.sched.setAttribute("aria-label", "programat " + t.sched_time);
     }
 
+    // A2 canonicalisation: `uncertain` = station/operator did not match a known name
+    var unsure = t.uncertain === true;
     c.station.textContent = t.station ? t.station.toLowerCase() : "—";
-    c.station.setAttribute("aria-label", where + (t.station || "stație necunoscută"));
+    c.station.setAttribute("aria-label", where + (t.station || "stație necunoscută") +
+      (unsure ? " (citire nesigură)" : ""));
+    c.station.classList.toggle("is-uncertain", unsure && !!t.station);
+    c.station.title = unsure ? UNSURE : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = t.train_type || "?";
     c.type.title = "Tip tren " + (t.train_type || "necunoscut");
@@ -158,6 +195,8 @@
     c.flag.hidden = !t.flagged;
     c.op.textContent = t.operator || "";
     c.op.hidden = !t.operator;
+    c.op.classList.toggle("is-uncertain", unsure && !!t.operator);
+    c.op.title = unsure ? UNSURE : "";
 
     c.delay.className = "delay delay-" + level;
     c.delay.replaceChildren(
@@ -201,6 +240,8 @@
 
   function refreshFollowButtons() {
     BOARDS.forEach(function (b) { state.cards[b].forEach(applyFollow); });
+    // the Panou view (panel.js) renders its own follow buttons
+    document.dispatchEvent(new CustomEvent("tabela:follows"));
   }
 
   function renderBoard(board, trains) {
@@ -276,7 +317,7 @@
       return;
     }
 
-    var stale = age == null || age > STALE_S;
+    var stale = age == null || age > cfg.stale_after_s;
     if (state.failed) {
       live.dataset.state = "offline";
       text.textContent = age == null ? "date vechi" : "date vechi · " + ago(age);
@@ -357,8 +398,10 @@
         clearTimeout(to);
         if (state.inflight !== ctrl) return; // a newer refresh owns the UI and the timer
         state.inflight = null;
+        var boot = $("boot");
+        if (boot) boot.hidden = true;
         renderLive();
-        schedule(REFRESH_MS);
+        schedule(refreshMs());
         // mod „Panou" (panel.js) listens for every fetch outcome
         document.dispatchEvent(new CustomEvent("tabela:board",
           { detail: { data: state.data, failed: state.failed } }));
@@ -448,6 +491,8 @@
     };
   }
   window.TabelaApp.toast = toast;
+  window.TabelaApp.config = loadConfig;   // Promise of the validated /api/config
+  window.TabelaApp.UNSURE = UNSURE;
   window.TabelaApp.refresh = refresh;
   window.TabelaApp.el = el;
   window.TabelaApp.icon = icon;
@@ -469,9 +514,41 @@
   }
   window.TabelaApp.registerSW = registerSW;
 
+  // ---- theme toggle (logic in theme-init.js, loaded first in <head>) ----------------
+
+  var THEME_NEXT = { auto: "light", light: "dark", dark: "auto" };
+
+  function renderThemeButtons() {
+    var T = window.TabelaTheme;
+    if (!T) return;
+    var mode = T.get();
+    document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
+      var label = "Temă: " + T.LABELS[mode];
+      b.dataset.mode = mode;
+      b.setAttribute("aria-label", label);
+      b.setAttribute("aria-pressed", mode === "auto" ? "false" : "true");
+      var txt = b.querySelector(".pnl-btn-text"); // the Panou copy has visible text
+      if (txt) txt.textContent = label;
+      b.title = label + (mode === "auto" ? " (urmează sistemul)" : "") +
+        ". Apasă pentru " + T.LABELS[THEME_NEXT[mode]] + ".";
+    });
+  }
+
+  function initTheme() {
+    var b = $("theme-btn");
+    if (!b || !window.TabelaTheme) { if (b) b.hidden = true; return; }
+    b.setAttribute("data-theme-toggle", "");
+    b.addEventListener("click", function () { window.TabelaTheme.next(); });
+    document.addEventListener("tabela:theme", renderThemeButtons);
+    renderThemeButtons();
+  }
+  window.TabelaApp.renderThemeButtons = renderThemeButtons;
+
   // ---- boot ------------------------------------------------------------------------
 
   function init() {
+    loadConfig();
+    initTheme();
     initTabs();
     route();
     window.addEventListener("hashchange", route);

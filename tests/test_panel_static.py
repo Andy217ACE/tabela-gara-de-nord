@@ -48,7 +48,9 @@ def test_panel_js_safe_dom():
                 "new Function", "setAttribute(\"style\""):
         assert bad not in js, bad
     assert "textContent" in js
-    assert "/api/config" in js
+    # /api/config is fetched once by app.js (single source of truth); the panel reuses it
+    assert "TabelaApp.config" in js or "App.config" in js
+    assert 'fetch("/api/config"' not in js
     assert "#istoric?train=" in js
     assert "SOSIRI — GARA DE NORD BUCUREȘTI" in js
     assert "PLECĂRI — GARA DE NORD BUCUREȘTI" in js

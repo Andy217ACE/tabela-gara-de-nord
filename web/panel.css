@@ -157,6 +157,10 @@ html[data-view="panou"] main { max-width: 1760px; }
   border-bottom: 2px solid var(--p-line-strong);
 }
 
+.pnl-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pnl-logo { width: 40px; height: 40px; }
+.pnl.is-fs .pnl-logo { width: 56px; height: 56px; }
+
 .pnl-title {
   margin: 0;
   font-family: var(--mono);
@@ -478,7 +482,8 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
 .pnl-row.is-recent .c-changed,
 .pnl-row.is-recent .c-msg { color: var(--p-info); }
 
-.c-fav { width: 2.25rem; padding-right: 0 !important; }
+.c-fav { width: 4.5rem; padding-right: 0 !important; }
+.pnl-rowbtns { display: inline-flex; align-items: center; gap: 2px; }
 .c-time { width: 5rem; font-weight: 700; font-size: 1.15em; color: var(--p-amber); white-space: nowrap; }
 .c-train { white-space: nowrap; }
 .c-station { font-family: var(--font); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere; }
@@ -533,6 +538,8 @@ thead .c-plat { text-align: center; }
 .pnl-star .pnl-ico { width: 18px; height: 18px; }
 .pnl-star[aria-pressed="true"] { color: var(--p-amber); }
 .pnl-star[aria-pressed="true"] .pnl-ico { fill: currentColor; }
+.pnl-follow[aria-pressed="true"] { color: var(--p-info); }
+.pnl-follow[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
 .pnl-empty {
   margin: 0;
@@ -665,6 +672,7 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
   .pnl-row.is-selected { border-color: var(--p-amber); }
   .pnl-row:focus-visible { border-color: var(--focus); }
   .c-fav { grid-area: fav; width: auto; }
+  .pnl-rowbtns { flex-direction: column; gap: 4px; }
   .c-time { grid-area: time; width: auto; }
   .c-station { grid-area: station; }
   .c-plat { grid-area: plat; width: auto; }

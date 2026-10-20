@@ -42,7 +42,7 @@ def test_index_has_title_meta_and_footer(client):
 
 def test_index_has_logo_slot_and_landmarks(client):
     html = client.get("/").text
-    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/icon-192.png"', html)
+    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/logo.png"', html)
     assert 'alt="Sigla Tabela Gara de Nord"' in html
     for tag in ("<header", "<main", "<nav", "<footer"):
         assert tag in html
@@ -72,14 +72,17 @@ def test_index_is_csp_compatible():
                                "https://cfr.ro")), url
 
 
-FOOTER = ('<footer class="footer">\n    <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro)'
+FOOTER = ('<p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro)'
           ' — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro"'
           ' target="_blank" rel="noopener noreferrer">cfr.ro</a></p>\n  </footer>')
 
 
 def test_footer_unchanged():
+    """The attribution line is byte-for-byte unchanged; only the logo mark sits next to it."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert FOOTER in html
+    footer = re.search(r'<footer class="footer">(.*?)</footer>', html, re.S).group(1)
+    assert re.search(r'<img class="logo logo-footer" src="icons/favicon-16.png"', footer)
 
 
 def test_manifest_valid_and_linked(client):
@@ -112,13 +115,15 @@ def test_manifest_valid_and_linked(client):
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert '<link rel="manifest" href="manifest.webmanifest">' in html
     assert '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">' in html
-    assert '<link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">' in html
+    assert '<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">' in html
+    assert '<link rel="icon" href="icons/favicon-16.png" sizes="16x16" type="image/png">' in html
+    assert '<link rel="icon" href="favicon.ico" sizes="48x48">' in html
     assert '<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">' in html
     assert ".svg" not in html
     from PIL import Image
     with Image.open(WEB / "icons" / "apple-touch-icon.png") as im:
         assert im.size == (180, 180) and im.mode == "RGB"  # iOS: no transparency
-    with Image.open(WEB / "icons" / "icon-32.png") as im:
+    with Image.open(WEB / "icons" / "favicon-32.png") as im:
         assert im.size == (32, 32)
     r = client.get("/favicon.ico")
     assert r.status_code == 200 and r.content[:4] == b"\x00\x00\x01\x00"
@@ -146,12 +151,22 @@ def test_service_worker_served_as_js_no_cache(client):
     for path in re.findall(r'"([^"]+)"', shell):
         assert client.get(path).status_code == 200, path
     for f in ("history.js", "follows.js", "app.js", "style.css", "manifest.webmanifest",
-              "icons/icon-192.png", "icons/icon-32.png", "icons/apple-touch-icon.png",
-              "favicon.ico"):
+              "icons/icon-192.png", "icons/favicon-32.png", "icons/apple-touch-icon.png",
+              "favicon.ico", "panel.js", "panel.css", "theme-init.js", "icons/logo.png",
+              "icons/favicon-16.png"):
         assert f'"/{f}"' in shell, f
+    assert 'OFFLINE_URL = "/offline.html"' in js and "OFFLINE_URL," in shell
+    # every same-origin static file referenced by index.html is precached
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    refs = set(re.findall(r'(?:src|href)="((?!https?:|#)[^"]+)"', html))
+    refs |= {u.split()[0] for m in re.findall(r'srcset="([^"]+)"', html) for u in m.split(",")}
+    precached = set(re.findall(r'"([^"]+)"', shell)) | {"/offline.html"}
+    for ref in refs:
+        assert "/" + ref.lstrip("/") in precached, ref
 
 
-@pytest.mark.parametrize("name", ["app.js", "history.js", "follows.js", "sw.js"])
+@pytest.mark.parametrize("name", ["app.js", "history.js", "follows.js", "sw.js", "panel.js",
+                                  "theme-init.js"])
 def test_js_files_safe_dom(client, name):
     r = client.get("/" + name)
     assert r.status_code == 200

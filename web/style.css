@@ -171,6 +171,15 @@ main:focus { outline: none; }
   border: 0;
 }
 
+/* nume canonic dintr-o citire OCR nesigură (câmpul `uncertain` din API) */
+.is-uncertain {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
+
 .skip-link {
   position: absolute;
   left: 12px;
@@ -211,13 +220,56 @@ svg { flex: none; }
   min-width: 0;
 }
 
-#logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  flex: none;
-  display: block;
+/* sigla (web/icons/logo.png: plăcuța rotunjită are deja margine transparentă) */
+.logo { display: block; flex: none; }
+#logo { width: 40px; height: 40px; }
+
+/* comutator temă: Auto → Luminoasă → Întunecată (theme-init.js + app.js) */
+.theme-btn {
+  order: 1;
+  margin-left: auto;
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
 }
+.theme-btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.theme-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.theme-icon {
+  display: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.theme-icon .theme-fill { fill: currentColor; stroke: none; }
+.theme-btn[data-mode="auto"] .theme-icon-auto,
+.theme-btn[data-mode="light"] .theme-icon-light,
+.theme-btn[data-mode="dark"] .theme-icon-dark,
+.theme-btn:not([data-mode]) .theme-icon-auto { display: block; }
+
+/* ecran de încărcare (până la primele date) */
+.boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+.logo-boot { width: 40px; height: 40px; animation: boot-pulse 1.6s ease-in-out infinite; }
+@keyframes boot-pulse { 50% { opacity: 0.55; } }
 
 .brand-text {
   display: flex;
@@ -241,6 +293,7 @@ svg { flex: none; }
 /* live indicator */
 
 .live {
+  order: 2;
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1137,6 +1190,8 @@ main {
   text-align: center;
 }
 .footer p { margin: 0; }
+.footer { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.logo-footer { width: 16px; height: 16px; border-radius: 4px; }
 .footer a { color: var(--text); text-underline-offset: 2px; }
 
 /* ---------- larger phones / tablets ---------- */
@@ -1210,9 +1265,10 @@ main {
 
   .topbar { padding-top: 22px; padding-bottom: 10px; }
   .brand-title { font-size: 1.5rem; }
-  #logo { width: 46px; height: 46px; border-radius: 13px; }
+  #logo { width: 46px; height: 46px; }
 
   .live { order: 3; }
+  .theme-btn { order: 4; margin-left: 0; width: 40px; height: 40px; }
   .mainnav {
     position: static;
     order: 2;
@@ -1282,8 +1338,29 @@ main {
   .train.flash { animation: none; }
   .live[data-state="live"] .live-dot::after { display: none; }
   .sk { animation: none; }
+  .logo-boot { animation: none; }
 }
 
 @media (forced-colors: active) {
   .live-dot, .plat, .type, .delay, .follow { border: 1px solid CanvasText; }
 }
+
+/* ---------- pagina offline (web/offline.html, servită de sw.js) ---------- */
+
+.offline-page { padding-bottom: 0; }
+.offline {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 48px var(--gutter);
+  text-align: center;
+}
+.logo-offline { width: 96px; height: 96px; }
+.offline-title { margin: 0; font-size: 1.5rem; }
+.offline-text { margin: 0; color: var(--text-2); }
+.offline-retry { text-decoration: none; }

@@ -208,8 +208,8 @@
         " (" + (BOARD_LABEL[s.board] || "") + " " + (s.sched_time || "") + ")");
       train.addEventListener("click", function () { openDetail(s, q.date, train); });
       cell(tr, "Tren", "h-trn", train);
-      cell(tr, "Stație", "h-station", s.station ? titleCase(s.station) : "—");
-      cell(tr, "Operator", "h-op", s.operator || "—");
+      cell(tr, "Stație", "h-station", s.station ? nameNode(titleCase(s.station), s) : "—");
+      cell(tr, "Operator", "h-op", s.operator ? nameNode(s.operator, s) : "—");
       cell(tr, "Întârziere max. observată", "h-max",
            delayBadge(s.max_delay, "Cea mai mare întârziere văzută pe tabelă"));
       cell(tr, "Ultima întârziere observată", "h-last",
@@ -227,6 +227,15 @@
     });
     table.append(cap, thead, tbody);
     box.append(table);
+  }
+
+  // canonical name from an uncertain OCR match (API field `uncertain`): dotted underline
+  function nameNode(text, s) {
+    if (s.uncertain !== true) return text;
+    var n = el("span", "is-uncertain", text);
+    n.title = "citire nesigură";
+    n.append(el("span", "sr-only", " (citire nesigură)"));
+    return n;
   }
 
   function clearResults() {
