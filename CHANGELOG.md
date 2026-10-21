@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.02 — 2026-10-21
+
+### Reparat
+- Un tren nu mai apare de două ori pe tabelă când OCR-ul citește greșit un singur caracter din număr sau din oră (ex. „1234” citit „1284”, „06:52” citit „05:52”): rândul se asociază trenului deja afișat, pe același panou, aceeași stație și aceeași zi; trenurile care diferă prin două sau mai multe cifre sau prin stație rămân separate.
+- Un tren nou citit cu încredere scăzută intră pe tabelă abia la a doua citire consecutivă; `/api/board` comasează orice dublură rămasă.
+- Citiri parțiale („doar 2 rânduri” pe un panou): dacă un panou are brusc sub jumătate din rândurile ultimei citiri bune, cadrul e respins pentru acel panou — se păstrează ultima stare bună, trenurile nu sunt marcate dispărute, iar celălalt panou se actualizează în continuare.
+- Doar panoul afectat e marcat „date vechi” (în Carduri și în Panou); `/api/board` și `/api/health` au câmpul `boards` cu vechimea fiecărui panou.
+- OCR mai robust la variații de expunere și lumină (zori/amurg): prag de text adaptiv pe fiecare panou, detecția rândurilor tolerantă la separatoare și reflexii, recuperarea „:” din oră; testat pe o a doua imagine de referință și pe variante augmentate (luminozitate, gamma, contrast, blur, zgomot).
+
+### Diagnostic
+- Cadrele respinse se salvează (imagine + motiv) în `REJECTED_DIR` (implicit `/var/lib/tabela/rejected`, ultimele 40), cu avertisment în jurnal.
+
 ## Beta 1.01 — 2026-10-21
 
 ### Adăugat

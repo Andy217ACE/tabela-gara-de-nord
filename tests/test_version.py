@@ -46,6 +46,14 @@ def test_beta_101_lists_the_wave():
         assert word in blob, word
 
 
+def test_beta_102_lists_the_hotfix():
+    e = {x["version"]: x for x in v.changelog()}["Beta 1.02"]
+    blob = " ".join(i for g in e["groups"] for i in g["items"]).lower()
+    for word in ("două ori", "a doua citire", "citiri parțiale", "date vechi", "rejected_dir",
+                 "ocr"):
+        assert word in blob, word
+
+
 def test_health_and_changelog_endpoints(client):
     h = client.get("/api/health").json()
     assert h["version"] == v.__version__
