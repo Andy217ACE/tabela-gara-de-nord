@@ -462,7 +462,7 @@
           sb.addEventListener("click", function () { sortBy(c.sort); });
           th.appendChild(sb);
         } else {
-          th.textContent = label;
+          th.appendChild(el("span", "pnl-th-label", label));
         }
         th.title = c.full;
         ths[c.id] = th;
@@ -538,6 +538,24 @@
     return td;
   }
 
+  // Celulă cu text lung (stație, operator, mesaj): cel mult 2 rânduri, apoi „…" (CSS).
+  // Valoarea completă rămâne în `title` (tooltip), în aria-label-ul rândului și în detaliu,
+  // astfel încât lățimea coloanelor și înălțimea rândurilor nu depind de date.
+  function clipCell(cls, content, full) {
+    var clip = el("span", "pnl-clip");
+    if (content instanceof Node) clip.appendChild(content);
+    else if (content != null) clip.textContent = content;
+    var td = el("td", "c-" + cls);
+    if (full) td.title = full;
+    td.appendChild(clip);
+    return td;
+  }
+
+  function fullName(text, t) {
+    if (!text) return "";
+    return t.uncertain === true ? text + " (" + UNSURE + ")" : text;
+  }
+
   function message(board, t, lvl, fresh) {
     var parts = [];
     if (fresh !== "live") parts.push("neconfirmat — date vechi");
@@ -610,8 +628,10 @@
     }
     tr.appendChild(cell("train", train));
 
-    tr.appendChild(cell("station", t.station ? nameNode(t.station, t) : unknown("stație")));
-    tr.appendChild(cell("op", t.operator ? nameNode(t.operator, t) : unknown("operator")));
+    tr.appendChild(clipCell("station", t.station ? nameNode(t.station, t) : unknown("stație"),
+      fullName(t.station, t)));
+    tr.appendChild(clipCell("op", t.operator ? nameNode(t.operator, t) : unknown("operator"),
+      fullName(t.operator, t)));
     tr.appendChild(cell("delay", delayNode(t, lvl, fresh)));
 
     var known = t.platform != null && t.platform !== "";
@@ -619,7 +639,8 @@
     if (known) plat.setAttribute("aria-label", "Linia " + t.platform);
     tr.appendChild(cell("plat", plat));
 
-    tr.appendChild(cell("msg", message(board, t, lvl, fresh)));
+    var msg = message(board, t, lvl, fresh);
+    tr.appendChild(clipCell("msg", msg, msg));
 
     var at = changedAt(board, t);
     if (at != null) {
@@ -636,7 +657,7 @@
   function nameNode(text, t) {
     if (t.uncertain !== true) return document.createTextNode(text);
     var s = el("span", "is-uncertain", text);
-    s.title = UNSURE;
+    s.title = text + " (" + UNSURE + ")";
     s.appendChild(el("span", "sr-only", " (" + UNSURE + ")"));
     return s;
   }
