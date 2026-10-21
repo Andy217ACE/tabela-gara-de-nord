@@ -16,7 +16,8 @@ pixels. Cleaning:
 
 Outputs (committed; nothing runs at runtime, Pillow only):
 
-  web/icons/logo.png               512, transparent (header @2x, loading, footer, panel)
+  web/icons/logo.png               512, transparent (README, large uses)
+  web/icons/logo-96.png, -192      header / loading / Panou / offline page (1x, 2x)
   web/icons/icon-192.png, -512     purpose "any", transparent margin
   web/icons/icon-maskable-512.png  solid tile blue, logo inside the 80 % safe zone
   web/icons/apple-touch-icon.png   180, opaque (iOS shows transparency as black)
@@ -87,6 +88,16 @@ def resized(img: Image.Image, size: int) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
+def small(img: Image.Image) -> Image.Image:
+    """256-colour palette with dithering: ~1/6 of the bytes, no visible banding on the
+    tile gradient (checked by eye at 1x and 2x). RGBA keeps a palette alpha."""
+    if img.mode == "RGBA":
+        return img.quantize(256, method=Image.Quantize.FASTOCTREE,
+                            dither=Image.Dither.FLOYDSTEINBERG)
+    return img.convert("RGB").quantize(256, method=Image.Quantize.MEDIANCUT,
+                                       dither=Image.Dither.FLOYDSTEINBERG)
+
+
 def on_background(logo_sq: Image.Image, size: int, fraction: float, bg) -> Image.Image:
     canvas = Image.new("RGBA", (size, size), bg + (255,))
     inner = round(size * fraction)
@@ -146,15 +157,17 @@ def main() -> None:
     print("tile blue:", "#%02x%02x%02x" % bg)
     mark = small_mark(logo, bg)
     outputs = {
-        ICONS / "logo.png": resized(logo_sq, 512),
-        ICONS / "icon-192.png": resized(logo_sq, 192),
-        ICONS / "icon-512.png": resized(logo_sq, 512),
+        ICONS / "logo.png": small(resized(logo_sq, 512)),
+        ICONS / "logo-96.png": small(resized(logo_sq, 96)),
+        ICONS / "logo-192.png": small(resized(logo_sq, 192)),
+        ICONS / "icon-192.png": small(resized(logo_sq, 192)),
+        ICONS / "icon-512.png": small(resized(logo_sq, 512)),
         # maskable: launchers crop to a circle of 80 % diameter; keep the artwork inside
-        ICONS / "icon-maskable-512.png": on_background(logo_sq, 512, 0.72, bg),
+        ICONS / "icon-maskable-512.png": small(on_background(logo_sq, 512, 0.72, bg)),
         ICONS / "apple-touch-icon.png": on_background(logo_sq, 180, 1.1, bg).convert("RGB"),
         ICONS / "favicon-32.png": resized(mark, 32),
         ICONS / "favicon-16.png": resized(mark, 16),
-        ICONS / "og-image.png": og_image(logo_sq),
+        ICONS / "og-image.png": small(og_image(logo_sq)),
     }
     for path, img in outputs.items():
         img.save(path, optimize=True)

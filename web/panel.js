@@ -296,8 +296,8 @@
     var head = el("div", "pnl-head");
     var brand = el("div", "pnl-brand");
     var logo = el("img", "logo pnl-logo");
-    logo.src = "icons/logo.png";
-    logo.srcset = "icons/icon-192.png 2x, icons/logo.png 3x";
+    logo.src = "icons/logo-96.png";
+    logo.srcset = "icons/logo-96.png 1x, icons/logo-192.png 2x";
     logo.alt = "";
     logo.width = 40;
     logo.height = 40;

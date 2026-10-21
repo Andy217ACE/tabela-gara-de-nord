@@ -8,7 +8,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v3";
+var VERSION = "v4";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -25,14 +25,14 @@ var SHELL = [
   "/panel.js",
   "/manifest.webmanifest",
   "/favicon.ico",
-  "/icons/logo.png",
+  "/icons/logo-96.png",
+  "/icons/logo-192.png",
   "/icons/favicon-16.png",
   "/icons/favicon-32.png",
   "/icons/icon-192.png",
-  "/icons/apple-touch-icon.png",
-  "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png"
+  "/icons/apple-touch-icon.png"
 ];
+// icon-512 / maskable are fetched by the browser from the manifest; not precached.
 var DEFAULT_TITLE = "Gara de Nord";
 
 self.addEventListener("install", function (event) {

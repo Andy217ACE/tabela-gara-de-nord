@@ -33,6 +33,8 @@ def html():
 
 ICON_SIZES = {
     "icons/logo.png": (512, 512),
+    "icons/logo-96.png": (96, 96),
+    "icons/logo-192.png": (192, 192),
     "icons/icon-192.png": (192, 192),
     "icons/icon-512.png": (512, 512),
     "icons/icon-maskable-512.png": (512, 512),
@@ -64,7 +66,7 @@ def test_brand_source_kept_and_placeholders_gone():
 
 def test_logo_png_is_clean_and_centered():
     with Image.open(WEB / "icons" / "logo.png") as im:
-        a = im.getchannel("A")
+        a = im.convert("RGBA").getchannel("A")
         box = a.getbbox()
     left, top, right, bottom = box
     # consistent transparent margin, centred (the shadow slab under the tile is gone)
@@ -116,12 +118,13 @@ def test_og_and_twitter_tags():
 
 def test_logo_used_everywhere():
     h = html()
-    assert re.search(r'<img id="logo" [^>]*src="icons/logo.png"[^>]*width="46" height="46"', h)
+    assert re.search(r'<img id="logo" [^>]*src="icons/logo-96.png" srcset="icons/logo-96.png 1x, '
+                     r'icons/logo-192.png 2x"[^>]*width="46" height="46"', h)
     assert 'class="logo logo-boot"' in h            # loading screen
     assert 'class="logo logo-footer"' in h          # footer mark
     off = (WEB / "offline.html").read_text(encoding="utf-8")
-    assert 'class="logo logo-offline" src="icons/logo.png"' in off
-    assert "logo.png" in (WEB / "panel.js").read_text(encoding="utf-8")  # Panou title bar
+    assert 'class="logo logo-offline" src="/icons/logo-96.png"' in off
+    assert "logo-96.png" in (WEB / "panel.js").read_text(encoding="utf-8")  # Panou title bar
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert re.search(r'<img [^>]*src="web/icons/logo.png"[^>]*width="96"', readme.split("\n## ")[0])
 
@@ -289,3 +292,23 @@ def test_cards_never_green_without_read_delay():
     assert 'if (t.delay_read !== true) return "unknown";' in panel
     assert "necitit" in panel and "necitit" in app
     assert "confidence" not in panel  # dead check removed
+
+
+def test_icon_weights_and_precache_budget(client):
+    for name in ("icon-512.png", "icon-maskable-512.png", "logo.png", "og-image.png"):
+        assert (WEB / "icons" / name).stat().st_size <= 90_000, name
+    assert (WEB / "icons" / "logo-96.png").stat().st_size <= 10_000
+    js = (WEB / "sw.js").read_text(encoding="utf-8")
+    shell = re.search(r"var SHELL = \[(.*?)\];", js, re.S).group(1)
+    assert "icon-512" not in shell and "icon-maskable" not in shell
+    paths = re.findall(r'"(/[^"]*)"', shell) + ["/offline.html"]
+    total = sum(len(client.get(p).content) for p in set(paths))
+    assert total <= 400_000, total
+
+
+def test_offline_page_uses_root_absolute_urls():
+    off = (WEB / "offline.html").read_text(encoding="utf-8")
+    for m in re.finditer(r'(?:src|href|srcset)="([^"]+)"', off):
+        for url in m.group(1).split(","):
+            u = url.strip().split()[0]
+            assert u.startswith(("/", "https://")), u

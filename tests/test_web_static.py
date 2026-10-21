@@ -42,7 +42,7 @@ def test_index_has_title_meta_and_footer(client):
 
 def test_index_has_logo_slot_and_landmarks(client):
     html = client.get("/").text
-    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/logo.png"', html)
+    assert re.search(r'<img [^>]*id="logo"[^>]*src="icons/logo-96.png"', html)
     assert 'alt="Sigla Tabela Gara de Nord"' in html
     for tag in ("<header", "<main", "<nav", "<footer"):
         assert tag in html
@@ -152,7 +152,7 @@ def test_service_worker_served_as_js_no_cache(client):
         assert client.get(path).status_code == 200, path
     for f in ("history.js", "follows.js", "app.js", "style.css", "manifest.webmanifest",
               "icons/icon-192.png", "icons/favicon-32.png", "icons/apple-touch-icon.png",
-              "favicon.ico", "panel.js", "panel.css", "theme-init.js", "icons/logo.png",
+              "favicon.ico", "panel.js", "panel.css", "theme-init.js", "icons/logo-96.png",
               "icons/favicon-16.png"):
         assert f'"/{f}"' in shell, f
     assert 'OFFLINE_URL = "/offline.html"' in js and "OFFLINE_URL," in shell
