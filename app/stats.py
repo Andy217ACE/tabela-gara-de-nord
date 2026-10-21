@@ -125,16 +125,33 @@ class Params:
                 "final_read_max_gap_min": journeys.final_gap_min()}
 
 
+_CACHE_MAX = 64  # cached journey sets per store (store._stats_cache)
+
+
 def load(store, p: Params, where: list[str] | None = None, args: list | None = None) -> list[dict]:
-    """Journeys matching the params, each with its computed result."""
+    """Journeys matching the params, each with its computed result. Read-only for callers:
+    the list is cached until the data changes (new run or new event)."""
     w, a = p.where()
-    rows = journeys.query(store, w + (where or []), a + (args or []))
+    w, a = w + (where or []), a + (args or [])
     gap = journeys.final_gap_min()
+    with store._lock:
+        stamp = store._conn.execute(
+            "SELECT (SELECT MAX(id) FROM runs), (SELECT MAX(id) FROM events),"
+            " (SELECT COUNT(*) FROM services), (SELECT MAX(id) FROM services)").fetchone()
+    cache = store.__dict__.setdefault("_stats_cache", {})
+    key = (tuple(w), tuple(a), gap, tuple(stamp))
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    rows = journeys.query(store, w, a)
     out = []
     for s in rows:
         d = dict(s)
         d["result"] = journeys.result(s, gap)
         out.append(d)
+    if len(cache) >= _CACHE_MAX:
+        cache.clear()
+    cache[key] = out
     return out
 
 

@@ -134,7 +134,7 @@ def journeys_page(store, name: str, p: stats.Params, limit: int = 100,
     js = stats.load(store, p, where, args)
     if not js and before is None:
         return None
-    js.sort(key=lambda j: j["id"], reverse=True)
+    js = sorted(js, key=lambda j: j["id"], reverse=True)
     page = js[:limit]
     return {"params": p.echo(), "name": name, "n": len(page),
             "next_before": page[-1]["id"] if len(js) > limit else None,

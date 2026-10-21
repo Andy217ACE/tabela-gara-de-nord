@@ -236,3 +236,14 @@ def test_api_history_has_id_and_delay_known(client):
     by_no = {s["train_no"]: s for s in j["services"]}
     assert by_no[1731]["delay_known"] is False and by_no[1621]["delay_known"] is True
     assert isinstance(by_no[1621]["id"], int)
+
+
+def test_cache_invalidated_by_new_data(store):
+    p = stats.Params(on_time=5, min_sample=1)
+    n0 = stats.overview(store, p)["quality"]["journeys"]
+    assert stats.overview(store, p)["quality"]["journeys"] == n0  # cached path
+    add(store, "arrival", 1999, 20, "20:00", 3)
+    assert stats.overview(store, p)["quality"]["journeys"] == n0 + 1
+    store._conn.execute("UPDATE services SET status='gone' WHERE status='listed'")
+    store._conn.execute("INSERT INTO runs(ts, ok, n_rows) VALUES ('x', 1, 0)")
+    assert stats.overview(store, p)["quality"]["states"]["in_progress"] == 0
