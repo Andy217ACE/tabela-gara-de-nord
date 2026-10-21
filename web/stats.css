@@ -1,0 +1,255 @@
+/* © 2026 Andy217Ace */
+/* Tabela Gara de Nord — Trenuri / profil tren / Statistici / Clasamente (web/stats.js).
+   Only theme tokens from style.css (light and dark follow automatically). Wide tables and
+   charts scroll inside their own container, never the page. */
+
+.st-root { min-width: 0; }
+.st-root.is-loading .st-body { opacity: 0.55; transition: opacity 0.2s ease; }
+.st-body { min-width: 0; }
+
+/* ---------- filters ---------- */
+.st-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.st-field { flex: 1 1 8rem; }
+.st-field-query { flex: 3 1 14rem; }
+.st-field-prag,
+.st-field-min { flex: 0 1 8.5rem; }
+.st-field-from,
+.st-field-to { flex: 1 1 9.5rem; }
+.st-check {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.st-check input { width: 18px; height: 18px; min-height: 0; margin: 0; accent-color: var(--accent); }
+
+/* ---------- head line, exports, notes ---------- */
+.st-bar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 10px;
+}
+.st-bar-head .h-count { margin: 0; flex: 1 1 18rem; }
+.st-exports { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-export { white-space: nowrap; }
+.st-back { color: var(--accent); font-weight: 600; font-size: 0.875rem; text-underline-offset: 3px; }
+.st-note { margin: 8px 0 0; color: var(--text-2); font-size: 0.8125rem; max-width: 80ch; }
+.st-warn {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 10px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.st-quality { margin: 10px 0 0; color: var(--text-3); font-size: 0.8125rem; }
+.st-section { margin-top: 22px; }
+.st-h2 { margin: 0 0 6px; font-size: 1.125rem; letter-spacing: -0.01em; }
+.st-explain { padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* ---------- station / train links ---------- */
+.station-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+  text-transform: none;
+}
+.station-link:hover { text-decoration-color: var(--accent); }
+.st-train {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.st-train .t-no { font-family: var(--mono); font-weight: 700; }
+.st-train:hover .t-no { color: var(--accent); }
+.st-more { color: var(--text-3); font-size: 0.75rem; cursor: help; }
+
+/* ---------- tables ---------- */
+.st-scroll {
+  margin-top: 10px;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.st-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.st-table th {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+.st-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.st-table tbody tr:last-child td { border-bottom: 0; }
+.st-table .st-num { text-align: right; }
+.st-row { cursor: pointer; }
+.st-row:hover { background: var(--surface-hover); }
+.st-row-small td { color: var(--text-2); }
+.st-mono { font-family: var(--mono); }
+.st-rank { color: var(--text-3); font-weight: 700; }
+.st-sort {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.st-sort:hover { color: var(--text); }
+th[aria-sort] .st-sort { color: var(--accent); }
+.st-q { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.st-q-sub { color: var(--text-3); font-size: 0.75rem; }
+.st-jbtn {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.st-jbtn:hover { text-decoration-color: var(--accent); }
+.st-jdelay { font-weight: 600; }
+.st-jdelay-note { color: var(--text-3); font-weight: 400; font-size: 0.75rem; }
+
+/* ---------- cards, stats grid, tiles ---------- */
+.st-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.st-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.st-card .detail-h { margin-top: 14px; }
+.st-card-chart .detail-h { margin-top: 0; }
+.st-card-h { margin: 0; font-size: 1.0625rem; overflow-wrap: anywhere; }
+.st-card-board { color: var(--accent); }
+.st-card-sub { margin: 2px 0 0; color: var(--text-3); font-size: 0.8125rem; }
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+.st-stat {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.st-stat:first-child { grid-column: 1 / -1; }
+.st-stat dt { color: var(--text-3); font-size: 0.75rem; }
+.st-stat dd {
+  margin: 2px 0 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.st-stat-sub { display: block; color: var(--text-3); font-size: 0.75rem; font-weight: 500; }
+.st-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.st-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.st-tile-label { color: var(--text-3); font-size: 0.75rem; }
+.st-tile-value { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.st-tile-sub { color: var(--text-2); font-size: 0.75rem; }
+.st-states { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 6px 0 0; padding: 0; list-style: none; }
+.st-states li { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+
+/* ---------- SVG bar charts ---------- */
+.st-chart-scroll { max-width: 100%; overflow-x: auto; margin-top: 6px; }
+.st-chart {
+  display: block;
+  max-width: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.st-grid-lines line { stroke: var(--border); stroke-width: 1; }
+.st-axis { stroke: var(--border-strong); stroke-width: 1; }
+.st-ylabel { fill: var(--text-3); font-family: var(--mono); font-size: 10px; text-anchor: end; }
+.st-xlabel { fill: var(--text-2); font-family: var(--mono); font-size: 10px; text-anchor: middle; }
+.st-nlabel { fill: var(--text-3); font-family: var(--mono); font-size: 9px; text-anchor: middle; }
+.st-nlabel-head { text-anchor: start; font-weight: 700; }
+.st-vlabel { fill: var(--text); font-family: var(--mono); font-size: 10px; font-weight: 700; text-anchor: middle; }
+.st-vnone { fill: var(--text-3); font-weight: 400; }
+.st-bar { fill: var(--accent); }
+.st-bar-low { fill: var(--accent); fill-opacity: 0.35; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; }
+.st-bar-g:hover .st-bar { fill-opacity: 0.8; }
+
+.st-rank-stations:empty { display: none; }
+
+@media (min-width: 600px) {
+  .st-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .st-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .st-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .st-stat:first-child { grid-column: auto; }
+}
+@media (forced-colors: active) {
+  .st-bar, .st-bar-low { fill: CanvasText; }
+}
