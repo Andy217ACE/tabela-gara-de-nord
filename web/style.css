@@ -674,6 +674,7 @@ main {
   stroke-linejoin: round;
 }
 .delay-ok { color: var(--ok); background: var(--ok-bg); }
+.h-truncated { color: var(--warn); font-weight: 600; }
 .delay-unread { color: var(--text-2); background: var(--surface-2); }
 .delay-minor { color: var(--warn); background: var(--warn-bg); }
 .delay-major { color: var(--bad); background: var(--bad-bg); }

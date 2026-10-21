@@ -530,7 +530,6 @@
       var label = "Temă: " + T.LABELS[mode];
       b.dataset.mode = mode;
       b.setAttribute("aria-label", label);
-      b.setAttribute("aria-pressed", mode === "auto" ? "false" : "true");
       var txt = b.querySelector(".pnl-btn-text"); // the Panou copy has visible text
       if (txt) txt.textContent = label;
       b.title = label + (mode === "auto" ? " (urmează sistemul)" : "") +

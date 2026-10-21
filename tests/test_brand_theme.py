@@ -163,9 +163,12 @@ def test_theme_button_present_and_labelled():
     h = html()
     m = re.search(r'<button class="theme-btn" type="button" id="theme-btn"([^>]*)>', h)
     assert m
-    assert 'aria-label="Temă: automată"' in m.group(1) and "aria-pressed=" in m.group(1)
+    # a 3-state cycle: the label carries the state; no aria-pressed (reads as on/off)
+    assert 'aria-label="Temă: automată"' in m.group(1) and "aria-pressed" not in m.group(1)
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    for needle in ('"Temă: "', "aria-pressed", "TabelaTheme"):
+    theme_fn = app.split("function renderThemeButtons")[1].split("function initTheme")[0]
+    assert "aria-pressed" not in theme_fn
+    for needle in ('"Temă: "', "TabelaTheme"):
         assert needle in app, needle
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert "data-theme-toggle" in panel  # reachable in Panou fullscreen too

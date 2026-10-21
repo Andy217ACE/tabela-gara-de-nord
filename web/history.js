@@ -118,6 +118,8 @@
     var to = setTimeout(function () { ctrl.timedOut = true; ctrl.abort(); }, TIMEOUT_MS);
     return fetch(url, { signal: ctrl.signal, cache: "no-store", headers: { Accept: "application/json" } })
       .then(function (r) {
+        // /api/history returns at most 500 rows and flags the cut with X-Truncated: 1
+        ctrl.truncated = r.headers.get("X-Truncated") === "1";
         return r.json().catch(function () { return null; }).then(function (body) {
           if (!r.ok) {
             var err = new Error("http");
@@ -167,12 +169,18 @@
     return b;
   }
 
-  function renderResults(q, services) {
+  var TRUNCATED_TEXT = "primele 500 — restrânge filtrele (oră/stație/tren)";
+
+  function renderResults(q, services, truncated) {
     var box = $("h-results");
     box.replaceChildren();
     var n = services.length;
-    $("h-count").textContent = plural(n, "rezultat", "rezultate") + " · " + dayLabel(q.date) +
+    var count = $("h-count");
+    count.textContent = plural(n, "rezultat", "rezultate") + " · " + dayLabel(q.date) +
       (n ? " · valori observate pe tabela CFR, nu ore reale confirmate" : "");
+    if (truncated) {
+      count.append(" · ", el("strong", "h-truncated", TRUNCATED_TEXT));
+    }
     var empty = $("h-empty");
     if (!n) {
       empty.textContent = q.date === todayBucharest() && !q.train && !q.station && !q.from && !q.to
@@ -274,7 +282,7 @@
       .then(function (data) {
         if (inflight !== ctrl) return;
         errBox.hidden = true;
-        renderResults(q, Array.isArray(data && data.services) ? data.services : []);
+        renderResults(q, Array.isArray(data && data.services) ? data.services : [], !!ctrl.truncated);
       })
       .catch(function (e) {
         if (inflight !== ctrl || e.aborted) return;

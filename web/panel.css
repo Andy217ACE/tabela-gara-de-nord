@@ -520,6 +520,8 @@ thead .c-plat { text-align: center; }
 }
 
 .pnl-unk { color: var(--p-dim); }
+.pnl-credit { margin: 4px 0 0; font-size: 0.75rem; color: var(--p-text-2); text-align: center; }
+.pnl-credit a { color: inherit; text-underline-offset: 2px; }
 .pnl-delay.pnl-unread { font-weight: 600; font-style: italic; }
 
 .pnl-star {

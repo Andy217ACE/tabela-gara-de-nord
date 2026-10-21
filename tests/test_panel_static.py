@@ -90,3 +90,21 @@ def test_api_config_env_override(monkeypatch):
 
 def test_api_config_read_only(client):
     assert client.post("/api/config").status_code == 405
+
+
+ATTRIBUTION = "© 2026 Andy217Ace · Date preluate de la CFR ("
+
+
+def test_panel_keeps_attribution_in_fullscreen():
+    """The page footer is outside #pnl; in (pseudo-)fullscreen only #pnl is visible."""
+    js = (WEB / "panel.js").read_text(encoding="utf-8")
+    assert f'credit.append("{ATTRIBUTION}", cfr,' in js
+    assert '") — proiect independent, neafiliat CFR");' in js
+    assert 'cfr.href = "https://cfr.ro";' in js and 'cfr.rel = "noopener noreferrer";' in js
+    assert "d.detail, credit);" in js  # appended inside .pnl
+
+
+def test_history_shows_truncation_notice():
+    js = (WEB / "history.js").read_text(encoding="utf-8")
+    assert 'r.headers.get("X-Truncated") === "1"' in js
+    assert "primele 500 — restrânge filtrele (oră/stație/tren)" in js

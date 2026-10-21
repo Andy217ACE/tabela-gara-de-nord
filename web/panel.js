@@ -481,7 +481,16 @@
     d.detail.hidden = true;
     d.detail.tabIndex = -1;
 
-    pnl.append(head, status, d.banner, controls, d.legend, d.body, d.detail);
+    // atribuirea rămâne vizibilă și în ecran complet (unde footer-ul paginii nu se vede)
+    var credit = el("p", "pnl-credit");
+    var cfr = el("a", null, "cfr.ro");
+    cfr.href = "https://cfr.ro";
+    cfr.target = "_blank";
+    cfr.rel = "noopener noreferrer";
+    credit.append("© 2026 Andy217Ace · Date preluate de la CFR (", cfr,
+                  ") — proiect independent, neafiliat CFR");
+
+    pnl.append(head, status, d.banner, controls, d.legend, d.body, d.detail, credit);
     root.append(d.switch, pnl);
     return true;
   }
