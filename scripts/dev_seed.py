@@ -4,6 +4,7 @@
     python scripts/dev_seed.py dev.db                # OCR tests/fixtures/board_1.jpg, ingest now
     python scripts/dev_seed.py dev.db --age 600      # pretend the reading is 10 min old (stale UI)
     python scripts/dev_seed.py dev.db --bump 7       # re-ingest with +7 min on the first arrival
+    python scripts/dev_seed.py dev.db --capture-dir data/captures   # also record an OCR capture
 
 Then serve it without the poller:
     DB_PATH=dev.db POLLER_ENABLED=0 uvicorn app.main:create --factory
@@ -26,7 +27,7 @@ _WIN_TESSERACT = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
 if "TESSERACT_CMD" not in os.environ and _WIN_TESSERACT.exists():
     os.environ["TESSERACT_CMD"] = str(_WIN_TESSERACT)
 
-from app.ocr.reader import read_board  # noqa: E402
+from app.ocr.reader import read_board_debug  # noqa: E402
 from app.store import TZ, Store  # noqa: E402
 
 
@@ -55,12 +56,15 @@ def main() -> None:
     ap.add_argument("--bump", type=int, default=0, help="extra delay minutes on the first arrival")
     ap.add_argument("--force", action="store_true",
                     help="seed even if the database already has rows")
+    ap.add_argument("--capture-dir", default=None,
+                    help="also record the image + OCR observations (Capturi OCR) under this dir")
     args = ap.parse_args()
 
     if not args.force and _has_rows(args.db):
         sys.exit(f"{args.db} already has data; refusing to seed it (use --force to override)")
 
-    rows = read_board(Path(args.image).read_bytes())
+    image = Path(args.image).read_bytes()
+    rows, debug = read_board_debug(image)
     if args.bump:
         for i, r in enumerate(rows):
             if r.board == "arrival":
@@ -70,6 +74,10 @@ def main() -> None:
     store.migrate()
     when = datetime.now(TZ) - timedelta(seconds=args.age)
     events = store.ingest(rows, when, "dev-seed")
+    if args.capture_dir:
+        from app.observations import record_capture
+        cid = record_capture(store, image, rows, debug, when, capture_dir=args.capture_dir)
+        print(f"capture #{cid} recorded under {args.capture_dir}")
     b = store.current_board()
     store.close()
     print(f"{len(rows)} rows read, {len(events)} events; board: "

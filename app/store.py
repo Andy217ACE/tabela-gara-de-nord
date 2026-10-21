@@ -24,7 +24,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -208,7 +208,8 @@ class Store:
 
     def migrate(self) -> None:
         """Version ladder: each step is additive and atomic together with its version bump
-        (a failure leaves the previous version in place), so re-running is safe."""
+        (a failure leaves the previous version in place), so re-running is safe.
+        Never renumber a step."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version >= SCHEMA_VERSION:
@@ -217,6 +218,9 @@ class Store:
                 self._migrate_to_3(version)
             if version < 4:
                 self._migrate_to_4()
+            if version < 5:
+                from app.observations import migrate_to_5  # v5: captures/observations/trains
+                migrate_to_5(self._conn)
 
     def _script(self, sql: str) -> None:
         try:

@@ -39,15 +39,15 @@ def wcols(s):
     return {r[1] for r in s._conn.execute("PRAGMA table_info(weather_observations)")}
 
 
-def test_schema_version_is_4():
-    assert SCHEMA_VERSION == 4
+def test_schema_version_is_at_least_4():
+    assert SCHEMA_VERSION >= 4
 
 
 def test_fresh_db_has_weather_table(store):
-    assert version(store) == 4
+    assert version(store) == SCHEMA_VERSION
     assert wcols(store) == COLS
     store.migrate()  # idempotent
-    assert version(store) == 4
+    assert version(store) == SCHEMA_VERSION
 
 
 def test_observed_at_unique_and_defaults(store):
@@ -67,6 +67,8 @@ def _make_v3(path):
     s.migrate()
     s.ingest(base_rows(), T0)
     s._conn.execute("DROP TABLE weather_observations")
+    for t in ("observations", "captures", "trains"):  # v5 tables (stage B) do not exist at v3
+        s._conn.execute(f"DROP TABLE IF EXISTS {t}")
     s._conn.execute("PRAGMA user_version = 3")
     return s
 
@@ -78,7 +80,7 @@ def test_migrate_v3_with_data_to_v4_keeps_all_rows(tmp_path):
     assert before["services"] == 4
     s.migrate()
     s.migrate()  # idempotent
-    assert version(s) == 4 and wcols(s) == COLS
+    assert version(s) == SCHEMA_VERSION and wcols(s) == COLS
     after = {t: s._conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
              for t in ("runs", "services", "events")}
     assert after == before
@@ -93,7 +95,7 @@ def test_migrate_v1_v2_to_v4(tmp_path, old):
     _downgrade(s, old)
     assert version(s) == old
     s.migrate()
-    assert version(s) == 4 and wcols(s) == COLS
+    assert version(s) == SCHEMA_VERSION and wcols(s) == COLS
     assert {"last_read", "operator_raw", "station_raw", "uncertain"} <= \
         {r[1] for r in s._conn.execute("PRAGMA table_info(services)")}
     assert s._conn.execute("SELECT COUNT(*) FROM services").fetchone()[0] == 4
@@ -105,7 +107,7 @@ def test_migrate_live_v2_fixture_to_v4(tmp_path):
     shutil.copy(Path(__file__).parent / "fixtures" / "live_v2.db", db)
     s = Store(str(db))
     s.migrate()
-    assert version(s) == 4 and wcols(s) == COLS
+    assert version(s) == SCHEMA_VERSION and wcols(s) == COLS
     assert s._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 5
     s.close()
 
@@ -121,7 +123,7 @@ def test_v4_step_is_atomic(tmp_path, monkeypatch):
     assert not wcols(s)
     monkeypatch.undo()
     s.migrate()
-    assert version(s) == 4
+    assert version(s) == SCHEMA_VERSION
     s.close()
 
 
