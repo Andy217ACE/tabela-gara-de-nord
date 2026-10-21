@@ -90,14 +90,39 @@ Actualizare (după `git push` pe branch):
 
     sudo bash /opt/tabela/app/deploy/update.sh
 
-face `git fetch` + checkout pe branch-ul curent, `pip install -r requirements.txt`, repornește
-serviciul și așteaptă `/api/health` (max. 3 minute).
+face, în ordine:
+
+1. notează commit-ul curent (PREV) și refuză clar un HEAD detașat (dați branch-ul explicit);
+2. `git fetch` + checkout pe branch, apoi `pip install -r requirements.txt` — dacă pip eșuează,
+   pune înapoi codul vechi și **nu** repornește serviciul;
+3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`);
+4. dacă noul cod are o versiune de schemă mai mare decât baza de date (`PRAGMA user_version`),
+   face întâi un backup online SQLite (`sqlite3 .backup`) în `/var/lib/tabela/backups/`
+   (se păstrează ultimele 5);
+5. repornește și așteaptă `/api/health` (max. 3 minute); dacă nu devine sănătos, face
+   **rollback** automat la PREV (checkout, pip install, restart, așteaptă) și iese cu cod 1.
+
+După un rollback de la o versiune care a migrat schema, codul vechi ignoră coloanele noi;
+copia dinaintea migrării e cel mai nou fișier din `/var/lib/tabela/backups/`
+(restaurare: `systemctl stop tabela`, copiați fișierul peste `tabela.db`, `systemctl start tabela`).
+Simularea scriptului (git temporar, comenzi false) e în `tests/test_update_sh.py`.
+
+Schimbările din `deploy/nginx-tabela.conf`, `tabela-limits.conf` sau pachetele apt se aplică
+rulând din nou `install.sh` (idempotent; nu regenerează cheile VAPID, iar dacă lipsește doar
+cheia publică o derivă din cea privată). Prima actualizare la schema v3 (acest val) rulează
+migrarea automat la pornire, după backup.
 
 Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/update.sh main`
 (de atunci `update.sh` fără argument rămâne pe `main`).
 
 - Log-uri: `journalctl -u tabela -f` (aplicația), `/var/log/nginx/access.log` (cererile;
   `/api/follows` nu se loghează, pentru că endpoint-ul push e în query string).
+  Atenție: o cerere respinsă de `limit_req` (429) poate scrie totuși linia cererii (cu query
+  string-ul) în `/var/log/nginx/error.log`. De aceea `tabela-limits.conf` setează
+  `limit_req_log_level warn`, sub nivelul implicit `error` al `error_log` — nu coborâți
+  nivelul `error_log` la `warn`/`info` fără să țineți cont de asta.
+- Configurare UI: `GET /api/config` (pragurile de culoare `DELAY_THRESHOLDS="5,15,30"` din env,
+  `refresh_s`, `stale_after_s`) — sursa unică pentru intervalul de reîmprospătare și culori.
 - Date: `/var/lib/tabela/tabela.db` (SQLite, istoric + abonări) și
   `/var/lib/tabela/last.jpg` (ultima imagine a tabelei, utilă la depanarea OCR).
 - Variabile în `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
