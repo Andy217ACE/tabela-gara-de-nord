@@ -38,7 +38,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -227,6 +227,39 @@ def _iso(d: date | str) -> str:
     return d if isinstance(d, str) else d.isoformat()
 
 
+def _backfill_delay_read_at(c: sqlite3.Connection) -> None:
+    """Set delay_read_at for services stored before v6, from evidence only:
+    observations with delay_read=1, delay events to a value > 0 (a 0 could be the old
+    default of an unreadable cell), first_seen when last_delay > 0 (never a default).
+    The latest proof wins; services without any keep NULL (delay unknown)."""
+    best: dict[int, datetime] = {}
+
+    def offer(sid, stamp) -> None:
+        if sid is None or not stamp:
+            return
+        try:
+            t = _local(datetime.fromisoformat(stamp.replace("Z", "+00:00")))
+        except ValueError:
+            return
+        if sid not in best or t > best[sid]:
+            best[sid] = t
+
+    has_obs = c.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
+                        " AND name='observations'").fetchone()
+    if has_obs:
+        for sid, at in c.execute("SELECT service_id, MAX(observed_at) FROM observations"
+                                 " WHERE delay_read=1 AND service_id IS NOT NULL"
+                                 " GROUP BY service_id"):
+            offer(sid, at)
+    for sid, at in c.execute("SELECT service_id, MAX(ts) FROM events WHERE kind='delay'"
+                             " AND CAST(new AS INTEGER) > 0 GROUP BY service_id"):
+        offer(sid, at)
+    for sid, at in c.execute("SELECT id, first_seen FROM services WHERE last_delay > 0"):
+        offer(sid, at)
+    c.executemany("UPDATE services SET delay_read_at=? WHERE id=? AND delay_read_at IS NULL",
+                  [(t.isoformat(), sid) for sid, t in best.items()])
+
+
 def _today() -> date:
     """Today in Europe/Bucharest (patched in tests)."""
     return datetime.now(TZ).date()
@@ -286,6 +319,8 @@ class Store:
             if version < 5:
                 from app.observations import migrate_to_5  # v5: captures/observations/trains
                 migrate_to_5(self._conn)
+            if version < 6:
+                self._migrate_to_6()
 
     def _script(self, sql: str) -> None:
         try:
@@ -309,6 +344,23 @@ class Store:
     def _migrate_to_4(self) -> None:
         """v3 -> v4: weather_observations (additive)."""
         self._script("BEGIN;" + _WEATHER_SCHEMA + "PRAGMA user_version = 4;COMMIT;")
+
+    def _migrate_to_6(self) -> None:
+        """v5 -> v6: services.delay_read_at (proof that the delay cell was read), backfilled
+        only from real evidence, in one transaction with the version bump."""
+        c = self._conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(services)")}
+            if "delay_read_at" not in cols:
+                c.execute("ALTER TABLE services ADD COLUMN delay_read_at TEXT")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_events_kind_service ON events(kind, service_id)")
+            _backfill_delay_read_at(c)
+            c.execute("PRAGMA user_version = 6")
+            c.execute("COMMIT")
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
 
     # -- ingest -----------------------------------------------------------
 
@@ -535,11 +587,12 @@ class Store:
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
                     " operator, sched_time, first_seen, last_seen, last_delay, last_platform,"
                     " flagged, status, miss_count, last_read, operator_raw, station_raw,"
-                    " uncertain)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?)",
+                    " uncertain, delay_read_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?,?)",
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
                      r.sched_time, first, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s,
-                     r.operator_raw, r.station_raw, int(r.uncertain)),
+                     r.operator_raw, r.station_raw, int(r.uncertain),
+                     ts_s if r.delay_read else None),
                 ).lastrowid
                 seen.add(sid)
                 self._pending_read[sid] = r.delay_read
@@ -566,9 +619,10 @@ class Store:
             c.execute(
                 "UPDATE services SET train_type=?, station=?, operator=?, station_raw=?,"
                 " operator_raw=?, uncertain=?, last_seen=?, last_delay=?, last_platform=?,"
-                " flagged=?, status='listed', miss_count=0, last_read=? WHERE id=?",
+                " flagged=?, status='listed', miss_count=0, last_read=?,"
+                " delay_read_at=CASE WHEN ? THEN ? ELSE delay_read_at END WHERE id=?",
                 (r.train_type, *names, ts_s, delay, r.platform,
-                 int(r.flagged), ts_s, sid),
+                 int(r.flagged), ts_s, int(r.delay_read), ts_s, sid),
             )
 
         # Low-confidence rows: only keep an exactly matching service alive.

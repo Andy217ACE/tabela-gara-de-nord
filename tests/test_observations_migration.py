@@ -45,14 +45,14 @@ def drop_v5(s):
         s._conn.execute(f"DROP TABLE {t}")
 
 
-def test_schema_version_is_5():
-    assert SCHEMA_VERSION == 5
+def test_schema_version_at_least_5():
+    assert SCHEMA_VERSION >= 5
 
 
 def test_fresh_db_has_v5_tables_and_indexes():
     s = Store(":memory:")
     s.migrate()
-    assert version(s) == 5
+    assert version(s) == SCHEMA_VERSION
     assert V5_TABLES <= tables(s)
     cols = {r[1] for r in s._conn.execute("PRAGMA table_info(observations)")}
     assert {"capture_id", "service_id", "board", "row_index", "observed_at", "raw_text",
@@ -106,7 +106,7 @@ def test_migrate_v3_or_v4_to_v5_keeps_data_and_backfills(tmp_path, start):
     n_events = s._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
     s.migrate()
     s.migrate()  # idempotent
-    assert version(s) == 5
+    assert version(s) == SCHEMA_VERSION
     assert V5_TABLES <= tables(s)
     assert s._conn.execute("SELECT COUNT(*) FROM services").fetchone()[0] == n_services == 4
     assert s._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == n_events
@@ -138,7 +138,7 @@ def test_migrate_v1_v2_to_v5(tmp_path, start):
         s._conn.execute("ALTER TABLE services DROP COLUMN last_read")
     s._conn.execute(f"PRAGMA user_version = {start}")
     s.migrate()
-    assert version(s) == 5
+    assert version(s) == SCHEMA_VERSION
     assert V5_TABLES <= tables(s)
     assert s._conn.execute("SELECT COUNT(*) FROM trains").fetchone()[0] == 3
     s.close()
@@ -149,7 +149,7 @@ def test_migrate_live_v2_fixture_to_v5(tmp_path):
     shutil.copy(Path(__file__).parent / "fixtures" / "live_v2.db", db)
     s = Store(str(db))
     s.migrate()
-    assert version(s) == 5
+    assert version(s) == SCHEMA_VERSION
     n = s._conn.execute("SELECT COUNT(DISTINCT train_no) FROM services").fetchone()[0]
     assert s._conn.execute("SELECT COUNT(*) FROM trains").fetchone()[0] == n
     total = s._conn.execute("SELECT SUM(journeys) FROM trains").fetchone()[0]
@@ -172,5 +172,5 @@ def test_failed_v5_migration_rolls_back(tmp_path, monkeypatch):
     assert not (V5_TABLES & tables(s))  # nothing half-created
     monkeypatch.undo()
     s.migrate()
-    assert version(s) == 5
+    assert version(s) == SCHEMA_VERSION
     s.close()
