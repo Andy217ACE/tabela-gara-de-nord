@@ -308,7 +308,12 @@
     d.clockTime = el("span", "pnl-clock-time", "--:--:--");
     d.clockDate = el("span", "pnl-clock-date", "");
     clock.append(d.clockTime, d.clockDate);
-    head.append(brand, clock);
+    // vremea lângă ceas (completată de web/weather.js)
+    var clockWx = el("div", "pnl-clockwx");
+    var wx = el("div", "wx-slot pnl-weather");
+    wx.setAttribute("data-weather-slot", "panel");
+    clockWx.append(wx, clock);
+    head.append(brand, clockWx);
 
     // linia de stare
     var status = el("ul", "pnl-status");
@@ -490,6 +495,13 @@
     // same text as the page footer
     credit.append("© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent," +
                   " neafiliat CFR. Tabela oficială: ", cfr);
+    var om = el("a", null, "Open-Meteo.com");
+    om.href = "https://open-meteo.com/";
+    om.target = "_blank";
+    om.rel = "noopener noreferrer";
+    var wxCredit = el("span", "wx-credit");
+    wxCredit.append(" · Meteo: ", om, " · CC BY 4.0");
+    credit.appendChild(wxCredit);
 
     pnl.append(head, status, d.banner, controls, d.legend, d.body, d.detail, credit);
     root.append(d.switch, pnl);

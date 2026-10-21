@@ -92,7 +92,8 @@
       delay_thresholds: { low: th.low, mid: th.mid, high: th.high },
       stale_after_s: num(c.stale_after_s) && c.stale_after_s > 0 ? c.stale_after_s : CONFIG_DEFAULTS.stale_after_s,
       // clamp: never hammer the server, never go silent for minutes
-      refresh_s: num(c.refresh_s) ? Math.min(300, Math.max(5, c.refresh_s)) : CONFIG_DEFAULTS.refresh_s
+      refresh_s: num(c.refresh_s) ? Math.min(300, Math.max(5, c.refresh_s)) : CONFIG_DEFAULTS.refresh_s,
+      weather: c.weather && typeof c.weather === "object" ? c.weather : null  // web/weather.js validates
     };
   }
 

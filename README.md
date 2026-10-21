@@ -177,8 +177,36 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
   schimbă (de obicei 1–4 cereri/minut, plafon fix de 10/minut, backoff la erori) și se
   identifică prin User-Agent. Nu rulați mai multe instanțe/workeri pe aceeași sursă.
 
+## Meteo
+
+Lângă ceas (în antetul vizualizării Carduri și în bara de titlu a Panoului) apare un widget
+mic cu vremea din București: pictogramă, temperatură, „se simte", vânt; la apăsare/hover un
+popover cu detalii (precipitații, ora observației, sursa).
+
+- Serverul (nu browserul — CSP rămâne `connect-src 'self'`) cere blocul `current` de la
+  Open-Meteo (`temperature_2m, precipitation, weather_code, wind_speed_10m,
+  wind_direction_10m, apparent_temperature`) la fiecare 15 minute, într-o sarcină proprie,
+  independentă de poller-ul CFR: o eroare meteo nu afectează tabela și nici `ok` din
+  `/api/health` (care primește doar `weather_age_s`). Backoff la erori (5 → 30 min), niciodată
+  mai mult de o cerere la 5 minute, nici după repornire.
+- Etichetare onestă: valorile `current` sunt **date de model** pentru celula de grilă a
+  coordonatelor, nu măsurătorile unei stații meteo. Se salvează cu `kind = model_current` și
+  se afișează „Condiții curente (model Open-Meteo)". Valoare lipsă = `NULL`/„—", niciodată 0
+  (0,0 mm precipitații e o valoare reală). Peste 45 de minute datele apar gri, „date vechi".
+- Stocare: tabelul `weather_observations` (schema v4, migrare aditivă), un rând per oră de
+  observație (UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi) pentru analiza
+  „Meteo și trenuri" din Etapa G. API: `GET /api/weather`; `GET /api/config` → `weather`.
+- Variabile (opționale) în `/etc/tabela.env`: `WEATHER_ENABLED` (implicit `1`; `0` oprește
+  serviciul și ascunde widgetul), `WEATHER_INTERVAL_S` (implicit `900`, minim `300`),
+  `WEATHER_LAT` / `WEATHER_LON` (implicit `44.4323` / `26.1063`), `WEATHER_URL` (implicit
+  `https://api.open-meteo.com/v1/forecast`).
+- Licență și atribuire: datele meteo sunt de la [Open-Meteo.com](https://open-meteo.com/),
+  sub licența **CC BY 4.0** (API-ul gratuit este pentru uz necomercial); atribuirea apare în
+  popover, în subsolul paginii și în creditul Panoului (vizibil și în ecran complet).
+
 ## Atribuire
 
 Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: https://cfr.ro. © 2026 Andy217Ace.
+Meteo: Open-Meteo.com (CC BY 4.0), valori de model.
 
 Licență: MIT (vezi `LICENSE`).
