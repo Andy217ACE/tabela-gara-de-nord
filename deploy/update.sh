@@ -16,6 +16,15 @@
 # tests/test_update_sh.py to simulate a server); production uses the defaults.
 set -euo pipefail
 
+# bash reads a script while running it and `git checkout` below replaces this file:
+# run from a private copy so the rest of the run is not read from the new version.
+if [ -z "${TABELA_UPDATE_COPY:-}" ]; then
+    copy="$(mktemp "${TMPDIR:-/tmp}/tabela-update.XXXXXX")"
+    cp "$0" "$copy"
+    TABELA_UPDATE_COPY="$copy" exec bash "$copy" "$@"
+fi
+trap 'rm -f "$TABELA_UPDATE_COPY"' EXIT
+
 APP_DIR="${APP_DIR:-/opt/tabela/app}"
 VENV="${VENV:-/opt/tabela/venv}"
 ENV_FILE="${ENV_FILE:-/etc/tabela.env}"
