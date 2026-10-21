@@ -43,7 +43,8 @@
   var S = { cfg: DEFAULTS, data: null, receivedAt: 0, failed: false, loading: true,
             widgets: [], timer: null, inflight: null, seq: 0 };
 
-  var fmtClock = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  var fmtClock = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, hour: "2-digit", minute: "2-digit",
+                                                   second: "2-digit", hour12: false });  // HH:MM:SS
   var fmtDate = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
 
   // ---- helpers ---------------------------------------------------------------------

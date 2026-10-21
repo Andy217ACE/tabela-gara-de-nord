@@ -2,6 +2,7 @@
 """Real-browser check: exactly ONE attribution footer is visible (bug: on desktop the page
 footer and the Panou credit were both shown). Also: version in the footer and the
 „Versiuni” screen. Skipped when Playwright (dev only) or its Chromium is unavailable."""
+import re
 import socket
 import subprocess
 import sys
@@ -100,5 +101,29 @@ def test_footer_shows_version_and_versions_screen(browser, base_url):
         assert __version__ in page.inner_text("#view-versiuni")
         assert page.title().startswith("Versiuni")
         assert not [e for e in errors if "Content Security Policy" in e]
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("w,h", [(1280, 800), (390, 844)])
+@pytest.mark.parametrize("view", ["panou", "carduri"])
+def test_clocks_show_seconds_without_breaking_the_header(browser, base_url, w, h, view):
+    ctx, page, _ = _page(browser, base_url, w, h, "dark", view)
+    try:
+        sel = ".pnl-clock-time" if view == "panou" else ".hdr-clock-time"
+        # poll from Python: page-side string predicates need eval, which the CSP forbids
+        seen = []
+        for _ in range(40):
+            seen.append(page.text_content(sel))
+            if len(set(x for x in seen if re.fullmatch(r"\d{2}:\d{2}:\d{2}", x or ""))) >= 2:
+                break
+            page.wait_for_timeout(100)
+        good = [x for x in seen if re.fullmatch(r"\d{2}:\d{2}:\d{2}", x or "")]
+        assert len(set(good)) >= 2, seen  # HH:MM:SS, ticking every second
+        assert not page.evaluate("document.documentElement.scrollWidth > "
+                                 "document.documentElement.clientWidth")
+        if view == "carduri":  # header clock row: the clock text never wraps
+            box = page.locator(".hdr-clock-time").bounding_box()
+            assert box and box["height"] < 40
     finally:
         ctx.close()

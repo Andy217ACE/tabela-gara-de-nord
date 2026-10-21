@@ -27,6 +27,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   font-variant-numeric: tabular-nums;
 }
 .hdr-clock-time {
+  font-variant-numeric: tabular-nums;
   font-family: var(--mono);
   font-size: 1.0625rem;
   font-weight: 700;

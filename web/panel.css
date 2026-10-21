@@ -180,6 +180,7 @@ html[data-view="panou"] main { max-width: 1760px; }
   line-height: 1.1;
 }
 .pnl-clock-time {
+  font-variant-numeric: tabular-nums;
   font-size: clamp(1.25rem, 0.8rem + 1.8vw, 2.4rem);
   font-weight: 700;
   color: var(--p-text);

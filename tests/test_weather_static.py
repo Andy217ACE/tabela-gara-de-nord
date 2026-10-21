@@ -120,3 +120,20 @@ def test_readme_documents_weather():
     for needle in ("WEATHER_ENABLED", "WEATHER_INTERVAL_S", "WEATHER_LAT", "WEATHER_LON",
                    "WEATHER_URL", "CC BY 4.0", "Open-Meteo", "model"):
         assert needle in md, needle
+
+
+def test_every_clock_shows_seconds_with_tabular_digits():
+    wjs = (WEB / "weather.js").read_text(encoding="utf-8")
+    m = re.search(r"var fmtClock = new Intl\.DateTimeFormat\((.*?)\);", wjs, re.S)
+    assert m and 'second: "2-digit"' in m.group(1) and 'timeZone: TZ' in m.group(1)
+    assert "setInterval(tickClock, 1000)" in wjs
+    pjs = (WEB / "panel.js").read_text(encoding="utf-8")
+    m = re.search(r"var fmtTime = new Intl\.DateTimeFormat\((.*?)\);", pjs, re.S)
+    assert m and 'second: "2-digit"' in m.group(1)
+    assert "setInterval(tickClock, 1000)" in pjs
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert '<span class="hdr-clock-time">--:--:--</span>' in html
+    for css, sel in (("weather.css", ".hdr-clock-time"), ("panel.css", ".pnl-clock-time")):
+        block = re.search(re.escape(sel) + r"\s*\{(.*?)\}", (WEB / css).read_text(encoding="utf-8"),
+                          re.S).group(1)
+        assert "font-variant-numeric: tabular-nums" in block
