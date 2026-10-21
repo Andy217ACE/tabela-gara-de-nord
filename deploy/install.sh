@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
 # © 2026 Andy217Ace
 # Idempotent install of Tabela Gara de Nord on Ubuntu 24.04. Run as root:
-#   sudo bash install.sh [branch]        (default branch: feat/app; later: main)
+#   sudo bash install.sh [branch]
+# Branch: the argument; otherwise the branch already checked out in /opt/tabela/app
+# (like update.sh). A first install (no repo yet) or a detached HEAD needs the argument.
 # Never prints the VAPID private key. Never enables ufw (the cloud NSG is the firewall).
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/Andy217Ace/tabela-gara-de-nord.git}"
-BRANCH="${1:-${BRANCH:-feat/app}}"
-APP_DIR=/opt/tabela/app
+APP_DIR="${APP_DIR:-/opt/tabela/app}"
+if [ $# -ge 1 ] && [ -n "$1" ]; then
+    BRANCH="$1"
+elif [ -d "$APP_DIR/.git" ]; then
+    BRANCH="$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)"
+    if [ "$BRANCH" = "HEAD" ]; then
+        echo "ERROR: $APP_DIR is on a detached HEAD; pass the branch: install.sh <branch>" >&2
+        exit 1
+    fi
+    echo "branch: $BRANCH (currently checked out)"
+else
+    echo "ERROR: no checkout in $APP_DIR yet; pass the branch: install.sh <branch>" >&2
+    exit 1
+fi
+[ "${BRANCH_ONLY:-0}" = 1 ] && { echo "$BRANCH"; exit 0; }  # tests: stop after choosing
 VENV=/opt/tabela/venv
 DATA_DIR=/var/lib/tabela
 ENV_FILE=/etc/tabela.env

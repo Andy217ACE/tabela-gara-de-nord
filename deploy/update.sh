@@ -10,7 +10,11 @@
 #  4. if the new code's store.SCHEMA_VERSION is above the database's user_version,
 #     takes an online SQLite backup first (/var/lib/tabela/backups, last 5 kept);
 #  5. restarts and waits for /api/health; if it never gets healthy, ROLLS BACK to PREV
-#     (checkout, pip install, restart, wait) and exits 1 with a report.
+#     on the ORIGINAL branch (checkout, pip install, restart, wait) and exits 1.
+#
+# Health gate: HEALTH_MODE=strict (default) needs {"ok":true}, i.e. the app is up AND
+# it has read the CFR board recently. When CFR itself is failing that can never pass;
+# for an emergency redeploy use HEALTH_MODE=up (HTTP 200 from /api/health is enough).
 #
 # Paths and commands can be overridden through the environment (used by
 # tests/test_update_sh.py to simulate a server); production uses the defaults.
@@ -38,6 +42,7 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/api/health}"
 HEALTH_CMD="${HEALTH_CMD:-curl -fs $HEALTH_URL}"
 HEALTH_TRIES="${HEALTH_TRIES:-90}"     # x HEALTH_SLEEP seconds (default: 3 minutes)
 HEALTH_SLEEP="${HEALTH_SLEEP:-2}"
+HEALTH_MODE="${HEALTH_MODE:-strict}"   # strict | up
 UNIT_SRC="$APP_DIR/deploy/tabela.service"
 UNIT_DST="${UNIT_DST:-/etc/systemd/system/tabela.service}"
 
@@ -61,10 +66,31 @@ fi
 PREV="$(git_ rev-parse HEAD)"
 echo "== current: $(git_ log -1 --oneline "$PREV") (branch: $CURRENT)"
 
+case "$HEALTH_MODE" in strict|up) ;; *) echo "HEALTH_MODE must be strict or up" >&2; exit 1;; esac
+# pre-check: if the running app is up but not reading CFR, a strict gate cannot pass
+if [ "$HEALTH_MODE" = strict ]; then
+    pre="$($HEALTH_CMD 2>/dev/null || true)"
+    if printf '%s' "$pre" | grep -q '"ok":false'; then
+        echo "WARNING: /api/health is ok=false BEFORE the update (CFR board not read recently)." >&2
+        echo "The strict health gate will then fail and roll back. For an emergency redeploy:" >&2
+        echo "  HEALTH_MODE=up bash update.sh $BRANCH" >&2
+    fi
+fi
+
+health_ok() {   # one probe according to HEALTH_MODE
+    local body
+    body="$($HEALTH_CMD 2>/dev/null)" || return 1
+    if [ "$HEALTH_MODE" = up ]; then
+        printf '%s' "$body" | grep -q '"ok":'
+    else
+        printf '%s' "$body" | grep -q '"ok":true'
+    fi
+}
+
 healthy() {
     local i
     for i in $(seq 1 "$HEALTH_TRIES"); do
-        if $HEALTH_CMD 2>/dev/null | grep -q '"ok":true'; then
+        if health_ok; then
             echo "healthy after ~$((i * HEALTH_SLEEP)) s"
             return 0
         fi
@@ -119,9 +145,10 @@ backup_db() {
     (umask 077; mkdir -p "$BACKUP_DIR") || return 1
     dest="$BACKUP_DIR/tabela-$(date +%Y%m%d-%H%M%S)-v$2.db"
     if command -v sqlite3 >/dev/null 2>&1; then
-        (umask 077; sqlite3 "$db" ".backup '$dest'") || return 1
+        # -readonly: the backup never creates root-owned -wal/-shm next to the live DB
+        (umask 077; sqlite3 -readonly "$db" ".backup '$dest'") || return 1
     else   # the same online-backup API, through Python
-        (umask 077; "$PYTHON" -c 'import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' "$db" "$dest") || return 1
+        (umask 077; "$PYTHON" -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' "$db" "$dest") || return 1
     fi
     [ -s "$dest" ] || return 1
     echo "db backup: $dest"
@@ -136,11 +163,16 @@ git_ checkout -q -B "$BRANCH" "origin/$BRANCH"
 NEW="$(git_ rev-parse HEAD)"
 echo "== new: $(git_ log -1 --oneline)"
 
+restore_prev() {  # the original branch name at the original commit
+    if [ "$CURRENT" = "HEAD" ]; then git_ checkout -q --detach "$PREV"
+    else git_ checkout -q -B "$CURRENT" "$PREV"; fi
+}
+
 # Before the restart nothing has changed for the running process: put the old code back
 # on disk and stop (static files are served from disk, so it must match the process).
 abort_before_restart() {
     echo "ERROR: $1; restoring $PREV - service NOT restarted (old code keeps running)" >&2
-    git_ checkout -q -B "$BRANCH" "$PREV"
+    restore_prev
     "$PIP" install -q -r "$APP_DIR/requirements.txt" || true
     exit 1
 }
@@ -169,7 +201,7 @@ fi
 
 echo "ERROR: not healthy after $((HEALTH_TRIES * HEALTH_SLEEP)) s; rolling back to $PREV" >&2
 echo "(logs: journalctl -u tabela -n 100)" >&2
-git_ checkout -q -B "$BRANCH" "$PREV"
+restore_prev
 "$PIP" install -q -r "$APP_DIR/requirements.txt" || echo "WARNING: pip install during rollback failed" >&2
 install_unit
 $SYSTEMCTL restart tabela

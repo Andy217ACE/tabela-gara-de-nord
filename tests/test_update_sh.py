@@ -187,3 +187,63 @@ def test_keeps_only_last_backups(server):
     assert server.run().returncode == 0
     names = sorted(p.name for p in bk.glob("tabela-*.db"))
     assert len(names) == 2 and names[0] == "tabela-20260103-000000-v2.db"
+
+
+def test_rollback_restores_the_original_branch(server):
+    # deploy a different branch that is broken: rollback goes back to main@PREV
+    git(server.work, "checkout", "-q", "-b", "next")
+    commit(server.work, 2, "boom", "broken next")
+    git(server.work, "push", "-q", "origin", "next")
+    r = server.run("next")
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr
+    branch = subprocess.run(["git", "-C", str(server.app), "rev-parse", "--abbrev-ref", "HEAD"],
+                            check=True, capture_output=True, text=True).stdout.strip()
+    assert branch == "main" and server.head() == server.prev
+
+
+def test_health_mode_up_accepts_app_up_without_cfr(server):
+    commit(server.work, 2, '{"ok":false,"age_s":null}', "cfr down")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr        # strict gate
+    server.env["HEALTH_MODE"] = "up"
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr                 # app up is enough
+
+
+def test_precheck_warns_when_running_app_is_not_reading_cfr(server):
+    fake = server.tmp / "bin"
+    script(fake / "health_down", "echo '{\"ok\":false,\"age_s\":900}'\n")
+    server.env["HEALTH_CMD"] = "health_down"
+    server.env["HEALTH_TRIES"] = "1"
+    r = server.run()
+    assert "ok=false BEFORE the update" in r.stderr and "HEALTH_MODE=up" in r.stderr
+
+
+def test_backup_is_read_only(server):
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    assert server.run().returncode == 0
+    leftovers = [p.name for p in server.data.iterdir() if p.name.endswith(("-wal", "-shm"))]
+    assert leftovers == []
+
+
+@pytest.mark.parametrize("case", ["arg", "checked_out", "no_repo", "detached"])
+def test_install_sh_branch_choice(server, case):
+    script_path = ROOT / "deploy" / "install.sh"
+    env = {**server.env, "BRANCH_ONLY": "1"}
+    args = []
+    if case == "arg":
+        args = ["feat/x"]
+    elif case == "no_repo":
+        env["APP_DIR"] = posix(server.tmp / "nothing")
+    elif case == "detached":
+        git(server.app, "checkout", "-q", "--detach")
+    r = subprocess.run([BASH, posix(script_path), *args], env=env, capture_output=True,
+                       text=True, timeout=60)
+    if case == "arg":
+        assert r.returncode == 0 and r.stdout.strip().endswith("feat/x")
+    elif case == "checked_out":
+        assert r.returncode == 0 and r.stdout.strip().endswith("main")
+    else:
+        assert r.returncode == 1 and "pass the branch" in r.stderr

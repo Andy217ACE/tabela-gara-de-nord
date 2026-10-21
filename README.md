@@ -76,7 +76,7 @@ Fișiere în `deploy/`: `install.sh` (instalare idempotentă), `update.sh` (actu
 Prima instalare (pe server, cu sudo):
 
     git clone --branch feat/app https://github.com/Andy217Ace/tabela-gara-de-nord.git /tmp/tabela
-    sudo bash /tmp/tabela/deploy/install.sh feat/app
+    sudo bash /tmp/tabela/deploy/install.sh feat/app   # branch obligatoriu la prima instalare
 
 Scriptul instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`; creează
 utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, venv în
@@ -100,17 +100,60 @@ face, în ordine:
    face întâi un backup online SQLite (`sqlite3 .backup`) în `/var/lib/tabela/backups/`
    (se păstrează ultimele 5);
 5. repornește și așteaptă `/api/health` (max. 3 minute); dacă nu devine sănătos, face
-   **rollback** automat la PREV (checkout, pip install, restart, așteaptă) și iese cu cod 1.
+   **rollback** automat la PREV pe branch-ul inițial (checkout, pip install, restart,
+   așteaptă) și iese cu cod 1.
 
-După un rollback de la o versiune care a migrat schema, codul vechi ignoră coloanele noi;
-copia dinaintea migrării e cel mai nou fișier din `/var/lib/tabela/backups/`
-(restaurare: `systemctl stop tabela`, copiați fișierul peste `tabela.db`, `systemctl start tabela`).
-Simularea scriptului (git temporar, comenzi false) e în `tests/test_update_sh.py`.
+Poarta de sănătate implicită (`HEALTH_MODE=strict`) cere `"ok":true`, adică aplicația a citit
+tabela CFR recent. Dacă CFR însuși nu răspunde, poarta nu poate trece (scriptul avertizează
+înainte); pentru o redistribuire de urgență: `sudo HEALTH_MODE=up bash .../update.sh <branch>`
+(ajunge HTTP 200 de la `/api/health`). Scriptul rulează dintr-o copie temporară a lui însuși
+(checkout-ul îl înlocuiește). Simularea lui (git temporar, comenzi false) e în
+`tests/test_update_sh.py`.
 
-Schimbările din `deploy/nginx-tabela.conf`, `tabela-limits.conf` sau pachetele apt se aplică
-rulând din nou `install.sh` (idempotent; nu regenerează cheile VAPID, iar dacă lipsește doar
-cheia publică o derivă din cea privată). Prima actualizare la schema v3 (acest val) rulează
-migrarea automat la pornire, după backup.
+**Restaurarea bazei de date** dintr-un backup (baza e în modul WAL — nu copiați fișierul peste
+o bază deschisă și nu lăsați fișierele `-wal`/`-shm` vechi lângă ea):
+
+    sudo systemctl stop tabela && \
+    sudo rm -f /var/lib/tabela/tabela.db-wal /var/lib/tabela/tabela.db-shm && \
+    sudo install -o tabela -g tabela -m 640 <backup.db> /var/lib/tabela/tabela.db && \
+    sudo systemctl start tabela
+
+După un rollback de cod de la o versiune care a migrat schema, codul vechi ignoră coloanele
+noi; restaurarea de mai sus e necesară doar dacă vreți și datele de dinainte de migrare.
+
+`install.sh` fără argument rămâne pe branch-ul deja scos în `/opt/tabela/app` (ca
+`update.sh`); la prima instalare branch-ul e obligatoriu. Schimbările din
+`deploy/nginx-tabela.conf`, `tabela-limits.conf` sau pachetele apt se aplică rulând din nou
+`install.sh <branch>` (idempotent; nu regenerează cheile VAPID, iar dacă lipsește doar cheia
+publică o derivă din cea privată).
+
+### Primul deploy al valului 1 (schema v3) — procedură
+
+Serverul are încă `update.sh`/`install.sh` vechi: **nu le rulați** (cel vechi nu face backup și
+poate fi stricat de propriul `git checkout`). Pași (cu sudo, `B` = branch-ul de livrat):
+
+1. Verificări: `curl -s http://127.0.0.1:8000/api/health` (ok=true), `df -h /var/lib/tabela /opt`,
+   `git -C /opt/tabela/app status --porcelain` (gol); notați `git -C /opt/tabela/app rev-parse HEAD`.
+2. Backup manual online + verificare:
+
+       sudo install -d -m 700 /root/tabela-predeploy
+       sudo /opt/tabela/venv/bin/python -c 'import sqlite3; s=sqlite3.connect("file:/var/lib/tabela/tabela.db?mode=ro", uri=True); d=sqlite3.connect("/root/tabela-predeploy/tabela.db"); s.backup(d); print(d.execute("PRAGMA integrity_check").fetchone()[0], d.execute("PRAGMA user_version").fetchone()[0], d.execute("SELECT COUNT(*) FROM services").fetchone()[0])'
+
+   (trebuie să afișeze `ok 2 <număr servicii>`).
+3. Scriptul NOU, rulat din `/tmp`:
+
+       sudo git -C /opt/tabela/app fetch origin "$B"
+       sudo git -C /opt/tabela/app show "origin/$B:deploy/update.sh" > /tmp/update-new.sh
+       sudo bash /tmp/update-new.sh "$B"
+
+4. Verificare: `PRAGMA user_version` = 3 și aceleași numere de servicii/evenimente (cu
+   `mode=ro` ca mai sus), `/api/health` ok, `/api/board` are `uncertain` și `delay_read`.
+5. `sudo bash /opt/tabela/app/deploy/install.sh "$B"` (explicit: pachetul sqlite3 și
+   `limit_req_log_level`).
+6. Rollback (dacă e nevoie): doar cod — `git -C /opt/tabela/app checkout -B <branch-vechi>
+   <SHA notat>`, `/opt/tabela/venv/bin/pip install -r /opt/tabela/app/requirements.txt`,
+   `systemctl restart tabela`; baza de date — restaurarea de mai sus cu
+   `/root/tabela-predeploy/tabela.db`.
 
 Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/update.sh main`
 (de atunci `update.sh` fără argument rămâne pe `main`).
