@@ -38,6 +38,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
+DELAY_JUMP_CONFIRM = 30  # a delay change larger than this needs two consecutive readings
 SCHEMA_VERSION = 6
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
@@ -228,36 +229,24 @@ def _iso(d: date | str) -> str:
 
 
 def _backfill_delay_read_at(c: sqlite3.Connection) -> None:
-    """Set delay_read_at for services stored before v6, from evidence only:
-    observations with delay_read=1, delay events to a value > 0 (a 0 could be the old
-    default of an unreadable cell), first_seen when last_delay > 0 (never a default).
-    The latest proof wins; services without any keep NULL (delay unknown)."""
-    best: dict[int, datetime] = {}
-
-    def offer(sid, stamp) -> None:
-        if sid is None or not stamp:
-            return
-        try:
-            t = _local(datetime.fromisoformat(stamp.replace("Z", "+00:00")))
-        except ValueError:
-            return
-        if sid not in best or t > best[sid]:
-            best[sid] = t
-
+    """Set delay_read_at for services stored before v6 from observations with
+    delay_read=1 only (v5+, both 0 and non-zero readings). Older evidence (delay
+    events, non-zero last_delay) exists only for DELAYED trains: using it would bias
+    the statistics towards delays, so those services keep NULL (delay unknown)."""
     has_obs = c.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
                         " AND name='observations'").fetchone()
-    if has_obs:
-        for sid, at in c.execute("SELECT service_id, MAX(observed_at) FROM observations"
-                                 " WHERE delay_read=1 AND service_id IS NOT NULL"
-                                 " GROUP BY service_id"):
-            offer(sid, at)
-    for sid, at in c.execute("SELECT service_id, MAX(ts) FROM events WHERE kind='delay'"
-                             " AND CAST(new AS INTEGER) > 0 GROUP BY service_id"):
-        offer(sid, at)
-    for sid, at in c.execute("SELECT id, first_seen FROM services WHERE last_delay > 0"):
-        offer(sid, at)
-    c.executemany("UPDATE services SET delay_read_at=? WHERE id=? AND delay_read_at IS NULL",
-                  [(t.isoformat(), sid) for sid, t in best.items()])
+    if not has_obs:
+        return
+    upd = []
+    for sid, at in c.execute("SELECT service_id, MAX(observed_at) FROM observations"
+                             " WHERE delay_read=1 AND service_id IS NOT NULL"
+                             " GROUP BY service_id").fetchall():
+        try:
+            t = _local(datetime.fromisoformat(at.replace("Z", "+00:00")))
+        except (ValueError, AttributeError):
+            continue
+        upd.append((t.isoformat(), sid))
+    c.executemany("UPDATE services SET delay_read_at=? WHERE id=? AND delay_read_at IS NULL", upd)
 
 
 def _today() -> date:
@@ -291,6 +280,10 @@ class Store:
         # a row): a stored misread is renamed once the other reading persists.
         self._misread: dict[int, tuple[tuple, int]] = {}
         self._misread_next: dict[int, tuple[tuple, int]] = {}
+        # service id -> delay read once after a jump > DELAY_JUMP_CONFIRM (e.g. "15" read as
+        # "945"): applied only when the next frame reads the same value.
+        self._jump: dict[int, int] = {}
+        self._jump_next: dict[int, int] = {}
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -454,6 +447,7 @@ class Store:
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
                 self._misread = self._misread_next
+                self._jump = self._jump_next
                 self._delay_read.update(self._pending_read)
                 if len(self._delay_read) > 4000:  # bounded: old services drop out
                     self._delay_read = dict(self._pending_read)
@@ -532,6 +526,7 @@ class Store:
         events: list[Event] = []
         seen: set[int] = set()
         self._misread_next = {}
+        self._jump_next = {}
 
         def emit(sid: int, kind: str, row: Row, sd: str, old=None, new=None) -> None:
             self._insert_event(sid, ts_s, kind, old, new)
@@ -604,6 +599,13 @@ class Store:
             row = replace(r, sched_time=cur["sched_time"], train_no=cur["train_no"])
             if cur["status"] == "gone":
                 emit(sid, "appeared", row, sd)
+            if (r.delay_read and cur["delay_read_at"] is not None
+                    and abs(r.delay_min - cur["last_delay"]) > DELAY_JUMP_CONFIRM
+                    and self._jump.get(sid) != r.delay_min):
+                # implausible jump in one frame: wait for a second identical reading
+                self._jump_next[sid] = r.delay_min
+                r = replace(r, delay_read=False)
+                row = replace(row, delay_read=False)
             # unreadable delay: keep the last real reading, no event, no overwrite
             delay = r.delay_min if r.delay_read else cur["last_delay"]
             self._pending_read[sid] = r.delay_read

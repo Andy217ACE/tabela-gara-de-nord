@@ -88,9 +88,9 @@ def _v5(tmp_path):
 
     f, l = "2026-10-20T11:00:00+03:00", "2026-10-20T12:30:00+03:00"
     a = svc(1, 0, f, l)    # no evidence at all -> NULL
-    b = svc(2, 7, f, l)    # non-zero delay can't be a default -> first_seen
+    b = svc(2, 7, f, l)    # non-zero delay without observation -> NULL (old evidence is biased)
     d = svc(3, 0, f, l)    # delay event 5 -> 0 only: a 0 is not proof
-    e = svc(4, 12, f, l)   # delay event 0 -> 12 at 11:40
+    e = svc(4, 12, f, l)   # delay event 0 -> 12 at 11:40 (ignored) + observation
     g = svc(5, 0, f, l)    # observation with delay_read=1 (UTC stamp)
     c.execute("INSERT INTO events(service_id, ts, kind, old, new) VALUES"
               " (?, '2026-10-20T11:20:00+03:00', 'delay', '5', '0')", (d,))
@@ -116,9 +116,9 @@ def test_v5_to_v6_backfill(tmp_path):
     assert version(s) == 6
     got = dict(s._conn.execute("SELECT id, delay_read_at FROM services"))
     assert got[a] is None
-    assert got[b] == "2026-10-20T11:00:00+03:00"
+    assert got[b] is None
     assert got[d] is None
-    # max(event 11:40 local, observation 09:05Z = 12:05 local) -> the observation
+    # observation 09:05Z = 12:05 local (the delay event is not used)
     assert got[e] == "2026-10-20T12:05:00+03:00"
     assert got[g] == "2026-10-20T12:25:00+03:00"  # stored in local time, like services
     s.migrate()  # idempotent
@@ -151,3 +151,21 @@ def test_live_fixture_migrates(tmp_path):
     n = s._conn.execute("SELECT COUNT(*) FROM services").fetchone()[0]
     assert n > 0
     s.close()
+
+
+def test_delay_jump_needs_two_readings(store):
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 15)}), T0)
+    t1, t2, t3 = (T0 + timedelta(minutes=k) for k in (1, 2, 3))
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 945)}), t1)  # "15" misread
+    assert col(store, 1621, "last_delay") == 15
+    assert col(store, 1621) == T0.isoformat()  # the jump is not a proven reading yet
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 16)}), t2)
+    assert col(store, 1621, "last_delay") == 16
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 80)}), t3)
+    assert col(store, 1621, "last_delay") == 16
+    t4 = T0 + timedelta(minutes=4)
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 80)}), t4)  # confirmed twice
+    assert col(store, 1621, "last_delay") == 80 and col(store, 1621) == t4.isoformat()
+    kinds = [r[0] for r in store._conn.execute(
+        "SELECT new FROM events WHERE kind='delay' ORDER BY id")]
+    assert kinds == ["16", "80"]
