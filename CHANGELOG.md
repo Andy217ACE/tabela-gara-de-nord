@@ -5,6 +5,16 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.03 — 2026-10-21
+
+### Reparat
+- Modul „Panou”: lățimea coloanelor nu mai depinde de date — numele lungi de stație sau operator (ex. „Chișinău Triaj Internațional – Nord”) nu mai lățesc zona de text și coloanele nu mai sar de la o actualizare la alta (tabel cu lățimi fixe).
+- Textul lung (stație, operator, stare) se afișează pe cel mult 2 rânduri, apoi „…”; valoarea completă rămâne în tooltip (title), în detaliul trenului și pentru cititoarele de ecran.
+- Toate rândurile au aceeași înălțime, în ambele panouri.
+- Ecran complet pe desktop: coloanele „Sosiri” și „Plecări” au aceeași lățime, antetele și rândurile sunt aliniate sus și pe orizontală; fontul se adaptează când cele două panouri stau alăturate.
+- Modul „Carduri”: pe desktop, cele două coloane au aceeași lățime și cardurile aceeași înălțime (rândurile rămân aliniate); operatorul lung e trunchiat cu „…”, numele complet e în tooltip. Pe telefon, stația are cel mult 2 rânduri și nu apare scroll orizontal.
+- Butonul „Caută, filtrează, sortează” nu mai apare pe desktop (era vizibil deși filtrele sunt deja deschise).
+
 ## Beta 1.02 — 2026-10-21
 
 ### Reparat
