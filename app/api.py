@@ -29,7 +29,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import admin, captures, observations, poller, trains_api, weather
+from app import admin, captures, observations, poller, stats_api, trains_api, weather
 from app.config import Settings, get_settings
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
@@ -450,6 +450,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         return {"ok": True}
 
     app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
+    app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(trains_api.router)  # /api/trains (public catalog)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],

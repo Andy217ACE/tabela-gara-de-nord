@@ -798,8 +798,9 @@ class Store:
             where.append("s.sched_time <= ?")
             args.append(time_to)
         sql = (
-            "SELECT s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
+            "SELECT s.id, s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
             " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen, s.uncertain,"
+            " s.delay_read_at,"
             " (SELECT MAX(MAX(COALESCE(CAST(e.old AS INTEGER), 0),"
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
@@ -809,6 +810,7 @@ class Store:
         with self._lock:
             found = self._conn.execute(sql, args).fetchall()
         return [{
+            "id": s["id"], "delay_known": s["delay_read_at"] is not None,
             "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
             "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
             "max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
