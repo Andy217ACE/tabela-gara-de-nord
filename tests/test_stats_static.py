@@ -41,7 +41,7 @@ def test_stats_js_uses_api_and_rules():
                    "encodeURIComponent(name)", "#tren?nr=",
                    "Eșantion mic (N = ", "procentele nu sunt afișate",
                    "Încă nu există trenuri cu cel puțin", "below_min",
-                   "Beta 1.03", "București Nord", "sufficient === false", "history.replaceState"):
+                   "Beta 1.04", "București Nord", "sufficient === false", "history.replaceState"):
         assert needle in js, needle
     # a missing value is „—”, never 0
     assert 'v == null ? "—"' in js

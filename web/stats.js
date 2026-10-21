@@ -800,7 +800,7 @@
     qs.append(ul);
     qs.append(el("p", "st-note", (q.uncertain_names || 0) + " călătorii au numele stației/operatorului citit nesigur."));
     qs.append(el("p", "st-warn",
-      "Datele de dinainte de Beta 1.03 au întârzierea „necunoscută”: atunci citirea întârzierii nu era " +
+      "Datele de dinainte de Beta 1.04 au întârzierea „necunoscută”: atunci citirea întârzierii nu era " +
       "înregistrată pe fiecare călătorie, deci nu o putem folosi. Ele apar ca „necunoscute” și nu intră în statistici."));
     v.body.append(qs);
 
