@@ -250,8 +250,26 @@
       <div class="page-head">
         <h1 id="trenuri-heading">Trenuri</h1>
         <p class="page-sub">Catalogul trenurilor observate pe tabela din Gara de Nord, cu statistici de întârziere: un rând pentru fiecare număr de tren și panou (sosiri și plecări separat). Întârzierea este cea citită pe tabela de la București Nord.</p>
+        <p class="page-links"><a class="st-back" href="#statii">Stații: de unde vin și unde pleacă trenurile →</a></p>
       </div>
       <div class="st-root" id="st-trenuri"></div>
+    </section>
+
+    <section class="view view-stats" id="view-statii" aria-labelledby="statii-heading" hidden>
+      <div class="page-head">
+        <h1 id="statii-heading">Stații</h1>
+        <p class="page-sub">Stațiile afișate pe tabela din Gara de Nord: originea trenurilor la sosiri și destinația la plecări. Caută o stație și deschide-i pagina cu istoricul trenurilor.</p>
+        <p class="page-links"><a class="st-back" href="#trenuri">← Trenuri</a></p>
+      </div>
+      <div class="st-root" id="st-statii"></div>
+    </section>
+
+    <section class="view view-stats" id="view-statie" aria-labelledby="statie-heading" hidden>
+      <div class="page-head">
+        <h1 id="statie-heading">Stație</h1>
+        <p class="page-sub" id="statie-sub"></p>
+      </div>
+      <div class="st-root" id="st-statie"></div>
     </section>
 
     <section class="view view-stats" id="view-tren" aria-labelledby="tren-heading" hidden>

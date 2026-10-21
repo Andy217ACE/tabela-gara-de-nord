@@ -84,7 +84,7 @@ def test_app_routes_for_stats_views():
 
 def test_sw_precaches_stats_and_bumped():
     sw = (WEB / "sw.js").read_text(encoding="utf-8")
-    assert 'var VERSION = "v8"' in sw
+    assert 'var VERSION = "v9"' in sw
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
     assert '"/stats.js"' in shell and '"/stats.css"' in shell
 
@@ -93,3 +93,51 @@ def test_mobile_nav_scrolls_inside_not_page():
     css = (WEB / "style.css").read_text(encoding="utf-8")
     nav = re.search(r"\n\.mainnav \{(.*?)\n\}", css, re.S).group(1)
     assert "overflow-x: auto" in nav and "display: flex" in nav
+
+
+# ---- D2: station pages (#statii, #statie?nume=), station links, station ranking ----------
+
+def test_station_views_wired():
+    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    for needle in ("App.views.statii", "App.views.statie", "/api/stations", "/journeys?",
+                   "next_before", '"before"', "Mai multe călătorii", "Ultimele călătorii",
+                   "Sosiri dinspre stație", "Plecări înspre stație", "Stația nu a fost observată pe tabelă",
+                   "#statii", "Nu intră în clasamentul stațiilor", "sub eșantionul minim",
+                   "Locul ", "rank-stations", "most_punctual", "Clasamentul stațiilor",
+                   "Încă nu există stații cu cel puțin", "nume nesigur", "uncertain_only",
+                   "d.note", "Atenție: ", "openJourney", "timeSections"):
+        assert needle in js, needle
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    for needle in ('"#statii": "statii"', '"#statie": "statie"', 'statii: "trenuri"',
+                   'statie: "trenuri"'):
+        assert needle in app, needle
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    for needle in ('id="view-statii"', 'id="view-statie"', 'id="st-statii"', 'id="st-statie"',
+                   'id="statie-heading"', 'id="statie-sub"', 'href="#statii"'):
+        assert needle in html, needle
+    assert html.count("<footer") == 1
+
+
+def test_station_links_everywhere_and_safe():
+    href = 'href = "#statie?nume=" + encodeURIComponent('
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert '"#statie?nume=" + encodeURIComponent(t.station)' in app
+    assert "station-link station-link-plain" in app
+    panel = (WEB / "panel.js").read_text(encoding="utf-8")
+    assert href in panel and "station-link station-link-plain" in panel
+    assert 'e.target.closest("a")' in panel          # a click on the link does not open the row detail
+    hist = (WEB / "history.js").read_text(encoding="utf-8")
+    assert href in hist and 'closest("button, a")' in hist
+    for name, src in (("app.js", app), ("panel.js", panel), ("history.js", hist)):
+        for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", 'setAttribute("style"'):
+            assert bad not in src, (name, bad)
+    css = (WEB / "stats.css").read_text(encoding="utf-8")
+    assert re.search(r"\.station-link-plain\s*\{[^}]*text-decoration:\s*none", css)
+    assert re.search(r"\.station-link:focus-visible\s*\{[^}]*outline", css)
+
+
+def test_sw_precache_still_complete():
+    sw = (WEB / "sw.js").read_text(encoding="utf-8")
+    shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
+    for f in ("/app.js", "/history.js", "/panel.js", "/stats.js", "/stats.css"):
+        assert f'"{f}"' in shell, f

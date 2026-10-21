@@ -610,7 +610,7 @@
     }
     tr.appendChild(cell("train", train));
 
-    tr.appendChild(cell("station", t.station ? nameNode(t.station, t) : unknown("stație")));
+    tr.appendChild(cell("station", t.station ? stationLink(t.station, t) : unknown("stație")));
     tr.appendChild(cell("op", t.operator ? nameNode(t.operator, t) : unknown("operator")));
     tr.appendChild(cell("delay", delayNode(t, lvl, fresh)));
 
@@ -639,6 +639,14 @@
     s.title = UNSURE;
     s.appendChild(el("span", "sr-only", " (" + UNSURE + ")"));
     return s;
+  }
+
+  // Numele stației = link spre pagina ei (#statie?nume=, stats.js); aspectul e moștenit.
+  function stationLink(name, t) {
+    var a = el("a", "station-link station-link-plain");
+    a.href = "#statie?nume=" + encodeURIComponent(name);
+    a.appendChild(nameNode(name, t));
+    return a;
   }
 
   // Butonul „urmărește" (notificări) din rând — logica e în follows.js (TabelaApp.onFollow).
@@ -702,7 +710,8 @@
     var focusKey = focused ? focused.dataset.key : null;
     var ae = document.activeElement;
     var focusBtn = ae && ae.classList && ae.classList.contains("pnl-follow") ? ".pnl-follow"
-      : (ae && ae.classList && ae.classList.contains("pnl-star") ? ".pnl-star" : null);
+      : (ae && ae.classList && ae.classList.contains("pnl-star") ? ".pnl-star"
+      : (ae && ae.classList && ae.classList.contains("station-link") ? ".station-link" : null));
 
     var shown = 0, total = 0;
     BOARDS.forEach(function (b) {
@@ -917,13 +926,14 @@
     }
     var star = e.target.closest(".pnl-star");
     if (star && star.dataset.fav) { toggleFav(star.dataset.fav); return; }
+    if (e.target.closest("a")) return; // link de stație: navighează, nu deschide detaliile
     var row = e.target.closest(".pnl-row");
     if (row) openDetail(row.dataset.key);
   }
 
   function onRowKey(e) {
     var row = e.target.closest(".pnl-row");
-    if (!row || e.target.closest(".pnl-star")) return;
+    if (!row || e.target.closest(".pnl-star, a")) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       openDetail(row.dataset.key);

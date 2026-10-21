@@ -241,6 +241,33 @@ th[aria-sort] .st-sort { color: var(--accent); }
 
 .st-rank-stations:empty { display: none; }
 
+/* ---------- stations (#statii, #statie, links everywhere) ---------- */
+/* Panou / Carduri: the link keeps the look of the name (case, colour, weight); underline on hover only. */
+.station-link-plain { text-transform: inherit; text-decoration: none; }
+.station-link-plain:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.station-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.st-field-q { flex: 3 1 14rem; }
+.page-links { margin: 6px 0 0; }
+.st-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.st-station-note { margin-top: 12px; font-size: 0.875rem; }
+.st-rankline { margin: 10px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--text-2); }
+.st-rankline-out { font-weight: 500; color: var(--text-3); }
+.st-subsection { margin-top: 14px; }
+.st-h3 { margin: 0 0 4px; font-size: 1rem; }
+.st-more-btn { margin-top: 10px; }
+.st-more-btn[hidden] { display: none; }
+.st-missing p { margin: 0 0 6px; }
+
 @media (min-width: 600px) {
   .st-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .st-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
