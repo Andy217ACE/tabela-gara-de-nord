@@ -92,7 +92,8 @@
       delay_thresholds: { low: th.low, mid: th.mid, high: th.high },
       stale_after_s: num(c.stale_after_s) && c.stale_after_s > 0 ? c.stale_after_s : CONFIG_DEFAULTS.stale_after_s,
       // clamp: never hammer the server, never go silent for minutes
-      refresh_s: num(c.refresh_s) ? Math.min(300, Math.max(5, c.refresh_s)) : CONFIG_DEFAULTS.refresh_s
+      refresh_s: num(c.refresh_s) ? Math.min(300, Math.max(5, c.refresh_s)) : CONFIG_DEFAULTS.refresh_s,
+      weather: c.weather && typeof c.weather === "object" ? c.weather : null  // web/weather.js validates
     };
   }
 
@@ -444,8 +445,26 @@
 
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
-  var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite" };
+  var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
+    "#ocr": "ocr", "#versiuni": "versiuni" };
   var currentRoute = null;
+
+  // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
+  function loadOcrView() {
+    if ($("view-ocr")) return;
+    var sec = el("section", "view view-ocr");
+    sec.id = "view-ocr";
+    sec.hidden = true;
+    $("main").appendChild(sec);
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "ocr.css";
+    document.head.appendChild(css);
+    var s = document.createElement("script");
+    s.src = "ocr.js";
+    s.addEventListener("load", function () { if (currentRoute === "ocr") route(); });
+    document.head.appendChild(s);
+  }
 
   function parseHash() {
     var h = location.hash || "";
@@ -460,15 +479,19 @@
     var name = r.name;
     var changed = name !== currentRoute;
     currentRoute = name;
-    ["tabela", "istoric", "urmarite"].forEach(function (v) {
-      $("view-" + v).hidden = v !== name;
+    if (name === "ocr") loadOcrView();
+    ["tabela", "istoric", "urmarite", "ocr", "versiuni"].forEach(function (v) {
+      var sec = $("view-" + v);
+      if (sec) sec.hidden = v !== name;
     });
     document.querySelectorAll(".nav-item").forEach(function (a) {
       if (a.dataset.route === name) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     document.title = name === "tabela" ? "Tabela Gara de Nord"
-      : (name === "istoric" ? "Istoric" : "Urmărite") + " · Tabela Gara de Nord";
+      : (name === "istoric" ? "Istoric" : name === "ocr" ? "Capturi OCR"
+        : name === "versiuni" ? "Versiuni" : "Urmărite") +
+        " · Tabela Gara de Nord";
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);
     if (changed) window.scrollTo(0, 0);

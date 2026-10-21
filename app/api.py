@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -29,8 +29,9 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import poller
+from app import admin, captures, observations, poller, trains_api, weather
 from app.config import Settings, get_settings
+from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
 from app.store import HISTORY_MAX, TZ, Store
@@ -174,7 +175,7 @@ async def _json_body(request: Request) -> dict:
 # -- poller wiring ----------------------------------------------------------
 
 async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClient,
-                            stop: asyncio.Event, known_stations=None) -> None:
+                            stop: asyncio.Event, known_stations=None, on_capture=None) -> None:
     """Run the poller; on crash (or unexpected return) log and restart with backoff."""
     first = max(0.0, settings.poller_restart_backoff)
     delay = first
@@ -182,7 +183,7 @@ async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClie
         try:
             await poller.run_poller(settings, on_rows, client, stop,
                                     last_image_path=settings.last_image_path,
-                                    known_stations=known_stations)
+                                    known_stations=known_stations, on_capture=on_capture)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -232,6 +233,10 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         async def on_rows(rows, ts: float) -> None:
             when = datetime.fromtimestamp(ts, TZ)
             events = await asyncio.to_thread(store.ingest, rows, when, "")
+            try:  # public catalog follows the board even when captures are off/failing
+                await asyncio.to_thread(observations.refresh_catalog, store, rows)
+            except Exception:
+                log.exception("trains catalog refresh failed (board unaffected)")
             t = asyncio.create_task(notifier.handle(events, when.date()))
             notify_tasks.add(t)
             t.add_done_callback(_notify_done)
@@ -241,15 +246,30 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         app.state.notifier = notifier
         app.state.on_rows = on_rows
 
+        cap_settings = captures.capture_settings()  # Etapa B: OCR captures + retention
+        app.state.capture_settings = cap_settings
+        on_capture = captures.make_on_capture(store, cap_settings) if cap_settings.enabled else None
+        app.state.on_capture = on_capture
+        cap_stop = asyncio.Event()
+        retention_task = (asyncio.create_task(captures.retention_loop(store, cap_settings, cap_stop))
+                          if start_poller else None)
+
         client = stop = poller_task = None
         if start_poller and settings.poller_enabled:
             client = httpx.AsyncClient()
             stop = asyncio.Event()
             poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop,
-                                                               store.known_stations))
+                                                               store.known_stations, on_capture))
+        # weather: own supervised task, independent of the poller (never affects health.ok)
+        wx = weather.start(store, settings.weather) if start_poller and settings.weather else None
         try:
             yield
         finally:
+            if wx is not None:
+                await wx.stop()
+            cap_stop.set()
+            if retention_task is not None:
+                await asyncio.gather(retention_task, return_exceptions=True)
             if poller_task is not None:
                 stop.set()
                 try:
@@ -300,12 +320,23 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
 
     @app.get("/api/health")
     def health(request: Request):
-        age = store_of(request).last_ok_age(datetime.now(TZ))
-        return {"ok": age is not None and age <= STALE_S, "age_s": age}
+        store = store_of(request)
+        age = store.last_ok_age(datetime.now(TZ))
+        return {"ok": age is not None and age <= STALE_S, "age_s": age, "version": __version__,
+                "weather_age_s": weather.age_s(store.latest_weather(), datetime.now(timezone.utc))}
+
+    @app.get("/api/changelog")
+    def changelog_(response: Response):
+        response.headers["Cache-Control"] = "no-cache"
+        return {"version": __version__, "entries": changelog()}
 
     @app.get("/api/config")
     def config():
-        return panel_config()
+        return {**panel_config(), "weather": weather.ui_config(settings.weather is not None)}
+
+    @app.get("/api/weather")
+    def weather_now(request: Request):
+        return weather.present(store_of(request).latest_weather(), datetime.now(timezone.utc))
 
     @app.get("/api/history")
     def history(request: Request, response: Response):
@@ -400,6 +431,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         ep, n, day = await _follow_args(request)
         await run_in_threadpool(store_of(request).unfollow, ep, n, day)
         return {"ok": True}
+
+    app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
+    app.include_router(trains_api.router)  # /api/trains (public catalog)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
                    include_in_schema=False)

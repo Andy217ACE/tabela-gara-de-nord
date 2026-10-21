@@ -180,6 +180,7 @@ html[data-view="panou"] main { max-width: 1760px; }
   line-height: 1.1;
 }
 .pnl-clock-time {
+  font-variant-numeric: tabular-nums;
   font-size: clamp(1.25rem, 0.8rem + 1.8vw, 2.4rem);
   font-weight: 700;
   color: var(--p-text);
@@ -721,3 +722,7 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
   .pnl-delay, .pnl-plat, .pnl-chip { border: 1px solid CanvasText; }
   .pnl-row td:first-child { border-left: 4px solid CanvasText; }
 }
+
+/* creditul din Panou dublează footerul paginii: se vede doar în ecran complet
+   (unde footerul paginii nu mai e vizibil) — exact un footer vizibil oricând */
+.pnl:not(.is-fs) .pnl-credit { display: none; }

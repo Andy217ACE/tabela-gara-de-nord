@@ -36,7 +36,8 @@ from app.ocr import preprocess
 from app.ocr.digits import DigitMatcher
 from app.ocr.engine import TESSERACT_TIMEOUT, OcrEngine, OcrError, TesseractEngine
 
-__all__ = ["OcrError", "TESSERACT_TIMEOUT", "read_board", "cell_grid", "COLUMNS"]
+__all__ = ["OcrError", "TESSERACT_TIMEOUT", "read_board", "read_board_debug", "cell_grid",
+           "COLUMNS"]
 
 log = logging.getLogger(__name__)
 
@@ -149,13 +150,23 @@ def _train_no(s: str) -> int:
 
 def cell_grid(board_bgr: np.ndarray) -> list[dict[str, np.ndarray]]:
     """Per detected row of one board: {column name: binary cell image (x3)}."""
+    return [cells for cells, _ in _cell_grid_geo(board_bgr)]
+
+
+def _cell_grid_geo(board_bgr: np.ndarray) -> list[tuple[dict[str, np.ndarray], dict]]:
+    """cell_grid plus each cell's box (x, y, w, h) in board pixels (not the x3 mask)."""
     mask, layout = preprocess.board_masks(board_bgr)
+    s = preprocess.SCALE
     grid = []
     for band in preprocess.row_bands(layout):
         edges = _cell_edges(layout, band)
         strip = mask[band[0]:band[1]]
-        grid.append({name: strip[:, x0:x1]
-                     for name, x0, x1 in zip(_ORDER, edges[:-1], edges[1:])})
+        y, hgt = band[0] // s, max(1, -(-(band[1] - band[0]) // s))
+        grid.append((
+            {name: strip[:, x0:x1] for name, x0, x1 in zip(_ORDER, edges[:-1], edges[1:])},
+            {name: (x0 // s, y, max(1, (x1 - x0) // s), hgt)
+             for name, x0, x1 in zip(_ORDER, edges[:-1], edges[1:])},
+        ))
     return grid
 
 
@@ -214,34 +225,46 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
                stations: Iterable[str] = ()) -> list[Row]:
     """Rows of both boards. `engine` defaults to Tesseract; `stations` are the
     station names learned from the history (added to the curated seed)."""
+    return read_board_debug(image_bytes, engine, stations=stations)[0]
+
+
+def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
+                     stations: Iterable[str] = ()) -> tuple[list[Row], list[dict]]:
+    """(rows, debug): the rows of `read_board` plus one debug dict per detected line,
+    including lines that gave no row (``row`` None: type or time unreadable).
+
+    A debug dict holds ``board``, ``row_index`` (line within its board), ``row``,
+    ``conf`` (0..1), ``raw_text`` (the cells as read, joined) and ``fields``:
+    per column ``{raw, norm, conf (0-100 or None), bbox (x, y, w, h in image px)}``.
+    Same OCR calls as before: debugging costs no accuracy and no extra time.
+    """
     img = _decode(image_bytes)
     if engine is None:
         engine = TesseractEngine()
 
-    slots: list[tuple[str, dict[str, np.ndarray]]] = [
-        (board, cells)
-        for board, half in zip(BOARDS, preprocess.split_boards(img))
-        for cells in cell_grid(half)
-    ]
+    slots: list[tuple[str, int, dict[str, np.ndarray], dict]] = []
+    for board, (half, x_off) in zip(BOARDS, preprocess.split_boards_offsets(img)):
+        for j, (cells, boxes) in enumerate(_cell_grid_geo(half)):
+            slots.append((board, j, cells, {n: (x + x_off, y, w, h)
+                                           for n, (x, y, w, h) in boxes.items()}))
     if not slots:
-        return []
+        return [], []
 
-    reads = {name: _Composite([c[name] for _, c in slots]).read(engine, *_TESS[name])
+    reads = {name: _Composite([c[name] for _, _, c, _ in slots]).read(engine, *_TESS[name])
              for name in _ORDER}
     matcher = _get_matcher()
     seed = canonical.seed_stations()
     known_stations = set(stations) | seed
 
     rows: list[Row] = []
-    for i, (board, cells) in enumerate(slots):
+    debug: list[dict] = []
+    for i, (board, j, cells, boxes) in enumerate(slots):
         cell = {name: reads[name][i] for name in _ORDER}
         for name in _ALLOWED:
             cell[name] = _numeric(name, cells[name], cell[name], matcher)
         type_text, flagged = strip_flag(cell["type"][0])
         train_type = normalize_type(type_text)
         sched = parse_time(cell["time"][0])
-        if train_type is None or sched is None:
-            continue
         confs = [c for _, c in cell.values() if c is not None]
         conf = sum(confs) / len(confs) / 100 if confs else 0.0
         station_raw = clean_station(cell["station"][0])
@@ -250,6 +273,22 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
             station_raw, known_stations, preferred=seed)
         operator, o_score = canonical.canonical_operator(operator_raw)
         delay = parse_delay(cell["delay"][0])  # None: unreadable cell (not "on time")
+        norm = {"type": train_type, "no": _train_no(cell["no"][0]) or None,
+                "station": station, "operator": operator, "time": sched,
+                "delay": delay, "platform": parse_platform(cell["platform"][0])}
+        entry = {
+            "board": board, "row_index": j, "row": None,
+            "conf": min(1.0, max(0.0, conf)),
+            "raw_text": " ".join(t for t in (cell[n][0] for n in _ORDER) if t),
+            "fields": {n: {"raw": cell[n][0], "norm": norm[n],
+                           "conf": None if cell[n][1] is None
+                           else round(min(100.0, max(0.0, cell[n][1])), 1),
+                           "bbox": list(boxes[n])} for n in _ORDER},
+            "station_score": s_score, "operator_score": o_score,
+        }
+        debug.append(entry)
+        if train_type is None or sched is None:
+            continue
         rows.append(Row(
             board=board,
             train_type=train_type,
@@ -267,4 +306,5 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
             # any corrected/unknown station (score < 1) or unmatched operator is uncertain
             uncertain=s_score < 1.0 or o_score < canonical.DEFAULT_THRESHOLD,
         ))
-    return rows
+        entry["row"] = rows[-1]
+    return rows, debug

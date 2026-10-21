@@ -3,12 +3,13 @@
 // - App shell precached; network-first so a deploy is picked up at once, cache when offline.
 // - /api/board: network-first; the last good board is kept and served when offline, with
 //   "sw_offline": true and "sw_cached_at" (ms) added to the JSON so the page can mark it old.
-// - No other /api call is ever cached (history, follows, push are always live).
+// - No other /api call is ever cached (history, follows, push, weather are always live;
+//   weather.js keeps its last value in memory and marks it "date vechi" when offline).
 // - Web Push: shows {title, body, tag, url}; a click focuses/opens `url` (same origin only).
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v4";
+var VERSION = "v6";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -23,6 +24,9 @@ var SHELL = [
   "/history.js",
   "/follows.js",
   "/panel.js",
+  "/weather.css",
+  "/weather.js",
+  "/versions.js",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/icons/logo-96.png",

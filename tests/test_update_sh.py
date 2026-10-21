@@ -103,7 +103,7 @@ def server(tmp_path):
            "PATH": str(fake) + os.pathsep + os.environ.get("PATH", ""),
            "PIP": pip, "PYTHON": posix(sys.executable), "SYSTEMCTL": "systemctl",
            "HEALTH_CMD": "health", "HEALTH_TRIES": "2", "HEALTH_SLEEP": "0",
-           "UNIT_DST": posix(tmp_path / "tabela.service"), "REQUIRE_ROOT": "0"}
+           "UNIT_DST": posix(tmp_path / "tabela.service"), "REQUIRE_ROOT": "0", "SVC_OWNER": ""}
 
     class S:
         pass
@@ -129,6 +129,9 @@ def test_happy_path_migrates_env_and_backs_up_db(server):
     assert "OK:" in r.stdout
     env = server.env_file.read_text(encoding="utf-8").splitlines()
     assert env[1] == "POLLER_ENABLED=1" and env[2].startswith("LAST_IMAGE_PATH=")
+    assert env[3] == "CAPTURE_DIR=" + posix(server.data / "captures")
+    assert (server.data / "captures").is_dir()
+    assert not any(x.startswith("ADMIN_TOKEN") for x in env)  # the secret is never written by the script
     backups = list((server.data / "backups").glob("tabela-*-v2.db"))
     assert len(backups) == 1
     c = sqlite3.connect(backups[0])
@@ -144,6 +147,7 @@ def test_happy_path_migrates_env_and_backs_up_db(server):
     r = server.run()
     assert r.returncode == 0 and "backup" not in r.stdout
     assert server.env_file.read_text().count("LAST_IMAGE_PATH=") == 1
+    assert server.env_file.read_text().count("CAPTURE_DIR=") == 1
 
 
 def test_rolls_back_when_new_commit_is_unhealthy(server):

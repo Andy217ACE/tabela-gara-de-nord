@@ -6,11 +6,15 @@
 #  1. records the running commit (PREV), fetches and checks out origin/<branch>;
 #  2. pip install -r requirements.txt - on failure the old commit is checked out again
 #     and the service is NOT restarted (it keeps running the old code);
-#  3. migrates /etc/tabela.env (adds LAST_IMAGE_PATH if missing);
+#  3. migrates /etc/tabela.env (adds LAST_IMAGE_PATH and CAPTURE_DIR if missing) and
+#     creates CAPTURE_DIR owned by the service user; ADMIN_TOKEN is set by hand (secret);
 #  4. if the new code's store.SCHEMA_VERSION is above the database's user_version,
 #     takes an online SQLite backup first (/var/lib/tabela/backups, last 5 kept);
 #  5. restarts and waits for /api/health; if it never gets healthy, ROLLS BACK to PREV
 #     on the ORIGINAL branch (checkout, pip install, restart, wait) and exits 1.
+#
+# Every deploy bumps the version: VERSION (Beta 1.NN, NN + 1) and a new section on top of
+# CHANGELOG.md (Romanian) - committed BEFORE running this script; it prints the version.
 #
 # Health gate: HEALTH_MODE=strict (default) needs {"ok":true}, i.e. the app is up AND
 # it has read the CFR board recently. When CFR itself is failing that can never pass;
@@ -43,6 +47,7 @@ HEALTH_CMD="${HEALTH_CMD:-curl -fs $HEALTH_URL}"
 HEALTH_TRIES="${HEALTH_TRIES:-90}"     # x HEALTH_SLEEP seconds (default: 3 minutes)
 HEALTH_SLEEP="${HEALTH_SLEEP:-2}"
 HEALTH_MODE="${HEALTH_MODE:-strict}"   # strict | up
+SVC_OWNER="${SVC_OWNER-tabela}"        # owner of CAPTURE_DIR (empty: current user, tests)
 UNIT_SRC="$APP_DIR/deploy/tabela.service"
 UNIT_DST="${UNIT_DST:-/etc/systemd/system/tabela.service}"
 
@@ -181,6 +186,15 @@ echo "== pip install"
 "$PIP" install -q -r "$APP_DIR/requirements.txt" || abort_before_restart "pip install failed"
 
 env_add_missing LAST_IMAGE_PATH "$DATA_DIR/last.jpg" || abort_before_restart "cannot update $ENV_FILE"
+env_add_missing CAPTURE_DIR "$DATA_DIR/captures" || abort_before_restart "cannot update $ENV_FILE"
+CAPTURE_DIR_="$(sed -n 's/^CAPTURE_DIR=//p' "$ENV_FILE" | tail -n 1 | tr -d "\"'")"
+case "$CAPTURE_DIR_" in
+    "") ;;
+    "$DATA_DIR"/*)  # the unit can only write under DATA_DIR (ReadWritePaths)
+        { mkdir -p "$CAPTURE_DIR_" && { [ -z "$SVC_OWNER" ] || {
+            chown "$SVC_OWNER:$SVC_OWNER" "$CAPTURE_DIR_" && chmod 750 "$CAPTURE_DIR_"; }; }; }             || abort_before_restart "cannot prepare $CAPTURE_DIR_" ;;
+    *) echo "WARNING: CAPTURE_DIR=$CAPTURE_DIR_ is outside $DATA_DIR; the service cannot write there" >&2 ;;
+esac
 
 DB="$(db_path)"
 OLD_V="$(db_version "$DB")" || abort_before_restart "cannot read the schema version of $DB"
@@ -195,7 +209,7 @@ echo "== restart"
 $SYSTEMCTL restart tabela
 
 if healthy; then
-    echo "OK: $PREV -> $NEW"
+    echo "OK: $PREV -> $NEW ($(cat "$APP_DIR/VERSION" 2>/dev/null || echo 'fără VERSION'))"
     exit 0
 fi
 

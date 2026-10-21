@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from fastapi.testclient import TestClient
 
+from app.version import __version__
 from app.api import create_app
 from app.config import Settings
 from app.models import Row
@@ -78,7 +79,8 @@ def test_board_fresh_not_stale(client):
 def test_health_false_without_data(client):
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json() == {"ok": False, "age_s": None}
+    assert r.json() == {"ok": False, "age_s": None, "weather_age_s": None,
+                        "version": __version__}
 
 
 def test_health_ok_with_fresh_data_and_false_when_old(client):

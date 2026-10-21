@@ -76,7 +76,8 @@ def test_api_config_defaults(client, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body == {"delay_thresholds": {"low": 5, "mid": 15, "high": 30},
-                    "stale_after_s": 180, "refresh_s": 10}
+                    "stale_after_s": 180, "refresh_s": 10,
+                    "weather": {"enabled": False, "stale_after_s": 2700, "refresh_s": 300}}
 
 
 def test_api_config_env_override(monkeypatch):
@@ -112,3 +113,16 @@ def test_history_shows_truncation_notice():
     js = (WEB / "history.js").read_text(encoding="utf-8")
     assert 'r.headers.get("X-Truncated") === "1"' in js
     assert "primele 500 — restrânge filtrele (oră/stație/tren)" in js
+
+
+def test_exactly_one_attribution_footer_visible():
+    """Bug (desktop, mod Panou): page footer + Panou credit were both visible.
+
+    Statically: outside (pseudo-)fullscreen the Panou credit is hidden, and the page has a
+    single <footer>. The visible-count check runs in Playwright (see task-INT2-report)."""
+    css = (WEB / "panel.css").read_text(encoding="utf-8")
+    assert re.search(r"\.pnl:not\(\.is-fs\)\s+\.pnl-credit\s*\{\s*display:\s*none;", css)
+    js = (WEB / "panel.js").read_text(encoding="utf-8")
+    assert 'S.dom.pnl.classList.toggle("is-fs", on);' in js  # credit returns in fullscreen
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert html.count("<footer") == 1

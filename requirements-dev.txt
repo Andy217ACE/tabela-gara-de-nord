@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest
 pytest-asyncio
+playwright==1.64.0  # optional: tests/test_footer_browser.py (skipped when absent)

@@ -65,6 +65,48 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
   (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
 
+## Capturi și retenție
+
+- Schema v5 (migrare automată, fără ștergeri; din v1/v2/v3/v4): `captures` (o imagine
+  nouă a tabelei: oră UTC, hash, cale relativă, dimensiuni, durata OCR, eroare,
+  `processing_version`), `observations` (o linie OCR: textul brut complet, pe fiecare
+  câmp text brut / valoare normalizată / încredere / dreptunghi, stare de validare
+  `ok | uncertain | rejected_low_conf | incomplete`, legătura cu călătoria) și `trains`
+  (catalogul numerelor de tren: `journeys` = călătorii/servicii, `observations` = citiri
+  OCR utilizabile — două numere distincte; istoricul de dinainte de v5 are 0 observații).
+- Fiecare imagine nouă se salvează **nemodificată** în `CAPTURE_DIR/AAAA/LL/ZZ/HHMMSS-<hash8>.jpg`
+  (UTC); aceeași imagine (același hash) nu creează o captură nouă. Liniile incomplete sau
+  cu încredere mică se păstrează și ele, marcate. O eroare la înregistrare nu oprește
+  niciodată tabela (doar se scrie în jurnal).
+- Variabile: `CAPTURE_ENABLED` (implicit 1), `CAPTURE_DIR` (implicit
+  `/var/lib/tabela/captures` pe server, `data/captures` local), `CAPTURE_RETENTION_DAYS`
+  (implicit 7). O dată pe zi se șterg doar **fișierele** imagine mai vechi decât retenția
+  (rândurile rămân, `path` devine NULL); nu se atinge nimic în afara `CAPTURE_DIR`.
+  `CAPTURE_RETENTION_DAYS=0` nu mai scrie deloc imagini. Sub `CAPTURE_MIN_FREE_MB`
+  (implicit 2048) spațiu liber pe disc nu se mai scriu imagini (doar metadatele), ca baza
+  de date și tabela LIVE să nu rămână fără spațiu; `GET /api/admin/stats` arată spațiul liber.
+  Observațiile rămân în baza de date (~30–40 MB/zi) — de urmărit; compactarea câmpurilor
+  `fields_json` vechi e planificată (fără ștergerea rândurilor).
+- Catalogul `trains` se actualizează la fiecare citire a tabelei (și la fiecare captură).
+- Capturile brute CFR sunt **private**: se văd doar din administrare și nu se redistribuie.
+- Catalog public (fără imagini): `GET /api/trains?query=&limit=` și `GET /api/trains/{nr}`.
+- Dezvoltare: `python scripts/dev_seed.py dev.db --capture-dir data/captures` adaugă și o captură.
+
+## Administrare
+
+- Pagina „Capturi OCR” e la `/#ocr` (nu apare în meniu): listă capturi, imagine cu
+  dreptunghiurile OCR (verde ≥ 80, galben 50–79, roșu < 50), text brut vs normalizat pe
+  câmp, „Copiază JSON”, plus starea sistemului (`GET /api/admin/stats`).
+- Se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 12 caractere; recomandat un șir aleator lung; fără el toate
+  `/api/admin/*` răspund 503 „Administrare dezactivată”). Generare:
+  `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
+- Autentificare: `Authorization: Bearer <token>` sau formularul din pagină (cookie
+  HttpOnly, Secure, SameSite=Strict, 12 h; cookie-ul nu conține tokenul). 5 încercări
+  greșite/minut/IP → 429 (și 30/minut în total, pentru toți); nginx limitează în plus `POST /api/admin/login` la 5/min
+  (zona `tabela_admin_login` din `deploy/tabela-limits.conf`). Răspunsurile admin au
+  `Cache-Control: private, no-store` și nu trec prin cache-ul service worker-ului.
+  Schimbarea `ADMIN_TOKEN` invalidează toate sesiunile.
+
 ## Deploy (server Ubuntu 24.04)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).
@@ -86,6 +128,12 @@ utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, ven
 de reload; copia anterioară a site-ului ajunge în `/root/backup-<data>/tabela.site.bak` și
 e restaurată automat dacă testul eșuează). `ufw` nu se activează: firewall-ul e NSG-ul Azure.
 
+**La fiecare deploy crește versiunea și completează istoricul:** în `VERSION` se trece
+`Beta 1.NN` cu NN mărit cu 1 (ex. `Beta 1.01` → `Beta 1.02`), iar în `CHANGELOG.md` se
+adaugă sus o secțiune `## Beta 1.NN — AAAA-LL-ZZ` cu `### Adăugat` / `### Reparat` (în
+română). Versiunea apare în footer (link spre ecranul „Versiuni”, `#versiuni`), în
+`/api/health` (câmpul `version`) și în `/api/changelog`; `update.sh` o afișează la final.
+
 Actualizare (după `git push` pe branch):
 
     sudo bash /opt/tabela/app/deploy/update.sh
@@ -95,7 +143,8 @@ face, în ordine:
 1. notează commit-ul curent (PREV) și refuză clar un HEAD detașat (dați branch-ul explicit);
 2. `git fetch` + checkout pe branch, apoi `pip install -r requirements.txt` — dacă pip eșuează,
    pune înapoi codul vechi și **nu** repornește serviciul;
-3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`);
+3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`, `CAPTURE_DIR`)
+   și creează `CAPTURE_DIR` (proprietar `tabela`); `ADMIN_TOKEN` se pune manual (secret);
 4. dacă noul cod are o versiune de schemă mai mare decât baza de date (`PRAGMA user_version`),
    face întâi un backup online SQLite (`sqlite3 .backup`) în `/var/lib/tabela/backups/`
    (se păstrează ultimele 5);
@@ -169,7 +218,9 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
 - Date: `/var/lib/tabela/tabela.db` (SQLite, istoric + abonări) și
   `/var/lib/tabela/last.jpg` (ultima imagine a tabelei, utilă la depanarea OCR).
 - Variabile în `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
-  `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` (opțional `TESSERACT_CMD`).
+  `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `CAPTURE_DIR`, `ADMIN_TOKEN`
+  (opțional `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`); model fără valori
+  reale în `.env.example`.
 - Chei VAPID: generate o singură dată de `install.sh` (dacă lipsesc din `/etc/tabela.env`);
   nu se regenerează niciodată, altfel toate abonările push existente devin invalide.
   Cheia privată nu iese din `/etc/tabela.env`; subiectul VAPID e URL-ul site-ului.
@@ -177,8 +228,36 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
   schimbă (de obicei 1–4 cereri/minut, plafon fix de 10/minut, backoff la erori) și se
   identifică prin User-Agent. Nu rulați mai multe instanțe/workeri pe aceeași sursă.
 
+## Meteo
+
+Lângă ceas (în antetul vizualizării Carduri și în bara de titlu a Panoului) apare un widget
+mic cu vremea din București: pictogramă, temperatură, „se simte", vânt; la apăsare/hover un
+popover cu detalii (precipitații, ora observației, sursa).
+
+- Serverul (nu browserul — CSP rămâne `connect-src 'self'`) cere blocul `current` de la
+  Open-Meteo (`temperature_2m, precipitation, weather_code, wind_speed_10m,
+  wind_direction_10m, apparent_temperature`) la fiecare 15 minute, într-o sarcină proprie,
+  independentă de poller-ul CFR: o eroare meteo nu afectează tabela și nici `ok` din
+  `/api/health` (care primește doar `weather_age_s`). Backoff la erori (5 → 30 min), niciodată
+  mai mult de o cerere la 5 minute, nici după repornire.
+- Etichetare onestă: valorile `current` sunt **date de model** pentru celula de grilă a
+  coordonatelor, nu măsurătorile unei stații meteo. Se salvează cu `kind = model_current` și
+  se afișează „Condiții curente (model Open-Meteo)". Valoare lipsă = `NULL`/„—", niciodată 0
+  (0,0 mm precipitații e o valoare reală). Peste 45 de minute datele apar gri, „date vechi".
+- Stocare: tabelul `weather_observations` (schema v4, migrare aditivă), un rând per oră de
+  observație (UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi) pentru analiza
+  „Meteo și trenuri" din Etapa G. API: `GET /api/weather`; `GET /api/config` → `weather`.
+- Variabile (opționale) în `/etc/tabela.env`: `WEATHER_ENABLED` (implicit `1`; `0` oprește
+  serviciul și ascunde widgetul), `WEATHER_INTERVAL_S` (implicit `900`, minim `300`),
+  `WEATHER_LAT` / `WEATHER_LON` (implicit `44.4323` / `26.1063`), `WEATHER_URL` (implicit
+  `https://api.open-meteo.com/v1/forecast`).
+- Licență și atribuire: datele meteo sunt de la [Open-Meteo.com](https://open-meteo.com/),
+  sub licența **CC BY 4.0** (API-ul gratuit este pentru uz necomercial); atribuirea apare în
+  popover, în subsolul paginii și în creditul Panoului (vizibil și în ecran complet).
+
 ## Atribuire
 
 Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: https://cfr.ro. © 2026 Andy217Ace.
+Meteo: Open-Meteo.com (CC BY 4.0), valori de model.
 
 Licență: MIT (vezi `LICENSE`).

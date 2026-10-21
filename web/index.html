@@ -42,6 +42,9 @@
   <script src="follows.js" defer></script>
   <link rel="stylesheet" href="panel.css">
   <script src="panel.js" defer></script>
+  <link rel="stylesheet" href="weather.css">
+  <script src="weather.js" defer></script>
+  <script src="versions.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -55,6 +58,12 @@
           <span class="brand-sub">Sosiri și plecări</span>
         </span>
       </a>
+
+      <!-- ceas + vreme (web/weather.js); ascunse cât e vizibil Panoul, care are ceasul lui -->
+      <div class="hdr-clockwx">
+        <time class="hdr-clock" id="hdr-clock"><span class="hdr-clock-time">--:--:--</span><span class="hdr-clock-date"></span></time>
+        <div class="wx-slot" data-weather-slot="header"></div>
+      </div>
 
       <button class="theme-btn" type="button" id="theme-btn" aria-label="Temă: automată" title="Temă: automată (urmează sistemul). Apasă pentru luminoasă.">
         <svg class="theme-icon theme-icon-auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="theme-fill"/></svg>
@@ -222,6 +231,15 @@
       <ul class="f-list" id="f-list"></ul>
       <p class="empty" id="f-empty" hidden>Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
     </section>
+
+    <section class="view view-versions" id="view-versiuni" aria-labelledby="versiuni-heading" hidden>
+      <div class="page-head">
+        <h1 id="versiuni-heading">Versiuni</h1>
+        <p class="page-sub" id="v-current"></p>
+      </div>
+      <p class="notice notice-error" id="v-error" role="alert" hidden></p>
+      <div class="v-list" id="v-list"></div>
+    </section>
   </main>
 
   <div class="toast" id="toast" role="status" hidden></div>
@@ -229,6 +247,8 @@
   <footer class="footer">
     <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
+    <span class="footer-meteo">Meteo: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> · CC BY 4.0 (valori de model)</span>
+    <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor">Versiuni</a>
   </footer>
 </body>
 </html>
