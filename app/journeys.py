@@ -36,9 +36,10 @@ JOURNEY_SQL = (
     "SELECT s.id, s.board, s.service_date, s.train_type, s.train_no, s.station, s.operator,"
     " s.sched_time, s.first_seen, s.last_seen, s.last_delay, s.last_platform, s.status,"
     " s.uncertain, s.delay_read_at,"
-    " (SELECT MAX(e.ts) FROM events e WHERE e.service_id = s.id AND e.kind = 'gone') AS gone_at,"
-    " (SELECT MAX(e.ts) FROM events e WHERE e.service_id = s.id AND e.kind = 'appeared')"
-    " AS appeared_at"
+    " (SELECT e.ts FROM events e WHERE e.service_id = s.id AND e.kind = 'gone'"
+    "  ORDER BY e.id DESC LIMIT 1) AS gone_at,"
+    " (SELECT e.ts FROM events e WHERE e.service_id = s.id AND e.kind = 'appeared'"
+    "  ORDER BY e.id DESC LIMIT 1) AS appeared_at"
     " FROM services s"
 )
 
@@ -159,8 +160,9 @@ def delay_series(store, service_id: int, s) -> list[dict]:
         has_obs = c.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
                             " AND name='observations'").fetchone()
         obs = c.execute("SELECT observed_at, delay_min FROM observations WHERE service_id=?"
-                        " AND delay_read=1 AND delay_min IS NOT NULL", (service_id,)).fetchall() \
-            if has_obs else []
+                        " AND delay_read=1 AND delay_min IS NOT NULL"
+                        " AND validation_state IN ('ok', 'uncertain') ORDER BY id",
+                        (service_id,)).fetchall() if has_obs else []
         evs = c.execute("SELECT ts, old, new FROM events WHERE service_id=? AND kind='delay'"
                         " ORDER BY ts, id", (service_id,)).fetchall()
     for e in evs:
@@ -168,8 +170,16 @@ def delay_series(store, service_id: int, s) -> list[dict]:
     if evs and (_int(evs[0]["old"]) or 0) > 0:
         # a non-zero previous value was a real reading, held since the first sighting
         add(s["first_seen"], _int(evs[0]["old"]), "event")
-    for o in obs:
-        add(o["observed_at"], o["delay_min"], "observation")
+    # An OCR reading the store did not apply (e.g. a one-frame jump "15" -> "945") is not
+    # drawn: keep an observation only if its value was applied (a delay event / the
+    # stored value) or the next reading confirms it (the two-readings rule).
+    applied = {_int(e["new"]) for e in evs} | {_int(e["old"]) for e in evs}
+    if s["delay_read_at"]:
+        applied.add(s["last_delay"])
+    for k, o in enumerate(obs):
+        nxt = obs[k + 1]["delay_min"] if k + 1 < len(obs) else None
+        if o["delay_min"] in applied or o["delay_min"] == nxt:
+            add(o["observed_at"], o["delay_min"], "observation")
     if s["delay_read_at"]:
         add(s["delay_read_at"], s["last_delay"], "last_read")
     return sorted(pts.values(), key=lambda p: _dt(p["t"]))

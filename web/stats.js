@@ -66,6 +66,10 @@
 
   function stationLink(name, uncertain) {
     if (!name) return el("span", null, "—");
+    // the station page (#statie) ships separately: until its view exists, plain text
+    if (!(window.TabelaApp.views && window.TabelaApp.views.statie)) {
+      return el("span", uncertain ? "station-name is-uncertain" : "station-name", titleCase(name));
+    }
     var a = el("a", "station-link", titleCase(name));
     a.href = "#statie?nume=" + encodeURIComponent(name);
     if (uncertain) {

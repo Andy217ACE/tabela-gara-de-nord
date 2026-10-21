@@ -89,7 +89,7 @@ async def journeys_list(request: Request):
         raise _bad("Numele stației este prea lung.")
     if station:
         where.append("s.station = ?")
-        args.append(station.upper())
+        args.append(stations.canonical(station) or station.upper())
     state = q.get("state") or None
     if state is not None and state not in STATES:
         raise _bad("Stare invalidă.")
@@ -150,6 +150,8 @@ async def train_journeys(request: Request, no: str):
 @router.get("/api/stats")
 async def stats_overview(request: Request):
     p = params(request)
+    if _fmt(request) == "csv":
+        raise _bad("Pentru export CSV folosiți /api/journeys?format=csv sau /api/trains/stats?format=csv.")
     return await run_in_threadpool(stats.overview, _store(request), p)
 
 

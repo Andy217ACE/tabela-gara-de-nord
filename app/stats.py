@@ -125,7 +125,7 @@ class Params:
                 "final_read_max_gap_min": journeys.final_gap_min()}
 
 
-_CACHE_MAX = 64  # cached journey sets per store (store._stats_cache)
+_CACHE_MAX = 16  # cached journey sets per store and data generation (store._stats_cache)
 
 
 def load(store, p: Params, where: list[str] | None = None, args: list | None = None) -> list[dict]:
@@ -138,8 +138,14 @@ def load(store, p: Params, where: list[str] | None = None, args: list | None = N
         stamp = store._conn.execute(
             "SELECT (SELECT MAX(id) FROM runs), (SELECT MAX(id) FROM events),"
             " (SELECT COUNT(*) FROM services), (SELECT MAX(id) FROM services)").fetchone()
-    cache = store.__dict__.setdefault("_stats_cache", {})
-    key = (tuple(w), tuple(a), gap, tuple(stamp))
+    # One generation per store: any new run/event/service drops every cached set (the
+    # dict is only touched under the GIL; a race at worst recomputes or serves the
+    # previous generation for one request).
+    if store.__dict__.get("_stats_stamp") != tuple(stamp):
+        store.__dict__["_stats_cache"] = {}
+        store.__dict__["_stats_stamp"] = tuple(stamp)
+    cache = store.__dict__["_stats_cache"]
+    key = (tuple(w), tuple(a), gap)
     hit = cache.get(key)
     if hit is not None:
         return hit
@@ -345,8 +351,17 @@ def to_csv(header: list[str], rows: list[list]) -> str:
     w = csv.writer(buf, lineterminator="\r\n")
     w.writerow(header)
     for r in rows:
-        w.writerow(["" if v is None else v for v in r])
+        w.writerow([_cell(v) for v in r])
     return buf.getvalue()
+
+
+def _cell(v):
+    """CSV cell; text starting like a spreadsheet formula is prefixed with ' (inert)."""
+    if v is None:
+        return ""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + v
+    return v
 
 
 STAT_COLS = ["n", "mean", "median", "p90", "max", "on_time", "on_time_pct", "over_30",

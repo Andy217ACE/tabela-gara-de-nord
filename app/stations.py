@@ -10,6 +10,7 @@ destination are never attributed to it.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
 
 from app import stats
 from app.normalize import clean_station
@@ -23,6 +24,10 @@ JOURNEYS_PAGE_MAX = 500
 
 def canonical(name: str) -> str:
     return clean_station(name or "")
+
+
+def _when(stamp: str):
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
 def list_stations(store, query: str | None = None, limit: int = 100) -> list[dict]:
@@ -104,7 +109,8 @@ def detail(store, name: str, p: stats.Params) -> dict | None:
             "rank": {"position": None if pos is None else pos + 1,
                      "of": sum(1 for r in ranking if r["board"] == b)},
         }
-    stamps = sorted(j["first_seen"] for j in js) + sorted(j["last_seen"] for j in js)
+    firsts = [j["first_seen"] for j in js]
+    lasts = [j["last_seen"] for j in js]
     dates = sorted(j["service_date"] for j in js)
     return {
         "params": p.echo(),
@@ -113,7 +119,7 @@ def detail(store, name: str, p: stats.Params) -> dict | None:
         "journeys": len(js),
         "trains": len({j["train_no"] for j in js}),
         "uncertain_names": sum(1 for j in js if j["uncertain"]),
-        "first_seen": min(stamps), "last_seen": max(stamps),
+        "first_seen": min(firsts, key=_when), "last_seen": max(lasts, key=_when),
         "period": {"first": dates[0], "last": dates[-1], "days": len(set(dates))},
         "quality": stats.quality(js),
         "boards": boards,

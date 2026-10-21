@@ -238,9 +238,12 @@ def _backfill_delay_read_at(c: sqlite3.Connection) -> None:
     if not has_obs:
         return
     upd = []
-    for sid, at in c.execute("SELECT service_id, MAX(observed_at) FROM observations"
-                             " WHERE delay_read=1 AND service_id IS NOT NULL"
-                             " GROUP BY service_id").fetchall():
+    # only readings the store applied: confident rows whose value is the stored one
+    for sid, at in c.execute("SELECT o.service_id, MAX(o.observed_at) FROM observations o"
+                             " JOIN services s ON s.id = o.service_id"
+                             " WHERE o.delay_read=1 AND o.validation_state IN ('ok','uncertain')"
+                             " AND o.delay_min = s.last_delay"
+                             " GROUP BY o.service_id").fetchall():
         try:
             t = _local(datetime.fromisoformat(at.replace("Z", "+00:00")))
         except (ValueError, AttributeError):
@@ -282,8 +285,8 @@ class Store:
         self._misread_next: dict[int, tuple[tuple, int]] = {}
         # service id -> delay read once after a jump > DELAY_JUMP_CONFIRM (e.g. "15" read as
         # "945"): applied only when the next frame reads the same value.
-        self._jump: dict[int, int] = {}
-        self._jump_next: dict[int, int] = {}
+        self._jump: dict[int, tuple[str, int]] = {}  # sid -> (panel, value)
+        self._jump_next: dict[int, tuple[str, int]] = {}
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -447,7 +450,8 @@ class Store:
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
                 self._misread = self._misread_next
-                self._jump = self._jump_next
+                self._jump = {**{k: v for k, v in self._jump.items() if v[0] not in accepted},
+                              **self._jump_next}
                 self._delay_read.update(self._pending_read)
                 if len(self._delay_read) > 4000:  # bounded: old services drop out
                     self._delay_read = dict(self._pending_read)
@@ -599,16 +603,19 @@ class Store:
             row = replace(r, sched_time=cur["sched_time"], train_no=cur["train_no"])
             if cur["status"] == "gone":
                 emit(sid, "appeared", row, sd)
+            held = False
             if (r.delay_read and cur["delay_read_at"] is not None
                     and abs(r.delay_min - cur["last_delay"]) > DELAY_JUMP_CONFIRM
-                    and self._jump.get(sid) != r.delay_min):
+                    and self._jump.get(sid) != (r.board, r.delay_min)):
                 # implausible jump in one frame: wait for a second identical reading
-                self._jump_next[sid] = r.delay_min
+                self._jump_next[sid] = (r.board, r.delay_min)
                 r = replace(r, delay_read=False)
                 row = replace(row, delay_read=False)
+                held = True
             # unreadable delay: keep the last real reading, no event, no overwrite
             delay = r.delay_min if r.delay_read else cur["last_delay"]
-            self._pending_read[sid] = r.delay_read
+            # a held jump keeps showing the last proven value (a reading, not "necitit")
+            self._pending_read[sid] = r.delay_read or held
             if r.delay_read and cur["last_delay"] != r.delay_min:
                 emit(sid, "delay", row, sd, str(cur["last_delay"]), str(r.delay_min))
             if cur["last_platform"] != r.platform:
@@ -813,6 +820,10 @@ class Store:
             found = self._conn.execute(sql, args).fetchall()
         return [{
             "id": s["id"], "delay_known": s["delay_read_at"] is not None,
+            # display only: a delay was read at some point (pre-v6 delay events count);
+            # statistics use delay_known (proof stored per journey)
+            "delay_seen": s["delay_read_at"] is not None or (s["ev_max"] or 0) > 0
+            or (s["last_delay"] or 0) > 0,
             "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
             "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
             "max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),

@@ -148,3 +148,19 @@ def test_detail_missing():
     s.migrate()
     assert journeys.detail(s, 999) is None
     s.close()
+
+
+def test_series_skips_unapplied_observation(store):
+    store.ingest(frame(t1621=15), at(12, 0))
+    store.ingest(frame(t1621=945), at(12, 1))  # held: not applied
+    store.ingest(frame(t1621=16), at(12, 2))
+    sid = store._conn.execute("SELECT id FROM services WHERE train_no=1621").fetchone()[0]
+    c = store._conn
+    cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES ('x','h',1)").lastrowid
+    for k, (v, state) in enumerate(((15, "ok"), (945, "ok"), (16, "ok"), (99, "rejected_low_conf"))):
+        c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
+                  " delay_min, delay_read, validation_state, processing_version)"
+                  " VALUES (?,?,'arrival',0,?,?,1,?,'t')",
+                  (cap, sid, at(12, k).isoformat(), v, state))
+    vals = [p["delay"] for p in journeys.detail(store, sid)["delay_series"]]
+    assert 945 not in vals and 99 not in vals and vals[-1] == 16

@@ -247,3 +247,14 @@ def test_cache_invalidated_by_new_data(store):
     store._conn.execute("UPDATE services SET status='gone' WHERE status='listed'")
     store._conn.execute("INSERT INTO runs(ts, ok, n_rows) VALUES ('x', 1, 0)")
     assert stats.overview(store, p)["quality"]["states"]["in_progress"] == 0
+
+
+def test_csv_formula_cells_are_inert():
+    out = stats.to_csv(["a", "b"], [["=HYPERLINK(1)", 5], ["-3", None], ["ok", -3]])
+    lines = out.lstrip("﻿").splitlines()
+    assert lines[1] == "'=HYPERLINK(1),5" and lines[2] == "'-3," and lines[3] == "ok,-3"
+
+
+def test_api_stats_csv_rejected_and_station_canonical(client):
+    assert client.get("/api/stats?format=csv").status_code == 422
+    assert client.get("/api/journeys?station=Constanța").json()["n"] == 1

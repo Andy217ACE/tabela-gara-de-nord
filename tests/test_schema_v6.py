@@ -118,8 +118,8 @@ def test_v5_to_v6_backfill(tmp_path):
     assert got[a] is None
     assert got[b] is None
     assert got[d] is None
-    # observation 09:05Z = 12:05 local (the delay event is not used)
-    assert got[e] == "2026-10-20T12:05:00+03:00"
+    # its observation read 0, not the stored 12: not proof of the stored value
+    assert got[e] is None
     assert got[g] == "2026-10-20T12:25:00+03:00"  # stored in local time, like services
     s.migrate()  # idempotent
     assert dict(s._conn.execute("SELECT id, delay_read_at FROM services")) == got
@@ -169,3 +169,30 @@ def test_delay_jump_needs_two_readings(store):
     kinds = [r[0] for r in store._conn.execute(
         "SELECT new FROM events WHERE kind='delay' ORDER BY id")]
     assert kinds == ["16", "80"]
+
+
+def test_backfill_ignores_unapplied_readings(tmp_path):
+    p, (a, b, d, e, g) = _v5(tmp_path)
+    c = sqlite3.connect(p)
+    cap = c.execute("SELECT id FROM captures").fetchone()[0]
+    # newer low-confidence reading, and a newer confident one with another value: neither
+    # was applied by the store (last_delay stays 12), so neither is proof
+    for state, val, at in (("rejected_low_conf", 12, "2026-10-20T09:40:00+00:00"),
+                           ("ok", 945, "2026-10-20T09:41:00+00:00")):
+        c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
+                  " delay_min, delay_read, validation_state, processing_version)"
+                  " VALUES (?,?,'arrival',0,?,?,1,?,'t')", (cap, e, at, val, state))
+    c.commit()
+    c.close()
+    s = Store(str(p))
+    s.migrate()
+    got = dict(s._conn.execute("SELECT id, delay_read_at FROM services"))
+    assert got[e] is None  # its only applied-value observation (0 at 09:05) != last_delay 12
+    s.close()
+
+
+def test_held_jump_still_shows_as_read(store):
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 15)}), T0)
+    store.ingest(rows({1621: R("arrival", 1621, "12:10", 945)}), T0 + timedelta(minutes=1))
+    sid = store._conn.execute("SELECT id FROM services WHERE train_no=1621").fetchone()[0]
+    assert store._delay_read.get(sid, True) is True

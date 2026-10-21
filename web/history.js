@@ -213,7 +213,7 @@
     var tbody = el("tbody");
     services.forEach(function (s) {
       var tr = el("tr", "h-row");
-      var known = s.delay_known !== false;
+      var known = s.delay_seen != null ? s.delay_seen !== false : s.delay_known !== false;
       tr.dataset.delay = known ? delayLevel(s.max_delay) : "unread";
       cell(tr, "Ora programată", "h-time", s.sched_time || "--:--");
       cell(tr, "Panou", "h-board", BOARD_LABEL[s.board] || s.board);
