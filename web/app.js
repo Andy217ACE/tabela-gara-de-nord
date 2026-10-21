@@ -190,7 +190,8 @@
     c.station.setAttribute("aria-label", where + (t.station || "stație necunoscută") +
       (unsure ? " (citire nesigură)" : ""));
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
-    c.station.title = unsure ? UNSURE : "";
+    // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
+    c.station.title = t.station ? t.station + (unsure ? " (" + UNSURE + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = t.train_type || "?";
     c.type.title = "Tip tren " + (t.train_type || "necunoscut");
@@ -199,7 +200,7 @@
     c.op.textContent = t.operator || "";
     c.op.hidden = !t.operator;
     c.op.classList.toggle("is-uncertain", unsure && !!t.operator);
-    c.op.title = unsure ? UNSURE : "";
+    c.op.title = t.operator ? t.operator + (unsure ? " (" + UNSURE + ")" : "") : "";
 
     c.delay.className = "delay delay-" + level;
     c.delay.replaceChildren(

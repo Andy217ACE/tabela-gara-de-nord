@@ -81,3 +81,10 @@ def test_deploy_docs_require_version_bump():
     upd = (ROOT / "deploy" / "update.sh").read_text(encoding="utf-8")
     assert "CHANGELOG.md" in readme and "VERSION" in readme
     assert "CHANGELOG.md" in upd and "VERSION" in upd
+
+
+def test_beta_103_lists_the_layout_fix():
+    e = {x["version"]: x for x in v.changelog()}["Beta 1.03"]
+    blob = " ".join(i for g in e["groups"] for i in g["items"]).lower()
+    for word in ("panou", "lățimea coloanelor", "ecran complet", "carduri", "tooltip"):
+        assert word in blob, word

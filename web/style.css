@@ -593,6 +593,12 @@ main {
   line-height: 1.25;
   overflow-wrap: anywhere;
   text-transform: capitalize;
+  /* nume lungi: cel mult 2 rânduri, apoi „…" (numele complet e în title) */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .t-meta {
@@ -612,7 +618,13 @@ main {
   color: var(--text);
 }
 
-.t-op { white-space: nowrap; }
+.t-op {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .t-flag {
   font-family: var(--mono);
@@ -1300,12 +1312,18 @@ main {
   .tabs { display: none; }
   .boards {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 28px;
     margin-top: 18px;
     align-items: start;
   }
-  .boards .board { display: block !important; }
+  .boards .board { display: block !important; min-width: 0; }
+  /* coloane alăturate: carduri de aceeași înălțime (stația pe un rând, operatorul trunchiat
+     pe rândul tipului), ca rândurile din Sosiri și Plecări să rămână aliniate */
+  .t-station { -webkit-line-clamp: 1; line-clamp: 1; }
+  .t-meta { flex-wrap: nowrap; }
+  .t-meta > * { flex: 0 0 auto; }
+  .t-meta > .t-op { flex: 0 1 auto; }
   .board-title { display: flex; }
 
   .toast { bottom: 24px; }
