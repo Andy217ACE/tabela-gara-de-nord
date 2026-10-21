@@ -67,7 +67,7 @@ def seed(c, board):
 
 
 ENDPOINTS = ["/api/admin/captures", "/api/admin/captures/1", "/api/admin/captures/1/image",
-             "/api/admin/captures/1/overlay.png", "/api/admin/stats", "/api/admin/session"]
+             "/api/admin/captures/1/overlay.png", "/api/admin/stats"]
 
 
 # -- auth matrix ------------------------------------------------------------------
@@ -77,6 +77,14 @@ def test_disabled_without_token_503(client, monkeypatch, path):
     monkeypatch.delenv("ADMIN_TOKEN")
     r = client.get(path, headers=AUTH)
     assert r.status_code == 503 and r.json()["detail"] == "Administrare dezactivată."
+
+
+def test_session_endpoint_always_200(client, monkeypatch):
+    r = client.get("/api/admin/session")
+    assert r.status_code == 200 and r.json() == {"enabled": True, "authenticated": False}
+    assert r.headers["cache-control"] == "private, no-store"
+    monkeypatch.delenv("ADMIN_TOKEN")
+    assert client.get("/api/admin/session").json() == {"enabled": False, "authenticated": False}
 
 
 def test_short_token_counts_as_disabled(client, monkeypatch):
@@ -114,9 +122,9 @@ def test_compare_is_timing_safe(client, monkeypatch):
         return real(a, b)
 
     monkeypatch.setattr(admin.hmac, "compare_digest", spy)
-    client.get("/api/admin/session", headers=AUTH)
+    client.get("/api/admin/stats", headers=AUTH)
     client.post("/api/admin/login", json={"token": TOKEN})
-    client.get("/api/admin/session")  # cookie
+    client.get("/api/admin/stats")  # cookie
     assert len(calls) >= 3
 
 
@@ -127,10 +135,12 @@ def test_login_sets_strict_cookie_and_logout_clears(client):
     assert "httponly" in sc and "secure" in sc and "samesite=strict" in sc
     assert "path=/api/admin" in sc and "max-age=43200" in sc
     assert TOKEN.lower() not in sc  # the token itself is never in the cookie
-    assert client.get("/api/admin/session").status_code == 200  # cookie works
+    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": True}
+    assert client.get("/api/admin/stats").status_code == 200  # cookie works
     out = client.post("/api/admin/logout")
     assert out.status_code == 200
-    assert client.get("/api/admin/session").status_code == 401
+    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": False}
+    assert client.get("/api/admin/stats").status_code == 401
 
 
 def test_login_wrong_token_and_bad_body(client):

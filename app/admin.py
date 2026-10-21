@@ -201,9 +201,13 @@ async def logout():
     return resp
 
 
-@guarded.get("/session")
-def session():
-    return _json({"ok": True})
+@router.get("/session")
+def session(request: Request):
+    """Login state for the UI, always 200 (no failed request on a normal visit).
+    Only the cookie is checked here; it never counts as a failed attempt."""
+    token = admin_token()
+    ok = token is not None and check_session(token, request.cookies.get(COOKIE))
+    return _json({"enabled": token is not None, "authenticated": bool(ok)})
 
 
 @guarded.get("/captures")

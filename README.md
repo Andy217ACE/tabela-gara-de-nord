@@ -65,6 +65,42 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
   (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
 
+## Capturi și retenție
+
+- Schema v5 (migrare automată, fără ștergeri; din v1/v2/v3/v4): `captures` (o imagine
+  nouă a tabelei: oră UTC, hash, cale relativă, dimensiuni, durata OCR, eroare,
+  `processing_version`), `observations` (o linie OCR: textul brut complet, pe fiecare
+  câmp text brut / valoare normalizată / încredere / dreptunghi, stare de validare
+  `ok | uncertain | rejected_low_conf | incomplete`, legătura cu călătoria) și `trains`
+  (catalogul numerelor de tren: `journeys` = călătorii/servicii, `observations` = citiri
+  OCR utilizabile — două numere distincte; istoricul de dinainte de v5 are 0 observații).
+- Fiecare imagine nouă se salvează **nemodificată** în `CAPTURE_DIR/AAAA/LL/ZZ/HHMMSS-<hash8>.jpg`
+  (UTC); aceeași imagine (același hash) nu creează o captură nouă. Liniile incomplete sau
+  cu încredere mică se păstrează și ele, marcate. O eroare la înregistrare nu oprește
+  niciodată tabela (doar se scrie în jurnal).
+- Variabile: `CAPTURE_ENABLED` (implicit 1), `CAPTURE_DIR` (implicit
+  `/var/lib/tabela/captures` pe server, `data/captures` local), `CAPTURE_RETENTION_DAYS`
+  (implicit 7). O dată pe zi se șterg doar **fișierele** imagine mai vechi decât retenția
+  (rândurile rămân, `path` devine NULL); nu se atinge nimic în afara `CAPTURE_DIR`.
+- Capturile brute CFR sunt **private**: se văd doar din administrare și nu se redistribuie.
+- Catalog public (fără imagini): `GET /api/trains?query=&limit=` și `GET /api/trains/{nr}`.
+- Dezvoltare: `python scripts/dev_seed.py dev.db --capture-dir data/captures` adaugă și o captură.
+
+## Administrare
+
+- Pagina „Capturi OCR” e la `/#ocr` (nu apare în meniu): listă capturi, imagine cu
+  dreptunghiurile OCR (verde ≥ 80, galben 50–79, roșu < 50), text brut vs normalizat pe
+  câmp, „Copiază JSON”, plus starea sistemului (`GET /api/admin/stats`).
+- Se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 16 caractere; fără el toate
+  `/api/admin/*` răspund 503 „Administrare dezactivată”). Generare:
+  `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
+- Autentificare: `Authorization: Bearer <token>` sau formularul din pagină (cookie
+  HttpOnly, Secure, SameSite=Strict, 12 h; cookie-ul nu conține tokenul). 5 încercări
+  greșite/minut/IP → 429; nginx limitează în plus `POST /api/admin/login` la 5/min
+  (zona `tabela_admin_login` din `deploy/tabela-limits.conf`). Răspunsurile admin au
+  `Cache-Control: private, no-store` și nu trec prin cache-ul service worker-ului.
+  Schimbarea `ADMIN_TOKEN` invalidează toate sesiunile.
+
 ## Deploy (server Ubuntu 24.04)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).
