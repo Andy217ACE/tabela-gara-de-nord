@@ -800,8 +800,9 @@
     qs.append(ul);
     qs.append(el("p", "st-note", (q.uncertain_names || 0) + " călătorii au numele stației/operatorului citit nesigur."));
     qs.append(el("p", "st-warn",
-      "Datele de dinainte de Beta 1.04 au întârzierea „necunoscută”: atunci citirea întârzierii nu era " +
-      "înregistrată pe fiecare călătorie, deci nu o putem folosi. Ele apar ca „necunoscute” și nu intră în statistici."));
+      "Înainte de Beta 1.04 citirea întârzierii nu era înregistrată pe fiecare călătorie: pentru majoritatea " +
+      "călătoriilor de atunci întârzierea este „necunoscută” (nu 0) și nu intră în statistici. Doar cele cu " +
+      "citiri păstrate în observațiile OCR (din Beta 1.01) sunt folosite."));
     v.body.append(qs);
 
     var cards = el("div", "st-cards");
