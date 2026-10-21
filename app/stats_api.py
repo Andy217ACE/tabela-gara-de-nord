@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import journeys, stats
+from app import journeys, stations, stats
 
 router = APIRouter()
 MAX_QUERY = 40
@@ -158,13 +158,83 @@ async def stats_rankings(request: Request):
     p = params(request)
     fmt = _fmt(request)
     limit = _int(request.query_params.get("limit"), "limit", 1, RANK_MAX) or 10
-    d = await run_in_threadpool(stats.rankings, _store(request), p, limit)
+
+    def run():
+        d = stats.rankings(_store(request), p, limit)
+        st = stations.rank_stations(stats.load(_store(request), p), p, limit)
+        st.pop("_ranked")
+        d["stations"] = st
+        return d
+
+    d = await run_in_threadpool(run)
     if fmt == "csv":
         rows = []
         for name in ("most_delayed", "most_punctual"):
             for i, e in enumerate(d[name], 1):
                 rows.append([name, i, e["train_no"], e["board"], e["station"]]
                             + [e["stats"][c] for c in stats.STAT_COLS])
+            for i, e in enumerate(d["stations"][name], 1):
+                rows.append(["stations_" + name, i, "", e["board"], e["station"]]
+                            + [e["stats"][c] for c in stats.STAT_COLS])
         return _csv(stats.to_csv(["list", "rank", "train_no", "board", "station"]
                                  + stats.STAT_COLS, rows), "clasamente.csv")
     return d
+
+
+def _station_name(name: str) -> str:
+    if len(name) > MAX_QUERY:
+        raise _bad("Numele stației este prea lung.")
+    canon = stations.canonical(name)
+    if not canon:
+        raise _bad("Nume de stație invalid.")
+    return canon
+
+
+@router.get("/api/stations")
+async def stations_list(request: Request):
+    q = request.query_params
+    query = (q.get("query") or "").strip()
+    if len(query) > MAX_QUERY:
+        raise _bad("Căutarea este prea lungă.")
+    limit = _int(q.get("limit"), "limit", 1, stations.LIST_MAX) or 100
+    fmt = _fmt(request)
+    items = await run_in_threadpool(stations.list_stations, _store(request), query or None, limit)
+    if fmt == "csv":
+        cols = ["name", "journeys", "arrivals", "departures", "trains", "delay_known",
+                "first_date", "last_date", "uncertain_only"]
+        return _csv(stats.to_csv(cols, [[i[c] for c in cols] for i in items]), "statii.csv")
+    return {"n": len(items), "stations": items}
+
+
+@router.get("/api/stations/{name}")
+async def station_detail(request: Request, name: str):
+    canon = _station_name(name)
+    p = params(request)
+    fmt = _fmt(request)
+    d = await run_in_threadpool(stations.detail, _store(request), canon, p)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Stația nu a fost observată pe tabelă.")
+    if fmt == "csv":
+        entries = [e for b in d["boards"].values() for e in b["trains"]]
+        return _csv(stats.entries_csv(entries), f"statie-{_slug(canon)}.csv")
+    return d
+
+
+@router.get("/api/stations/{name}/journeys")
+async def station_journeys(request: Request, name: str):
+    canon = _station_name(name)
+    p = params(request)
+    fmt = _fmt(request)
+    q = request.query_params
+    limit = _int(q.get("limit"), "limit", 1, stations.JOURNEYS_PAGE_MAX) or 100
+    before = _int(q.get("before"), "before", 1, 10**12)
+    d = await run_in_threadpool(stations.journeys_page, _store(request), canon, p, limit, before)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Stația nu a fost observată pe tabelă.")
+    if fmt == "csv":
+        return _csv(stats.journeys_csv(d["journeys"]), f"statie-{_slug(canon)}-calatorii.csv")
+    return d
+
+
+def _slug(name: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-") or "statie"
