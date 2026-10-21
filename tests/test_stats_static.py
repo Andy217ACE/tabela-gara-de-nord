@@ -84,7 +84,8 @@ def test_app_routes_for_stats_views():
 
 def test_sw_precaches_stats_and_bumped():
     sw = (WEB / "sw.js").read_text(encoding="utf-8")
-    assert 'var VERSION = "v8"' in sw
+    m = re.search(r'var VERSION = "v(\d+)"', sw)
+    assert m and int(m.group(1)) >= 8
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
     assert '"/stats.js"' in shell and '"/stats.css"' in shell
 
