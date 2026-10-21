@@ -29,7 +29,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import poller
+from app import admin, captures, poller, trains_api
 from app.config import Settings, get_settings
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
@@ -174,7 +174,7 @@ async def _json_body(request: Request) -> dict:
 # -- poller wiring ----------------------------------------------------------
 
 async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClient,
-                            stop: asyncio.Event, known_stations=None) -> None:
+                            stop: asyncio.Event, known_stations=None, on_capture=None) -> None:
     """Run the poller; on crash (or unexpected return) log and restart with backoff."""
     first = max(0.0, settings.poller_restart_backoff)
     delay = first
@@ -182,7 +182,7 @@ async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClie
         try:
             await poller.run_poller(settings, on_rows, client, stop,
                                     last_image_path=settings.last_image_path,
-                                    known_stations=known_stations)
+                                    known_stations=known_stations, on_capture=on_capture)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -241,15 +241,26 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         app.state.notifier = notifier
         app.state.on_rows = on_rows
 
+        cap_settings = captures.capture_settings()  # Etapa B: OCR captures + retention
+        app.state.capture_settings = cap_settings
+        on_capture = captures.make_on_capture(store, cap_settings) if cap_settings.enabled else None
+        app.state.on_capture = on_capture
+        cap_stop = asyncio.Event()
+        retention_task = (asyncio.create_task(captures.retention_loop(store, cap_settings, cap_stop))
+                          if start_poller else None)
+
         client = stop = poller_task = None
         if start_poller and settings.poller_enabled:
             client = httpx.AsyncClient()
             stop = asyncio.Event()
             poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop,
-                                                               store.known_stations))
+                                                               store.known_stations, on_capture))
         try:
             yield
         finally:
+            cap_stop.set()
+            if retention_task is not None:
+                await asyncio.gather(retention_task, return_exceptions=True)
             if poller_task is not None:
                 stop.set()
                 try:
@@ -400,6 +411,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         ep, n, day = await _follow_args(request)
         await run_in_threadpool(store_of(request).unfollow, ep, n, day)
         return {"ok": True}
+
+    app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
+    app.include_router(trains_api.router)  # /api/trains (public catalog)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
                    include_in_schema=False)

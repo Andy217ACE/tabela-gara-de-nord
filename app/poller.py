@@ -14,7 +14,7 @@ import httpx
 
 from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
-from app.ocr.reader import OcrError, read_board
+from app.ocr.reader import OcrError, read_board, read_board_debug
 
 log = logging.getLogger(__name__)
 
@@ -123,12 +123,24 @@ async def run_poller(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     last_image_path: str | None = "data/last.jpg",
     known_stations: Callable[[], Iterable[str]] | None = None,
+    on_capture: Callable[..., Awaitable[None]] | None = None,
 ) -> None:
     """Poll the board image and hand new readings to `on_rows`.
 
     `known_stations` (e.g. ``Store.known_stations``) supplies the station names
-    learned from the history for OCR canonicalisation.
+    learned from the history for OCR canonicalisation. `on_capture(image, rows,
+    debug, ts, duration_ms, error)` (optional) records every new image after
+    `on_rows`, also when OCR failed; its failures are logged and ignored.
     """
+    reader = read_board if on_capture is None else read_board_debug
+
+    async def capture(data: bytes, rows, debug, ts: float, dur_ms: int, error) -> None:
+        if on_capture is None:
+            return
+        try:
+            await on_capture(data, rows, debug, ts, dur_ms, error)
+        except Exception:
+            log.exception("on_capture callback failed")
     tracker = PhaseTracker()
     backoff = Backoff()
     requests: deque[float] = deque(maxlen=MAX_PER_MIN)
@@ -174,9 +186,10 @@ async def run_poller(
             if not first:
                 tracker.observe_change(ts)
                 last_change = ts
+            t0, debug = time.perf_counter(), None
             try:
                 if known_stations is None:
-                    rows = await asyncio.to_thread(read_board, data)
+                    rows = await asyncio.to_thread(reader, data)
                 else:
                     try:
                         stations = await asyncio.to_thread(known_stations)
@@ -187,12 +200,18 @@ async def run_poller(
                             log.warning("known stations unavailable (repeats silenced for"
                                         " %d min)", KNOWN_STATIONS_WARN_S // 60, exc_info=True)
                         stations = ()
-                    rows = await asyncio.to_thread(read_board, data, stations=stations)
-            except (OcrError, ValueError):
+                    rows = await asyncio.to_thread(reader, data, stations=stations)
+                if on_capture is not None:
+                    rows, debug = rows
+            except (OcrError, ValueError) as e:
                 log.exception("OCR failed for new image")
+                await capture(data, None, None, ts, int((time.perf_counter() - t0) * 1000),
+                              f"{type(e).__name__}: {e}")
             else:
+                dur_ms = int((time.perf_counter() - t0) * 1000)
                 try:
                     await on_rows(rows, ts)
                 except Exception:
                     log.exception("on_rows callback failed")
+                await capture(data, rows, debug, ts, dur_ms, None)
         await pause(tracker.next_poll_delay(clock(), last_change))
