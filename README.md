@@ -82,6 +82,12 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   `/var/lib/tabela/captures` pe server, `data/captures` local), `CAPTURE_RETENTION_DAYS`
   (implicit 7). O dată pe zi se șterg doar **fișierele** imagine mai vechi decât retenția
   (rândurile rămân, `path` devine NULL); nu se atinge nimic în afara `CAPTURE_DIR`.
+  `CAPTURE_RETENTION_DAYS=0` nu mai scrie deloc imagini. Sub `CAPTURE_MIN_FREE_MB`
+  (implicit 2048) spațiu liber pe disc nu se mai scriu imagini (doar metadatele), ca baza
+  de date și tabela LIVE să nu rămână fără spațiu; `GET /api/admin/stats` arată spațiul liber.
+  Observațiile rămân în baza de date (~30–40 MB/zi) — de urmărit; compactarea câmpurilor
+  `fields_json` vechi e planificată (fără ștergerea rândurilor).
+- Catalogul `trains` se actualizează la fiecare citire a tabelei (și la fiecare captură).
 - Capturile brute CFR sunt **private**: se văd doar din administrare și nu se redistribuie.
 - Catalog public (fără imagini): `GET /api/trains?query=&limit=` și `GET /api/trains/{nr}`.
 - Dezvoltare: `python scripts/dev_seed.py dev.db --capture-dir data/captures` adaugă și o captură.
@@ -96,7 +102,7 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
 - Autentificare: `Authorization: Bearer <token>` sau formularul din pagină (cookie
   HttpOnly, Secure, SameSite=Strict, 12 h; cookie-ul nu conține tokenul). 5 încercări
-  greșite/minut/IP → 429; nginx limitează în plus `POST /api/admin/login` la 5/min
+  greșite/minut/IP → 429 (și 30/minut în total, pentru toți); nginx limitează în plus `POST /api/admin/login` la 5/min
   (zona `tabela_admin_login` din `deploy/tabela-limits.conf`). Răspunsurile admin au
   `Cache-Control: private, no-store` și nu trec prin cache-ul service worker-ului.
   Schimbarea `ADMIN_TOKEN` invalidează toate sesiunile.

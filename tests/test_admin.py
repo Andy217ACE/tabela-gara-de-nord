@@ -301,3 +301,15 @@ def test_operator_chosen_13_char_key_is_accepted(monkeypatch):
     assert adm.admin_token() == "x" * 13
     monkeypatch.setenv("ADMIN_TOKEN", "x" * 11)
     assert adm.admin_token() is None
+
+
+def test_global_failure_cap_blocks_ip_rotation():
+    from app import admin as adm
+    adm.reset_failures()
+    now = 1000.0
+    for i in range(adm.GLOBAL_FAIL_LIMIT):
+        adm._failures.setdefault(f"10.0.0.{i}", __import__("collections").deque()).append(now)
+        adm._global_failures.append(now)
+    assert adm._limited("192.0.2.1", now + 1)          # a fresh IP is limited too
+    assert not adm._limited("192.0.2.1", now + adm.FAIL_WINDOW_S + 1)  # window expires
+    adm.reset_failures()

@@ -38,6 +38,7 @@ COOKIE = "tabela_admin"
 SESSION_S = 12 * 3600
 MIN_TOKEN_LEN = 12  # the operator's chosen key; nginx + FAIL_LIMIT slow guessing
 FAIL_LIMIT = 5
+GLOBAL_FAIL_LIMIT = 30  # wrong keys per FAIL_WINDOW_S from ALL clients (IP rotation)
 FAIL_WINDOW_S = 60.0
 FAIL_DELAY_S = 0.5
 MAX_LOGIN_BODY = 1024
@@ -45,6 +46,7 @@ TESSERACT_CACHE_S = 300.0
 NO_STORE = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
 
 _failures: dict[str, deque] = {}
+_global_failures: deque = deque(maxlen=GLOBAL_FAIL_LIMIT * 2)
 _fail_lock = threading.Lock()
 
 
@@ -63,6 +65,10 @@ def _ip(request: Request) -> str:
 
 def _limited(ip: str, now: float) -> bool:
     with _fail_lock:
+        while _global_failures and _global_failures[0] <= now - FAIL_WINDOW_S:
+            _global_failures.popleft()
+        if len(_global_failures) >= GLOBAL_FAIL_LIMIT:
+            return True
         q = _failures.get(ip)
         if not q:
             return False
@@ -74,9 +80,10 @@ def _limited(ip: str, now: float) -> bool:
 async def _fail(ip: str) -> HTTPException:
     now = time.monotonic()
     with _fail_lock:
-        if len(_failures) > 10000:  # bounded memory
-            _failures.clear()
+        if len(_failures) > 10000 and ip not in _failures:  # bounded memory: drop the oldest
+            del _failures[next(iter(_failures))]
         _failures.setdefault(ip, deque(maxlen=FAIL_LIMIT * 4)).append(now)
+        _global_failures.append(now)
     await asyncio.sleep(FAIL_DELAY_S)
     log.warning("admin: wrong credentials from %s", ip)
     return _err(401, "Autentificare necesară.", {"WWW-Authenticate": "Bearer"})
@@ -85,6 +92,7 @@ async def _fail(ip: str) -> HTTPException:
 def reset_failures() -> None:
     with _fail_lock:
         _failures.clear()
+        _global_failures.clear()
 
 
 def _sign(token: str, exp: int) -> str:
@@ -244,11 +252,12 @@ def capture_image(request: Request, cid: str):
 async def capture_overlay(request: Request, cid: str):
     store = request.app.state.store
     n = _cid(cid)
-    p = captures.image_path(store, _cap_settings(request).dir, n)
-    d = captures.capture_detail(store, n)
+    p = await run_in_threadpool(captures.image_path, store, _cap_settings(request).dir, n)
+    d = await run_in_threadpool(captures.capture_detail, store, n)
     if p is None or d is None:
         raise _err(404, "Imaginea nu mai este disponibilă (retenție expirată).")
-    png = await run_in_threadpool(captures.overlay_png, p.read_bytes(), d["observations"])
+    data = await run_in_threadpool(p.read_bytes)
+    png = await run_in_threadpool(captures.overlay_png, data, d["observations"])
     if png is None:
         raise _err(422, "Imaginea nu poate fi decodată.")
     return Response(png, media_type="image/png", headers=NO_STORE)
@@ -259,7 +268,7 @@ async def stats(request: Request):
     store = request.app.state.store
     settings = request.app.state.settings
     out = await run_in_threadpool(captures.capture_system_stats, store, settings.db_path)
-    age = store.last_ok_age(datetime.now(TZ))
+    age = await run_in_threadpool(store.last_ok_age, datetime.now(TZ))
     out["live_age_s"] = age
     out["tesseract"] = await run_in_threadpool(tesseract_status, settings.tesseract_cmd)
     cs = _cap_settings(request)

@@ -187,11 +187,14 @@ echo "== pip install"
 
 env_add_missing LAST_IMAGE_PATH "$DATA_DIR/last.jpg" || abort_before_restart "cannot update $ENV_FILE"
 env_add_missing CAPTURE_DIR "$DATA_DIR/captures" || abort_before_restart "cannot update $ENV_FILE"
-CAPTURE_DIR_="$(sed -n 's/^CAPTURE_DIR=//p' "$ENV_FILE" | tail -n 1)"
-if [ -n "$CAPTURE_DIR_" ] && [ ! -d "$CAPTURE_DIR_" ]; then
-    { mkdir -p "$CAPTURE_DIR_" && { [ -z "$SVC_OWNER" ] || {
-        chown "$SVC_OWNER:$SVC_OWNER" "$CAPTURE_DIR_" && chmod 750 "$CAPTURE_DIR_"; }; }; }         || abort_before_restart "cannot create $CAPTURE_DIR_"
-fi
+CAPTURE_DIR_="$(sed -n 's/^CAPTURE_DIR=//p' "$ENV_FILE" | tail -n 1 | tr -d "\"'")"
+case "$CAPTURE_DIR_" in
+    "") ;;
+    "$DATA_DIR"/*)  # the unit can only write under DATA_DIR (ReadWritePaths)
+        { mkdir -p "$CAPTURE_DIR_" && { [ -z "$SVC_OWNER" ] || {
+            chown "$SVC_OWNER:$SVC_OWNER" "$CAPTURE_DIR_" && chmod 750 "$CAPTURE_DIR_"; }; }; }             || abort_before_restart "cannot prepare $CAPTURE_DIR_" ;;
+    *) echo "WARNING: CAPTURE_DIR=$CAPTURE_DIR_ is outside $DATA_DIR; the service cannot write there" >&2 ;;
+esac
 
 DB="$(db_path)"
 OLD_V="$(db_version "$DB")" || abort_before_restart "cannot read the schema version of $DB"

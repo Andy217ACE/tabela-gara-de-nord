@@ -29,7 +29,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import admin, captures, poller, trains_api, weather
+from app import admin, captures, observations, poller, trains_api, weather
 from app.config import Settings, get_settings
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
@@ -233,6 +233,10 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         async def on_rows(rows, ts: float) -> None:
             when = datetime.fromtimestamp(ts, TZ)
             events = await asyncio.to_thread(store.ingest, rows, when, "")
+            try:  # public catalog follows the board even when captures are off/failing
+                await asyncio.to_thread(observations.refresh_catalog, store, rows)
+            except Exception:
+                log.exception("trains catalog refresh failed (board unaffected)")
             t = asyncio.create_task(notifier.handle(events, when.date()))
             notify_tasks.add(t)
             t.add_done_callback(_notify_done)

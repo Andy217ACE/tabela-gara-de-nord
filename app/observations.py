@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import sqlite3
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
@@ -32,6 +33,9 @@ from app.store import JITTER_MIN, MIN_CONFIDENCE, TZ, service_date
 
 log = logging.getLogger(__name__)
 
+# below this much free space on CAPTURE_DIR's disk no image file is written (the DB and
+# the live board share the disk; a full disk would stop the board). Env CAPTURE_MIN_FREE_MB.
+MIN_FREE_MB_DEFAULT = 2048
 PROCESSING_VERSION = "ocr-tess-digits-1"  # bump when OCR/parsing changes meaningfully
 STATES = ("ok", "uncertain", "rejected_low_conf", "incomplete")
 FIELDS = ("type", "no", "station", "operator", "time", "delay", "platform")
@@ -82,6 +86,9 @@ SCHEMA_V5 = (
     "CREATE INDEX IF NOT EXISTS ix_observations_observed ON observations(observed_at)",
     "CREATE INDEX IF NOT EXISTS ix_observations_capture ON observations(capture_id)",
     "CREATE INDEX IF NOT EXISTS ix_observations_train ON observations(train_no, observed_at)",
+    # covers refresh_trains' per-train count (runs for every capture)
+    "CREATE INDEX IF NOT EXISTS ix_observations_train_state"
+    " ON observations(train_no, validation_state, observed_at)",
     """CREATE TABLE IF NOT EXISTS trains (
         train_no INTEGER PRIMARY KEY,
         first_seen TEXT,
@@ -225,7 +232,30 @@ def capture_relpath(when: datetime, image_hash: str) -> str:
     return f"{u:%Y/%m/%d}/{u:%H%M%S}-{image_hash[:8]}.jpg"
 
 
+def min_free_bytes() -> int:
+    try:
+        mb = int(os.environ.get("CAPTURE_MIN_FREE_MB", MIN_FREE_MB_DEFAULT))
+    except ValueError:
+        mb = MIN_FREE_MB_DEFAULT
+    return max(0, mb) * 1024 * 1024
+
+
+def _disk_ok(root: Path, need: int) -> bool:
+    """Enough free space for one more image while keeping the floor free."""
+    try:
+        probe = root if root.exists() else root.parent
+        free = shutil.disk_usage(probe).free
+    except OSError:
+        return True  # cannot tell: the write itself will fail cleanly if needed
+    if free - need < min_free_bytes():
+        log.warning("capture image not saved: only %d MB free (floor %d MB)",
+                    free // 2**20, min_free_bytes() // 2**20)
+        return False
+    return True
+
+
 def _write_file(root: Path, rel: str, data: bytes) -> bool:
+    tmp = None
     try:
         dest = root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -235,7 +265,19 @@ def _write_file(root: Path, rel: str, data: bytes) -> bool:
         return True
     except OSError:
         log.warning("could not save capture image %s", rel, exc_info=True)
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
         return False
+
+
+def _remove_file(root: Path, rel: str) -> None:
+    try:
+        (root / rel).unlink(missing_ok=True)
+    except OSError:
+        log.warning("could not remove orphan capture image %s", rel, exc_info=True)
 
 
 def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
@@ -264,7 +306,8 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
             return cur[0]
 
     rel = None
-    if capture_dir is not None:
+    # retention 0 keeps no image at all; a nearly full disk keeps metadata only
+    if capture_dir is not None and retention_days > 0             and _disk_ok(Path(capture_dir), len(image_bytes)):
         rel = capture_relpath(when, h)
         if not _write_file(Path(capture_dir), rel, image_bytes):
             rel = None
@@ -306,7 +349,7 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
                      r.station_raw if r else (fields.get("station") or {}).get("raw"),
                      r.operator if r else (fields.get("operator") or {}).get("norm"),
                      r.operator_raw if r else (fields.get("operator") or {}).get("raw"),
-                     round(float(e.get("conf") or 0.0), 4),
+                     (None if e.get("conf") is None else round(float(e["conf"]), 4)),
                      int(bool(r and r.uncertain)), state, processing_version))
                 if state in ("ok", "uncertain"):
                     nos.add(train_no)
@@ -314,8 +357,26 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
+            if rel is not None:  # no DB row will ever point at it: retention could not delete it
+                _remove_file(Path(capture_dir), rel)
             raise
     return cid
+
+
+def refresh_catalog(store, rows: list[Row]) -> None:
+    """Keep `trains` current from the board ingest itself (independent of captures)."""
+    nos = {r.train_no for r in rows if r.train_no and r.confidence >= MIN_CONFIDENCE}
+    if not nos:
+        return
+    conn = store._conn
+    with store._lock:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            refresh_trains(conn, nos)
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
 
 
 # -- public catalog reads --------------------------------------------------------

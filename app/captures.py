@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -283,6 +284,12 @@ def capture_system_stats(store, db_path: str, now: datetime | None = None) -> di
             "SELECT COUNT(*), COALESCE(SUM(validation_state IN"
             " ('rejected_low_conf', 'incomplete')), 0) FROM observations"
             " WHERE observed_at >= ?", (day_ago,)).fetchone()
+    disk_free = None
+    if db_path and db_path != ":memory:":
+        try:
+            disk_free = shutil.disk_usage(os.path.dirname(os.path.abspath(db_path))).free
+        except OSError:
+            pass
     db_bytes = 0
     if db_path and db_path != ":memory:":
         for suffix in ("", "-wal", "-shm"):
@@ -291,6 +298,7 @@ def capture_system_stats(store, db_path: str, now: datetime | None = None) -> di
             except OSError:
                 pass
     return {
+        "disk_free_bytes": disk_free,
         "last_capture_attempt": last_any, "last_capture_ok": last_ok,
         "last_ocr_run": last_run,
         "duration_ms": {"n": len(durs),

@@ -192,3 +192,61 @@ def test_list_and_detail_trains(store, tmp_path):
     assert len(d["journeys_list"]) == 1 and d["journeys_list"][0]["observations"] == 1
     assert d["journeys_list"][0]["first_seen"].endswith("+00:00")
     assert obs.train_detail(store, 9999) is None
+
+
+# -- review fixes (INT2) ---------------------------------------------------------------
+
+def test_failed_transaction_leaves_no_orphan_image(store, board, tmp_path, monkeypatch):
+    data, rows, debug = board
+    _ingest(store, rows)
+
+    def boom(conn, nos):
+        raise RuntimeError("db failure")
+    monkeypatch.setattr(obs, "refresh_trains", boom)
+    with pytest.raises(RuntimeError):
+        obs.record_capture(store, data, rows, debug, TS, capture_dir=tmp_path)
+    assert not [p for p in tmp_path.rglob("*") if p.is_file()]  # file removed, no .tmp
+    assert q(store, "SELECT COUNT(*) FROM captures")[0][0] == 0
+
+
+def test_low_disk_keeps_metadata_without_file(store, board, tmp_path, monkeypatch):
+    data, rows, debug = board
+    _ingest(store, rows)
+    monkeypatch.setenv("CAPTURE_MIN_FREE_MB", str(10 ** 9))  # floor far above any disk
+    cid = obs.record_capture(store, data, rows, debug, TS, capture_dir=tmp_path)
+    assert q(store, "SELECT path FROM captures WHERE id=?", cid)[0][0] is None
+    assert not [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert q(store, "SELECT COUNT(*) FROM observations WHERE capture_id=?", cid)[0][0] > 0
+
+
+def test_retention_zero_writes_no_image(store, board, tmp_path):
+    data, rows, debug = board
+    _ingest(store, rows)
+    cid = obs.record_capture(store, data, rows, debug, TS, capture_dir=tmp_path,
+                             retention_days=0)
+    assert q(store, "SELECT path FROM captures WHERE id=?", cid)[0][0] is None
+    assert not [p for p in tmp_path.rglob("*") if p.is_file()]
+
+
+def test_unread_confidence_is_null_not_zero(store, board, tmp_path):
+    data, rows, debug = board
+    _ingest(store, rows)
+    dbg = [dict(e, conf=None) for e in debug]
+    cid = obs.record_capture(store, data, rows, dbg, TS, capture_dir=None)
+    vals = {r[0] for r in q(store, "SELECT row_conf FROM observations WHERE capture_id=?", cid)}
+    assert vals == {None}
+
+
+def test_catalog_follows_ingest_without_captures(store, board):
+    _, rows, _ = board
+    _ingest(store, rows)
+    obs.refresh_catalog(store, rows)
+    nos = {r.train_no for r in rows if r.confidence >= 0.5}
+    got = {r[0] for r in q(store, "SELECT train_no FROM trains")}
+    assert nos and nos <= got
+    assert q(store, "SELECT SUM(observations) FROM trains")[0][0] == 0  # no captures
+
+
+def test_observations_have_covering_index_for_catalog(store):
+    idx = {r[1] for r in q(store, "PRAGMA index_list(observations)")}
+    assert "ix_observations_train_state" in idx
