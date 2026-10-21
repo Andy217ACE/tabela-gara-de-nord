@@ -91,7 +91,7 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
 - Pagina „Capturi OCR” e la `/#ocr` (nu apare în meniu): listă capturi, imagine cu
   dreptunghiurile OCR (verde ≥ 80, galben 50–79, roșu < 50), text brut vs normalizat pe
   câmp, „Copiază JSON”, plus starea sistemului (`GET /api/admin/stats`).
-- Se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 16 caractere; fără el toate
+- Se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 12 caractere; recomandat un șir aleator lung; fără el toate
   `/api/admin/*` răspund 503 „Administrare dezactivată”). Generare:
   `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
 - Autentificare: `Authorization: Bearer <token>` sau formularul din pagină (cookie
@@ -122,6 +122,12 @@ utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, ven
 de reload; copia anterioară a site-ului ajunge în `/root/backup-<data>/tabela.site.bak` și
 e restaurată automat dacă testul eșuează). `ufw` nu se activează: firewall-ul e NSG-ul Azure.
 
+**La fiecare deploy crește versiunea și completează istoricul:** în `VERSION` se trece
+`Beta 1.NN` cu NN mărit cu 1 (ex. `Beta 1.01` → `Beta 1.02`), iar în `CHANGELOG.md` se
+adaugă sus o secțiune `## Beta 1.NN — AAAA-LL-ZZ` cu `### Adăugat` / `### Reparat` (în
+română). Versiunea apare în footer (link spre ecranul „Versiuni”, `#versiuni`), în
+`/api/health` (câmpul `version`) și în `/api/changelog`; `update.sh` o afișează la final.
+
 Actualizare (după `git push` pe branch):
 
     sudo bash /opt/tabela/app/deploy/update.sh
@@ -131,7 +137,8 @@ face, în ordine:
 1. notează commit-ul curent (PREV) și refuză clar un HEAD detașat (dați branch-ul explicit);
 2. `git fetch` + checkout pe branch, apoi `pip install -r requirements.txt` — dacă pip eșuează,
    pune înapoi codul vechi și **nu** repornește serviciul;
-3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`);
+3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`, `CAPTURE_DIR`)
+   și creează `CAPTURE_DIR` (proprietar `tabela`); `ADMIN_TOKEN` se pune manual (secret);
 4. dacă noul cod are o versiune de schemă mai mare decât baza de date (`PRAGMA user_version`),
    face întâi un backup online SQLite (`sqlite3 .backup`) în `/var/lib/tabela/backups/`
    (se păstrează ultimele 5);
@@ -205,7 +212,9 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
 - Date: `/var/lib/tabela/tabela.db` (SQLite, istoric + abonări) și
   `/var/lib/tabela/last.jpg` (ultima imagine a tabelei, utilă la depanarea OCR).
 - Variabile în `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
-  `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` (opțional `TESSERACT_CMD`).
+  `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `CAPTURE_DIR`, `ADMIN_TOKEN`
+  (opțional `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`); model fără valori
+  reale în `.env.example`.
 - Chei VAPID: generate o singură dată de `install.sh` (dacă lipsesc din `/etc/tabela.env`);
   nu se regenerează niciodată, altfel toate abonările push existente devin invalide.
   Cheia privată nu iese din `/etc/tabela.env`; subiectul VAPID e URL-ul site-ului.

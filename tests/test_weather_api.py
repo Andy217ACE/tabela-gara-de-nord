@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from app.version import __version__
 from app import weather as wx
 from app.api import create_app
 from tests.test_api import BUC, ingest, settings
@@ -73,7 +74,7 @@ def test_weather_read_only(client):
 
 def test_health_has_weather_age_without_changing_ok(client):
     assert client.get("/api/health").json() == {"ok": False, "age_s": None,
-                                                "weather_age_s": None}
+                                                "weather_age_s": None, "version": __version__}
     seed(client, 5)
     h = client.get("/api/health").json()
     assert h["ok"] is False and 240 <= h["weather_age_s"] <= 400   # weather never makes ok

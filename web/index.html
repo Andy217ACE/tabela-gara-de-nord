@@ -44,6 +44,7 @@
   <script src="panel.js" defer></script>
   <link rel="stylesheet" href="weather.css">
   <script src="weather.js" defer></script>
+  <script src="versions.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -230,6 +231,15 @@
       <ul class="f-list" id="f-list"></ul>
       <p class="empty" id="f-empty" hidden>Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
     </section>
+
+    <section class="view view-versions" id="view-versiuni" aria-labelledby="versiuni-heading" hidden>
+      <div class="page-head">
+        <h1 id="versiuni-heading">Versiuni</h1>
+        <p class="page-sub" id="v-current"></p>
+      </div>
+      <p class="notice notice-error" id="v-error" role="alert" hidden></p>
+      <div class="v-list" id="v-list"></div>
+    </section>
   </main>
 
   <div class="toast" id="toast" role="status" hidden></div>
@@ -238,6 +248,7 @@
     <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
     <span class="footer-meteo">Meteo: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> · CC BY 4.0 (valori de model)</span>
+    <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor">Versiuni</a>
   </footer>
 </body>
 </html>

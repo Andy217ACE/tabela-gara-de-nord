@@ -293,3 +293,11 @@ def test_public_train_unknown_404(client):
 
 def test_admin_unknown_path_still_404_json(client):
     assert client.get("/api/admin/nothing", headers=AUTH).status_code in (401, 404)
+
+
+def test_operator_chosen_13_char_key_is_accepted(monkeypatch):
+    from app import admin as adm
+    monkeypatch.setenv("ADMIN_TOKEN", "x" * 13)
+    assert adm.admin_token() == "x" * 13
+    monkeypatch.setenv("ADMIN_TOKEN", "x" * 11)
+    assert adm.admin_token() is None

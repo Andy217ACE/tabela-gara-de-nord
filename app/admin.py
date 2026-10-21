@@ -1,7 +1,7 @@
 # © 2026 Andy217Ace
 """Administration: token auth + the „Capturi OCR" API (raw CFR captures are private).
 
-Auth: env ADMIN_TOKEN (at least 16 characters; unset/short -> every admin endpoint
+Auth: env ADMIN_TOKEN (at least 12 characters; unset/short -> every admin endpoint
 answers 503 „Administrare dezactivată."). A request is authenticated by
 ``Authorization: Bearer <token>`` or by the session cookie set by
 ``POST /api/admin/login`` (HttpOnly, Secure, SameSite=Strict, 12 h). The cookie
@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 COOKIE = "tabela_admin"
 SESSION_S = 12 * 3600
-MIN_TOKEN_LEN = 16
+MIN_TOKEN_LEN = 12  # the operator's chosen key; nginx + FAIL_LIMIT slow guessing
 FAIL_LIMIT = 5
 FAIL_WINDOW_S = 60.0
 FAIL_DELAY_S = 0.5

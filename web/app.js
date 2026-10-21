@@ -446,7 +446,7 @@
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
-    "#ocr": "ocr" };
+    "#ocr": "ocr", "#versiuni": "versiuni" };
   var currentRoute = null;
 
   // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
@@ -480,7 +480,7 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
-    ["tabela", "istoric", "urmarite", "ocr"].forEach(function (v) {
+    ["tabela", "istoric", "urmarite", "ocr", "versiuni"].forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
     });
@@ -489,7 +489,8 @@
       else a.removeAttribute("aria-current");
     });
     document.title = name === "tabela" ? "Tabela Gara de Nord"
-      : (name === "istoric" ? "Istoric" : name === "ocr" ? "Capturi OCR" : "Urmărite") +
+      : (name === "istoric" ? "Istoric" : name === "ocr" ? "Capturi OCR"
+        : name === "versiuni" ? "Versiuni" : "Urmărite") +
         " · Tabela Gara de Nord";
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);

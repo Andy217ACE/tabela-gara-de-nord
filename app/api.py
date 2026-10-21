@@ -31,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app import admin, captures, poller, trains_api, weather
 from app.config import Settings, get_settings
+from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
 from app.store import HISTORY_MAX, TZ, Store
@@ -317,8 +318,13 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     def health(request: Request):
         store = store_of(request)
         age = store.last_ok_age(datetime.now(TZ))
-        return {"ok": age is not None and age <= STALE_S, "age_s": age,
+        return {"ok": age is not None and age <= STALE_S, "age_s": age, "version": __version__,
                 "weather_age_s": weather.age_s(store.latest_weather(), datetime.now(timezone.utc))}
+
+    @app.get("/api/changelog")
+    def changelog_(response: Response):
+        response.headers["Cache-Control"] = "no-cache"
+        return {"version": __version__, "entries": changelog()}
 
     @app.get("/api/config")
     def config():

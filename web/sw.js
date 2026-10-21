@@ -26,6 +26,7 @@ var SHELL = [
   "/panel.js",
   "/weather.css",
   "/weather.js",
+  "/versions.js",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/icons/logo-96.png",
