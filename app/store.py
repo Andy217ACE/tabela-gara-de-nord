@@ -23,7 +23,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -181,21 +181,26 @@ class Store:
             self._conn.close()
 
     def migrate(self) -> None:
+        """Version ladder; every step is one transaction (a failure keeps the
+        previous version) and re-runnable. Never renumber a step."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version >= SCHEMA_VERSION:
                 return
-            if version == 0:  # fresh database: full current schema
-                self._conn.executescript(
-                    "BEGIN;" + _SCHEMA + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
-                return
-            # v1/v2 -> v3: add the missing services columns, then bump the version,
-            # all in one transaction (a failure leaves the old version in place).
-            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
-            add = "".join(f"ALTER TABLE services ADD COLUMN {name} {decl};"
-                          for name, decl in _ADDED_COLUMNS if name not in cols)
-            self._conn.executescript(
-                "BEGIN;" + _SCHEMA + add + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
+            if version < 3:
+                self._migrate_to_3()
+            # (v4 slot: weather_observations, feat/weather)
+            if version < 5:
+                from app.observations import migrate_to_5  # v5: captures/observations/trains
+                migrate_to_5(self._conn)
+
+    def _migrate_to_3(self) -> None:
+        # fresh or v1/v2 -> v3: base tables, then the missing services columns, then
+        # the version, all in one transaction.
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
+        add = "".join(f"ALTER TABLE services ADD COLUMN {name} {decl};"
+                      for name, decl in _ADDED_COLUMNS if cols and name not in cols)
+        self._conn.executescript("BEGIN;" + _SCHEMA + add + "PRAGMA user_version = 3;COMMIT;")
 
     # -- ingest -----------------------------------------------------------
 
