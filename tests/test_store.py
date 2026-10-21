@@ -100,7 +100,8 @@ def test_delay_change_event(store):
     store.ingest(base_rows(), T0)
     rows = base_rows()
     rows[0] = R("arrival", 1621, "12:10", delay=15, platform=3)
-    ev = store.ingest(rows, T0 + timedelta(minutes=1))
+    assert store.ingest(rows, T0 + timedelta(minutes=1)) == []  # first reading: pending
+    ev = store.ingest(rows, T0 + timedelta(minutes=2))  # confirmed by the second one
     assert len(ev) == 1
     e = ev[0]
     assert e.kind == "delay" and e.old == "0" and e.new == "15"
@@ -115,7 +116,8 @@ def test_platform_assigned_and_changed(store):
     ev = store.ingest(rows, T0 + timedelta(minutes=1))
     assert [(e.kind, e.old, e.new) for e in ev] == [("platform", None, "7")]
     rows[1] = R("arrival", 1622, "12:20", platform=8)
-    ev = store.ingest(rows, T0 + timedelta(minutes=2))
+    assert store.ingest(rows, T0 + timedelta(minutes=2)) == []  # a change waits one frame
+    ev = store.ingest(rows, T0 + timedelta(minutes=3))
     assert [(e.kind, e.old, e.new) for e in ev] == [("platform", "7", "8")]
 
 
@@ -193,18 +195,19 @@ def test_ingest_uses_bucharest_service_date(store):
     assert ts.endswith("+03:00")
 
 
-def test_gone_after_two_consecutive_misses(store):
+def test_gone_after_three_consecutive_misses(store):
     store.ingest(base_rows(), T0)
     rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
     ev = store.ingest(rows, T0 + timedelta(minutes=1))
     assert [(e.kind, e.row.train_no) for e in ev] == [("appeared", 1650)]
     assert count(store, "services", "train_no=1621 AND status='listed'") == 1
-    ev = store.ingest(rows, T0 + timedelta(minutes=2))
+    assert store.ingest(rows, T0 + timedelta(minutes=2)) == []  # 2 misses: still listed
+    ev = store.ingest(rows, T0 + timedelta(minutes=3))
     assert [(e.kind, e.row.train_no) for e in ev] == [("gone", 1621)]
     assert count(store, "services", "train_no=1621 AND status='gone'") == 1
     assert count(store, "events", "kind='gone'") == 1
     # stays gone, no duplicate event
-    assert store.ingest(rows, T0 + timedelta(minutes=3)) == []
+    assert store.ingest(rows, T0 + timedelta(minutes=4)) == []
 
 
 def test_miss_reset_when_seen_again(store):
@@ -220,9 +223,10 @@ def test_miss_reset_when_seen_again(store):
 def test_gone_service_reappears(store):
     store.ingest(base_rows(), T0)
     rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
-    store.ingest(rows, T0 + timedelta(minutes=1))
-    store.ingest(rows, T0 + timedelta(minutes=2))
-    ev = store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0 + timedelta(minutes=3))
+    for m in (1, 2, 3):
+        store.ingest(rows, T0 + timedelta(minutes=m))
+    # back after a long absence (> REAPPEAR_QUIET_MIN): a new 'appeared'
+    ev = store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0 + timedelta(minutes=20))
     assert [(e.kind, e.row.train_no) for e in ev] == [("appeared", 1621)]
     row = store._conn.execute(
         "SELECT status, miss_count FROM services WHERE train_no=1621").fetchone()
@@ -264,8 +268,8 @@ def test_current_board_orders_across_midnight_and_hides_gone(store):
     b = store.current_board()
     assert [r["train_no"] for r in b["arrivals"]] == [2, 1]
     rows2 = rows[1:] + [R("arrival", 5, "00:30")]
-    store.ingest(rows2, now + timedelta(minutes=1))
-    store.ingest(rows2, now + timedelta(minutes=2))
+    for m in (1, 2, 3):
+        store.ingest(rows2, now + timedelta(minutes=m))
     assert [r["train_no"] for r in store.current_board()["arrivals"]] == [2, 5]
 
 
@@ -284,10 +288,11 @@ def test_ingest_rolls_back_on_error(store, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("boom")
 
+    store.ingest(rows, T0 + timedelta(minutes=1))  # first reading of 20: pending
     monkeypatch.setattr(store, "_insert_event", boom)
     with pytest.raises(RuntimeError):
-        store.ingest(rows, T0 + timedelta(minutes=1))
-    assert count(store, "runs") == 1
+        store.ingest(rows, T0 + timedelta(minutes=2))  # confirming one: event insert fails
+    assert count(store, "runs") == 2
     assert store._conn.execute(
         "SELECT last_delay FROM services WHERE train_no=1621").fetchone()[0] == 0
 
@@ -314,6 +319,7 @@ def test_low_confidence_delay_misread_is_ignored(store):
     assert count(store, "events", "kind IN ('delay','platform')") == 0
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_low_confidence_misread_train_no_creates_nothing(store):
     store.ingest(base_rows() + [R("arrival", 1650, "13:00")], T0)
     rows = base_rows() + [R("arrival", 1650, "13:00")]
@@ -344,6 +350,7 @@ def test_validity_uses_deduplicated_rows(store):
     assert count(store, "runs", "ok=0") == 1
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_sched_time_jitter_merges(store):
     rows = base_rows() + [R("arrival", 1636, "20:04", delay=5)]
     store.ingest(rows, T0)
@@ -381,6 +388,7 @@ def test_stale_services_go_silently(store):
     assert count(store, "events", "kind='gone'") == 0
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_events_carry_service_date(store):
     now = datetime(2026, 10, 20, 23, 58, tzinfo=BUC)
     rows = [R("arrival", 1, "00:05"), R("arrival", 2, "23:50"),
@@ -401,6 +409,7 @@ def test_event_service_date_default():
     assert e.service_date is None
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_jitter_claim_is_globally_closest_not_row_order():
     # two listed services of one train; two incoming rows each within 10 min of both
     for order in (0, 1):
@@ -417,6 +426,7 @@ def test_jitter_claim_is_globally_closest_not_row_order():
         assert got == {"20:00": 5, "20:08": 9}, order
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_low_confidence_row_does_not_touch_gone_service(store):
     store.ingest(base_rows() + [R("arrival", 1636, "12:40")], T0)
     store.ingest(base_rows(), T0 + timedelta(minutes=1))
@@ -594,6 +604,7 @@ def test_migrate_live_v2_db_from_production_code(tmp_path):
     s.close()
 
 
+@pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce
 def test_unread_delay_keeps_last_value_and_emits_nothing(store):
     rows = base_rows()
     rows[0] = R("arrival", 1621, "12:10", delay=15, platform=3)

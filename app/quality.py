@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS quality_periods (
 """
 
 # SQL fragments for readers (alias of the services table: s).
-GHOST_SQL = "s.id IN (SELECT service_id FROM service_quality WHERE ghost=1)"
-LOW_QUALITY_SQL = "s.id IN (SELECT service_id FROM service_quality WHERE low_quality=1)"
-SUSPECT_EVENT_SQL = "e.id IN (SELECT event_id FROM event_quality WHERE suspect=1)"
+GHOST_SQL = "(s.id IN (SELECT service_id FROM service_quality WHERE ghost=1))"
+LOW_QUALITY_SQL = "(s.id IN (SELECT service_id FROM service_quality WHERE low_quality=1))"
+SUSPECT_EVENT_SQL = "(e.id IN (SELECT event_id FROM event_quality WHERE suspect=1))"
 
 
 def include_low_quality() -> bool:
@@ -280,8 +280,8 @@ def judge_ghost(conn: sqlite3.Connection, service_id: int) -> tuple[str, int | N
     verdict = ghost_verdict(dict(s), [dict(p) for p in partners], n_obs)
     if verdict is not None:
         upsert_service(conn, service_id, ghost=1, ghost_reason=verdict[0], ghost_of=verdict[1])
-    elif conn.execute("SELECT ghost FROM service_quality WHERE service_id=?",
-                      (service_id,)).fetchone() not in (None, (0,)):
+    elif (conn.execute("SELECT ghost FROM service_quality WHERE service_id=?",
+                       (service_id,)).fetchone() or (0,))[0]:
         upsert_service(conn, service_id, ghost=0, ghost_reason=None, ghost_of=None)
     return verdict
 

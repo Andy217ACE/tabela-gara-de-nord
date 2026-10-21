@@ -26,7 +26,7 @@ from app import canonical
 from app.models import Row
 from app.normalize import (
     clean_station,
-    normalize_type,
+    resolve_type,
     parse_delay,
     parse_platform,
     parse_time,
@@ -205,7 +205,12 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
         t_text = _time_colon(t_text)
     if matcher is None:
         return t_text, t_conf
-    m_text, m_score, trusted = matcher.read(cell, _ALLOWED[name])
+    try:
+        m_text, m_score, trusted = matcher.read(cell, _ALLOWED[name])
+    except ValueError:  # a degenerate cell must not fail the whole frame
+        log.warning("glyph templates failed on a %s cell %s; Tesseract reading kept",
+                    name, getattr(cell, "shape", None), exc_info=True)
+        return t_text, t_conf
     if not m_text:
         return "", None  # no ink in the cell: empty, whatever Tesseract hallucinated
     if name == "time":
@@ -263,7 +268,8 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
         for name in _ALLOWED:
             cell[name] = _numeric(name, cells[name], cell[name], matcher)
         type_text, flagged = strip_flag(cell["type"][0])
-        train_type = normalize_type(type_text)
+        # "*" (flag) is stripped first; "I"/"RN".. are resolved only where measured
+        train_type = resolve_type(type_text, _train_no(cell["no"][0]))
         sched = parse_time(cell["time"][0])
         confs = [c for _, c in cell.values() if c is not None]
         conf = sum(confs) / len(confs) / 100 if confs else 0.0

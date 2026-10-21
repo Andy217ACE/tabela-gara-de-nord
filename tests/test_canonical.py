@@ -11,7 +11,7 @@ from app.canonical import (
 )
 
 OPERATORS = {"CFR Calatori", "Regio Calatori", "Transferoviar", "InterRegional",
-             "Astra Trans Ca"}
+             "Astra Trans Ca", "Softrans Calat", "Ferotrafic"}
 
 
 def test_default_threshold():

@@ -11,6 +11,9 @@ from app.models import Row
 from app.notifier import Notifier, SubscriptionGone, make_webpush_sender
 from app.store import Store, Subscription
 
+# notifier debounce tested on the raw store events (store validation: test_store_quality.py)
+pytestmark = pytest.mark.usefixtures("legacy_rules")
+
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
 DAY = date(2026, 10, 20)

@@ -140,16 +140,33 @@ def refresh_trains(conn: sqlite3.Connection, train_nos) -> None:
 
     Idempotent (pure function of the stored data). Operator/route counts are
     journeys (services). Train numbers with neither a service nor a usable
-    observation are not catalogued (a misread number is not a train).
+    observation are not catalogued (a misread number is not a train). Ghost
+    services (app.quality: misread duplicates, one-off sightings) and their
+    observations do not count; an entry left with 0 journeys stays stored but is
+    hidden from the public catalog. Station/operator use the canonical form when a
+    corrected one exists.
     """
+    dq = _has_quality(conn)
+    ghost = (" AND id NOT IN (SELECT service_id FROM service_quality WHERE ghost=1)"
+             if dq else "")
+    ghost_obs = (" AND (service_id IS NULL OR service_id NOT IN"
+                 " (SELECT service_id FROM service_quality WHERE ghost=1))" if dq else "")
+    names = ("COALESCE((SELECT q.station_canonical FROM service_quality q"
+             " WHERE q.service_id=services.id), station),"
+             " COALESCE((SELECT q.operator_canonical FROM service_quality q"
+             " WHERE q.service_id=services.id), operator)" if dq else "station, operator")
     for no in sorted({int(n) for n in train_nos if n}):
         svc = conn.execute(
-            "SELECT board, station, operator, first_seen, last_seen FROM services"
-            " WHERE train_no=?", (no,)).fetchall()
+            f"SELECT board, {names}, first_seen, last_seen FROM services"
+            " WHERE train_no=?" + ghost, (no,)).fetchall()
         n_obs, o_first, o_last = conn.execute(
             "SELECT COUNT(*), MIN(observed_at), MAX(observed_at) FROM observations"
-            " WHERE train_no=? AND validation_state IN ('ok', 'uncertain')", (no,)).fetchone()
+            " WHERE train_no=? AND validation_state IN ('ok', 'uncertain')" + ghost_obs,
+            (no,)).fetchone()
         if not svc and not n_obs:
+            # stored entry of a number now known to be a misread: kept, hidden (0 journeys)
+            conn.execute("UPDATE trains SET journeys=0, observations=0 WHERE train_no=?",
+                         (no,))
             continue
         stamps = [_utc(s[3]) for s in svc] + [_utc(s[4]) for s in svc]
         stamps += [_utc(x) for x in (o_first, o_last) if x]
@@ -172,6 +189,11 @@ def refresh_trains(conn: sqlite3.Connection, train_nos) -> None:
                                                   key=lambda kv: (-kv[1], kv[0]))],
                         ensure_ascii=False),
              len(svc), n_obs))
+
+
+def _has_quality(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
+                        " AND name='service_quality'").fetchone() is not None
 
 
 # -- recording ----------------------------------------------------------------
@@ -363,9 +385,11 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
     return cid
 
 
-def refresh_catalog(store, rows: list[Row]) -> None:
-    """Keep `trains` current from the board ingest itself (independent of captures)."""
+def refresh_catalog(store, rows: list[Row], extra=()) -> None:
+    """Keep `trains` current from the board ingest itself (independent of captures).
+    `extra`: more train numbers to recompute (e.g. ones just flagged ghost)."""
     nos = {r.train_no for r in rows if r.train_no and r.confidence >= MIN_CONFIDENCE}
+    nos |= {int(n) for n in extra if n}
     if not nos:
         return
     conn = store._conn
@@ -394,15 +418,18 @@ def _train_dict(r) -> dict:
 
 def list_trains(store, query: str | None = None, limit: int = 50) -> list[dict]:
     """Catalog entries, most recently seen first. `query`: train-number prefix
-    (digits) or a case-insensitive substring of a station/operator name."""
+    (digits) or a case-insensitive substring of a station/operator name. Entries
+    without a real journey (only ghost services / stray readings) are hidden."""
     limit = max(1, min(int(limit), TRAINS_MAX))
-    where, args = "", []
+    where, args = " WHERE journeys > 0", []
     if query:
         if query.isascii() and query.isdigit():
-            where, args = " WHERE CAST(train_no AS TEXT) LIKE ? ESCAPE '!'", [query + "%"]
+            where += " AND CAST(train_no AS TEXT) LIKE ? ESCAPE '!'"
+            args = [query + "%"]
         else:
             esc = query.lower().replace("!", "!!").replace("%", "!%").replace("_", "!_")
-            where = " WHERE lower(routes_json) LIKE ? ESCAPE '!' OR lower(operators_json) LIKE ? ESCAPE '!'"
+            where += (" AND (lower(routes_json) LIKE ? ESCAPE '!'"
+                      " OR lower(operators_json) LIKE ? ESCAPE '!')")
             args = [f"%{esc}%", f"%{esc}%"]
     with store._lock:
         found = store._conn.execute(
@@ -414,15 +441,18 @@ def list_trains(store, query: str | None = None, limit: int = 50) -> list[dict]:
 def train_detail(store, train_no: int) -> dict | None:
     """Catalog entry + its journeys (services), newest first, capped at JOURNEYS_MAX."""
     with store._lock:
-        t = store._conn.execute("SELECT * FROM trains WHERE train_no=?",
+        t = store._conn.execute("SELECT * FROM trains WHERE train_no=? AND journeys > 0",
                                 (train_no,)).fetchone()
         if t is None:
             return None
         found = store._conn.execute(
-            "SELECT s.id, s.board, s.service_date, s.train_type, s.sched_time, s.station,"
-            " s.operator, s.first_seen, s.last_seen, s.status, s.last_delay,"
+            "SELECT s.id, s.board, s.service_date, s.train_type, s.sched_time,"
+            " COALESCE(q.station_canonical, s.station) AS station,"
+            " COALESCE(q.operator_canonical, s.operator) AS operator,"
+            " s.first_seen, s.last_seen, s.status, s.last_delay, q.low_quality,"
             " (SELECT COUNT(*) FROM observations o WHERE o.service_id = s.id) AS n_obs"
-            " FROM services s WHERE s.train_no=?"
+            " FROM services s LEFT JOIN service_quality q ON q.service_id = s.id"
+            " WHERE s.train_no=? AND COALESCE(q.ghost, 0) = 0"
             " ORDER BY s.service_date DESC, s.sched_time DESC LIMIT ?",
             (train_no, JOURNEYS_MAX + 1)).fetchall()
     out = _train_dict(t)
@@ -431,6 +461,7 @@ def train_detail(store, train_no: int) -> dict | None:
         "sched_time": r["sched_time"], "station": r["station"], "operator": r["operator"],
         "first_seen": utc_iso(r["first_seen"]), "last_seen": utc_iso(r["last_seen"]),
         "status": r["status"], "observations": r["n_obs"],
+        "low_quality": bool(r["low_quality"]),
     } for r in found[:JOURNEYS_MAX]]
     out["journeys_truncated"] = len(found) > JOURNEYS_MAX
     return out

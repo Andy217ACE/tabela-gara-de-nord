@@ -1,8 +1,10 @@
 # © 2026 Andy217Ace
 # Operatori văzuți efectiv pe tabela Gara de Nord (fixture + /api/board live, 2026-10-21).
-# Forma canonică = textul afișat pe tabelă (coloana trunchiază: „Astra Trans Ca”).
+# Forma canonică = textul afișat pe tabelă (coloana trunchiază: „Astra Trans Ca”, „Softrans Calat”).
 CFR Calatori
 Regio Calatori
 Transferoviar
 InterRegional
 Astra Trans Ca
+Softrans Calat
+Ferotrafic

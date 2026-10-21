@@ -9,11 +9,14 @@ fixed box, so the matcher is independent of the source resolution.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 GLYPH_H = 32
 GLYPH_W = 32
@@ -86,6 +89,11 @@ def _split_touching(line: np.ndarray, x: int, w: int, line_h: int) -> list[tuple
     for i in range(1, k):
         c = int(round(i * step))
         lo, hi = max(1, c - win), min(w - 1, c + win + 1)
+        if hi <= lo:  # degenerate component (a sliver a few pixels wide): cut evenly
+            log.warning("touching glyphs: empty cut window (w=%d, line_h=%d); even split",
+                        w, line_h)
+            cuts.append(x + min(max(c, 1), max(w - 1, 1)))
+            continue
         cuts.append(x + lo + int(np.argmin(col_ink[lo:hi])))
     cuts.append(x + w)
     return [(a, b) for a, b in zip(cuts[:-1], cuts[1:]) if b > a]

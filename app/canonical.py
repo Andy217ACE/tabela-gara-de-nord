@@ -67,6 +67,25 @@ def _lev(a: str, b: str) -> int:
     return prev[-1]
 
 
+def near_name(a: str, b: str) -> bool:
+    """Are station names `a` and `b` (clean_station form) one OCR slip apart? Same
+    letters with spaces moved ("AD JUD"/"ADJUD"), a stray one-character token
+    ("RUSE I"/"RUSE"), or within 1 edit (names up to 6
+    letters) / 2 edits (longer names). Used to keep misreads out of the learned list."""
+    ka, kb = _key(a), _key(b)
+    if ka.replace(" ", "") == kb.replace(" ", ""):
+        return True
+    for x, y in ((ka, kb), (kb, ka)):  # a stray one-character token: "RUSE I" / RUSE
+        w = x.split()
+        if len(w) >= 2 and len(w[-1]) == 1 and " ".join(w[:-1]) == y:
+            return True
+    return _lev(ka, kb) <= (1 if min(len(ka), len(kb)) <= 6 else 2)
+
+
+SPACING_SCORE = 0.95  # same letters, spaces misplaced: "AD JUD", "PLOIESTISUD", "CHISINAU -KIEV"
+TAIL_SCORE = 0.9  # a stray one-character token after an exact name: "ARAD E", "RUSE I"
+
+
 def _same_words(k: str, ck: str) -> bool:
     """Could `k` be an OCR misread of `ck`? OCR noise substitutes characters inside the
     words; it does not add or drop whole words or change a word into another one.
@@ -97,6 +116,10 @@ def _best(text: str, known: Iterable[str], words: bool = False) -> tuple[str | N
             continue
         if ck == k:
             score = 1.0
+        elif words and k.replace(" ", "") == ck.replace(" ", ""):
+            score = SPACING_SCORE
+        elif words and len(k.split()) >= 2 and len(k.split()[-1]) == 1                 and " ".join(k.split()[:-1]) == ck:
+            score = TAIL_SCORE
         elif words and not _same_words(k, ck):
             continue  # a genuinely different name, not a misread of this one
         else:

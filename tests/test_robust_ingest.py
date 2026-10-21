@@ -189,7 +189,7 @@ def test_panel_that_really_shrank_is_accepted_after_a_while(store):
         store.ingest(frame(2, 12), at(m))
     assert "arrival" in store.last_rejected
     assert not services(store, "status='gone'")
-    for m in range(PARTIAL_ACCEPT_AFTER, PARTIAL_ACCEPT_AFTER + 2):  # GONE after 2 misses
+    for m in range(PARTIAL_ACCEPT_AFTER, PARTIAL_ACCEPT_AFTER + 3):  # GONE after 3 misses
         store.ingest(frame(2, 12), at(m))
     assert store.last_rejected == {}
     assert len(services(store, "board='arrival' AND status='listed'")) == 2

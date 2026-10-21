@@ -69,6 +69,29 @@ def normalize_type(s: str) -> str | None:
     return t if t in _TYPES else None
 
 
+# Type misreads resolved only where the live data shows a single real answer
+# (data-quality report, 2026-10-21): "I" on a 3-digit number is always IC there
+# (531, 536, 553, 571, 581: IC in every other reading), and the airport shuttle's
+# "RM" split into "RN"/"RND"/"RNE"/"RIM"/"RR" on 79xx numbers (7925-7939: RM in every
+# other reading). Anything else stays unreadable (None): nothing is guessed.
+_TYPE_RESCUE_IC = {"I"}
+_TYPE_RESCUE_RM = {"RN", "RND", "RNE", "RIM", "RR"}
+
+
+def resolve_type(s: str, train_no: int) -> str | None:
+    """`normalize_type`, plus the two measured misreads above (asterisk already stripped)."""
+    t = normalize_type(s)
+    if t is not None or not train_no:
+        return t
+    raw = (s or "").strip().translate(_TYPE_FIX).upper().replace(" ", "")
+    digits = str(train_no)
+    if raw in _TYPE_RESCUE_IC and len(digits) == 3:
+        return "IC"
+    if raw in _TYPE_RESCUE_RM and len(digits) == 4 and digits.startswith("79"):
+        return "RM"
+    return None
+
+
 def strip_flag(s: str) -> tuple[str, bool]:
     s = (s or "").strip()
     flagged = s.startswith("*") or s.endswith("*")

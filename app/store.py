@@ -11,13 +11,15 @@ ingested. A frame where no panel is usable is a failed run (`ok=0`).
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.canonical import _lev
+from app import quality
+from app.canonical import _lev, near_name, seed_stations
 from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
 from app.normalize import clean_station
@@ -34,7 +36,8 @@ PARTIAL_ACCEPT_AFTER = 10  # ...unless it stays that small this many frames (it 
 CONFIRM_CONFIDENCE = 0.7  # a NEW service read below this needs a second consecutive reading
 RENAME_AFTER = 3  # a stored misread is renamed after this many frames read otherwise
 BOARDS = ("arrival", "departure")
-GONE_AFTER_MISSES = 2
+GONE_AFTER_MISSES = 3  # OCR alternating between variants made 2 flap (data-quality report)
+REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'appeared'
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
@@ -193,6 +196,22 @@ def _near_dup(a: tuple, b: tuple) -> bool:
     return (d_no == 1 and t_a == t_b) or (d_no == 0 and _lev(t_a, t_b) == 1)
 
 
+def _protect_learned(names: list[str]) -> list[str]:
+    """Learned station names (most frequent first) minus probable misreads: anything
+    but letters/digits/spaces/hyphens ("PLOIEST! SUD", "TIMISOA.RA NORD"), and any name
+    one or two characters away from a seed station or from a more frequent learned name
+    ("AD JUD" next to ADJUD, "LASI" next to IASI)."""
+    seed = seed_stations()
+    kept: list[str] = []
+    for n in names:
+        if not _LEARNABLE.fullmatch(n):
+            continue
+        if any(near_name(n, k) for k in (*seed, *kept) if k != n):
+            continue
+        kept.append(n)
+    return kept
+
+
 def _dedup(rows: list) -> list:
     """Listed services with near-duplicates (see `_near_dup`) on the same panel
     collapsed: the most recently seen one stays, at the first one's position.
@@ -212,6 +231,7 @@ def _dedup(rows: list) -> list:
     return kept
 
 
+_LEARNABLE = re.compile(r"[A-Z0-9]+(?:[ -][A-Z0-9]+)*")
 MAX_KEY_LEN = 256
 MAX_FOLLOWS = 20
 
@@ -230,6 +250,17 @@ def _iso(d: date | str) -> str:
 def _today() -> date:
     """Today in Europe/Bucharest (patched in tests)."""
     return datetime.now(TZ).date()
+
+
+def _clean_delays(s: sqlite3.Row) -> dict:
+    """max_delay / final_delay of one history row: the confirmed values of a service
+    checked retroactively (when any was confirmed), else the stored ones without the
+    suspect events."""
+    if s["delay_checked"] and s["last_delay_clean"] is not None:
+        return {"max_delay": max(s["max_delay_clean"] or 0, s["last_delay_clean"]),
+                "final_delay": s["last_delay_clean"]}
+    return {"max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
+            "final_delay": s["last_delay"] or 0}
 
 
 class Store:
@@ -258,6 +289,11 @@ class Store:
         # a row): a stored misread is renamed once the other reading persists.
         self._misread: dict[int, tuple[tuple, int]] = {}
         self._misread_next: dict[int, tuple[tuple, int]] = {}
+        # (kind, service id) -> (board, value read, consecutive frames): a delay/platform
+        # change is applied (and its event emitted) only once confirmed (app.quality).
+        self._cand: dict[tuple[str, int], tuple[str, object, int]] = {}
+        self._cand_next: dict[tuple[str, int], tuple[str, object, int]] = {}
+        self.last_ghost_numbers: set[int] = set()  # train numbers flagged ghost by the last ingest
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -274,11 +310,10 @@ class Store:
     def migrate(self) -> None:
         """Version ladder: each step is additive and atomic together with its version bump
         (a failure leaves the previous version in place), so re-running is safe.
-        Never renumber a step."""
+        Never renumber a step. The data-quality tables (app.quality) are ensured on
+        every start, independently of the version."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
-            if version >= SCHEMA_VERSION:
-                return
             if version < 3:
                 self._migrate_to_3(version)
             if version < 4:
@@ -286,6 +321,8 @@ class Store:
             if version < 5:
                 from app.observations import migrate_to_5  # v5: captures/observations/trains
                 migrate_to_5(self._conn)
+            # data-quality side tables: additive, idempotent, outside the version ladder
+            quality.ensure_schema(self._conn)
 
     def _script(self, sql: str) -> None:
         try:
@@ -402,6 +439,9 @@ class Store:
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
                 self._misread = self._misread_next
+                # a candidate waits while its panel is rejected; otherwise consecutive only
+                self._cand = {**{k: v for k, v in self._cand.items() if v[0] not in accepted},
+                              **self._cand_next}
                 self._delay_read.update(self._pending_read)
                 if len(self._delay_read) > 4000:  # bounded: old services drop out
                     self._delay_read = dict(self._pending_read)
@@ -480,6 +520,8 @@ class Store:
         events: list[Event] = []
         seen: set[int] = set()
         self._misread_next = {}
+        self._cand_next = {}
+        self.last_ghost_numbers = set()
 
         def emit(sid: int, kind: str, row: Row, sd: str, old=None, new=None) -> None:
             self._insert_event(sid, ts_s, kind, old, new)
@@ -550,14 +592,33 @@ class Store:
             # renames; only a reading that persists does, in _maybe_rename)
             row = replace(r, sched_time=cur["sched_time"], train_no=cur["train_no"])
             if cur["status"] == "gone":
-                emit(sid, "appeared", row, sd)
-            # unreadable delay: keep the last real reading, no event, no overwrite
-            delay = r.delay_min if r.delay_read else cur["last_delay"]
+                quality.clear_ghost(c, sid)
+                away = local - datetime.fromisoformat(cur["last_seen"])
+                if away > timedelta(minutes=REAPPEAR_QUIET_MIN):
+                    emit(sid, "appeared", row, sd)
+                else:  # a short absence (OCR flapping): same listing, no new event
+                    log.info("service %d back on the board after %ds: no 'appeared'",
+                             sid, away.total_seconds())
+            # unreadable delay: keep the last real reading, no event, no overwrite;
+            # a changed reading is applied only once confirmed (quality.delay_needs)
+            delay = cur["last_delay"]
             self._pending_read[sid] = r.delay_read
-            if r.delay_read and cur["last_delay"] != r.delay_min:
-                emit(sid, "delay", row, sd, str(cur["last_delay"]), str(r.delay_min))
-            if cur["last_platform"] != r.platform:
-                emit(sid, "platform", row, sd, _plat(cur["last_platform"]), _plat(r.platform))
+            if r.delay_read and r.delay_min != delay:
+                need = quality.delay_needs(r.delay_min, delay)
+                if need is None:
+                    log.info("delay %d of service %d rejected ('+' read as a digit of %d)",
+                             r.delay_min, sid, delay)
+                elif self._confirmed("delay", sid, cur["board"], r.delay_min, need):
+                    emit(sid, "delay", row, sd, str(delay), str(r.delay_min))
+                    delay = r.delay_min
+            elif not r.delay_read and ("delay", sid) in self._cand:
+                self._cand_next[("delay", sid)] = self._cand[("delay", sid)]  # held
+            platform = cur["last_platform"]
+            if r.platform != platform and self._confirmed(
+                    "platform", sid, cur["board"], r.platform,
+                    quality.platform_needs(platform, r.platform)):
+                emit(sid, "platform", row, sd, _plat(platform), _plat(r.platform))
+                platform = r.platform
             names = (r.station, r.operator, r.station_raw, r.operator_raw, int(r.uncertain))
             if r.uncertain and not cur["uncertain"]:
                 # Never replace names matched to a known value by unmatched OCR text.
@@ -567,7 +628,7 @@ class Store:
                 "UPDATE services SET train_type=?, station=?, operator=?, station_raw=?,"
                 " operator_raw=?, uncertain=?, last_seen=?, last_delay=?, last_platform=?,"
                 " flagged=?, status='listed', miss_count=0, last_read=? WHERE id=?",
-                (r.train_type, *names, ts_s, delay, r.platform,
+                (r.train_type, *names, ts_s, delay, platform,
                  int(r.flagged), ts_s, sid),
             )
 
@@ -590,13 +651,34 @@ class Store:
                 # Not seen for a long time (e.g. downtime): retire without an event.
                 c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
                           (misses, s["id"]))
+                self._judge_ghost(s)
             elif misses >= GONE_AFTER_MISSES:
                 c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
                           (misses, s["id"]))
                 emit(s["id"], "gone", self._row_of(s), s["service_date"])
+                self._judge_ghost(s)
             else:
                 c.execute("UPDATE services SET miss_count=? WHERE id=?", (misses, s["id"]))
         return events
+
+    def _confirmed(self, kind: str, sid: int, board: str, value, need: int) -> bool:
+        """Count one more consecutive reading of `value` for (kind, sid); True once it
+        reached `need` (the candidate is then cleared). A different value restarts."""
+        prev = self._cand.get((kind, sid))
+        n = prev[2] + 1 if prev and prev[1] == value else 1
+        if n >= need:
+            return True
+        self._cand_next[(kind, sid)] = (board, value, n)
+        return False
+
+    def _judge_ghost(self, s: sqlite3.Row) -> None:
+        """A service leaving the board: flag it if it was a misread duplicate or a
+        one-off sighting (app.quality.ghost_verdict). Never deletes anything."""
+        verdict = quality.judge_ghost(self._conn, s["id"])
+        if verdict is not None:
+            self.last_ghost_numbers.add(s["train_no"])
+            log.info("service %d (%s %s) flagged ghost: %s", s["id"], s["train_no"],
+                     s["sched_time"], verdict[0])
 
     @staticmethod
     def _row_of(s: sqlite3.Row) -> Row:
@@ -619,8 +701,9 @@ class Store:
                 "SELECT id, board, train_type, train_no, station, operator, sched_time,"
                 " last_delay, last_platform, flagged, status, service_date, uncertain,"
                 " station_raw, last_seen"
-                " FROM services"
-                " WHERE status='listed' ORDER BY service_date, sched_time, train_no"
+                " FROM services s"
+                " WHERE status='listed' AND NOT " + quality.GHOST_SQL +
+                " ORDER BY service_date, sched_time, train_no"
             ).fetchall()
         for s in _dedup(rows):
             out[_BOARD_KEYS[s["board"]]].append({
@@ -675,7 +758,7 @@ class Store:
                 " HAVING COUNT(DISTINCT train_no) >= ? AND COUNT(DISTINCT service_date) >= ?"
                 " ORDER BY COUNT(*) DESC, station LIMIT ?",
                 (min_services, min_days, KNOWN_STATIONS_MAX)).fetchall()
-        names = frozenset(r[0] for r in found)
+        names = frozenset(_protect_learned([r[0] for r in found]))
         self._known_cache = ((today, min_services, min_days), names)
         return set(names)
 
@@ -722,10 +805,14 @@ class Store:
         `station` is a case/diacritics-insensitive substring (LIKE wildcards are
         matched literally). `time_from`/`time_to` are inclusive "HH:MM" bounds,
         compared as strings (zero-padded HH:MM sorts chronologically; a malformed
-        bound simply compares lexicographically). `max_delay` covers every delay
-        seen: the current one plus the old/new values of all delay events.
+        bound simply compares lexicographically). `max_delay` covers every confirmed
+        delay: the current one plus the values of the delay events not marked suspect
+        (app.quality); for services checked retroactively, the confirmed values only.
+        Ghost services (misread duplicates, one-off sightings) are left out; station
+        and operator are the canonical forms when a corrected one exists (raw kept).
+        `low_quality` marks the reduced-quality (beta) period.
         """
-        where, args = ["s.service_date = ?"], [day.isoformat()]
+        where, args = ["s.service_date = ?", "NOT " + quality.GHOST_SQL], [day.isoformat()]
         if train is not None:
             where.append("s.train_no = ?")
             args.append(train)
@@ -735,7 +822,7 @@ class Store:
         if station is not None:
             q = clean_station(station) or station.strip().upper()
             esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-            where.append("s.station LIKE ? ESCAPE '!'")
+            where.append("COALESCE(q.station_canonical, s.station) LIKE ? ESCAPE '!'")
             args.append(f"%{esc}%")
         if time_from is not None:
             where.append("s.sched_time >= ?")
@@ -744,12 +831,17 @@ class Store:
             where.append("s.sched_time <= ?")
             args.append(time_to)
         sql = (
-            "SELECT s.board, s.train_type, s.train_no, s.station, s.operator, s.sched_time,"
+            "SELECT s.board, s.train_type, s.train_no,"
+            " COALESCE(q.station_canonical, s.station) AS station,"
+            " COALESCE(q.operator_canonical, s.operator) AS operator, s.sched_time,"
             " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen, s.uncertain,"
+            " q.delay_checked, q.max_delay_clean, q.last_delay_clean, q.low_quality,"
             " (SELECT MAX(MAX(COALESCE(CAST(e.old AS INTEGER), 0),"
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
-            "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay') AS ev_max"
-            " FROM services s WHERE " + " AND ".join(where) +
+            "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay'"
+            "    AND NOT " + quality.SUSPECT_EVENT_SQL + ") AS ev_max"
+            " FROM services s LEFT JOIN service_quality q ON q.service_id = s.id"
+            " WHERE " + " AND ".join(where) +
             " ORDER BY s.sched_time, s.board, s.train_no LIMIT " + str(HISTORY_MAX + 1)
         )
         with self._lock:
@@ -757,19 +849,23 @@ class Store:
         return [{
             "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
             "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
-            "max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
-            "final_delay": s["last_delay"] or 0, "platform": s["last_platform"],
+            **_clean_delays(s), "platform": s["last_platform"],
             "status": s["status"], "first_seen": s["first_seen"], "last_seen": s["last_seen"],
-            "uncertain": bool(s["uncertain"]),
+            "uncertain": bool(s["uncertain"]), "low_quality": bool(s["low_quality"]),
         } for s in found]
 
     def train_events(self, train_no: int, day: date) -> list[dict]:
-        """Events of every service of `train_no` on `day`, chronological."""
+        """Events of every service of `train_no` on `day`, chronological. Events marked
+        suspect (e.g. "+25" read as 425) and ghost services are left out (kept in the DB)."""
         with self._lock:
             found = self._conn.execute(
-                "SELECT e.ts, e.kind, e.old, e.new, s.board, s.sched_time, s.station"
+                "SELECT e.ts, e.kind, e.old, e.new, s.board, s.sched_time,"
+                " COALESCE(q.station_canonical, s.station) AS station"
                 " FROM events e JOIN services s ON s.id = e.service_id"
-                " WHERE s.train_no = ? AND s.service_date = ? ORDER BY e.ts, e.id",
+                " LEFT JOIN service_quality q ON q.service_id = s.id"
+                " WHERE s.train_no = ? AND s.service_date = ?"
+                " AND NOT " + quality.SUSPECT_EVENT_SQL + " AND NOT " + quality.GHOST_SQL +
+                " ORDER BY e.ts, e.id",
                 (train_no, day.isoformat()),
             ).fetchall()
         return [dict(r) for r in found]

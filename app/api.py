@@ -236,11 +236,12 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             when = datetime.fromtimestamp(ts, TZ)
 
             def _ingest():
-                return store.ingest(rows, when, ""), dict(store.last_rejected)
+                return (store.ingest(rows, when, ""), dict(store.last_rejected),
+                        set(store.last_ghost_numbers))
 
-            events, rejected = await asyncio.to_thread(_ingest)
+            events, rejected, ghosts = await asyncio.to_thread(_ingest)
             try:  # public catalog follows the board even when captures are off/failing
-                await asyncio.to_thread(observations.refresh_catalog, store, rows)
+                await asyncio.to_thread(observations.refresh_catalog, store, rows, ghosts)
             except Exception:
                 log.exception("trains catalog refresh failed (board unaffected)")
             t = asyncio.create_task(notifier.handle(events, when.date()))

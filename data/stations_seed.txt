@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
-# Stații văzute efectiv pe tabela Gara de Nord (fixture + live, 2026-10-21), forma clean_station.
+# Stații reale, forma clean_station (majuscule, fără diacritice).
+# Văzute efectiv pe tabela Gara de Nord (fixture + live, 2026-10-21):
 AEROPORT H COANDA
 BRASOV
 BUDAPESTA KELETI
@@ -15,3 +16,35 @@ SATU MARE
 TARGOVISTE
 URZICENI
 VATRA DORNEI BAI
+# Văzute în baza live la 2026-10-21 (citiri corecte, verificate read-only):
+ADJUD
+ARAD
+BACAU
+BUCURESTI OBOR
+CHISINAU-KIEV
+FETESTI
+GALATI
+RUSE
+SIBIU
+SLOBOZIA VECHE
+SUCEAVA
+SUCEAVA NORD
+TARGU JIU
+TARGU MURES
+TEIUS
+TIMISOARA NORD
+TITU
+VIENA
+# Capete de linie reale pe traseele CFR frecvente din București Nord (încă necitite):
+BRAILA
+DEVA
+FOCSANI
+GIURGIU NORD
+MANGALIA
+MARASESTI
+MEDIAS
+ORADEA
+PASCANI
+ROMAN
+SIGHISOARA
+VATRA DORNEI
