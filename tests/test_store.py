@@ -46,7 +46,7 @@ def test_min_rows_constant():
 
 def test_migrate_idempotent_and_versioned(store):
     store.migrate()
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     names = {r[0] for r in store._conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"runs", "services", "events", "subscriptions", "follows"} <= names
@@ -459,7 +459,7 @@ def test_migrate_old_db_to_v3_keeps_data(tmp_path, version):
     s.migrate()
     s.migrate()  # idempotent
     assert V3_COLS | {"last_read"} <= _cols(s)
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert count(s, "services") == 4
     row = s._conn.execute("SELECT operator_raw, station_raw, uncertain FROM services"
                           " LIMIT 1").fetchone()
@@ -476,7 +476,7 @@ def test_migrate_partially_applied_v3_columns(tmp_path):
     s._conn.execute("PRAGMA user_version = 2")
     s.migrate()
     assert V3_COLS <= _cols(s)
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     s.close()
 
 
@@ -579,7 +579,7 @@ def test_migrate_live_v2_db_from_production_code(tmp_path):
     assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 2
     assert not (V3_COLS & _cols(s))
     s.migrate()
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert V3_COLS <= _cols(s)
     assert count(s, "services") == 4 and count(s, "events") == 5
     rows = s._conn.execute("SELECT operator, operator_raw, station_raw, uncertain"

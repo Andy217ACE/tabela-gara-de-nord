@@ -76,7 +76,8 @@ def test_api_config_defaults(client, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body == {"delay_thresholds": {"low": 5, "mid": 15, "high": 30},
-                    "stale_after_s": 180, "refresh_s": 10}
+                    "stale_after_s": 180, "refresh_s": 10,
+                    "weather": {"enabled": False, "stale_after_s": 2700, "refresh_s": 300}}
 
 
 def test_api_config_env_override(monkeypatch):
