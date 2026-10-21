@@ -54,6 +54,12 @@ def _span(profile: np.ndarray, min_frac: float) -> tuple[int, int] | None:
 
 def split_boards(img_bgr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(arrivals, departures): each half tightened horizontally to its blue panel."""
+    (a, _), (d, _) = split_boards_offsets(img_bgr)
+    return a, d
+
+
+def split_boards_offsets(img_bgr: np.ndarray) -> list[tuple[np.ndarray, int]]:
+    """Like split_boards, plus the x offset of each panel in the original image."""
     h, w = img_bgr.shape[:2]
     out = []
     for f0, f1 in HALVES:
@@ -62,8 +68,9 @@ def split_boards(img_bgr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         span = _span(blue_mask(half).mean(axis=0), _PANEL_MIN_FRAC)
         if span is not None and span[1] - span[0] > 0.5 * half.shape[1]:
             half = half[:, span[0]:span[1]]
-        out.append(half)
-    return out[0], out[1]
+            x0 += span[0]
+        out.append((half, x0))
+    return out
 
 
 def _runs(on: np.ndarray) -> list[list[int]]:
