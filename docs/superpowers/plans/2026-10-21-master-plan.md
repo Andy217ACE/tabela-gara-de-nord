@@ -64,6 +64,14 @@
 ## Etapa D — Catalog, profil tren, Statistici, Clasamente
 - Pagina „Toate trenurile" (N călătorii, % la timp, medie/mediană/max, >30 min, calitatea datelor), profil tren, clasamente cu eșantion minim, punctualitate configurabilă, distribuții; export CSV/JSON.
 
+## Etapa D2 — Pagini pe locații (cerere utilizator, 2026-10-21)
+Idee: click pe o stație (ex. „Galați") oriunde apare numele ei (Panou, Carduri, Istoric, profil tren) → pagina `#statie?nume=GALATI` cu istoricul tuturor trenurilor care vin de acolo / pleacă într-acolo.
+- **Entitate stație**: nume canonic (din canonicalizarea A2; alias-uri: `GALATI`/`Galați`, `BRASOV`≠`BRASOV TRIAJ`), contor de călătorii distincte și observații separate; pagină accesibilă și din căutarea globală.
+- **Conținut**: (1) antet cu N călătorii observate, primul/ultimul moment observat, perioada; (2) tabel „Trenuri dinspre/înspre stație" separat pe sosiri și plecări: nr. tren, operator observat, N călătorii, întârziere medie / mediană / p90 / maximă (valori OBSERVATE, ultima întârziere citită înainte de dispariția de pe panou; nu „rezultat final confirmat"), % călătorii la timp (prag configurabil), ultima observație; (3) statistici agregate ale stației: media/mediana pe ore, zile ale săptămânii, luni; distribuția întârzierilor; tendința lunară; poziția în clasamentul stațiilor (cu N); (4) lista ultimelor călătorii cu graficul evoluției întârzierii; (5) după Etapa G: relația cu meteo (asociere statistică, nu cauză).
+- **Reguli**: eșantion minim configurabil (sub prag arătăm cifrele brute cu avertisment, fără procente „înșelătoare"); trenurile care trec prin stație dar sunt afișate cu altă origine/destinație NU sunt atribuite stației (se folosește exact ce afișează panoul); nota explicită că întârzierea afișată este cea la București Nord, nu la stația de origine; date citite ≠ calculate; valori lipsă ≠ 0; export CSV/JSON al paginii.
+- **API**: `GET /api/stations?query=&limit=` (autocomplete + contoare), `GET /api/stations/{name}` (agregate + trenuri), `GET /api/stations/{name}/journeys?from=&to=&board=` (paginate, plafonate).
+- Se implementează în valul 3 împreună cu D (catalog trenuri, profil, statistici, clasamente), pe baza tabelelor `trains`/`observations` din Etapa B; clasamentul stațiilor intră în pagina Clasamente.
+
 ## Etapa E — Alerte și monitorizare
 - Motor de reguli (cooldown, id eveniment, jurnal), Telegram opțional, pagina Stare sistem (durate OCR, erori, vechime date, dimensiune DB/imagini), watchdog.
 
