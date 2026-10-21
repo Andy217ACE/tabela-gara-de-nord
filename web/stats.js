@@ -1,7 +1,8 @@
 // © 2026 Andy217Ace
 // Tabela Gara de Nord — Trenuri (#trenuri), profil tren (#tren?nr=), Statistici
-// (#statistici), Clasamente (#clasamente). Data: /api/trains/stats, /api/trains/{no}/journeys,
-// /api/stats, /api/stats/rankings. Every delay is the one READ on the București Nord board;
+// (#statistici), Clasamente (#clasamente), Stații (#statii) și pagina unei stații
+// (#statie?nume=). Data: /api/trains/stats, /api/trains/{no}/journeys, /api/stats,
+// /api/stats/rankings, /api/stations, /api/stations/{name}[/journeys]. Every delay is the one READ on the București Nord board;
 // arrivals and departures are never mixed; a missing value is shown as „—”, never 0; N is
 // shown next to every statistic. DOM via createElement/textContent, charts via
 // createElementNS + classes from stats.css (no inline styles: CSP).
@@ -286,7 +287,8 @@
     to: { label: "Până la (data)", type: "date" },
     prag: { label: "„La timp” ≤ (min)", type: "number", lo: 0, hi: 60, placeholder: "5" },
     min: { label: "Eșantion minim", type: "number", lo: 1, hi: 1000, placeholder: "5" },
-    doar_confirmate: { label: "Doar rezultate confirmate", type: "checkbox" }
+    doar_confirmate: { label: "Doar rezultate confirmate", type: "checkbox" },
+    q: { label: "Caută stația", type: "search", placeholder: "ex. Galați, Brașov, Aeroport", max: 64 }
   };
 
   function clean(field, raw) {
@@ -317,8 +319,10 @@
   }
 
   function syncHash(base, p, fields, extra) {
-    var s = toSearch(p, fields);
+    // identity first (#statie?nume=…&board=…), then the filters
+    var s = new URLSearchParams();
     Object.keys(extra || {}).forEach(function (k) { s.set(k, extra[k]); });
+    toSearch(p, fields).forEach(function (val, k) { s.set(k, val); });
     var q = s.toString();
     var hash = "#" + base + (q ? "?" + q : "");
     if (location.hash !== hash) history.replaceState(null, "", hash);
@@ -435,13 +439,16 @@
           if (v.ctrl !== ctrl || e.aborted) return;
           v.data = null;
           v.key = null;
-          v.body.replaceChildren(notice(cfg.errorText ? cfg.errorText(e) : errorText(e), "notice-error"));
+          v.body.replaceChildren(cfg.errorNode ? cfg.errorNode(v, e)
+            : notice(cfg.errorText ? cfg.errorText(e) : errorText(e), "notice-error"));
+          if (cfg.onError) cfg.onError(v, e);
         })
         .then(function () {
           if (v.ctrl === ctrl) { v.ctrl = null; $(cfg.root).classList.remove("is-loading"); }
         });
     }
     v.load = load;
+    v.url = function () { return cfg.url(v); };
     v.show = function (params) {
       ensure();
       v.p = readParams(params, cfg.fields);
@@ -776,6 +783,33 @@
     { key: "month", title: "Pe lună", minWidth: 240, label: function (g) { return monthText(g.key); } }
   ];
 
+  // Charts per hour / weekday / month, one card per board (shared with #statie).
+  function timeSections(host, byTime, boards, params, labels) {
+    DIMS.forEach(function (dim) {
+      var sec = el("section", "st-section");
+      sec.append(el("h2", "st-h2", dim.title));
+      sec.append(el("p", "st-note", "Bara = întârzierea medie citită (minute); sub fiecare bară: N călătorii. " +
+        "Barele estompate au eșantion mic (N < " + params.min_sample + ")."));
+      var grid = el("div", "st-cards");
+      sec.append(grid);
+      host.append(sec);
+      boards.forEach(function (b) {
+        var groups = byTime && byTime[b] && byTime[b][dim.key];
+        var card = el("div", "st-card st-card-chart");
+        card.append(el("h3", "detail-h", labels[b]));
+        grid.append(card);
+        if (!groups || !groups.length) {
+          card.append(el("p", "detail-note", "Nu există date."));
+          return;
+        }
+        card.append(barChart({ host: card, items: groupItems(groups, dim.label), minWidth: dim.minWidth,
+          showN: true, unit: "min",
+          title: dim.title + " — " + labels[b],
+          desc: "Întârzierea medie citită pe tabela de la București Nord, cu N călătorii pentru fiecare bară." }));
+      });
+    });
+  }
+
   function renderStatistici(v, d) {
     var params = d.params || {};
     var q = d.quality || {};
@@ -826,29 +860,7 @@
       }
     });
 
-    DIMS.forEach(function (dim) {
-      var sec = el("section", "st-section");
-      sec.append(el("h2", "st-h2", dim.title));
-      sec.append(el("p", "st-note", "Bara = întârzierea medie citită (minute); sub fiecare bară: N călătorii. " +
-        "Barele estompate au eșantion mic (N < " + params.min_sample + ")."));
-      var grid = el("div", "st-cards");
-      sec.append(grid);
-      v.body.append(sec);
-      boards.forEach(function (b) {
-        var groups = d.by_time && d.by_time[b] && d.by_time[b][dim.key];
-        var card = el("div", "st-card st-card-chart");
-        card.append(el("h3", "detail-h", BOARD_PL[b]));
-        grid.append(card);
-        if (!groups || !groups.length) {
-          card.append(el("p", "detail-note", "Nu există date."));
-          return;
-        }
-        card.append(barChart({ host: card, items: groupItems(groups, dim.label), minWidth: dim.minWidth,
-          showN: true, unit: "min",
-          title: dim.title + " — " + BOARD_PL[b],
-          desc: "Întârzierea medie citită pe tabela de la București Nord, cu N călătorii pentru fiecare bară." }));
-      });
-    });
+    timeSections(v.body, d.by_time, boards, params, BOARD_PL);
 
     var note = el("section", "st-section st-explain");
     note.append(el("h2", "st-h2", "Cum citești aceste cifre"));
@@ -938,13 +950,79 @@
         " călătorii cu întârziere citită pentru filtrele alese. " +
         plural(d.below_min || 0, "tren are", "trenuri au") + " date, dar sub prag — nu le clasăm, " +
         "pentru că un eșantion atât de mic nu spune nimic sigur."));
-      return;
+    } else {
+      v.body.append(rankTable("Cele mai întârziate", d.most_delayed || []));
+      v.body.append(rankTable("Cele mai punctuale", d.most_punctual || []));
+      v.body.append(el("p", "st-note", "Ordine: „cele mai întârziate” după întârzierea medie citită (apoi " +
+        "mediana); „cele mai punctuale” după % la timp (apoi media). N = călătorii încheiate cu " +
+        "întârzierea citită pe tabela de la București Nord."));
     }
-    v.body.append(rankTable("Cele mai întârziate", d.most_delayed || []));
-    v.body.append(rankTable("Cele mai punctuale", d.most_punctual || []));
-    v.body.append(el("p", "st-note", "Ordine: „cele mai întârziate” după întârzierea medie citită (apoi " +
-      "mediana); „cele mai punctuale” după % la timp (apoi media). N = călătorii încheiate cu " +
-      "întârzierea citită pe tabela de la București Nord."));
+    renderRankStations(d.stations, params);
+  }
+
+  function stationRankTable(title, list) {
+    var sec = el("section", "st-subsection");
+    sec.append(el("h3", "st-h3", title));
+    if (!list.length) {
+      sec.append(el("p", "detail-note", "Nicio stație eligibilă."));
+      return sec;
+    }
+    var t = scrollTable("Stații — " + title.toLowerCase());
+    var thead = el("thead");
+    var hr = el("tr");
+    [["#", true], ["Stație", false], ["Panou", false], ["N", true], ["Călătorii", true], ["Trenuri", true],
+     ["Medie", true], ["Mediană", true], ["% la timp", true]].forEach(function (h) {
+      var th = el("th", h[1] ? "st-num" : null, h[0]);
+      th.scope = "col";
+      hr.append(th);
+    });
+    thead.append(hr);
+    var tbody = el("tbody");
+    list.forEach(function (e, i) {
+      var s = e.stats || {};
+      var tr = el("tr", "st-row");
+      td(tr, String(i + 1), "st-num st-rank");
+      td(tr, stationLink(e.station));
+      td(tr, BOARD_ONE[e.board] || e.board);
+      td(tr, s.n == null ? "—" : String(s.n), "st-num");
+      td(tr, e.journeys == null ? "—" : String(e.journeys), "st-num");
+      td(tr, e.trains == null ? "—" : String(e.trains), "st-num");
+      td(tr, minutes(s.mean), "st-num");
+      td(tr, minutes(s.median), "st-num");
+      td(tr, pct(s.on_time_pct), "st-num");
+      tr.addEventListener("click", function (ev) {
+        if (!ev.target.closest("a, button")) location.hash = "#statie?nume=" + encodeURIComponent(e.station);
+      });
+      tbody.append(tr);
+    });
+    t.table.append(thead, tbody);
+    sec.append(t.wrap);
+    return sec;
+  }
+
+  // Station ranking (`stations` of /api/stats/rankings) in #rank-stations.
+  function renderRankStations(st, params) {
+    var box = $("rank-stations");
+    if (!box) return;
+    box.replaceChildren();
+    if (!st) return;
+    var sec = el("section", "st-section st-explain");
+    sec.append(el("h2", "st-h2", "Clasamentul stațiilor"));
+    sec.append(el("p", "h-count", plural(st.eligible || 0, "stație eligibilă", "stații eligibile") +
+      " (stație × panou, cu cel puțin " + params.min_sample + " călătorii cu întârziere citită) · " +
+      (st.below_min || 0) + " sub prag"));
+    sec.append(el("p", "st-note", "Stația = originea (la sosiri) sau destinația (la plecări) afișată pe " +
+      "tabelă. Întârzierea este cea citită pe tabela de la București Nord, nu cea de la stație. " +
+      "Sosirile și plecările sunt clasate separat (coloana „Panou”)."));
+    if (!st.eligible) {
+      sec.append(el("p", "st-warn", "Încă nu există stații cu cel puțin " + params.min_sample +
+        " călătorii cu întârziere citită pentru filtrele alese. " +
+        plural(st.below_min || 0, "stație are", "stații au") + " date, dar sub prag — nu le clasăm."));
+    } else {
+      sec.append(stationRankTable("Cele mai întârziate", st.most_delayed || []));
+      sec.append(stationRankTable("Cele mai punctuale", st.most_punctual || []));
+    }
+    box.append(sec);
   }
 
   var clasamente = makeView({
@@ -954,12 +1032,384 @@
       q.set("limit", String(RANK_LIMIT));
       return "/api/stats/rankings?" + q.toString();
     },
+    onError: function () { var b = $("rank-stations"); if (b) b.replaceChildren(); },
     render: renderClasamente
+  });
+
+  // ---- #statii (list + search) ---------------------------------------------------------
+
+  var SL_FIELDS = ["q"];
+  var SL_LIMIT = 500;
+
+  function renderStatii(v, d) {
+    var list = Array.isArray(d.stations) ? d.stations : [];
+    var head = el("div", "st-bar-head");
+    var total = list.reduce(function (a, s) { return a + (s.journeys || 0); }, 0);
+    head.append(el("p", "h-count", plural(list.length, "stație", "stații") +
+      (v.p.q ? " pentru „" + v.p.q + "”" : "") + " · " + plural(total, "călătorie", "călătorii")));
+    var q = new URLSearchParams();
+    if (v.p.q) q.set("query", v.p.q);
+    q.set("limit", String(SL_LIMIT));
+    var exp = el("div", "st-exports");
+    q.set("format", "csv");
+    exp.append(exportLink("Export CSV", "/api/stations?" + q.toString(), true));
+    q.delete("format");
+    exp.append(exportLink("JSON", "/api/stations?" + q.toString(), false));
+    head.append(exp);
+    v.body.append(head);
+    v.body.append(el("p", "st-note", "Stația = originea (la sosiri) sau destinația (la plecări) afișată pe " +
+      "tabela din Gara de Nord. Întârzierile din paginile stațiilor sunt cele citite la București Nord, " +
+      "nu la stație. „Nume nesigur” = numele a fost citit doar nesigur (OCR) pe tabelă."));
+    if (!list.length) {
+      v.body.append(el("p", "empty", v.p.q ? "Nicio stație nu se potrivește căutării." : "Încă nu există stații observate."));
+      return;
+    }
+    var t = scrollTable("Stații observate pe tabelă");
+    var thead = el("thead");
+    var hr = el("tr");
+    [["Stație", false], ["Călătorii", true], ["Sosiri", true], ["Plecări", true], ["Trenuri", true],
+     ["Cu întârziere citită", true], ["Perioada", false]].forEach(function (h) {
+      var th = el("th", h[1] ? "st-num" : null, h[0]);
+      th.scope = "col";
+      hr.append(th);
+    });
+    thead.append(hr);
+    var tbody = el("tbody");
+    list.forEach(function (s) {
+      var tr = el("tr", "st-row");
+      var c = el("span", "st-station");
+      c.append(stationLink(s.name, s.uncertain_only));
+      if (s.uncertain_only) c.append(el("span", "st-tag", "nume nesigur"));
+      td(tr, c);
+      td(tr, String(s.journeys == null ? "—" : s.journeys), "st-num");
+      td(tr, s.arrivals == null ? "—" : String(s.arrivals), "st-num");
+      td(tr, s.departures == null ? "—" : String(s.departures), "st-num");
+      td(tr, s.trains == null ? "—" : String(s.trains), "st-num");
+      td(tr, s.delay_known == null ? "—" : String(s.delay_known), "st-num");
+      td(tr, period(s.first_date, s.last_date));
+      tr.addEventListener("click", function (ev) {
+        if (!ev.target.closest("a, button")) location.hash = "#statie?nume=" + encodeURIComponent(s.name);
+      });
+      tbody.append(tr);
+    });
+    t.table.append(thead, tbody);
+    v.body.append(t.wrap);
+    if (list.length >= SL_LIMIT) {
+      v.body.append(el("p", "st-note", "Se afișează primele " + SL_LIMIT + " stații — restrânge căutarea."));
+    }
+  }
+
+  var statii = makeView({
+    root: "st-statii", route: "statii", fields: SL_FIELDS,
+    url: function (v) {
+      var q = new URLSearchParams();
+      if (v.p.q) q.set("query", v.p.q);
+      q.set("limit", String(SL_LIMIT));
+      return "/api/stations?" + q.toString();
+    },
+    render: renderStatii
+  });
+
+  // ---- #statie?nume= -------------------------------------------------------------------
+
+  var SN_FIELDS = ["board", "from", "to", "prag", "min", "doar_confirmate"];
+  var JR_PAGE = 50;
+  var BOARD_TOWARD = { arrival: "Sosiri dinspre stație", departure: "Plecări înspre stație" };
+  var stampFmt = new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric",
+    month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+  function stamp(ts) {
+    if (!ts) return "necunoscut";
+    var d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : stampFmt.format(d);
+  }
+
+  function stationApi(name) { return "/api/stations/" + encodeURIComponent(name); }
+
+  function rankLine(rank, s, params, board) {
+    if (rank && rank.position != null) {
+      return el("p", "st-rankline", "Locul " + rank.position + " din " + rank.of + " stații (" +
+        BOARD_PL[board].toLowerCase() + ") cu ≥ " + params.min_sample +
+        " călătorii cu întârziere citită · locul 1 = cea mai întârziată.");
+    }
+    var n = s && s.n != null ? s.n : 0;
+    return el("p", "st-rankline st-rankline-out", "Nu intră în clasamentul stațiilor: " +
+      (n < params.min_sample ? "sub eșantionul minim (N = " + n + " < " + params.min_sample + ")."
+        : "nu este eligibilă pentru filtrele alese."));
+  }
+
+  function stationTrainsTable(list, name, board) {
+    var cap = "Trenuri — " + BOARD_PL[board].toLowerCase() + " " + BOARD_DIR[board] + " " + titleCase(name);
+    var t = scrollTable(cap);
+    var thead = el("thead");
+    var hr = el("tr");
+    [["Tren", false], ["Operator", false], ["Călătorii", true], ["N", true], ["Medie", true],
+     ["Mediană", true], ["p90", true], ["Max", true], ["% la timp", true], ["Ultima zi", false]].forEach(function (h) {
+      var th = el("th", h[1] ? "st-num" : null, h[0]);
+      th.scope = "col";
+      hr.append(th);
+    });
+    thead.append(hr);
+    var tbody = el("tbody");
+    list.forEach(function (e) {
+      var s = e.stats || {};
+      var tr = el("tr", "st-row");
+      if (s.sufficient === false) tr.classList.add("st-row-small");
+      td(tr, trainLink(e), "st-c-train");
+      td(tr, e.operator || "necunoscut");
+      td(tr, e.journeys == null ? "—" : String(e.journeys), "st-num");
+      td(tr, s.n == null ? "—" : String(s.n), "st-num");
+      td(tr, minutes(s.mean), "st-num");
+      td(tr, minutes(s.median), "st-num");
+      td(tr, minutes(s.p90), "st-num");
+      td(tr, minutes(s.max), "st-num");
+      td(tr, pct(s.on_time_pct), "st-num");
+      td(tr, dayText(e.last_date));
+      tr.addEventListener("click", function (ev) {
+        if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
+      });
+      tbody.append(tr);
+    });
+    t.table.append(thead, tbody);
+    return t.wrap;
+  }
+
+  // „Ultimele călătorii”: /api/stations/{name}/journeys, paginated with before=next_before.
+  function jrRow(j) {
+    var tr = el("tr", "st-row");
+    var b = el("button", "st-jbtn", dayText(j.service_date));
+    b.type = "button";
+    b.setAttribute("aria-label", "Detalii călătorie " + (j.train_type || "") + " " + j.train_no + ", " +
+      dayText(j.service_date) + " " + (j.sched_time || ""));
+    var open = function () {
+      var f = H().openJourney;
+      if (typeof f === "function") {
+        f(j.id, b, { train_type: j.train_type, train_no: j.train_no, board: j.board,
+                     sched_time: j.sched_time, station: j.station, service_date: j.service_date });
+      }
+    };
+    b.addEventListener("click", open);
+    td(tr, b);
+    td(tr, j.sched_time || "—", "st-mono");
+    td(tr, BOARD_ONE[j.board] || j.board);
+    td(tr, trainLink(j));
+    td(tr, j.operator || "necunoscut");
+    td(tr, resultBadge(j.result));
+    td(tr, journeyDelay(j.result), "st-num");
+    if (j.uncertain) tr.title = "Numele stației/operatorului citit nesigur";
+    tr.addEventListener("click", function (ev) { if (!ev.target.closest("a, button")) open(); });
+    return tr;
+  }
+
+  function jrPaint(v) {
+    var jr = v.jr;
+    var dom = jr && jr.dom;
+    if (!dom) return;
+    dom.tbody.replaceChildren.apply(dom.tbody, jr.items.map(jrRow));
+    dom.wrap.hidden = !jr.items.length;
+    dom.count.textContent = jr.items.length ? "Afișate: " + plural(jr.items.length, "călătorie", "călătorii") +
+      (jr.next == null && jr.loaded ? " (toate)" : "") : "";
+    dom.more.hidden = jr.next == null;
+    dom.more.disabled = jr.loading;
+    dom.status.textContent = jr.loading ? "Se încarcă…" : jr.error ? jr.error
+      : jr.loaded && !jr.items.length ? "Nicio călătorie pentru această stație." : "";
+  }
+
+  function jrFetch(v) {
+    var jr = v.jr;
+    if (jr.loading) return;
+    jr.loading = true;
+    jr.error = null;
+    jrPaint(v);
+    var q = new URLSearchParams();
+    q.set("limit", String(JR_PAGE));
+    if (jr.board) q.set("board", jr.board);
+    if (jr.next != null) q.set("before", String(jr.next));
+    var ctrl = new AbortController();
+    jr.ctrl = ctrl;
+    getJSON(stationApi(jr.name) + "/journeys?" + q.toString(), ctrl)
+      .then(function (data) {
+        if (v.jr !== jr) return;
+        var items = Array.isArray(data && data.journeys) ? data.journeys : [];
+        jr.items = jr.items.concat(items);
+        jr.next = data && data.next_before != null ? data.next_before : null;
+        jr.loaded = true;
+      })
+      .catch(function (e) {
+        if (v.jr !== jr || e.aborted) return;
+        jr.error = errorText(e);
+      })
+      .then(function () {
+        if (v.jr !== jr) return;
+        jr.loading = false;
+        jrPaint(v);
+      });
+  }
+
+  function journeysSection(v, name) {
+    var board = v.p.board || "";
+    var sec = el("section", "st-section");
+    sec.append(el("h2", "st-h2", "Ultimele călătorii"));
+    sec.append(el("p", "st-note", "Cele mai noi primele" + (board ? " · doar " + BOARD_PL[board].toLowerCase() : "") +
+      " (fără filtrul de perioadă). Apasă pe o călătorie pentru rezultat, motiv și graficul citirilor."));
+    var count = el("p", "h-count");
+    var t = scrollTable("Ultimele călătorii — " + titleCase(name));
+    var thead = el("thead");
+    var hr = el("tr");
+    ["Data de serviciu", "Ora prog.", "Panou", "Tren", "Operator", "Rezultat", "Întârziere"].forEach(function (x) {
+      var th = el("th", null, x);
+      th.scope = "col";
+      hr.append(th);
+    });
+    thead.append(hr);
+    var tbody = el("tbody");
+    t.table.append(thead, tbody);
+    var more = el("button", "btn btn-ghost btn-sm st-more-btn", "Mai multe călătorii");
+    more.type = "button";
+    var status = el("p", "detail-note");
+    status.setAttribute("role", "status");
+    sec.append(count, t.wrap, more, status);
+    var key = name + "|" + board;
+    if (!v.jr || v.jr.key !== key) {
+      if (v.jr && v.jr.ctrl) v.jr.ctrl.abort();
+      v.jr = { key: key, name: name, board: board, items: [], next: null, loaded: false, loading: false };
+    }
+    v.jr.dom = { tbody: tbody, wrap: t.wrap, count: count, more: more, status: status };
+    more.addEventListener("click", function () { jrFetch(v); });
+    if (!v.jr.loaded && !v.jr.loading) jrFetch(v);
+    else jrPaint(v);
+    return sec;
+  }
+
+  function stationHeading(text, sub) {
+    $("statie-heading").textContent = text;
+    $("statie-sub").textContent = sub || "";
+  }
+
+  function renderStatie(v, d) {
+    var params = d.params || {};
+    var name = d.name || v.nume;
+    var nice = titleCase(name);
+    if (name !== v.nume) {   // show the canonical name in the URL (GALATI, not galați)
+      v.nume = name;
+      v.key = v.url();
+      syncHash("statie", v.p, SN_FIELDS, { nume: name });
+    }
+    stationHeading("Stația " + nice,
+      plural(d.journeys || 0, "călătorie", "călătorii") + " · " + plural(d.trains || 0, "tren", "trenuri") +
+      " · perioada: " + (d.period ? period(d.period.first, d.period.last) : "—") +
+      (d.period && d.period.days ? " (" + plural(d.period.days, "zi cu date", "zile cu date") + ")" : "") +
+      " · prima observație: " + stamp(d.first_seen) + " · ultima: " + stamp(d.last_seen));
+    document.title = "Stația " + nice + " · Tabela Gara de Nord";
+
+    var warn = el("p", "st-warn st-station-note");
+    warn.setAttribute("role", "note");
+    warn.append(el("strong", null, "Atenție: "), document.createTextNode(d.note ||
+      "Întârzierea este cea afișată pe tabela din București Nord, nu la stație."));
+    v.body.append(warn);
+
+    var top = el("div", "st-bar-head");
+    var back = el("a", "st-back", "← Toate stațiile");
+    back.href = "#statii";
+    top.append(back);
+    var q = toSearch(v.p, SN_FIELDS);
+    var exp = el("div", "st-exports");
+    q.set("format", "csv");
+    exp.append(exportLink("Export CSV (trenuri)", stationApi(name) + "?" + q.toString(), true));
+    var jq = new URLSearchParams();
+    if (v.p.board) jq.set("board", v.p.board);
+    jq.set("limit", "500");
+    jq.set("format", "csv");
+    exp.append(exportLink("Export CSV (călătorii)", stationApi(name) + "/journeys?" + jq.toString(), true));
+    q.delete("format");
+    exp.append(exportLink("JSON", stationApi(name) + (q.toString() ? "?" + q.toString() : ""), false));
+    top.append(exp);
+    v.body.append(top);
+    v.body.append(el("p", "h-count", explainParams(params)));
+    v.body.append(qualityLine(d.quality));
+    if (d.uncertain_names) {
+      v.body.append(el("p", "st-note", plural(d.uncertain_names, "călătorie are", "călătorii au") +
+        " numele stației sau al operatorului citit nesigur (OCR)."));
+    }
+
+    var boards = BOARDS.filter(function (b) { return d.boards && d.boards[b]; });
+    var cards = el("div", "st-cards");
+    v.body.append(cards);
+    boards.forEach(function (b) {
+      var x = d.boards[b];
+      var s = x.stats || {};
+      var card = el("section", "st-card");
+      card.append(el("h2", "st-card-h st-card-board", BOARD_TOWARD[b]));
+      card.append(el("p", "st-card-sub", plural(x.journeys || 0, "călătorie", "călătorii") + " · " +
+        (b === "arrival" ? "trenuri care vin din " : "trenuri care pleacă spre ") + nice));
+      card.append(statsGrid(s, params));
+      var w = sampleWarn(s, params);
+      if (w) card.append(w);
+      card.append(rankLine(x.rank, s, params, b));
+      card.append(qualityLine(x.quality));
+      if (x.distribution) {
+        card.append(el("h3", "detail-h", "Distribuția întârzierii citite (N = " + (s.n || 0) + ")"));
+        card.append(distChart(card, x.distribution, b));
+      }
+      cards.append(card);
+    });
+
+    boards.forEach(function (b) {
+      var list = Array.isArray(d.boards[b].trains) ? d.boards[b].trains : [];
+      var sec = el("section", "st-section");
+      sec.append(el("h2", "st-h2", "Trenuri — " + BOARD_TOWARD[b].toLowerCase() + " (" + list.length + ")"));
+      if (!list.length) sec.append(el("p", "detail-note", "Niciun tren."));
+      else sec.append(stationTrainsTable(list, name, b));
+      v.body.append(sec);
+    });
+
+    timeSections(v.body, d.by_time, boards, params, BOARD_TOWARD);
+    v.body.append(journeysSection(v, name));
+  }
+
+  function stationMissing(text) {
+    var box = el("div", "notice notice-error st-missing");
+    box.append(el("p", null, text));
+    var a = el("a", "st-back", "Vezi lista stațiilor →");
+    a.href = "#statii";
+    box.append(a);
+    return box;
+  }
+
+  var statie = makeView({
+    root: "st-statie", route: "statie", fields: SN_FIELDS,
+    onParams: function (v, params) { v.nume = (params.get("nume") || "").trim().slice(0, 80); },
+    hashExtra: function (v) { return v.nume ? { nume: v.nume } : null; },
+    title: function (v) {
+      stationHeading(v.nume ? "Stația " + titleCase(v.nume) : "Stație", "");
+      if (v.nume) document.title = "Stația " + titleCase(v.nume) + " · Tabela Gara de Nord";
+    },
+    url: function (v) {
+      if (!v.nume) {
+        v.data = null;
+        v.key = null;
+        v.body.replaceChildren(stationMissing("Nicio stație aleasă."));
+        return null;
+      }
+      var q = toSearch(v.p, SN_FIELDS).toString();
+      return stationApi(v.nume) + (q ? "?" + q : "");
+    },
+    errorNode: function (v, e) {
+      if (e.status === 404) {
+        stationHeading("Stație necunoscută", "");
+        return stationMissing("Stația nu a fost observată pe tabelă" + (v.nume ? " („" + v.nume + "”)." : "."));
+      }
+      if (e.status === 422) return stationMissing("Nume de stație invalid.");
+      return notice(errorText(e), "notice-error");
+    },
+    render: renderStatie
   });
 
   App.views.trenuri = { show: trenuri.show };
   App.views.tren = { show: tren.show };
   App.views.statistici = { show: statistici.show };
   App.views.clasamente = { show: clasamente.show };
+  App.views.statii = { show: statii.show };
+  App.views.statie = { show: statie.show };
   App.stats = { stationLink: stationLink, barChart: barChart, statsGrid: statsGrid, sampleWarn: sampleWarn };
 })();

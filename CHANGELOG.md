@@ -5,6 +5,15 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.05 — 2026-10-21
+
+### Adăugat
+- **Pagini pe stații** (`#statie?nume=…`): click pe numele unei stații oriunde apare (Panou, Carduri, Istoric, profil tren, Trenuri, Clasamente) deschide istoricul trenurilor care vin dinspre stație (sosiri) și pleacă înspre ea (plecări), separat: N călătorii și trenuri, perioada, medie / mediană / p90 / maxim, % la timp, peste 30 min, distribuția, medii pe oră / zi / lună, tabelul trenurilor, ultimele călătorii (paginate, cu rezultatul și graficul fiecăreia), export CSV/JSON.
+- Avertisment explicit pe fiecare pagină de stație: întârzierea este cea afișată pe tabela din București Nord, nu la stația respectivă; trenurile sunt atribuite stației doar când tabela o afișează ca origine sau destinație.
+- **Lista stațiilor** (`#statii`) cu căutare (și cu diacritice: „Galați” găsește GALATI), marcaj „nume nesigur”, export.
+- **Clasamentul stațiilor** în Clasamente (cele mai întârziate / punctuale, pe panou, doar cu eșantion minim, N afișat) și poziția fiecărei stații în clasament pe pagina ei.
+- API public: `/api/stations?query=`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys` (paginat, `before=`), JSON și `format=csv`; numele stațiilor sunt cele canonice (fără diacritice).
+
 ## Beta 1.04 — 2026-10-21
 
 ### Adăugat

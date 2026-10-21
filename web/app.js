@@ -129,6 +129,9 @@
 
     var main = el("div", "t-main");
     var station = el("p", "t-station");
+    // the station name links to its page (#statie?nume=); an <a> without href (no station) is inert
+    var stationLink = el("a", "station-link station-link-plain");
+    station.append(stationLink);
     var meta = el("p", "t-meta");
     var type = el("span", "type");
     var no = el("span", "t-no");
@@ -154,7 +157,8 @@
 
     li.append(time, main, platWrap, row);
 
-    var card = { li: li, board: board, sched: sched, est: est, station: station, type: type,
+    var card = { li: li, board: board, sched: sched, est: est, station: station,
+                 stationLink: stationLink, type: type,
                  no: no, flag: flag, op: op, delay: delay, follow: follow, plat: plat,
                  followText: followText, followLabel: "", train: null, sig: null };
     follow.addEventListener("click", function () {
@@ -186,9 +190,18 @@
 
     // A2 canonicalisation: `uncertain` = station/operator did not match a known name
     var unsure = t.uncertain === true;
-    c.station.textContent = t.station ? t.station.toLowerCase() : "—";
-    c.station.setAttribute("aria-label", where + (t.station || "stație necunoscută") +
-      (unsure ? " (citire nesigură)" : ""));
+    c.stationLink.textContent = t.station ? t.station.toLowerCase() : "—";
+    if (t.station) {
+      var href = "#statie?nume=" + encodeURIComponent(t.station);
+      if (c.stationLink.getAttribute("href") !== href) c.stationLink.setAttribute("href", href);
+      c.stationLink.setAttribute("aria-label", where + t.station + (unsure ? " (citire nesigură)" : "") +
+        " — pagina stației");
+      c.station.removeAttribute("aria-label");
+    } else {
+      c.stationLink.removeAttribute("href");
+      c.stationLink.removeAttribute("aria-label");
+      c.station.setAttribute("aria-label", where + "stație necunoscută");
+    }
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
     // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
     c.station.title = t.station ? t.station + (unsure ? " (" + UNSURE + ")" : "") : "";
@@ -461,13 +474,14 @@
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
-    "#statistici": "statistici", "#clasamente": "clasamente" };
+    "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente"];
+    "clasamente", "statii", "statie"];
   var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
-    trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente" };
-  // nav item highlighted for a route without its own entry (#tren → „Trenuri”)
-  var NAV_PARENT = { tren: "trenuri" };
+    trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
+    statii: "Stații", statie: "Stație" };
+  // nav item highlighted for a route without its own entry (#tren, #statii, #statie → „Trenuri”)
+  var NAV_PARENT = { tren: "trenuri", statii: "trenuri", statie: "trenuri" };
   var currentRoute = null;
 
   // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
