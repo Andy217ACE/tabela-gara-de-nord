@@ -519,13 +519,50 @@ def test_uncertain_reading_does_not_overwrite_certain_names(store):
     assert tuple(got) == ("CFR Calatori", "Brasov", 0)
 
 
-def test_known_stations(store):
+def _as_read(r, station, **kw):
+    """A row whose station was stored exactly as OCR read it."""
+    return Row(**{**r.__dict__, "station": station, "station_raw": station, **kw})
+
+
+def test_known_stations_learns_only_repeated_verbatim_reads(store):
     assert store.known_stations() == set()
-    rows = base_rows()
-    rows[2] = Row(**{**rows[2].__dict__, "station": "PLOIESTI SUD"})
-    store.ingest(rows, T0)
-    assert store.known_stations() == {"Brasov"}  # seen on >= 2 services
-    assert store.known_stations(min_services=1) == {"Brasov", "PLOIESTI SUD"}
+    day1 = base_rows()
+    day1[0] = _as_read(day1[0], "SUCEAVA")                    # 1621
+    day1[1] = _as_read(day1[1], "SUCEAVA")                    # 1622
+    day1[2] = _as_read(day1[2], "BRASOY")                     # one misread
+    day1[3] = Row(**{**day1[3].__dict__, "station": "BRASOV", "station_raw": "BRASOU",
+                     "uncertain": True})                     # corrected, not verbatim
+    store.ingest(day1, T0)
+    # 2 trains but only 1 day -> not yet
+    assert store.known_stations() == set()
+    day2 = [_as_read(r, "SUCEAVA") if r.train_no in (1621, 1622) else r for r in base_rows()]
+    store.ingest(day2, T0 + timedelta(days=1))
+    store._known_cache = None  # new day in tests: drop the per-day cache
+    assert store.known_stations() == {"SUCEAVA"}
+    # pre-v3 rows (no raw text) never teach anything
+    store._conn.execute("UPDATE services SET station_raw='' WHERE station='SUCEAVA'")
+    store._known_cache = None
+    assert store.known_stations() == set()
+
+
+def test_known_stations_cached_per_day_and_capped(store, monkeypatch):
+    import app.store as st
+    calls = []
+    real = store._conn
+
+    class Spy:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def execute(self, sql, *a):
+            calls.append(sql)
+            return real.execute(sql, *a)
+    store._conn = Spy()
+    store.known_stations()
+    store.known_stations()
+    assert sum("station_raw" in c for c in calls) == 1   # second call served from cache
+    store._conn = real
+    assert st.KNOWN_STATIONS_MAX == 2000
 
 
 def test_migrate_live_v2_db_from_production_code(tmp_path):

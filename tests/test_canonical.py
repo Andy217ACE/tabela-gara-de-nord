@@ -117,3 +117,30 @@ def test_data_files_have_header_and_no_blank_entries():
     for name in ("operators.txt", "stations_seed.txt"):
         lines = (canonical.DATA_DIR / name).read_text(encoding="utf-8").splitlines()
         assert lines[0].startswith("# © 2026 Andy217Ace")
+
+
+# -- review fix: never merge genuinely different stations ------------------------------
+
+FULL_SEED = {"VATRA DORNEI BAI", "CLUJ NAPOCA", "PLOIESTI SUD", "CRAIOVA", "BRASOV",
+             "ROSIORI NORD", "TARGOVISTE", "PITESTI"}
+
+
+@pytest.mark.parametrize("read,wrong", [
+    ("VATRA DORNEI", "VATRA DORNEI BAI"),   # one name = the other minus a whole word
+    ("CLUJ NAPOCA EST", "CLUJ NAPOCA"),     # plus a whole word
+    ("PITESTI SUD", "PLOIESTI SUD"),        # different first word, same last word
+    ("CRAIOVITA", "CRAIOVA"),               # different (longer) word
+])
+def test_distinct_stations_are_not_merged(read, wrong):
+    seed = FULL_SEED - {"PITESTI"} if read == "PITESTI SUD" else FULL_SEED
+    text, score = canonical_station(read, seed, preferred=seed)
+    assert text != wrong
+    assert text == read and score < 1.0
+
+
+@pytest.mark.parametrize("read,want", [("BRASOU", "BRASOV"), ("BRASOY", "BRASOV"),
+                                       ("ROSIORI N0RD", "ROSIORI NORD"),
+                                       ("TARGOVISHE", "TARGOVISTE")])
+def test_ocr_noise_still_corrected_but_not_exact(read, want):
+    text, score = canonical_station(read, FULL_SEED, preferred=FULL_SEED)
+    assert text == want and DEFAULT_THRESHOLD <= score < 1.0

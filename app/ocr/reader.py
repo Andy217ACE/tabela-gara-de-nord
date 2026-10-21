@@ -249,6 +249,7 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
             confidence=min(1.0, max(0.0, conf)),
             operator_raw=operator_raw,
             station_raw=station_raw,
-            uncertain=min(s_score, o_score) < canonical.DEFAULT_THRESHOLD,
+            # any corrected/unknown station (score < 1) or unmatched operator is uncertain
+            uncertain=s_score < 1.0 or o_score < canonical.DEFAULT_THRESHOLD,
         ))
     return rows

@@ -56,14 +56,51 @@ def seed_stations() -> frozenset[str]:
     return frozenset(clean_station(s) for s in _load("stations_seed.txt"))
 
 
-def _best(text: str, known: Iterable[str]) -> tuple[str | None, float]:
+def _lev(a: str, b: str) -> int:
+    """Levenshtein distance (short strings only)."""
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _same_words(k: str, ck: str) -> bool:
+    """Could `k` be an OCR misread of `ck`? OCR noise substitutes characters inside the
+    words; it does not add or drop whole words or change a word into another one.
+    So: same number of words, and each word differs by at most one edit per 5 letters
+    with the same length (one extra/missing letter only in words of 6+ letters).
+    Rejects VATRA DORNEI/VATRA DORNEI BAI, CLUJ NAPOCA EST/CLUJ NAPOCA,
+    PITESTI SUD/PLOIESTI SUD and CRAIOVITA/CRAIOVA; keeps BRASOY->BRASOV."""
+    a, b = k.split(), ck.split()
+    if len(a) != len(b):
+        return False
+    for wa, wb in zip(a, b):
+        if wa == wb:
+            continue
+        diff = abs(len(wa) - len(wb))
+        if diff > 1 or (diff == 1 and min(len(wa), len(wb)) < 6):
+            return False
+        if _lev(wa, wb) > max(1, min(len(wa), len(wb)) // 5):
+            return False
+    return True
+
+
+def _best(text: str, known: Iterable[str], words: bool = False) -> tuple[str | None, float]:
     k = _key(text)
     best, best_score = None, 0.0
     for cand in known:
         ck = _key(cand)
         if not ck:
             continue
-        score = 1.0 if ck == k else difflib.SequenceMatcher(None, k, ck).ratio()
+        if ck == k:
+            score = 1.0
+        elif words and not _same_words(k, ck):
+            continue  # a genuinely different name, not a misread of this one
+        else:
+            score = difflib.SequenceMatcher(None, k, ck).ratio()
         if score > best_score or (score == best_score and best is not None and cand < best):
             best, best_score = cand, score
     return best, best_score
@@ -86,6 +123,9 @@ def canonical_station(text: str | None, known: Iterable[str], *,
                       threshold: float = DEFAULT_THRESHOLD) -> tuple[str, float]:
     """(known station, score); below `threshold`: (cleaned raw text, best score).
 
+    Fuzzy matches are limited to in-word OCR noise (`_same_words`); any score below
+    1.0 means the name was corrected and the caller must mark the row uncertain.
+
     `preferred` (the curated seed) is tried first, so a misread that slipped into
     the learned history ("BRASOY") still resolves to the curated name ("BRASOV").
     """
@@ -95,11 +135,11 @@ def canonical_station(text: str | None, known: Iterable[str], *,
     known = set(known)
     if preferred:
         preferred = set(preferred)
-        match, score = _best(raw, preferred)
+        match, score = _best(raw, preferred, words=True)
         if match is not None and score >= threshold:
             return match, score
         known |= preferred
-    match, score = _best(raw, known)
+    match, score = _best(raw, known, words=True)
     if match is not None and score >= threshold:
         return match, score
-    return raw, score
+    return raw, min(score, 0.999)  # kept as read: never "exact"

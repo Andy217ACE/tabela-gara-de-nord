@@ -24,6 +24,7 @@ MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit eve
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 3
+KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
@@ -161,6 +162,7 @@ class Store:
     def __init__(self, path: str):
         self.path = path
         self._lock = threading.RLock()
+        self._known_cache: tuple | None = None  # ((day, min_services, min_days), names)
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
@@ -404,16 +406,31 @@ class Store:
             return None
         return (_local(now) - datetime.fromisoformat(ts)).total_seconds()
 
-    def known_stations(self, min_services: int = 2) -> set[str]:
-        """Distinct station names seen on at least `min_services` services.
+    def known_stations(self, min_services: int = 2, min_days: int = 2) -> set[str]:
+        """Station names learned from the history for canonicalisation.
 
-        Feeds station canonicalisation; the threshold keeps one-off misreads out.
+        Only names stored exactly as OCR read them (``station = station_raw``, so
+        never a corrected value and never a pre-v3 row without raw text), seen on at
+        least `min_services` distinct trains on at least `min_days` distinct days:
+        a one-off or one-day misread stays out. The curated seed is matched first by
+        the reader, so it always wins. At most KNOWN_STATIONS_MAX names; computed
+        once per (Bucharest) day — the poller asks before every image.
         """
+        today = datetime.now(TZ).date()
+        cached = self._known_cache
+        if cached and cached[0] == (today, min_services, min_days):
+            return set(cached[1])
         with self._lock:
             found = self._conn.execute(
-                "SELECT station FROM services WHERE station != '' GROUP BY station"
-                " HAVING COUNT(*) >= ?", (min_services,)).fetchall()
-        return {r[0] for r in found}
+                "SELECT station FROM services"
+                " WHERE station != '' AND station_raw != '' AND station = station_raw"
+                " GROUP BY station"
+                " HAVING COUNT(DISTINCT train_no) >= ? AND COUNT(DISTINCT service_date) >= ?"
+                " ORDER BY COUNT(*) DESC, station LIMIT ?",
+                (min_services, min_days, KNOWN_STATIONS_MAX)).fetchall()
+        names = frozenset(r[0] for r in found)
+        self._known_cache = ((today, min_services, min_days), names)
+        return set(names)
 
     # -- history ----------------------------------------------------------
 

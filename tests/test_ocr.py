@@ -328,7 +328,10 @@ def test_stations_canonical_against_seed(rows):
     pairs = _pairs(rows)
     assert _accuracy(pairs, "station") >= 23 / 24
     assert all(r.station_raw for r in rows)
-    assert not any(r.uncertain for r in rows)
+    # every corrected (non-exact) station is uncertain; exact reads are not
+    for r in rows:
+        assert r.uncertain == (r.station_raw != r.station), (r.station_raw, r.station)
+    assert sum(r.uncertain for r in rows) <= 1  # only the BRASOY misread
 
 
 def test_unknown_station_marked_uncertain(monkeypatch):
