@@ -266,3 +266,10 @@ def test_app_js_quality_fixes():
     # '*' flag has screen-reader text
     assert "marcat cu asterisc pe tabela CFR" in js
     assert "sr-only" in js
+
+
+def test_follows_list_never_shows_la_timp_for_unread_delay():
+    js = (WEB / "follows.js").read_text(encoding="utf-8")
+    assert "t.delay_read !== true" in js
+    assert 'el("span", "delay-unread", "necitit")' in js
+    assert '" · la timp"' not in js

@@ -92,14 +92,18 @@ def test_api_config_read_only(client):
     assert client.post("/api/config").status_code == 405
 
 
-ATTRIBUTION = "© 2026 Andy217Ace · Date preluate de la CFR ("
+ATTRIBUTION = "© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent,"
 
 
 def test_panel_keeps_attribution_in_fullscreen():
     """The page footer is outside #pnl; in (pseudo-)fullscreen only #pnl is visible."""
     js = (WEB / "panel.js").read_text(encoding="utf-8")
-    assert f'credit.append("{ATTRIBUTION}", cfr,' in js
-    assert '") — proiect independent, neafiliat CFR");' in js
+    assert f'credit.append("{ATTRIBUTION}" +' in js
+    assert '" neafiliat CFR. Tabela oficială: ", cfr);' in js
+    # identical to the page footer's line
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert ("© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent,"
+            " neafiliat CFR. Tabela oficială: <a") in html
     assert 'cfr.href = "https://cfr.ro";' in js and 'cfr.rel = "noopener noreferrer";' in js
     assert "d.detail, credit);" in js  # appended inside .pnl
 

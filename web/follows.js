@@ -256,12 +256,23 @@
       if (f.date < today) parts.push("zi trecută");
       seen.forEach(function (t) {
         var d = Math.max(0, t.delay_min | 0);
-        parts.push((t.sched_time || "") + " " + titleCase(t.station) +
-          (d ? " · +" + d + " min" : " · la timp") +
-          (t.platform != null && t.platform !== "" ? " · linia " + t.platform : ""));
+        parts.push((t.sched_time || "") + " " + titleCase(t.station));
+        // never "la timp" unless the delay cell was actually read (API delay_read)
+        if (t.delay_read !== true) {
+          var nr = el("span", "delay-unread", "necitit");
+          nr.title = "Celula de întârziere nu a putut fi citită de pe tabela CFR";
+          parts.push(nr);
+        } else {
+          parts.push(d ? "+" + d + " min" : "la timp");
+        }
+        if (t.platform != null && t.platform !== "") parts.push("linia " + t.platform);
       });
       if (f.date <= today && !seen.length) parts.push("nu e pe tabelă acum");
-      sub.textContent = parts.join(" · ");
+      sub.replaceChildren();
+      parts.forEach(function (p, i) {
+        if (i) sub.append(" · ");
+        sub.append(p);
+      });
       info.append(title, sub);
       var hist = el("a", "f-link", "Istoric");
       hist.href = "#istoric?date=" + encodeURIComponent(f.date <= today ? f.date : today) +

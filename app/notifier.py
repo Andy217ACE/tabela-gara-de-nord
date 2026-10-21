@@ -117,6 +117,10 @@ class Notifier:
             return "hold" if st["last_seen"] == run_ts else "confirm"
         if st["last_read"] != run_ts:
             return "hold"  # not re-read confidently in this run: neither confirm nor drop
+        if p.event.kind == "delay" and not st.get("delay_read", True):
+            # the delay cell was unreadable in this run (the stored value is the previous
+            # reading): like a missing row - neither confirm nor drop, counts to MAX_HOLD
+            return "hold"
         cur = st["delay"] if p.event.kind == "delay" else st["platform"]
         return "confirm" if (None if cur is None else str(cur)) == p.value else "drop"
 

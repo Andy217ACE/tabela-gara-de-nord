@@ -430,7 +430,7 @@ class Store:
         the reader, so it always wins. At most KNOWN_STATIONS_MAX names; computed
         once per (Bucharest) day — the poller asks before every image.
         """
-        today = datetime.now(TZ).date()
+        today = _today()
         cached = self._known_cache
         if cached and cached[0] == (today, min_services, min_days):
             return set(cached[1])
@@ -525,14 +525,17 @@ class Store:
 
     def service_state(self, board: str, service_date: str, train_no: int,
                       sched_time: str) -> dict | None:
-        """Current {status, delay, platform, last_read, last_seen} of one service, or None.
+        """Current {status, delay, platform, last_read, last_seen, delay_read} of one
+        service, or None.
 
         `last_read` is the ts of the last ok run that matched the service with a
-        confident row (low-confidence sightings do not update it).
+        confident row (low-confidence sightings do not update it). `delay_read` says
+        whether the delay cell was readable in that run: when it was not, `delay` is the
+        previous reading kept, so it must not confirm a pending delay change.
         """
         with self._lock:
             s = self._conn.execute(
-                "SELECT status, last_delay, last_platform, last_read, last_seen FROM services"
+                "SELECT id, status, last_delay, last_platform, last_read, last_seen FROM services"
                 " WHERE board=?"
                 " AND service_date=? AND train_no=? AND sched_time=?",
                 (board, service_date, train_no, sched_time),
@@ -541,7 +544,7 @@ class Store:
             return None
         return {"status": s["status"], "delay": s["last_delay"],
                 "platform": s["last_platform"], "last_read": s["last_read"],
-                "last_seen": s["last_seen"]}
+                "last_seen": s["last_seen"], "delay_read": self._delay_read.get(s["id"], True)}
 
     # -- subscriptions & follows -----------------------------------------
 
@@ -619,9 +622,25 @@ class Store:
         return [Subscription(r["endpoint"], r["p256dh"], r["auth"]) for r in found]
 
     def list_follows(self, endpoint: str) -> list[dict]:
+        """Followed trains with their current board state: `on_board`, and when listed
+        `delay_min` + `delay_read` (False = the delay cell is unreadable right now)."""
         with self._lock:
             found = self._conn.execute(
-                "SELECT f.train_no, f.service_date FROM follows f"
-                " JOIN subscriptions s ON s.id = f.subscription_id"
+                "SELECT f.train_no, f.service_date,"
+                " (SELECT v.id FROM services v WHERE v.train_no = f.train_no"
+                "  AND v.service_date = f.service_date AND v.status = 'listed'"
+                "  ORDER BY v.id LIMIT 1) AS sid,"
+                " (SELECT v.last_delay FROM services v WHERE v.train_no = f.train_no"
+                "  AND v.service_date = f.service_date AND v.status = 'listed'"
+                "  ORDER BY v.id LIMIT 1) AS delay"
+                " FROM follows f JOIN subscriptions s ON s.id = f.subscription_id"
                 " WHERE s.endpoint=? ORDER BY f.rowid", (endpoint,)).fetchall()
-        return [{"train_no": r["train_no"], "date": r["service_date"]} for r in found]
+        out = []
+        for r in found:
+            item = {"train_no": r["train_no"], "date": r["service_date"],
+                    "on_board": r["sid"] is not None}
+            if item["on_board"]:
+                item["delay_min"] = r["delay"]
+                item["delay_read"] = self._delay_read.get(r["sid"], True)
+            out.append(item)
+        return out

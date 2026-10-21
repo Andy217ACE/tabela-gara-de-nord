@@ -68,11 +68,11 @@ def test_follow_unfollow_and_list(store):
     store.follow(EP, 1636, DAY)  # idempotent
     store.follow(EP, 1621, "2026-10-21")  # ISO string accepted too
     assert store.list_follows(EP) == [
-        {"train_no": 1636, "date": "2026-10-20"},
-        {"train_no": 1621, "date": "2026-10-21"},
+        {"train_no": 1636, "date": "2026-10-20", "on_board": False},
+        {"train_no": 1621, "date": "2026-10-21", "on_board": False},
     ]
     store.unfollow(EP, 1636, DAY)
-    assert store.list_follows(EP) == [{"train_no": 1621, "date": "2026-10-21"}]
+    assert store.list_follows(EP) == [{"train_no": 1621, "date": "2026-10-21", "on_board": False}]
     assert store.followers(1636, DAY) == []
 
 
@@ -101,8 +101,8 @@ def test_follow_limit_counts_only_current_dates(store):
     store.follow(EP, 2000, DAY, today=DAY)
     store.follow(EP, 1000, DAY - timedelta(days=1), today=DAY)  # ...yesterday is kept
     assert store.list_follows(EP) == [
-        {"train_no": 2000, "date": "2026-10-20"},
-        {"train_no": 1000, "date": "2026-10-19"},
+        {"train_no": 2000, "date": "2026-10-20", "on_board": False},
+        {"train_no": 1000, "date": "2026-10-19", "on_board": False},
     ]
     for n in range(18):
         store.follow(EP, 3000 + n, DAY, today=DAY)
@@ -148,7 +148,8 @@ def test_service_state_and_last_run(store):
     assert isinstance(rid, int)
     st = store.service_state("arrival", "2026-10-20", 1621, "12:10")
     assert st == {"status": "listed", "delay": 5, "platform": 3,
-                  "last_read": T0.isoformat(), "last_seen": T0.isoformat()}
+                  "last_read": T0.isoformat(), "last_seen": T0.isoformat(),
+                  "delay_read": True}
     assert store.last_ok_run() == (rid, T0.isoformat())
     assert store.service_state("arrival", "2026-10-20", 9999, "12:10") is None
     store.ingest(rows[:1], T0 + timedelta(minutes=1))  # failed run: id unchanged
@@ -189,3 +190,27 @@ def test_subscribe_rejects_non_allowlisted(store, bad):
 
 def test_subscribe_host_case_insensitive(store):
     assert isinstance(store.subscribe("https://FCM.googleapis.com/fcm/send/x", "p", "a"), int)
+
+
+def test_list_follows_carries_board_state_and_delay_read(store):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.models import Row
+    t0 = datetime(2026, 10, 20, 12, 0, tzinfo=ZoneInfo("Europe/Bucharest"))
+    rows = [Row("arrival", "IR", 1621, "Brasov", "CFR", "12:10", 5),
+            Row("arrival", "IR", 1622, "Brasov", "CFR", "12:20"),
+            Row("departure", "IR", 1731, "Brasov", "CFR", "12:15"),
+            Row("departure", "IR", 1732, "Brasov", "CFR", "12:30")]
+    store.ingest(rows, t0)
+    rows[0] = Row("arrival", "IR", 1621, "Brasov", "CFR", "12:10", 0, delay_read=False)
+    store.ingest(rows, t0.replace(minute=1))
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1621, DAY, today=DAY)
+    store.follow(EP, 1622, DAY, today=DAY)
+    store.follow(EP, 9999, DAY, today=DAY)
+    got = {f["train_no"]: f for f in store.list_follows(EP)}
+    assert got[1621] == {"train_no": 1621, "date": "2026-10-20", "on_board": True,
+                         "delay_min": 5, "delay_read": False}   # last real value kept
+    assert got[1622]["delay_read"] is True and got[1622]["delay_min"] == 0
+    assert got[9999] == {"train_no": 9999, "date": "2026-10-20", "on_board": False}

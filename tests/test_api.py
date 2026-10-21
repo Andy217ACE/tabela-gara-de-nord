@@ -149,13 +149,13 @@ def test_follow_unfollow_roundtrip(client):
     assert client.post("/api/follow",
                        json={"endpoint": EP, "train": 531, "date": "2026-10-21"}).status_code == 200
     r = client.get("/api/follows", params={"endpoint": EP})
-    assert r.json()["follows"] == [{"train_no": 1636, "date": "2026-10-20"},
-                                   {"train_no": 531, "date": "2026-10-21"}]
+    assert r.json()["follows"] == [{"train_no": 1636, "date": "2026-10-20", "on_board": False},
+                                   {"train_no": 531, "date": "2026-10-21", "on_board": False}]
     r = client.request("DELETE", "/api/follow",
                        json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
     assert r.status_code == 200
     assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == \
-        [{"train_no": 531, "date": "2026-10-21"}]
+        [{"train_no": 531, "date": "2026-10-21", "on_board": False}]
     assert client.post("/api/push/unsubscribe", json={"endpoint": EP}).status_code == 200
     assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == []
 

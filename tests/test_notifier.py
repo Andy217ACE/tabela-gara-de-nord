@@ -19,7 +19,7 @@ EP2 = "https://fcm.googleapis.com/fcm/send/def"
 EP3 = "https://fcm.googleapis.com/fcm/send/ghi"
 
 
-def board(delay=0, platform=13, with_1636=True, conf=1.0):
+def board(delay=0, platform=13, with_1636=True, conf=1.0, delay_read=True):
     rows = [
         Row("arrival", "IR", 1621, "Brasov", "CFR", "12:10"),
         Row("arrival", "IR", 1622, "Brasov", "CFR", "12:20"),
@@ -28,7 +28,8 @@ def board(delay=0, platform=13, with_1636=True, conf=1.0):
     ]
     if with_1636:
         rows.append(Row("departure", "IR", 1636, "Constanta", "CFR", "12:40",
-                        delay_min=delay, platform=platform, confidence=conf))
+                        delay_min=delay, platform=platform, confidence=conf,
+                        delay_read=delay_read))
     return rows
 
 
@@ -419,3 +420,48 @@ def test_store_calls_run_off_the_event_loop_thread(store):
     names = {n for n, _ in seen}
     assert {"last_ok_run", "followers"} <= names
     assert all(t != threading.get_ident() for _, t in seen)
+
+
+# -- an unreadable delay frame never confirms a delay push -------------------------------
+
+def test_unread_delay_frame_does_not_confirm_misread(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))                       # one misread -> pending
+    h.tick(board(delay=0, delay_read=False))      # unreadable: hold, not "same value"
+    assert h.sent == []
+    h.tick(board(delay=0))                        # real reading: misread contradicted
+    h.tick(board(delay=0))
+    assert h.sent == []
+
+
+def test_unread_then_two_real_reads_confirm(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))                       # pending (1st real read)
+    h.tick(board(delay=0, delay_read=False))      # hold
+    assert h.sent == []
+    h.tick(board(delay=10))                       # 2nd real read -> confirmed
+    assert h.bodies() == ["IR 1636: întârziere +10 min"]
+
+
+def test_unread_delay_holds_count_toward_drop(h):
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))
+    for _ in range(3):
+        h.tick(board(delay=0, delay_read=False))  # 3 holds -> dropped
+    h.tick(board(delay=10))
+    assert h.sent == []                           # a fresh pending, not confirmed yet
+
+
+def test_platform_confirmation_unaffected_by_unread_delay(h):
+    h.tick(board(platform=None))
+    h.tick(board(platform=13))
+    h.tick(board(platform=13, delay_read=False))
+    assert h.bodies() == ["IR 1636: linia 13"]
+
+
+def test_gone_unaffected_by_unread_delay(h):
+    h.tick(board(delay_read=False))
+    h.tick(board(with_1636=False))
+    h.tick(board(with_1636=False))
+    h.tick(board(with_1636=False))
+    assert h.bodies() == ["IR 1636: a ieșit de pe panou"]

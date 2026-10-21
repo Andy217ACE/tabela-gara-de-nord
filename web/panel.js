@@ -487,8 +487,9 @@
     cfr.href = "https://cfr.ro";
     cfr.target = "_blank";
     cfr.rel = "noopener noreferrer";
-    credit.append("© 2026 Andy217Ace · Date preluate de la CFR (", cfr,
-                  ") — proiect independent, neafiliat CFR");
+    // same text as the page footer
+    credit.append("© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent," +
+                  " neafiliat CFR. Tabela oficială: ", cfr);
 
     pnl.append(head, status, d.banner, controls, d.legend, d.body, d.detail, credit);
     root.append(d.switch, pnl);

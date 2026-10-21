@@ -616,3 +616,13 @@ def test_new_service_with_unread_delay_is_flagged(store):
     store.ingest(rows, T0)
     a = {r["train_no"]: r for r in store.current_board()["arrivals"]}
     assert a[1622]["delay_read"] is False and a[1621]["delay_read"] is True
+
+
+def test_known_stations_cache_follows_patchable_today(store, monkeypatch):
+    import app.store as st
+    monkeypatch.setattr(st, "_today", lambda: date(2026, 10, 20))
+    store.known_stations()
+    assert store._known_cache[0][0] == date(2026, 10, 20)
+    monkeypatch.setattr(st, "_today", lambda: date(2026, 10, 21))
+    store.known_stations()
+    assert store._known_cache[0][0] == date(2026, 10, 21)  # new day -> recomputed
