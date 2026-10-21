@@ -149,10 +149,10 @@ def _train_no(s: str) -> int:
 
 def cell_grid(board_bgr: np.ndarray) -> list[dict[str, np.ndarray]]:
     """Per detected row of one board: {column name: binary cell image (x3)}."""
-    mask = preprocess.board_mask(board_bgr)
+    mask, layout = preprocess.board_masks(board_bgr)
     grid = []
-    for band in preprocess.row_bands(mask):
-        edges = _cell_edges(mask, band)
+    for band in preprocess.row_bands(layout):
+        edges = _cell_edges(layout, band)
         strip = mask[band[0]:band[1]]
         grid.append({name: strip[:, x0:x1]
                      for name, x0, x1 in zip(_ORDER, edges[:-1], edges[1:])})
@@ -177,6 +177,11 @@ def _get_matcher() -> DigitMatcher | None:
     return _matcher
 
 
+def _time_colon(s: str) -> str:
+    """The board always prints H:MM / HH:MM; a 3-digit reading lost its colon."""
+    return f"{s[0]}:{s[1:]}" if len(s) == 3 and s.isdigit() else s
+
+
 def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
              matcher: DigitMatcher | None) -> tuple[str, float | None]:
     """Pick the text of a numeric cell: glyph templates first, Tesseract as fallback.
@@ -185,11 +190,19 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     template reading overrides Tesseract it is the template's weakest glyph score.
     """
     t_text, t_conf = tess[0].replace(" ", ""), tess[1]
+    if name == "time":
+        t_text = _time_colon(t_text)
     if matcher is None:
         return t_text, t_conf
     m_text, m_score, trusted = matcher.read(cell, _ALLOWED[name])
     if not m_text:
         return "", None  # no ink in the cell: empty, whatever Tesseract hallucinated
+    if name == "time":
+        m_text = _time_colon(m_text)
+        # thin colon dots can drop out of the glyph segmentation: a template
+        # reading that is not a time never overrides a valid Tesseract time
+        if parse_time(m_text) is None and parse_time(t_text) is not None:
+            return t_text, t_conf
     if not trusted:
         return t_text, t_conf
     if m_text == t_text and t_conf is not None:

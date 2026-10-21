@@ -1,0 +1,31 @@
+{
+ "_note": "Cadru CFR live din 2026-10-21 ~05:5x (dimineață). Ore cu o singură cifră (5:57), întârzieri cu „+”, rânduri marcate cu „*”, linii 1..13, KIEV-CHISINAU. Pe plecări sunt două rânduri 16591 07:30 (RE și IR) cu aceeași cheie de serviciu: tabela afișează 12 rânduri, store-ul păstrează 11 servicii distincte.",
+ "arrival": [
+  {"train_type": "IR", "train_no": 11520, "station": "TITU", "operator": "Astra Trans Ca", "sched_time": "05:57", "delay_min": 30, "platform": 3, "flagged": false},
+  {"train_type": "RE", "train_no": 10064, "station": "PLOIESTI SUD", "operator": "Transferoviar", "sched_time": "06:09", "delay_min": 10, "platform": 13, "flagged": true},
+  {"train_type": "RM", "train_no": 7912, "station": "AEROPORT H COANDA", "operator": "CFR Calatori", "sched_time": "06:17", "delay_min": 0, "platform": 8, "flagged": true},
+  {"train_type": "IRN", "train_no": 1642, "station": "SATU MARE", "operator": "CFR Calatori", "sched_time": "06:22", "delay_min": 30, "platform": null, "flagged": false},
+  {"train_type": "RE", "train_no": 9900, "station": "CRAIOVA", "operator": "CFR Calatori", "sched_time": "06:23", "delay_min": 30, "platform": null, "flagged": false},
+  {"train_type": "IR", "train_no": 16560, "station": "BRASOV", "operator": "InterRegional", "sched_time": "06:28", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "IRN", "train_no": 401, "station": "KIEV-CHISINAU", "operator": "CFR Calatori", "sched_time": "06:38", "delay_min": 20, "platform": null, "flagged": false},
+  {"train_type": "RE", "train_no": 9200, "station": "PITESTI", "operator": "CFR Calatori", "sched_time": "06:44", "delay_min": 15, "platform": null, "flagged": false},
+  {"train_type": "IR", "train_no": 16536, "station": "CLUJ NAPOCA", "operator": "InterRegional", "sched_time": "06:50", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "RM", "train_no": 7914, "station": "AEROPORT H COANDA", "operator": "CFR Calatori", "sched_time": "06:57", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "RE", "train_no": 10182, "station": "FETESTI", "operator": "Transferoviar", "sched_time": "06:58", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "IR", "train_no": 11522, "station": "TITU", "operator": "Astra Trans Ca", "sched_time": "07:04", "delay_min": 0, "platform": null, "flagged": false}
+ ],
+ "departure": [
+  {"train_type": "R", "train_no": 8001, "station": "CONSTANTA", "operator": "CFR Calatori", "sched_time": "06:17", "delay_min": 0, "platform": 10, "flagged": true},
+  {"train_type": "IC", "train_no": 551, "station": "SUCEAVA", "operator": "CFR Calatori", "sched_time": "06:28", "delay_min": 0, "platform": 6, "flagged": false},
+  {"train_type": "RM", "train_no": 7913, "station": "AEROPORT H COANDA", "operator": "CFR Calatori", "sched_time": "06:30", "delay_min": 0, "platform": 8, "flagged": false},
+  {"train_type": "IR", "train_no": 16081, "station": "CONSTANTA", "operator": "CFR Calatori", "sched_time": "06:30", "delay_min": 0, "platform": 9, "flagged": false},
+  {"train_type": "IR", "train_no": 16011, "station": "CRAIOVA", "operator": "CFR Calatori", "sched_time": "06:32", "delay_min": 0, "platform": 1, "flagged": false},
+  {"train_type": "IR", "train_no": 11531, "station": "BRASOV", "operator": "Astra Trans Ca", "sched_time": "06:35", "delay_min": 0, "platform": 3, "flagged": false},
+  {"train_type": "IC", "train_no": 561, "station": "IASI", "operator": "CFR Calatori", "sched_time": "06:45", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "IR", "train_no": 10021, "station": "BRASOV", "operator": "Transferoviar", "sched_time": "06:52", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "RE", "train_no": 10107, "station": "AEROPORT H COANDA", "operator": "Transferoviar", "sched_time": "07:10", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "IC", "train_no": 535, "station": "BRASOV", "operator": "CFR Calatori", "sched_time": "07:18", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "RE", "train_no": 16591, "station": "BRASOV", "operator": "InterRegional", "sched_time": "07:30", "delay_min": 0, "platform": null, "flagged": false},
+  {"train_type": "IR", "train_no": 16591, "station": "BRASOV", "operator": "InterRegional", "sched_time": "07:30", "delay_min": 0, "platform": null, "flagged": false}
+ ]
+}

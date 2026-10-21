@@ -124,6 +124,70 @@ def test_row_bands_on_fixture():
         assert all(y0 < y1 for y0, y1 in bands)
 
 
+def _synthetic_panel(bg=(170, 40, 10), text=(255, 255, 255), lines=3, sep=None):
+    """A blue panel group with `lines` text lines; `sep` = colour of a vertical
+    separator crossing the whole group (as on the CFR board)."""
+    img = np.zeros((300, 600, 3), np.uint8)
+    img[60:240] = bg
+    for k in range(lines):
+        cv2.putText(img, f"IR {1630 + k} BRASOV 20:0{k}", (10, 95 + 55 * k),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, text, 2)
+    if sep is not None:
+        img[60:240, 300:303] = sep
+    return img
+
+
+def test_row_bands_ignore_vertical_separator():
+    """A light vertical separator bridging the gaps between text lines (as the
+    departures panel shows when the frame is brighter) must not merge the lines."""
+    img = _synthetic_panel(sep=(200, 180, 160))
+    bands = preprocess.row_bands(preprocess.board_mask(img))
+    assert len(bands) == 3
+
+
+def test_row_bands_tolerate_specks_in_gaps():
+    mask = np.full((300, 900), 255, np.uint8)
+    for y in (40, 120, 200):
+        mask[y:y + 40, 20:880:3] = 0          # text lines
+    for y in (80, 160):
+        mask[y:y + 40, 400:430] = 0           # a blob bridging each gap
+    assert len(preprocess.row_bands(mask)) == 3
+
+
+@pytest.mark.parametrize("gain", [0.5, 1.0, 1.4])
+def test_text_level_follows_panel_brightness(gain):
+    """The text threshold is relative to the panel's own luminance: a dimmer or
+    brighter frame keeps the glyphs and drops the background."""
+    img = np.clip(_synthetic_panel(bg=(150, 70, 20), text=(235, 235, 235))
+                  .astype(np.float32) * gain, 0, 255).astype(np.uint8)
+    mask = preprocess.board_mask(img)
+    s = preprocess.SCALE
+    assert (mask[218 * s:238 * s] == 0).sum() == 0   # empty panel area stays background
+    assert len(preprocess.row_bands(mask)) == 3      # every text line kept
+
+
+def test_text_level_flat_panel_has_no_text():
+    blue = np.zeros((300, 600, 3), np.uint8)
+    blue[:] = (170, 40, 10)
+    assert (preprocess.board_mask(blue) == 0).sum() == 0
+
+
+def test_time_without_colon_falls_back_to_tesseract():
+    """The colon dots can be thin enough to be dropped as specks by the glyph
+    segmenter; a template reading that is not a time must not override a valid
+    Tesseract time (it dropped the row)."""
+    from app.ocr import reader
+
+    class M:
+        def read(self, cell, allowed):
+            return "630", 0.86, True
+
+    cell = np.zeros((10, 10), np.uint8)
+    assert reader._numeric("time", cell, ("6:30", 96.0), M())[0] == "6:30"
+    # both readers lost the colon: 3 digits on the time column are H:MM
+    assert reader._numeric("time", cell, ("630", 90.0), M())[0] == "6:30"
+
+
 def test_digit_templates_generalise_to_held_out_board():
     """Templates are built from the arrivals panel only; departures are unseen."""
     from app.ocr.digits import DigitMatcher
@@ -332,7 +396,7 @@ def test_stations_canonical_against_seed(rows):
     # every corrected (non-exact) station is uncertain; exact reads are not
     for r in rows:
         assert r.uncertain == (r.station_raw != r.station), (r.station_raw, r.station)
-    assert sum(r.uncertain for r in rows) <= 1  # only the BRASOY misread
+    assert sum(r.uncertain for r in rows) <= 1  # at most one corrected misread
 
 
 def test_unknown_station_marked_uncertain(monkeypatch):
@@ -349,7 +413,11 @@ def test_learned_stations_used(monkeypatch):
 
     monkeypatch.setattr(canonical, "seed_stations", lambda: frozenset())
     got = read_board(_bytes(), stations={"BRASOV"})
-    assert any(r.station_raw == "BRASOY" and r.station == "BRASOV" for r in got)
+    # with no seed list, BRASOV is known only from the learned set: canonical and
+    # certain (without it, test_unknown_station_marked_uncertain flags it). The
+    # adaptive preprocessing now reads the former "BRASOY" row exactly.
+    brasov = [r for r in got if r.station_raw == "BRASOV"]
+    assert brasov and all(r.station == "BRASOV" and not r.uncertain for r in brasov)
 
 
 def test_garbled_delay_cell_is_unread(monkeypatch):

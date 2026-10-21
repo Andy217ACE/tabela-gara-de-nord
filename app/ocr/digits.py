@@ -21,7 +21,7 @@ _SHIFT = 2  # tolerated misalignment (px, normalised box) when matching
 PITCH = 0.78  # digit advance / text line height in the board font
 WIDE = 1.0    # a component wider than this x line height holds several glyphs
 MIN_SCORE = 0.60   # glyph match below this correlation is not trusted
-MIN_MARGIN = 0.01  # ...nor a near-tie with the runner-up template
+MIN_MARGIN = 0.04  # ...nor a near-tie with the runner-up template (5 vs 6 split by a grid line)
 TEMPLATES_PATH = Path(__file__).with_name("digit_templates.npz")
 # Calibration panels used by default; departures are kept unseen as a held-out check.
 DEFAULT_BOARDS: tuple[str, ...] = ("arrival",)
