@@ -195,6 +195,20 @@ def test_history_js_uses_api():
         assert needle in js, needle
 
 
+def test_history_js_journey_result():
+    """C3: the detail dialog shows the final result of /api/journeys/{id}, the service
+    date, a chart from the real readings, and the list never says „la timp” unread."""
+    js = (WEB / "history.js").read_text(encoding="utf-8")
+    for needle in ('"/api/journeys/"', "delay_series", "disappeared_at", "estimated_at",
+                   "Data de serviciu", "zilei următoare", "București Nord", "chart-gone",
+                   "s.delay_known !== false", '"necitit"', '"#tren?nr="', "openJourney",
+                   "final_delay", "document.body.appendChild(dlg)"):
+        assert needle in js, needle
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    for cls in (".res-confirmed", ".res-unconfirmed", ".res-unknown", ".res-progress", ".chart-gone"):
+        assert cls in css, cls
+
+
 def test_follows_js_uses_api():
     js = (WEB / "follows.js").read_text(encoding="utf-8")
     for needle in ("/api/push/key", "/api/push/subscribe", "/api/push/unsubscribe",

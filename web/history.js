@@ -160,7 +160,15 @@
     return td;
   }
 
-  function delayBadge(d, title) {
+  // `known === false`: the delay cell was never read for this journey → „necitit”,
+  // never „la timp” (a missing value is not 0).
+  function delayBadge(d, title, known) {
+    if (known === false) {
+      var u = el("span", "delay delay-unread");
+      u.append(App.icon(App.ICONS.clock), document.createTextNode("necitit"));
+      u.title = "Întârzierea nu a fost citită de pe tabela CFR pentru această călătorie";
+      return u;
+    }
     var lvl = delayLevel(d);
     var b = el("span", "delay delay-" + lvl);
     b.append(App.icon(lvl === "ok" ? App.ICONS.ok : lvl === "minor" ? App.ICONS.clock : App.ICONS.alert),
@@ -205,7 +213,8 @@
     var tbody = el("tbody");
     services.forEach(function (s) {
       var tr = el("tr", "h-row");
-      tr.dataset.delay = delayLevel(s.max_delay);
+      var known = s.delay_known !== false;
+      tr.dataset.delay = known ? delayLevel(s.max_delay) : "unread";
       cell(tr, "Ora programată", "h-time", s.sched_time || "--:--");
       cell(tr, "Panou", "h-board", BOARD_LABEL[s.board] || s.board);
       var train = el("button", "h-train");
@@ -219,12 +228,14 @@
       cell(tr, "Stație", "h-station", s.station ? nameNode(titleCase(s.station), s) : "—");
       cell(tr, "Operator", "h-op", s.operator ? nameNode(s.operator, s) : "—");
       cell(tr, "Întârziere max. observată", "h-max",
-           delayBadge(s.max_delay, "Cea mai mare întârziere văzută pe tabelă"));
+           delayBadge(s.max_delay, "Cea mai mare întârziere văzută pe tabelă", known));
       cell(tr, "Ultima întârziere observată", "h-last",
-           delayBadge(s.final_delay, "Ultima întârziere văzută pe tabelă (nu ora reală de sosire/plecare)"));
-      var known = s.platform != null && s.platform !== "";
-      var plat = el("span", known ? "plat plat-sm" : "plat plat-sm plat-unknown", known ? String(s.platform) : "—");
-      plat.setAttribute("aria-label", known ? "Linia " + s.platform : "Linie neanunțată");
+           delayBadge(s.final_delay, "Ultima întârziere văzută pe tabelă (nu ora reală de sosire/plecare)",
+                      known));
+      var hasPlat = s.platform != null && s.platform !== "";
+      var plat = el("span", hasPlat ? "plat plat-sm" : "plat plat-sm plat-unknown",
+                    hasPlat ? String(s.platform) : "—");
+      plat.setAttribute("aria-label", hasPlat ? "Linia " + s.platform : "Linie neanunțată");
       cell(tr, "Linia", "h-plat", plat);
       cell(tr, "Stare", "h-status", STATUS_LABEL[s.status] || s.status || "—");
       tr.addEventListener("click", function (e) {
@@ -364,7 +375,28 @@
     });
   }
 
-  function buildChart(pts) {
+  // Points of /api/journeys/{id} `delay_series` (real readings only, never an unread
+  // frame) + a final marker at the observed disappearance. A reading repeated by two
+  // sources a few seconds apart (observation + event) is drawn once.
+  function readingSeries(series, result) {
+    var pts = [];
+    (series || []).forEach(function (r) {
+      var t = new Date(r.t).getTime();
+      var d = typeof r.delay === "number" ? r.delay : null;
+      if (isNaN(t) || d == null) return;
+      var prev = pts[pts.length - 1];
+      if (prev && prev.d === d && Math.abs(t - prev.t) < 5000) return;
+      pts.push({ t: t, d: d, dot: true });
+    });
+    pts.sort(function (a, b) { return a.t - b.t; });
+    var gone = result && result.disappeared_at ? new Date(result.disappeared_at).getTime() : NaN;
+    if (pts.length && !isNaN(gone)) {
+      pts.push({ t: Math.max(gone, pts[pts.length - 1].t), d: pts[pts.length - 1].d, gone: true });
+    }
+    return pts;
+  }
+
+  function buildChart(pts, readings) {
     // viewBox in CSS pixels of the dialog so labels keep a readable size on phones
     var box = $("h-detail-body");
     var W = Math.max(300, Math.min(680, (box && box.clientWidth) || 640));
@@ -382,7 +414,8 @@
     var changes = pts.filter(function (p) { return p.change; }).length;
     root.append(svg("desc", { id: "h-chart-desc" },
       "Axa orizontală: ora citirii tabelei. Axa verticală: întârzierea afișată, în minute. " +
-      plural(changes, "schimbare observată", "schimbări observate") + "."));
+      (readings != null ? plural(readings, "citire reală", "citiri reale")
+        : plural(changes, "schimbare observată", "schimbări observate")) + "."));
 
     var grid = svg("g", { class: "chart-grid" });
     for (var dv = 0; dv <= maxD; dv += ys.step) {
@@ -408,9 +441,22 @@
     });
     root.append(svg("path", { d: d, class: "chart-line" }));
     pts.forEach(function (p) {
-      if (!p.change) return;
-      var c = svg("circle", { cx: x(p.t).toFixed(1), cy: y(p.d).toFixed(1), r: 4, class: "chart-dot" });
-      c.append(svg("title", {}, localTime(p.t, true) + ": " + delayText(p.d)));
+      if (!p.gone) return;
+      // observed disappearance from the board: vertical marker
+      var gx = x(p.t).toFixed(1);
+      root.append(svg("line", { x1: gx, x2: gx, y1: T - 8, y2: H - B, class: "chart-gone" }));
+      var nearEnd = x(p.t) > W - R - 30;
+      var lbl = svg("text", { x: nearEnd ? x(p.t) - 4 : gx, y: T - 12,
+                              class: "chart-gone-label" + (nearEnd ? " chart-xend" : "") }, "dispărut");
+      lbl.append(svg("title", {}, "Dispărut de pe tabelă la " + localTime(p.t, true)));
+      root.append(lbl);
+    });
+    pts.forEach(function (p) {
+      if (!p.change && !p.dot) return;
+      var c = svg("circle", { cx: x(p.t).toFixed(1), cy: y(p.d).toFixed(1), r: p.dot ? 3 : 4,
+                              class: "chart-dot" });
+      c.append(svg("title", {}, localTime(p.t, true) + ": " + delayText(p.d) +
+        (p.dot ? " (citit)" : "")));
       root.append(c);
     });
     return root;
@@ -466,7 +512,168 @@
     body.append(tl);
   }
 
+  // ---- journey (/api/journeys/{id}): final result + real delay readings ---------------
+
+  var STATE_CLASS = { confirmed: "res-confirmed", unconfirmed: "res-unconfirmed",
+                      unknown: "res-unknown", in_progress: "res-progress" };
+  var STATE_SHORT = { confirmed: "confirmat", unconfirmed: "neconfirmat", unknown: "necunoscut",
+                      in_progress: "în desfășurare" };
+
+  function minText(d) {
+    if (d == null) return "—";
+    return d <= 0 ? "0 min" : "+" + d + " min";
+  }
+
+  function resultBadge(r) {
+    var st = r && STATE_CLASS[r.state] ? r.state : "unknown";
+    var b = el("span", "res-badge " + STATE_CLASS[st], STATE_SHORT[st]);
+    b.title = (r && r.label) || "";
+    return b;
+  }
+
+  function factRow(dl, label, value, note) {
+    var dt = el("dt", null, label);
+    var dd = el("dd");
+    if (typeof value === "string") dd.textContent = value;
+    else dd.append(value);
+    if (note) dd.append(el("span", "res-fact-note", " " + note));
+    dl.append(dt, dd);
+  }
+
+  function renderResult(j) {
+    var r = j.result || {};
+    var box = el("section", "detail-block res");
+    box.dataset.state = r.state || "unknown";
+    box.append(el("h3", "detail-h", "Rezultat"));
+    var head = el("p", "res-head");
+    head.append(resultBadge(r), el("span", "res-label", r.label || "Rezultat necunoscut"));
+    box.append(head);
+    if (r.reason) box.append(el("p", "res-reason", r.reason));
+
+    var dl = el("dl", "res-facts");
+    if (r.state === "confirmed") {
+      factRow(dl, "Întârziere finală", minText(r.final_delay), "(citită pe tabela de la București Nord)");
+    } else if (r.delay_known) {
+      factRow(dl, "Ultima întârziere citită", minText(r.observed_delay),
+              r.delay_read_at ? "(la " + localTime(r.delay_read_at, true) + ")" : "");
+    } else {
+      factRow(dl, "Întârziere", "necunoscută", "(nu a fost citită niciodată pentru această călătorie)");
+    }
+    factRow(dl, "Ora programată", r.sched_at ? localTime(r.sched_at, true) : (j.sched_time || "—"));
+    factRow(dl, "Ora estimată", r.estimated_at ? localTime(r.estimated_at, true) : "necunoscută",
+            r.estimated_at ? "(programat + întârzierea citită)" : "");
+    factRow(dl, "Dispărut de pe tabelă", r.disappeared_at ? localTime(r.disappeared_at, true)
+      : r.state === "in_progress" ? "încă pe tabelă" : "neobservat");
+    factRow(dl, "Data de serviciu", j.service_date ? dayLabel(j.service_date) : "necunoscută");
+    box.append(dl);
+    box.append(el("p", "detail-note",
+      "Data de serviciu = ziua orei programate (un tren de 00:05 citit pe tabelă la 23:58 aparține " +
+      "zilei următoare). Întârzierea este cea CITITĂ pe tabela de la București Nord, nu ora reală " +
+      "de sosire/plecare. „Confirmat” = dispariția de pe tabelă a fost observată după ora estimată, " +
+      "iar întârzierea a fost citită cu cel mult " + (j.final_read_max_gap_min || 15) +
+      " min înainte."));
+    var link = el("a", "res-train-link", "Profilul trenului " + (j.train_type ? j.train_type + " " : "") +
+                  j.train_no + " →");
+    link.href = "#tren?nr=" + encodeURIComponent(j.train_no);
+    link.addEventListener("click", closeDetail);
+    box.append(link);
+    return box;
+  }
+
+  function journeyEventText(e) {
+    if (e.kind === "delay") {
+      var n = toInt(e.new);
+      return n == null ? "Întârziere: necitită" : "Întârziere citită: " + minText(n);
+    }
+    return eventText(e);
+  }
+
+  function renderJourney(j) {
+    var body = $("h-detail-body");
+    body.replaceChildren();
+    body.append(renderResult(j));
+
+    var pts = readingSeries(j.delay_series, j.result);
+    var readings = pts.filter(function (p) { return p.dot; }).length;
+    var chartBox = el("section", "detail-block");
+    chartBox.append(el("h3", "detail-h", "Întârzierea citită în timp"));
+    if (readings >= 1) {
+      chartBox.append(buildChart(pts, readings));
+      chartBox.append(el("p", "detail-note",
+        plural(readings, "citire reală a întârzierii", "citiri reale ale întârzierii") +
+        " (puncte); între citiri linia păstrează ultima valoare citită" +
+        (pts.some(function (p) { return p.gone; }) ? "; marcajul vertical = dispariția de pe tabelă" : "") +
+        ". Axa X: ora citirii (ora României). Axa Y: întârzierea, în minute."));
+    } else {
+      chartBox.append(el("p", "detail-note",
+        "Nicio citire a întârzierii pentru această călătorie — nu desenăm un grafic din valori necitite."));
+    }
+    body.append(chartBox);
+
+    var events = Array.isArray(j.events) ? j.events : [];
+    var tl = el("section", "detail-block");
+    tl.append(el("h3", "detail-h", "Evenimente (" + events.length + ")"));
+    if (!events.length) {
+      tl.append(el("p", "detail-note", "Nu există evenimente înregistrate pentru această călătorie."));
+    } else {
+      var ol = el("ol", "timeline");
+      events.forEach(function (e) {
+        var li = el("li", "tl-item tl-" + e.kind);
+        var time = el("time", "tl-time", localTime(e.ts));
+        time.dateTime = e.ts;
+        li.append(time, el("span", "tl-text", journeyEventText(e)));
+        ol.append(li);
+      });
+      tl.append(ol);
+    }
+    body.append(tl);
+  }
+
+  function journeyHead(j) {
+    $("h-detail-title").textContent = (j.train_type || "Tren") + " " + j.train_no;
+    $("h-detail-sub").textContent = (BOARD_LABEL[j.board] || "") + " " + (j.sched_time || "") +
+      (j.station ? " · " + titleCase(j.station) : "") +
+      (j.service_date ? " · " + dayLabel(j.service_date) : "");
+  }
+
+  function showDialog() {
+    var dlg = $("h-detail");
+    if (typeof dlg.showModal === "function") { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute("open", "");
+  }
+
+  // Public: open one journey by id (also used by the train profile, stats.js).
+  function openJourney(id, opener, hint) {
+    lastFocus = opener || null;
+    if (hint) journeyHead(hint);
+    else { $("h-detail-title").textContent = "Călătorie"; $("h-detail-sub").textContent = ""; }
+    var body = $("h-detail-body");
+    body.replaceChildren(el("p", "detail-note", "Se încarcă rezultatul călătoriei…"));
+    showDialog();
+    if (detailCtrl) detailCtrl.abort();
+    var ctrl = new AbortController();
+    detailCtrl = ctrl;
+    getJSON("/api/journeys/" + encodeURIComponent(id), ctrl)
+      .then(function (data) {
+        if (detailCtrl !== ctrl) return;
+        if (!data || typeof data !== "object") throw new Error("răspuns invalid");
+        journeyHead(data);
+        renderJourney(data);
+      })
+      .catch(function (e) {
+        if (detailCtrl !== ctrl || e.aborted) return;
+        body.replaceChildren(el("p", "notice notice-error",
+          e.status === 404 ? "Călătoria nu mai există." : errorText(e)));
+      });
+  }
+
   function openDetail(service, day, opener) {
+    if (service.id != null) {
+      openJourney(service.id, opener, { train_type: service.train_type, train_no: service.train_no,
+        board: service.board, sched_time: service.sched_time, station: service.station,
+        service_date: day });
+      return;
+    }
+    // older API without `id`: the day's events for this train number
     var dlg = $("h-detail");
     lastFocus = opener || null;
     $("h-detail-title").textContent = (service.train_type || "Tren") + " " + service.train_no;
@@ -535,6 +742,10 @@
       }, 0);
     });
     var dlg = $("h-detail");
+    // the dialog is shared with other views (#tren): keep it outside the hidden #view-istoric
+    document.body.appendChild(dlg);
+    // navigating (link, back button) must not leave the modal over another view
+    window.addEventListener("hashchange", function () { if (dlg.open) closeDetail(); });
     $("h-detail-close").addEventListener("click", closeDetail);
     dlg.addEventListener("click", function (e) { if (e.target === dlg) closeDetail(); }); // backdrop
     dlg.addEventListener("close", function () {
@@ -544,6 +755,8 @@
   }
 
   App.views.istoric = { show: show };
-  App.history = { delaySeries: delaySeries, todayBucharest: todayBucharest, plural: plural };
+  App.history = { delaySeries: delaySeries, readingSeries: readingSeries, todayBucharest: todayBucharest,
+                  plural: plural, openJourney: openJourney, resultBadge: resultBadge,
+                  titleCase: titleCase, dayLabel: dayLabel, localTime: localTime };
   init();
 })();
