@@ -32,6 +32,7 @@ PARTIAL_BASE = 6  # the partial-read guard applies once a panel had this many ro
 PARTIAL_FRAC = 0.5  # a panel suddenly under this share of its last good count is partial
 PARTIAL_ACCEPT_AFTER = 10  # ...unless it stays that small this many frames (it really shrank)
 CONFIRM_CONFIDENCE = 0.7  # a NEW service read below this needs a second consecutive reading
+RENAME_AFTER = 3  # a stored misread is renamed after this many frames read otherwise
 BOARDS = ("arrival", "departure")
 GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
@@ -194,12 +195,14 @@ def _near_dup(a: tuple, b: tuple) -> bool:
 
 def _dedup(rows: list) -> list:
     """Listed services with near-duplicates (see `_near_dup`) on the same panel
-    collapsed: the most recently seen one stays, at the first one's position."""
+    collapsed: the most recently seen one stays, at the first one's position.
+    Two services read in the same frame (equal last_seen) are distinct trains."""
     kept: list = []
     for s in rows:
         me = (s["train_no"], s["sched_time"], s["station"], s["station_raw"])
         for i, k in enumerate(kept):
-            if (k["board"], k["service_date"]) == (s["board"], s["service_date"]) and _near_dup(
+            if (k["board"], k["service_date"]) == (s["board"], s["service_date"]) and (
+                    k["last_seen"] != s["last_seen"]) and _near_dup(
                     (k["train_no"], k["sched_time"], k["station"], k["station_raw"]), me):
                 if s["last_seen"] > k["last_seen"]:
                     kept[i] = s
@@ -251,6 +254,10 @@ class Store:
         # reading of a new service, awaiting a second consecutive reading.
         self._pending_new: dict[tuple, str] = {}
         self._pending_new_next: dict[tuple, str] = {}
+        # service id -> ((train_no, sched_time) read instead of the stored one, frames in
+        # a row): a stored misread is renamed once the other reading persists.
+        self._misread: dict[int, tuple[tuple, int]] = {}
+        self._misread_next: dict[int, tuple[tuple, int]] = {}
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -394,6 +401,7 @@ class Store:
                 # pending new services of a rejected panel wait for its next reading
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
+                self._misread = self._misread_next
                 self._delay_read.update(self._pending_read)
                 if len(self._delay_read) > 4000:  # bounded: old services drop out
                     self._delay_read = dict(self._pending_read)
@@ -447,11 +455,31 @@ class Store:
             (r.train_no, r.sched_time, r.station, r.station_raw))]
         return hits[0] if len(hits) == 1 else None
 
+    def _maybe_rename(self, r: Row, s: sqlite3.Row) -> sqlite3.Row:
+        """Fuzzy-matched service `s`, renamed to `r`'s (train_no, sched_time) once that
+        reading persisted RENAME_AFTER accepted frames in a row (and the stored one was
+        not read meanwhile): the FIRST reading of a train may itself have been the
+        misread, and follows/notifications go by the train number."""
+        var = (r.train_no, r.sched_time)
+        prev = self._misread.get(s["id"])
+        n = prev[1] + 1 if prev and prev[0] == var else 1
+        if n < RENAME_AFTER or r.confidence < CONFIRM_CONFIDENCE or self._conn.execute(
+                "SELECT 1 FROM services WHERE board=? AND service_date=? AND train_no=?"
+                " AND sched_time=?", (s["board"], s["service_date"], *var)).fetchone():
+            self._misread_next[s["id"]] = (var, n)
+            return s
+        self._conn.execute("UPDATE services SET train_no=?, sched_time=? WHERE id=?",
+                           (*var, s["id"]))
+        log.warning("service %d renamed %s %s -> %s %s (read so %d frames in a row)",
+                    s["id"], s["train_no"], s["sched_time"], *var, n)
+        return self._conn.execute("SELECT * FROM services WHERE id=?", (s["id"],)).fetchone()
+
     def _diff(self, good: list[Row], low: list[Row], local: datetime,
               ts_s: str, boards: tuple[str, ...] = BOARDS) -> list[Event]:
         c = self._conn
         events: list[Event] = []
         seen: set[int] = set()
+        self._misread_next = {}
 
         def emit(sid: int, kind: str, row: Row, sd: str, old=None, new=None) -> None:
             self._insert_event(sid, ts_s, kind, old, new)
@@ -491,6 +519,7 @@ class Store:
                     log.info("misread %s %s %s matched to listed service %s %s (id %d)",
                              r.board, r.train_no, r.sched_time, s["train_no"],
                              s["sched_time"], s["id"])
+                    matches[i] = (r, sd, self._maybe_rename(r, s))
 
         self._pending_new_next = {}
         for r, sd, cur in matches:
@@ -517,7 +546,8 @@ class Store:
                 emit(sid, "appeared", r, sd)
                 continue
             sid, sd = cur["id"], cur["service_date"]
-            # the stored train number and sched_time win (a misread never renames)
+            # the stored train number and sched_time win (a one-frame misread never
+            # renames; only a reading that persists does, in _maybe_rename)
             row = replace(r, sched_time=cur["sched_time"], train_no=cur["train_no"])
             if cur["status"] == "gone":
                 emit(sid, "appeared", row, sd)

@@ -99,6 +99,32 @@ def test_one_digit_apart_both_on_the_same_frame_are_two_trains(store):
     assert len(services(store, "train_no IN (1234, 1284)")) == 2
 
 
+def test_one_digit_apart_read_together_both_stay_on_the_board(store):
+    store.ingest(frame() + [R("arrival", 1234, "12:40"), R("arrival", 1284, "12:40")], at(0))
+    arr = [r["train_no"] for r in store.current_board()["arrivals"]]
+    assert 1234 in arr and 1284 in arr
+
+
+def test_stored_misread_is_renamed_when_the_other_reading_persists(store):
+    store.ingest(frame() + [R("arrival", 1284, "12:40")], at(0))  # first reading misread
+    sid = store._conn.execute("SELECT id FROM services WHERE train_no=1284").fetchone()[0]
+    for m in (1, 2):
+        store.ingest(frame() + [R("arrival", 1234, "12:40")], at(m))
+        assert services(store, "train_no=1284")  # not yet
+    ev = store.ingest(frame() + [R("arrival", 1234, "12:40")], at(3))
+    assert [e for e in ev if e.kind == "appeared"] == []
+    row = store._conn.execute("SELECT id, train_no FROM services WHERE train_no=1234").fetchone()
+    assert tuple(row) == (sid, 1234) and not services(store, "train_no=1284")
+    assert [r["train_no"] for r in store.current_board()["arrivals"]].count(1234) == 1
+
+
+def test_no_rename_when_the_stored_reading_comes_back(store):
+    store.ingest(frame() + [R("arrival", 1234, "12:40")], at(0))
+    for m, no in enumerate((1284, 1284, 1234, 1284, 1284), start=1):
+        store.ingest(frame() + [R("arrival", no, "12:40")], at(m))
+    assert services(store, "train_no=1234") and not services(store, "train_no=1284")
+
+
 def test_board_api_collapses_leftover_near_duplicates(store):
     store.ingest(frame() + [R("arrival", 1234, "12:40")], at(0))
     # a duplicate created before the hotfix (e.g. live DB): inserted directly
@@ -106,9 +132,9 @@ def test_board_api_collapses_leftover_near_duplicates(store):
         "INSERT INTO services(board, service_date, train_type, train_no, station, operator,"
         " sched_time, first_seen, last_seen, station_raw) VALUES"
         " ('arrival', '2026-10-20', 'IR', 1284, 'BRASOV', 'CFR Calatori', '12:40', ?, ?,"
-        " 'BRASOV')", (at(0).isoformat(), at(0).isoformat()))
+        " 'BRASOV')", (at(-1).isoformat(), at(-1).isoformat()))
     arr = [r["train_no"] for r in store.current_board()["arrivals"]]
-    assert arr.count(1234) + arr.count(1284) == 1
+    assert (arr.count(1234), arr.count(1284)) == (1, 0)  # the most recently read stays
 
 
 # -- low-confidence new services ----------------------------------------------
