@@ -27,6 +27,7 @@ NO_PHASE_DELAY = 10.0
 STALE_AFTER = 300.0
 STALE_DELAY = 30.0
 HISTORY = 5
+KNOWN_STATIONS_WARN_S = 600  # log a known_stations() failure at most every 10 min
 
 
 class PhaseTracker:
@@ -132,6 +133,7 @@ async def run_poller(
     backoff = Backoff()
     requests: deque[float] = deque(maxlen=MAX_PER_MIN)
     last_hash: str | None = None
+    ks_warned: float | None = None  # monotonic time of the last known_stations warning
     last_change: float | None = None
 
     async def pause(delay: float) -> None:
@@ -179,7 +181,11 @@ async def run_poller(
                     try:
                         stations = await asyncio.to_thread(known_stations)
                     except Exception:  # canonicalisation then uses the seed only
-                        log.warning("known stations unavailable", exc_info=True)
+                        now_m = time.monotonic()
+                        if ks_warned is None or now_m - ks_warned >= KNOWN_STATIONS_WARN_S:
+                            ks_warned = now_m
+                            log.warning("known stations unavailable (repeats silenced for"
+                                        " %d min)", KNOWN_STATIONS_WARN_S // 60, exc_info=True)
                         stations = ()
                     rows = await asyncio.to_thread(read_board, data, stations=stations)
             except (OcrError, ValueError):

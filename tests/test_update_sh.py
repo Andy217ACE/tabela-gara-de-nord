@@ -70,8 +70,10 @@ def server(tmp_path):
     app = tmp_path / "app"
     data = tmp_path / "data"
     data.mkdir()
-    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
-    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+    # plain `git init` + checkout -b: `init -b` needs git >= 2.28
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    subprocess.run(["git", "init", "-q", str(work)], check=True)
+    git(work, "checkout", "-q", "-b", "main")
     git(work, "remote", "add", "origin", str(origin))
     prev = commit(work, 2, '{"ok":true}', "v2 healthy")
     git(work, "push", "-q", "origin", "main")

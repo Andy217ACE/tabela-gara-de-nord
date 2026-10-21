@@ -221,7 +221,7 @@ async def test_run_passes_learned_stations_to_reader(world, monkeypatch):
     assert got and all(s == {"BRASOV"} for s in got)
 
 
-async def test_run_survives_known_stations_failure(world, monkeypatch):
+async def test_run_survives_known_stations_failure(world, monkeypatch, caplog):
     w = world
     got = []
 
@@ -243,3 +243,6 @@ async def test_run_survives_known_stations_failure(world, monkeypatch):
         timeout=5,
     )
     assert got and all(s == () for s in got)
+    # the failure is logged at most once per KNOWN_STATIONS_WARN_S, not per image
+    warns = [r for r in caplog.records if "known stations unavailable" in r.getMessage()]
+    assert len(got) > 1 and len(warns) == 1
