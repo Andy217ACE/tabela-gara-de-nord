@@ -1377,3 +1377,19 @@ main {
 .v-group { margin: 12px 0 4px; font-size: 0.9375rem; color: var(--text-2); }
 .v-items { margin: 0; padding-left: 20px; line-height: 1.5; }
 .v-items li + li { margin-top: 4px; }
+
+/* un singur panou cu date vechi (citiri respinse), celălalt actualizat */
+.tab[data-stale="true"] > span:first-child::after,
+.board[data-stale="true"] .board-title::after {
+  content: "date vechi";
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px dashed currentColor;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.8;
+}
+.board[data-stale="true"] .trains { opacity: 0.6; }

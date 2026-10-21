@@ -69,7 +69,8 @@ def test_migrate_v1_db_adds_last_read(tmp_path):
 def test_last_read_only_set_by_confident_rows(store):
     store.ingest(base_rows(), T0)
     t1 = T0 + timedelta(minutes=1)
-    rows = base_rows() + [R("departure", 1733, "12:45")]  # stays a valid reading
+    # stays a valid reading (each panel keeps >= 2 confident rows)
+    rows = base_rows() + [R("departure", 1733, "12:45"), R("arrival", 1623, "12:40")]
     rows[0] = R("arrival", 1621, "12:10", platform=3, confidence=0.1)
     store.ingest(rows, t1)
     assert store.last_ok_run()[1] == t1.isoformat()
@@ -133,11 +134,13 @@ def test_too_few_rows_records_failed_run_only(store):
     assert count(store, "events") == 4
 
 
-def test_one_board_empty_is_failed_run(store):
+def test_one_board_empty_ingests_the_other_board(store):
+    """Per-panel ingest: an unreadable (empty) panel no longer blocks the other."""
     rows = [R("arrival", n, f"12:{n % 60:02d}") for n in range(1, 7)]
-    assert store.ingest(rows, T0) == []
-    assert count(store, "runs", "ok=0") == 1
-    assert count(store, "services") == 0
+    assert len(store.ingest(rows, T0)) == 6
+    assert count(store, "runs", "ok=1") == 1
+    assert count(store, "services", "board='arrival'") == 6
+    assert store.last_rejected == {"departure": "too few rows (0)"}
 
 
 def test_failed_run_does_not_count_as_miss(store):

@@ -19,6 +19,7 @@ class Settings:
     poller_enabled: bool = True  # POLLER_ENABLED=0 serves the stored board only (dev)
     last_image_path: str | None = "data/last.jpg"  # LAST_IMAGE_PATH="" disables saving
     weather: WeatherConfig | None = None  # get_settings: WEATHER_* env, on by default
+    rejected_dir: str | None = None  # REJECTED_DIR: last rejected frames (None: not saved)
 
 
 def get_settings() -> Settings:
@@ -36,4 +37,6 @@ def get_settings() -> Settings:
         not in ("0", "false", "no", "off"),
         last_image_path=os.environ.get("LAST_IMAGE_PATH", "data/last.jpg") or None,
         weather=config_from_env(),
+        # REJECTED_DIR="" disables saving rejected frames
+        rejected_dir=os.environ.get("REJECTED_DIR", "/var/lib/tabela/rejected") or None,
     )

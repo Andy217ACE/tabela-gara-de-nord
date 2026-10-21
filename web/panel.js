@@ -709,6 +709,9 @@
       var sec = d.sections[b];
       var visible = S.board === "all" || S.board === b;
       sec.sec.hidden = !visible;
+      // one panel stale alone (its frames rejected): mark only that panel
+      var pb = S.data && S.data.boards && S.data.boards[b];
+      sec.sec.dataset.stale = pb && pb.stale && !S.data.stale ? "true" : "false";
       var list = (S.data && S.data[b]) || [];
       var rows = sorted(list.filter(matches));
       sec.tbody.replaceChildren.apply(sec.tbody, rows.map(function (t) { return buildRow(b, t, fresh); }));

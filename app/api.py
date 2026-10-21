@@ -183,7 +183,8 @@ async def _supervise_poller(settings: Settings, on_rows, client: httpx.AsyncClie
         try:
             await poller.run_poller(settings, on_rows, client, stop,
                                     last_image_path=settings.last_image_path,
-                                    known_stations=known_stations, on_capture=on_capture)
+                                    known_stations=known_stations, on_capture=on_capture,
+                                    rejected_dir=getattr(settings, "rejected_dir", None))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -230,9 +231,14 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             if not t.cancelled() and t.exception() is not None:
                 log.error("notifier failed", exc_info=t.exception())
 
-        async def on_rows(rows, ts: float) -> None:
+        async def on_rows(rows, ts: float) -> dict[str, str]:
+            """Ingest one reading; returns {panel: reason} for the rejected panels."""
             when = datetime.fromtimestamp(ts, TZ)
-            events = await asyncio.to_thread(store.ingest, rows, when, "")
+
+            def _ingest():
+                return store.ingest(rows, when, ""), dict(store.last_rejected)
+
+            events, rejected = await asyncio.to_thread(_ingest)
             try:  # public catalog follows the board even when captures are off/failing
                 await asyncio.to_thread(observations.refresh_catalog, store, rows)
             except Exception:
@@ -240,6 +246,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             t = asyncio.create_task(notifier.handle(events, when.date()))
             notify_tasks.add(t)
             t.add_done_callback(_notify_done)
+            return rejected
 
         app.state.settings = settings
         app.state.store = store
@@ -315,14 +322,24 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         age = store.last_ok_age(datetime.now(TZ))
         out["age_s"] = age
         out["stale"] = age is None or age > STALE_S
+        out["boards"] = _boards(store)
         out["attribution"] = ATTRIBUTION
         return out
+
+    def _boards(store: Store) -> dict:
+        """Per panel: seconds since its last accepted reading and whether it is fresh
+        (a panel whose frames are rejected, e.g. partial reads, goes stale alone)."""
+        ages = store.board_ages(datetime.now(TZ))
+        return {key: {"age_s": ages[b], "ok": ages[b] is not None and ages[b] <= STALE_S,
+                      "stale": ages[b] is None or ages[b] > STALE_S}
+                for b, key in (("arrival", "arrivals"), ("departure", "departures"))}
 
     @app.get("/api/health")
     def health(request: Request):
         store = store_of(request)
         age = store.last_ok_age(datetime.now(TZ))
         return {"ok": age is not None and age <= STALE_S, "age_s": age, "version": __version__,
+                "boards": _boards(store),
                 "weather_age_s": weather.age_s(store.latest_weather(), datetime.now(timezone.utc))}
 
     @app.get("/api/changelog")

@@ -726,3 +726,16 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
 /* creditul din Panou dublează footerul paginii: se vede doar în ecran complet
    (unde footerul paginii nu mai e vizibil) — exact un footer vizibil oricând */
 .pnl:not(.is-fs) .pnl-credit { display: none; }
+
+/* un singur panou cu date vechi (citiri respinse): doar el e marcat */
+.pnl-board[data-stale="true"] .pnl-row,
+.pnl-board[data-stale="true"] .pnl-detail-delay { --lvl: var(--p-unknown); }
+.pnl-board[data-stale="true"] .pnl-row { color: var(--p-text-2); }
+.pnl-board[data-stale="true"] .pnl-board-title::after {
+  content: "DATE VECHI";
+  margin-left: 10px;
+  padding: 0 6px;
+  border: 1px dashed currentColor;
+  font-size: 0.75em;
+  opacity: 0.85;
+}

@@ -15,6 +15,7 @@ import httpx
 from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
 from app.ocr.reader import OcrError, read_board, read_board_debug
+from app.rejected import save_rejected
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ async def run_poller(
     last_image_path: str | None = "data/last.jpg",
     known_stations: Callable[[], Iterable[str]] | None = None,
     on_capture: Callable[..., Awaitable[None]] | None = None,
+    rejected_dir: str | None = None,
 ) -> None:
     """Poll the board image and hand new readings to `on_rows`.
 
@@ -131,6 +133,8 @@ async def run_poller(
     learned from the history for OCR canonicalisation. `on_capture(image, rows,
     debug, ts, duration_ms, error)` (optional) records every new image after
     `on_rows`, also when OCR failed; its failures are logged and ignored.
+    `on_rows` may return {panel: reason} for the panels it rejected; such frames
+    (and frames OCR failed on) are saved to `rejected_dir` (None: not saved).
     """
     reader = read_board if on_capture is None else read_board_debug
 
@@ -205,13 +209,20 @@ async def run_poller(
                     rows, debug = rows
             except (OcrError, ValueError) as e:
                 log.exception("OCR failed for new image")
+                if rejected_dir:
+                    await asyncio.to_thread(save_rejected, rejected_dir, data, ts,
+                                            {"frame": f"OCR failed: {type(e).__name__}"})
                 await capture(data, None, None, ts, int((time.perf_counter() - t0) * 1000),
                               f"{type(e).__name__}: {e}")
             else:
                 dur_ms = int((time.perf_counter() - t0) * 1000)
+                rejected = None
                 try:
-                    await on_rows(rows, ts)
+                    rejected = await on_rows(rows, ts)
                 except Exception:
                     log.exception("on_rows callback failed")
+                if rejected and rejected_dir:
+                    await asyncio.to_thread(save_rejected, rejected_dir, data, ts,
+                                            dict(rejected))
                 await capture(data, rows, debug, ts, dur_ms, None)
         await pause(tracker.next_poll_delay(clock(), last_change))

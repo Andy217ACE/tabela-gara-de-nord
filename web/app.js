@@ -304,6 +304,19 @@
     $("sr-status").textContent = text;
   }
 
+  // One panel can go stale alone (its frames rejected, e.g. a partial read) while the
+  // other stays fresh; the global banner covers the case when everything is stale.
+  function markPanelStale(b, data) {
+    var p = data.boards && data.boards[b];
+    var stale = !!(p && p.stale && !data.stale);
+    [$("panel-" + b), $("tab-" + b)].forEach(function (node) {
+      if (!node) return;
+      node.dataset.stale = stale ? "true" : "false";
+      node.title = stale ? "Date vechi pentru acest panou — ultima citire bună " +
+        (p.age_s == null ? "necunoscută" : ago(p.age_s)) : "";
+    });
+  }
+
   function renderLive() {
     var live = $("live");
     var text = $("updated");
@@ -392,7 +405,7 @@
         state.receivedAt = performance.now();
         state.failed = !!data.sw_offline; // served from the service worker cache
 
-        BOARDS.forEach(function (b) { renderBoard(b, data[b]); });
+        BOARDS.forEach(function (b) { renderBoard(b, data[b]); markPanelStale(b, data); });
       })
       .catch(function () {
         if (state.inflight !== ctrl) return; // superseded (e.g. visibilitychange): not an outage

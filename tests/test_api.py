@@ -76,11 +76,31 @@ def test_board_fresh_not_stale(client):
     assert b["stale"] is False and 0 <= b["age_s"] < 60
 
 
+def test_board_and_health_report_each_panel(client):
+    """A panel whose frames are rejected goes stale alone; the other stays fresh."""
+    store = client.app.state.store
+    old = datetime.now(BUC) - timedelta(seconds=600)
+    store.ingest(rows(), old)
+    arr = [Row("arrival", "IR", 1600 + k, f"ST{k}", "CFR", f"12:{k:02d}") for k in range(6)]
+    dep = [Row("departure", "IR", 1700 + k, f"ST{k}", "CFR", f"13:{k:02d}") for k in range(6)]
+    store.ingest(arr + dep, old + timedelta(seconds=1))
+    store.ingest(arr[:2] + dep, datetime.now(BUC))  # arrivals: partial read
+    b = client.get("/api/board").json()
+    assert b["stale"] is False
+    assert b["boards"]["departures"]["stale"] is False
+    assert b["boards"]["arrivals"]["stale"] is True and b["boards"]["arrivals"]["age_s"] > 500
+    h = client.get("/api/health").json()
+    assert h["ok"] is True
+    assert h["boards"]["arrivals"]["ok"] is False and h["boards"]["departures"]["ok"] is True
+
+
 def test_health_false_without_data(client):
     r = client.get("/api/health")
     assert r.status_code == 200
+    none = {"age_s": None, "ok": False, "stale": True}
     assert r.json() == {"ok": False, "age_s": None, "weather_age_s": None,
-                        "version": __version__}
+                        "version": __version__,
+                        "boards": {"arrivals": none, "departures": none}}
 
 
 def test_health_ok_with_fresh_data_and_false_when_old(client):

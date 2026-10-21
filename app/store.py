@@ -2,24 +2,37 @@
 """SQLite persistence: runs, services (one per train/day/board), events.
 
 `ingest` diffs a validated board reading against the stored state and emits
-`Event`s (appeared / delay / platform / gone). Readings that are too small or
-miss a whole board are recorded as failed runs (`ok=0`) and touch nothing else.
+`Event`s (appeared / delay / platform / gone). Each panel (arrivals/departures)
+is judged on its own: a panel with too few rows, or a partial read (suddenly
+under half of its last good row count), is rejected for that frame and keeps
+its last good state (nothing on it goes GONE); the other panel is still
+ingested. A frame where no panel is usable is a failed run (`ok=0`).
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from app.canonical import _lev
 from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
 from app.normalize import clean_station
 from app.weather import utc_iso
 
+log = logging.getLogger(__name__)
+
 TZ = ZoneInfo("Europe/Bucharest")
-MIN_ROWS = 4
+MIN_ROWS = 4  # a frame needs at least this many confident rows on its accepted panels
+MIN_BOARD_ROWS = 2  # ...and each accepted panel at least this many
+PARTIAL_BASE = 6  # the partial-read guard applies once a panel had this many rows
+PARTIAL_FRAC = 0.5  # a panel suddenly under this share of its last good count is partial
+PARTIAL_ACCEPT_AFTER = 10  # ...unless it stays that small this many frames (it really shrank)
+CONFIRM_CONFIDENCE = 0.7  # a NEW service read below this needs a second consecutive reading
+BOARDS = ("arrival", "departure")
 GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
@@ -162,6 +175,40 @@ def _plat(p: int | None) -> str | None:
     return None if p is None else str(p)
 
 
+def _near_dup(a: tuple, b: tuple) -> bool:
+    """Are (train_no, sched_time, station, station_raw) `a` and `b` one service read
+    twice, one of them with a single misread character?
+
+    Same key, or: same station (canonical or as read) and either the train number
+    differs by one edit at the same time, or the same number at a time differing
+    by one character. Two or more differing digits, or another station: distinct.
+    """
+    (no_a, t_a, st_a, raw_a), (no_b, t_b, st_b, raw_b) = a, b
+    if no_a == no_b and t_a == t_b:
+        return True
+    if not (st_a == st_b or (raw_a and raw_a == raw_b)):
+        return False
+    d_no = _lev(str(no_a), str(no_b))
+    return (d_no == 1 and t_a == t_b) or (d_no == 0 and _lev(t_a, t_b) == 1)
+
+
+def _dedup(rows: list) -> list:
+    """Listed services with near-duplicates (see `_near_dup`) on the same panel
+    collapsed: the most recently seen one stays, at the first one's position."""
+    kept: list = []
+    for s in rows:
+        me = (s["train_no"], s["sched_time"], s["station"], s["station_raw"])
+        for i, k in enumerate(kept):
+            if (k["board"], k["service_date"]) == (s["board"], s["service_date"]) and _near_dup(
+                    (k["train_no"], k["sched_time"], k["station"], k["station_raw"]), me):
+                if s["last_seen"] > k["last_seen"]:
+                    kept[i] = s
+                break
+        else:
+            kept.append(s)
+    return kept
+
+
 MAX_KEY_LEN = 256
 MAX_FOLLOWS = 20
 
@@ -194,6 +241,17 @@ class Store:
         # came from a real reading. After a restart the first poll refreshes it.
         self._delay_read: dict[int, bool] = {}
         self._pending_read: dict[int, bool] = {}
+        # Per panel, in memory (no schema change; after a restart they are rebuilt
+        # from the listed services / the last ok run): last accepted row count,
+        # time of the last accepted reading, consecutive partial-read frames.
+        self._good_count: dict[str, int] = {}
+        self._board_ok: dict[str, str] = {}
+        self._partial_streak: dict[str, int] = {}
+        # (board, service_date, train_no, sched_time) -> first ts of a low-confidence
+        # reading of a new service, awaiting a second consecutive reading.
+        self._pending_new: dict[tuple, str] = {}
+        self._pending_new_next: dict[tuple, str] = {}
+        self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
@@ -260,10 +318,48 @@ class Store:
                 low.setdefault(r.key, r)
         return list(good.values()), list(low.values())
 
-    @staticmethod
-    def _valid(rows: list[Row]) -> bool:
-        boards = {r.board for r in rows}
-        return len(rows) >= MIN_ROWS and {"arrival", "departure"} <= boards
+    def _last_count(self, board: str) -> int:
+        if board not in self._good_count:  # after a restart: the listed services
+            self._good_count[board] = self._conn.execute(
+                "SELECT COUNT(*) FROM services WHERE status='listed' AND board=?",
+                (board,)).fetchone()[0]
+        return self._good_count[board]
+
+    def _judge(self, good: list[Row]) -> tuple[dict[str, int], dict[str, str]]:
+        """({accepted panel: confident rows}, {rejected panel: reason}) for one frame."""
+        counts = {b: 0 for b in BOARDS}
+        for r in good:
+            counts[r.board] = counts.get(r.board, 0) + 1
+        accepted: dict[str, int] = {}
+        rejected: dict[str, str] = {}
+        for b in BOARDS:
+            n, base = counts[b], self._last_count(b)
+            if n < MIN_BOARD_ROWS:
+                rejected[b] = f"too few rows ({n})"
+            elif (base >= PARTIAL_BASE and n < PARTIAL_FRAC * base
+                  and self._partial_streak.get(b, 0) + 1 < PARTIAL_ACCEPT_AFTER):
+                rejected[b] = f"partial read ({n} of {base} rows)"
+            else:
+                accepted[b] = n
+        if accepted and sum(accepted.values()) < MIN_ROWS:
+            total = sum(accepted.values())
+            for b in accepted:
+                rejected[b] = f"frame too small ({total} rows)"
+            accepted = {}
+        return accepted, rejected
+
+    def _after_judge(self, accepted: dict[str, int], rejected: dict[str, str],
+                     ts_s: str) -> None:
+        """Panel bookkeeping, once the frame's transaction committed."""
+        self.last_rejected = rejected
+        for b, n in accepted.items():
+            self._good_count[b] = n
+            self._board_ok[b] = ts_s
+            self._partial_streak[b] = 0
+        for b, why in rejected.items():
+            if why.startswith("partial"):
+                self._partial_streak[b] = self._partial_streak.get(b, 0) + 1
+                log.warning("panel %s rejected: %s; keeping its last good state", b, why)
 
     def _insert_event(self, service_id: int, ts: str, kind: str,
                       old: str | None, new: str | None) -> None:
@@ -280,16 +376,24 @@ class Store:
             c.execute("BEGIN IMMEDIATE")
             try:
                 good, low = self._split(rows)
-                if not self._valid(good):
+                accepted, rejected = self._judge(good)
+                if not accepted:
                     c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,0,?)",
                               (ts_s, image_hash, len(rows)))
                     c.execute("COMMIT")
+                    self._after_judge(accepted, rejected, ts_s)
                     return []
                 c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,1,?)",
                           (ts_s, image_hash, len(rows)))
                 self._pending_read = {}
-                events = self._diff(good, low, local, ts_s)
+                good = [r for r in good if r.board in accepted]
+                low = [r for r in low if r.board in accepted]
+                events = self._diff(good, low, local, ts_s, tuple(accepted))
                 c.execute("COMMIT")
+                self._after_judge(accepted, rejected, ts_s)
+                # pending new services of a rejected panel wait for its next reading
+                self._pending_new = {**{k: v for k, v in self._pending_new.items()
+                                        if k[0] not in accepted}, **self._pending_new_next}
                 self._delay_read.update(self._pending_read)
                 if len(self._delay_read) > 4000:  # bounded: old services drop out
                     self._delay_read = dict(self._pending_read)
@@ -326,8 +430,25 @@ class Store:
                 out.append((diff, s))
         return out
 
+    def _fuzzy_match(self, r: Row, sd: str, seen: set[int]) -> sqlite3.Row | None:
+        """The listed service `r` is a one-character misread of, if exactly one fits.
+
+        Same panel and service day, same station (canonical or as read), and either the train number
+        differs by one edit at the same scheduled time, or the same number with the
+        scheduled time differing by one character (06:52 read 05:52). Services
+        already matched in this frame are real, distinct trains and never claimed.
+        """
+        cands = self._conn.execute(
+            "SELECT * FROM services WHERE status='listed' AND board=? AND service_date=?"
+            " ORDER BY id", (r.board, sd),
+        ).fetchall()
+        hits = [s for s in cands if s["id"] not in seen and _near_dup(
+            (s["train_no"], s["sched_time"], s["station"], s["station_raw"]),
+            (r.train_no, r.sched_time, r.station, r.station_raw))]
+        return hits[0] if len(hits) == 1 else None
+
     def _diff(self, good: list[Row], low: list[Row], local: datetime,
-              ts_s: str) -> list[Event]:
+              ts_s: str, boards: tuple[str, ...] = BOARDS) -> list[Event]:
         c = self._conn
         events: list[Event] = []
         seen: set[int] = set()
@@ -360,9 +481,27 @@ class Store:
             done.add(i)
             seen.add(sid_)
             matches[i] = (matches[i][0], matches[i][1], s)
+        # Pass 3: one-character misreads of a listed service (train number or time).
+        for i, (r, sd, cur) in enumerate(matches):
+            if cur is None:
+                s = self._fuzzy_match(r, sd, seen)
+                if s is not None:
+                    seen.add(s["id"])
+                    matches[i] = (r, sd, s)
+                    log.info("misread %s %s %s matched to listed service %s %s (id %d)",
+                             r.board, r.train_no, r.sched_time, s["train_no"],
+                             s["sched_time"], s["id"])
 
+        self._pending_new_next = {}
         for r, sd, cur in matches:
             if cur is None:
+                first = ts_s
+                if r.confidence < CONFIRM_CONFIDENCE:
+                    k = (r.board, sd, r.train_no, r.sched_time)
+                    if k not in self._pending_new:  # wait for a second consecutive reading
+                        self._pending_new_next[k] = ts_s
+                        continue
+                    first = self._pending_new[k]
                 sid = c.execute(
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
                     " operator, sched_time, first_seen, last_seen, last_delay, last_platform,"
@@ -370,7 +509,7 @@ class Store:
                     " uncertain)"
                     " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?)",
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
-                     r.sched_time, ts_s, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s,
+                     r.sched_time, first, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s,
                      r.operator_raw, r.station_raw, int(r.uncertain)),
                 ).lastrowid
                 seen.add(sid)
@@ -378,7 +517,8 @@ class Store:
                 emit(sid, "appeared", r, sd)
                 continue
             sid, sd = cur["id"], cur["service_date"]
-            row = replace(r, sched_time=cur["sched_time"])  # stored sched_time wins
+            # the stored train number and sched_time win (a misread never renames)
+            row = replace(r, sched_time=cur["sched_time"], train_no=cur["train_no"])
             if cur["status"] == "gone":
                 emit(sid, "appeared", row, sd)
             # unreadable delay: keep the last real reading, no event, no overwrite
@@ -410,7 +550,9 @@ class Store:
                           (ts_s, cur["id"]))
 
         stale_before = local - timedelta(minutes=STALE_MIN)
-        for s in c.execute("SELECT * FROM services WHERE status='listed'").fetchall():
+        marks = ",".join("?" * len(boards))
+        for s in c.execute(f"SELECT * FROM services WHERE status='listed' AND board IN ({marks})",
+                           boards).fetchall():
             if s["id"] in seen:
                 continue
             misses = s["miss_count"] + 1
@@ -445,11 +587,12 @@ class Store:
             out: dict = {"updated_at": self._last_ok_ts(), "arrivals": [], "departures": []}
             rows = self._conn.execute(
                 "SELECT id, board, train_type, train_no, station, operator, sched_time,"
-                " last_delay, last_platform, flagged, status, service_date, uncertain"
+                " last_delay, last_platform, flagged, status, service_date, uncertain,"
+                " station_raw, last_seen"
                 " FROM services"
                 " WHERE status='listed' ORDER BY service_date, sched_time, train_no"
             ).fetchall()
-        for s in rows:
+        for s in _dedup(rows):
             out[_BOARD_KEYS[s["board"]]].append({
                 "train_type": s["train_type"], "train_no": s["train_no"],
                 "station": s["station"], "operator": s["operator"],
@@ -460,6 +603,18 @@ class Store:
                 "delay_read": self._delay_read.get(s["id"], True),
             })
         return out
+
+    def board_ages(self, now: datetime) -> dict[str, float | None]:
+        """Seconds since each panel's last accepted reading (None: never read).
+
+        Kept in memory; until a panel is read after a restart, the last ok run stands in.
+        """
+        with self._lock:
+            fallback = self._last_ok_ts()
+            stamps = {b: self._board_ok.get(b, fallback) for b in BOARDS}
+        loc = _local(now)
+        return {b: None if ts is None else (loc - datetime.fromisoformat(ts)).total_seconds()
+                for b, ts in stamps.items()}
 
     def last_ok_age(self, now: datetime) -> float | None:
         with self._lock:
