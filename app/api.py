@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -29,7 +29,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import poller
+from app import poller, weather
 from app.config import Settings, get_settings
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
@@ -247,9 +247,13 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             stop = asyncio.Event()
             poller_task = asyncio.create_task(_supervise_poller(settings, on_rows, client, stop,
                                                                store.known_stations))
+        # weather: own supervised task, independent of the poller (never affects health.ok)
+        wx = weather.start(store, settings.weather) if start_poller and settings.weather else None
         try:
             yield
         finally:
+            if wx is not None:
+                await wx.stop()
             if poller_task is not None:
                 stop.set()
                 try:
@@ -300,12 +304,18 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
 
     @app.get("/api/health")
     def health(request: Request):
-        age = store_of(request).last_ok_age(datetime.now(TZ))
-        return {"ok": age is not None and age <= STALE_S, "age_s": age}
+        store = store_of(request)
+        age = store.last_ok_age(datetime.now(TZ))
+        return {"ok": age is not None and age <= STALE_S, "age_s": age,
+                "weather_age_s": weather.age_s(store.latest_weather(), datetime.now(timezone.utc))}
 
     @app.get("/api/config")
     def config():
-        return panel_config()
+        return {**panel_config(), "weather": weather.ui_config(settings.weather is not None)}
+
+    @app.get("/api/weather")
+    def weather_now(request: Request):
+        return weather.present(store_of(request).latest_weather(), datetime.now(timezone.utc))
 
     @app.get("/api/history")
     def history(request: Request, response: Response):

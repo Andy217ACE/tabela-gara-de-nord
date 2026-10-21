@@ -69,16 +69,17 @@ def test_index_is_csp_compatible():
     for m in re.finditer(r'(?:href|src)="(https?://[^"]+)"', html):
         url = m.group(1)
         assert url.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com",
-                               "https://cfr.ro")), url
+                               "https://cfr.ro", "https://open-meteo.com/")), url
 
 
 FOOTER = ('<p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro)'
           ' — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro"'
-          ' target="_blank" rel="noopener noreferrer">cfr.ro</a></p>\n  </footer>')
+          ' target="_blank" rel="noopener noreferrer">cfr.ro</a></p>\n')
 
 
 def test_footer_unchanged():
-    """The attribution line is byte-for-byte unchanged; only the logo mark sits next to it."""
+    """The attribution line is byte-for-byte unchanged; the logo mark sits before it and
+    the separate Open-Meteo span after it (tests/test_weather_static.py)."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert FOOTER in html
     footer = re.search(r'<footer class="footer">(.*?)</footer>', html, re.S).group(1)

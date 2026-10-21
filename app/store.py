@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
 from app.normalize import clean_station
+from app.weather import utc_iso
 
 TZ = ZoneInfo("Europe/Bucharest")
 MIN_ROWS = 4
@@ -23,7 +24,7 @@ GONE_AFTER_MISSES = 2
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -100,6 +101,31 @@ _ADDED_COLUMNS = (
     ("station_raw", "TEXT NOT NULL DEFAULT ''"),        # v3
     ("uncertain", "INTEGER NOT NULL DEFAULT 0"),        # v3: name not matched
 )
+
+# v4: Open-Meteo `current` values (app/weather.py), one row per observation time (UTC).
+# NULL = value missing (never 0). History is permanent (~96 rows/day).
+_WEATHER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS weather_observations (
+    id INTEGER PRIMARY KEY,
+    observed_at TEXT NOT NULL UNIQUE,
+    fetched_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'open-meteo',
+    kind TEXT NOT NULL DEFAULT 'model_current',
+    latitude REAL,
+    longitude REAL,
+    temperature_c REAL,
+    apparent_temperature_c REAL,
+    precipitation_mm REAL,
+    weather_code INTEGER,
+    wind_speed_kmh REAL,
+    wind_direction_deg REAL,
+    units_json TEXT,
+    raw_json TEXT
+);
+"""
+_WEATHER_COLS = ("observed_at", "fetched_at", "source", "kind", "latitude", "longitude",
+                 "temperature_c", "apparent_temperature_c", "precipitation_mm", "weather_code",
+                 "wind_speed_kmh", "wind_direction_deg", "units_json", "raw_json")
 
 
 def _local(dt: datetime) -> datetime:
@@ -181,21 +207,39 @@ class Store:
             self._conn.close()
 
     def migrate(self) -> None:
+        """Version ladder: each step is additive and atomic together with its version bump
+        (a failure leaves the previous version in place), so re-running is safe."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version >= SCHEMA_VERSION:
                 return
-            if version == 0:  # fresh database: full current schema
-                self._conn.executescript(
-                    "BEGIN;" + _SCHEMA + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
-                return
-            # v1/v2 -> v3: add the missing services columns, then bump the version,
-            # all in one transaction (a failure leaves the old version in place).
-            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
-            add = "".join(f"ALTER TABLE services ADD COLUMN {name} {decl};"
-                          for name, decl in _ADDED_COLUMNS if name not in cols)
-            self._conn.executescript(
-                "BEGIN;" + _SCHEMA + add + f"PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
+            if version < 3:
+                self._migrate_to_3(version)
+            if version < 4:
+                self._migrate_to_4()
+
+    def _script(self, sql: str) -> None:
+        try:
+            self._conn.executescript(sql)
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
+
+    def _migrate_to_3(self, version: int) -> None:
+        if version == 0:  # fresh database: full v3 schema
+            self._script("BEGIN;" + _SCHEMA + "PRAGMA user_version = 3;COMMIT;")
+            return
+        # v1/v2 -> v3: add the missing services columns, then bump the version,
+        # all in one transaction (a failure leaves the old version in place).
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(services)")}
+        add = "".join(f"ALTER TABLE services ADD COLUMN {name} {decl};"
+                      for name, decl in _ADDED_COLUMNS if name not in cols)
+        self._script("BEGIN;" + _SCHEMA + add + "PRAGMA user_version = 3;COMMIT;")
+
+    def _migrate_to_4(self) -> None:
+        """v3 -> v4: weather_observations (additive)."""
+        self._script("BEGIN;" + _WEATHER_SCHEMA + "PRAGMA user_version = 4;COMMIT;")
 
     # -- ingest -----------------------------------------------------------
 
@@ -445,6 +489,39 @@ class Store:
         names = frozenset(r[0] for r in found)
         self._known_cache = ((today, min_services, min_days), names)
         return set(names)
+
+    # -- weather (schema v4) ----------------------------------------------
+
+    def add_weather(self, obs: dict) -> bool:
+        """Store one observation; False if that observed_at is already stored (kept as is)."""
+        if not isinstance(obs.get("observed_at"), str) or not obs["observed_at"]:
+            raise ValueError("observed_at lipsește")
+        vals = [obs.get(c) for c in _WEATHER_COLS]
+        vals[2] = vals[2] or "open-meteo"
+        vals[3] = vals[3] or "model_current"
+        with self._lock:
+            cur = self._conn.execute(
+                f"INSERT INTO weather_observations({', '.join(_WEATHER_COLS)})"
+                f" VALUES ({', '.join('?' * len(_WEATHER_COLS))})"
+                " ON CONFLICT(observed_at) DO NOTHING", vals)
+            return cur.rowcount == 1
+
+    def latest_weather(self) -> dict | None:
+        """Newest observation (by observed_at), or None."""
+        with self._lock:
+            r = self._conn.execute("SELECT * FROM weather_observations"
+                                   " ORDER BY observed_at DESC LIMIT 1").fetchone()
+        return dict(r) if r else None
+
+    def weather_between(self, t0: datetime | str, t1: datetime | str) -> list[dict]:
+        """Observations with t0 <= observed_at <= t1 (UTC), oldest first."""
+        a = t0 if isinstance(t0, str) else utc_iso(t0)
+        b = t1 if isinstance(t1, str) else utc_iso(t1)
+        with self._lock:
+            found = self._conn.execute(
+                "SELECT * FROM weather_observations WHERE observed_at BETWEEN ? AND ?"
+                " ORDER BY observed_at", (a, b)).fetchall()
+        return [dict(r) for r in found]
 
     # -- history ----------------------------------------------------------
 

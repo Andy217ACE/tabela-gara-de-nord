@@ -78,7 +78,7 @@ def test_board_fresh_not_stale(client):
 def test_health_false_without_data(client):
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json() == {"ok": False, "age_s": None}
+    assert r.json() == {"ok": False, "age_s": None, "weather_age_s": None}
 
 
 def test_health_ok_with_fresh_data_and_false_when_old(client):
