@@ -20,7 +20,7 @@ BACKUP_DIR="/root/backup-$(date +%F)"
 echo "== packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q tesseract-ocr tesseract-ocr-ron python3-venv git curl
+apt-get install -y -q tesseract-ocr tesseract-ocr-ron python3-venv git curl sqlite3
 
 echo "== service user and directories"
 id tabela >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --no-create-home \
@@ -55,10 +55,34 @@ ENV
 fi
 chown root:root "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+
+# Rewrite the env file atomically: temp file next to it (same perms) + mv. Every line we
+# write ends with a newline, so nothing is ever glued to the previous last line.
+env_rewrite() {   # stdin: the new content
+    local tmp
+    tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+    chmod 600 "$tmp"
+    cat > "$tmp"
+    chown root:root "$tmp"
+    mv -f "$tmp" "$ENV_FILE"
+}
+env_lines_without() {  # print ENV_FILE without the given keys, last line newline-terminated
+    local pat="$1"
+    grep -v -E "^(${pat})=" "$ENV_FILE" | awk '{ print }' || true   # awk ends every line with \n
+}
+
+# older installs: settings added since
+if ! grep -q '^LAST_IMAGE_PATH=' "$ENV_FILE"; then
+    { env_lines_without 'LAST_IMAGE_PATH'; echo "LAST_IMAGE_PATH=$DATA_DIR/last.jpg"; } | env_rewrite
+    echo "env: added LAST_IMAGE_PATH"
+fi
+
+# VAPID: raw P-256 private key, base64url (what py_vapid/pywebpush accept); public key =
+# uncompressed point. Never regenerated when a private key exists (that would invalidate
+# every push subscription); a missing public key is derived from the private one.
 if ! grep -q '^VAPID_PRIVATE_KEY=.\+' "$ENV_FILE"; then
-    # Raw P-256 key, base64url (what py_vapid/pywebpush accept); public = uncompressed point.
-    sed -i '/^VAPID_PRIVATE_KEY=/d;/^VAPID_PUBLIC_KEY=/d' "$ENV_FILE"
-    "$VENV/bin/python" - >> "$ENV_FILE" <<'PY'
+    { env_lines_without 'VAPID_PRIVATE_KEY|VAPID_PUBLIC_KEY'
+      "$VENV/bin/python" - <<'PY'
 import base64
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization as s
@@ -67,8 +91,25 @@ b = lambda x: base64.urlsafe_b64encode(x).rstrip(b"=").decode()
 print("VAPID_PRIVATE_KEY=" + b(k.private_numbers().private_value.to_bytes(32, "big")))
 print("VAPID_PUBLIC_KEY=" + b(k.public_key().public_bytes(s.Encoding.X962, s.PublicFormat.UncompressedPoint)))
 PY
+    } | env_rewrite
     echo "VAPID keys generated"
+elif ! grep -q '^VAPID_PUBLIC_KEY=.\+' "$ENV_FILE"; then
+    { env_lines_without 'VAPID_PUBLIC_KEY'
+      ENV_FILE="$ENV_FILE" "$VENV/bin/python" - <<'PY'
+import base64, os
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import serialization as s
+raw = [l.split("=", 1)[1].strip() for l in open(os.environ["ENV_FILE"])
+       if l.startswith("VAPID_PRIVATE_KEY=")][-1]
+d = int.from_bytes(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)), "big")
+pub = ec.derive_private_key(d, ec.SECP256R1()).public_key()
+b = base64.urlsafe_b64encode(pub.public_bytes(s.Encoding.X962, s.PublicFormat.UncompressedPoint))
+print("VAPID_PUBLIC_KEY=" + b.rstrip(b"=").decode())
+PY
+    } | env_rewrite
+    echo "VAPID public key derived from the existing private key"
 fi
+# only the PUBLIC key is ever printed
 echo "VAPID public key: $(grep '^VAPID_PUBLIC_KEY=' "$ENV_FILE" | cut -d= -f2-)"
 
 echo "== systemd"
@@ -88,7 +129,12 @@ if nginx -t; then
     systemctl reload nginx
 else
     echo "nginx -t FAILED: restoring previous config" >&2
-    if [ -f "$BACKUP_DIR/tabela.site.bak" ]; then cp -a "$BACKUP_DIR/tabela.site.bak" "$SITE"; fi
+    if [ -f "$BACKUP_DIR/tabela.site.bak" ]; then
+        cp -a "$BACKUP_DIR/tabela.site.bak" "$SITE"
+    else
+        # first install: no previous site to restore - remove the broken one entirely
+        rm -f /etc/nginx/sites-enabled/tabela "$SITE"
+    fi
     if [ -f "$BACKUP_DIR/tabela-limits.conf.bak" ]; then
         cp -a "$BACKUP_DIR/tabela-limits.conf.bak" "$LIMITS"
     else
