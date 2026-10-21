@@ -21,16 +21,16 @@ def test_parse_time(s, exp):
 
 
 @pytest.mark.parametrize("s,exp", [
-    ("+10", 10), ("", 0), ("+1O", 10), ("+130", 130), ("+5", 5),
-    ("xyz", 0), ("--", 0), ("+", 0), ("10", 10),
+    ("+10", 10), ("", 0), ("   ", 0), ("+1O", 10), ("+130", 130), ("+5", 5),
+    ("xyz", None), ("--", None), ("+", None), ("10", 10),
 ])
 def test_parse_delay(s, exp):
     assert parse_delay(s) == exp
 
 
 @pytest.mark.parametrize("s,exp", [
-    ("SOS", 0), ("+SO", 0), ("OO", 0), ("BIG", 0), ("+S5", 55),
-    ("999", 999), ("+1000", 0), ("123456", 0),
+    ("SOS", None), ("+SO", None), ("OO", None), ("BIG", None), ("+S5", 55),
+    ("999", 999), ("+1000", None), ("123456", None),
 ])
 def test_parse_delay_rejects_noise_and_huge(s, exp):
     assert parse_delay(s) == exp
@@ -69,3 +69,10 @@ def test_strip_flag(s, exp):
 ])
 def test_clean_station(s, exp):
     assert clean_station(s) == exp
+
+
+def test_empty_delay_cell_is_a_read_zero_garbage_is_unread():
+    """CFR leaves the cell empty for on-time trains: that is a reading (0).
+    Garbled content is NOT a reading: None, never 0."""
+    assert parse_delay("") == 0 and parse_delay(None) == 0
+    assert parse_delay("?#") is None and parse_delay("+S?") is None

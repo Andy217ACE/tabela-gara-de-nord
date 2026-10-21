@@ -236,6 +236,7 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
         station, s_score = canonical.canonical_station(
             station_raw, known_stations, preferred=seed)
         operator, o_score = canonical.canonical_operator(operator_raw)
+        delay = parse_delay(cell["delay"][0])  # None: unreadable cell (not "on time")
         rows.append(Row(
             board=board,
             train_type=train_type,
@@ -243,7 +244,8 @@ def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
             station=station,
             operator=operator,
             sched_time=sched,
-            delay_min=parse_delay(cell["delay"][0]),
+            delay_min=delay if delay is not None else 0,
+            delay_read=delay is not None,
             platform=parse_platform(cell["platform"][0]),
             flagged=flagged,
             confidence=min(1.0, max(0.0, conf)),

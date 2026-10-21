@@ -9,7 +9,6 @@
 (function () {
   var TZ = "Europe/Bucharest";
   var DEFAULTS = { delay_thresholds: { low: 5, mid: 15, high: 30 }, stale_after_s: 180, refresh_s: 10 };
-  var CONF_MIN = 0.6;          // rânduri cu `confidence` sub prag = neconfirmate (gri)
   var RECENT_S = 120;          // „modificare recentă" (albastru) — observată de această pagină
   var BOARDS = ["arrivals", "departures"];
   var KEYS = { view: "tabela.view", board: "tabela.panel.board", cols: "tabela.panel.cols", fav: "tabela.fav" };
@@ -146,8 +145,10 @@
   // Nivelul de culoare. Niciodată „la timp" fără o întârziere citită pe un rând sigur.
   // `uncertain` (A2) privește doar numele stației/operatorului, nu cifrele întârzierii:
   // numele primesc marcajul „citire nesigură", culoarea întârzierii rămâne.
+  // `delay_read` (API) e true doar când celula de întârziere a fost citită efectiv:
+  // fără el nu există „la timp" (verde) — rândul rămâne gri, „necitit".
   function levelOf(t) {
-    if (typeof t.confidence === "number" && t.confidence < CONF_MIN) return "unknown";
+    if (t.delay_read !== true) return "unknown";
     var d = t.delay_min;
     if (t.delay_min == null || typeof d !== "number" || !isFinite(d) || d < 0) return "unknown";
     if (d === 0) return "ok";
@@ -528,6 +529,12 @@
   }
 
   function delayNode(t, lvl, fresh) {
+    if (t.delay_read !== true) {
+      var nr = el("span", "pnl-delay pnl-unread", "necitit");
+      nr.setAttribute("aria-label", "Întârziere necitită");
+      nr.title = "Celula de întârziere nu a putut fi citită de pe tabela CFR";
+      return nr;
+    }
     if (lvl === "unknown" && !(typeof t.delay_min === "number" && t.delay_min >= 0)) {
       return unknown("întârziere");
     }

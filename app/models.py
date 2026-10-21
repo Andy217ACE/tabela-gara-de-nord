@@ -19,6 +19,7 @@ class Row:
     operator_raw: str = ""  # text as read by OCR (operator/station hold canonical names)
     station_raw: str = ""
     uncertain: bool = False  # operator or station did not match a known name
+    delay_read: bool = True  # False: the delay cell was unreadable (delay_min is not a reading)
 
     @property
     def key(self) -> tuple[str, int, str]:

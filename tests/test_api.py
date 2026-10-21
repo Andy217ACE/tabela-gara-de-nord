@@ -426,3 +426,15 @@ def test_poller_gets_known_stations_from_store(monkeypatch):
     with TestClient(app):
         assert got.wait(2)
         assert seen["known_stations"]() == set()
+
+
+def test_board_rows_carry_delay_read(client):
+    from dataclasses import replace
+    store = client.app.state.store
+    store.ingest(rows(), T0)
+    unread = rows()
+    unread[0] = replace(unread[0], delay_min=0, delay_read=False)
+    store.ingest(unread, T0 + timedelta(minutes=1))
+    b = client.get("/api/board").json()
+    flags = [r["delay_read"] for r in b["arrivals"] + b["departures"]]
+    assert flags.count(False) == 1 and all(isinstance(f, bool) for f in flags)

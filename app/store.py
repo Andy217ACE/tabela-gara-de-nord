@@ -163,6 +163,11 @@ class Store:
         self.path = path
         self._lock = threading.RLock()
         self._known_cache: tuple | None = None  # ((day, min_services, min_days), names)
+        # service id -> was the delay readable in the latest confident reading of it?
+        # In memory only (no schema change): a missing id means the stored last_delay
+        # came from a real reading. After a restart the first poll refreshes it.
+        self._delay_read: dict[int, bool] = {}
+        self._pending_read: dict[int, bool] = {}
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
@@ -234,8 +239,12 @@ class Store:
                     return []
                 c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,1,?)",
                           (ts_s, image_hash, len(rows)))
+                self._pending_read = {}
                 events = self._diff(good, low, local, ts_s)
                 c.execute("COMMIT")
+                self._delay_read.update(self._pending_read)
+                if len(self._delay_read) > 4000:  # bounded: old services drop out
+                    self._delay_read = dict(self._pending_read)
                 return events
             except BaseException:
                 c.execute("ROLLBACK")
@@ -317,13 +326,17 @@ class Store:
                      r.operator_raw, r.station_raw, int(r.uncertain)),
                 ).lastrowid
                 seen.add(sid)
+                self._pending_read[sid] = r.delay_read
                 emit(sid, "appeared", r, sd)
                 continue
             sid, sd = cur["id"], cur["service_date"]
             row = replace(r, sched_time=cur["sched_time"])  # stored sched_time wins
             if cur["status"] == "gone":
                 emit(sid, "appeared", row, sd)
-            if cur["last_delay"] != r.delay_min:
+            # unreadable delay: keep the last real reading, no event, no overwrite
+            delay = r.delay_min if r.delay_read else cur["last_delay"]
+            self._pending_read[sid] = r.delay_read
+            if r.delay_read and cur["last_delay"] != r.delay_min:
                 emit(sid, "delay", row, sd, str(cur["last_delay"]), str(r.delay_min))
             if cur["last_platform"] != r.platform:
                 emit(sid, "platform", row, sd, _plat(cur["last_platform"]), _plat(r.platform))
@@ -336,7 +349,7 @@ class Store:
                 "UPDATE services SET train_type=?, station=?, operator=?, station_raw=?,"
                 " operator_raw=?, uncertain=?, last_seen=?, last_delay=?, last_platform=?,"
                 " flagged=?, status='listed', miss_count=0, last_read=? WHERE id=?",
-                (r.train_type, *names, ts_s, r.delay_min, r.platform,
+                (r.train_type, *names, ts_s, delay, r.platform,
                  int(r.flagged), ts_s, sid),
             )
 
@@ -383,7 +396,7 @@ class Store:
         with self._lock:
             out: dict = {"updated_at": self._last_ok_ts(), "arrivals": [], "departures": []}
             rows = self._conn.execute(
-                "SELECT board, train_type, train_no, station, operator, sched_time,"
+                "SELECT id, board, train_type, train_no, station, operator, sched_time,"
                 " last_delay, last_platform, flagged, status, service_date, uncertain"
                 " FROM services"
                 " WHERE status='listed' ORDER BY service_date, sched_time, train_no"
@@ -396,6 +409,7 @@ class Store:
                 "platform": s["last_platform"], "flagged": bool(s["flagged"]),
                 "status": s["status"], "service_date": s["service_date"],
                 "uncertain": bool(s["uncertain"]),
+                "delay_read": self._delay_read.get(s["id"], True),
             })
         return out
 

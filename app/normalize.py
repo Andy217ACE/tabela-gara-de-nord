@@ -38,13 +38,22 @@ def parse_time(s: str) -> str | None:
 MAX_DELAY = 999
 
 
-def parse_delay(s: str) -> int:
-    m = _DELAY.match((s or "").strip())
+def parse_delay(s: str | None) -> int | None:
+    """Minutes of delay in a board cell.
+
+    An EMPTY cell is how the CFR board shows an on-time train: that is a reading, 0.
+    Anything else that is not a plausible number (letter noise such as "SOS", a lone
+    "+", more than MAX_DELAY) is NOT a reading: None, so it is never shown as 0/"la timp".
+    """
+    s = (s or "").strip()
+    if not s:
+        return 0
+    m = _DELAY.match(s)
     # Require at least one real digit: letter-only noise ("SOS") is not a delay.
     if not m or not any(c.isdigit() for c in m.group(1)):
-        return 0
+        return None
     n = int(_digits(m.group(1)))
-    return n if n <= MAX_DELAY else 0
+    return n if n <= MAX_DELAY else None
 
 
 def parse_platform(s: str) -> int | None:

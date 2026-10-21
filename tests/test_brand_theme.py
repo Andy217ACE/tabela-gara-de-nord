@@ -245,3 +245,44 @@ def test_panel_follow_button_uses_app_on_follow():
     assert "Favorite (local)" in panel
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert 'new CustomEvent("tabela:follows")' in app
+
+
+# -- delay_read: never "la timp" without a delay actually read --------------------------
+
+NODE = __import__("shutil").which("node")
+
+
+@pytest.mark.skipif(NODE is None, reason="needs node")
+def test_panel_level_never_green_without_read_delay():
+    import subprocess
+    harness = r"""
+    global.window = global;
+    global.document = { readyState: 'complete', addEventListener(){}, getElementById(){ return null; },
+                        documentElement: { dataset: {} }, querySelectorAll(){ return []; } };
+    require(process.argv[1]);
+    const L = window.TabelaPanel.levelOf;
+    const out = {
+      unread0: L({ delay_min: 0, delay_read: false }),
+      missing0: L({ delay_min: 0 }),
+      read0: L({ delay_min: 0, delay_read: true }),
+      read20: L({ delay_min: 20, delay_read: true }),
+      unreadUncertain: L({ delay_min: 0, delay_read: false, uncertain: true }),
+    };
+    console.log(JSON.stringify(out));
+    """
+    r = subprocess.run([NODE, "-e", harness, str(WEB / "panel.js")], capture_output=True,
+                       text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    assert out == {"unread0": "unknown", "missing0": "unknown", "read0": "ok",
+                   "read20": "mid", "unreadUncertain": "unknown"}
+
+
+def test_cards_never_green_without_read_delay():
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert 'var read = t.delay_read === true;' in app
+    assert 'var level = read ? delayLevel(d) : "unread";' in app
+    panel = (WEB / "panel.js").read_text(encoding="utf-8")
+    assert 'if (t.delay_read !== true) return "unknown";' in panel
+    assert "necitit" in panel and "necitit" in app
+    assert "confidence" not in panel  # dead check removed

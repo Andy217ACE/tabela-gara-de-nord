@@ -243,7 +243,8 @@ def test_current_board(store):
     assert a == {"train_type": "IR", "train_no": 1621, "station": "Brasov",
                  "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
                  "platform": 3, "flagged": True, "status": "listed",
-                 "service_date": T0.date().isoformat(), "uncertain": False}
+                 "service_date": T0.date().isoformat(), "uncertain": False,
+                 "delay_read": True}
     assert a["flagged"] is True and b["arrivals"][1]["flagged"] is False
     # failed run doesn't move updated_at
     store.ingest([], T0 + timedelta(minutes=1))
@@ -588,3 +589,30 @@ def test_migrate_live_v2_db_from_production_code(tmp_path):
     assert {r["uncertain"] for r in board["arrivals"] + board["departures"]} == {False}
     assert s.history(date(2026, 10, 20))  # history query works on migrated rows
     s.close()
+
+
+def test_unread_delay_keeps_last_value_and_emits_nothing(store):
+    rows = base_rows()
+    rows[0] = R("arrival", 1621, "12:10", delay=15, platform=3)
+    store.ingest(rows, T0)
+    unread = base_rows()
+    unread[0] = R("arrival", 1621, "12:10", delay=0, platform=3, delay_read=False)
+    ev = store.ingest(unread, T0 + timedelta(minutes=1))
+    assert [e for e in ev if e.kind == "delay"] == []
+    a = {r["train_no"]: r for r in store.current_board()["arrivals"]}
+    assert a[1621]["delay_min"] == 15 and a[1621]["delay_read"] is False
+    assert a[1622]["delay_read"] is True
+    # read again -> flag back, real change emitted
+    again = base_rows()
+    again[0] = R("arrival", 1621, "12:10", delay=20, platform=3)
+    ev = store.ingest(again, T0 + timedelta(minutes=2))
+    assert [(e.kind, e.old, e.new) for e in ev] == [("delay", "15", "20")]
+    assert store.current_board()["arrivals"][0]["delay_read"] is True
+
+
+def test_new_service_with_unread_delay_is_flagged(store):
+    rows = base_rows()
+    rows[1] = R("arrival", 1622, "12:20", delay_read=False)
+    store.ingest(rows, T0)
+    a = {r["train_no"]: r for r in store.current_board()["arrivals"]}
+    assert a[1622]["delay_read"] is False and a[1621]["delay_read"] is True

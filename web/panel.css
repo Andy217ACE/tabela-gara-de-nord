@@ -520,6 +520,7 @@ thead .c-plat { text-align: center; }
 }
 
 .pnl-unk { color: var(--p-dim); }
+.pnl-delay.pnl-unread { font-weight: 600; font-style: italic; }
 
 .pnl-star {
   appearance: none;

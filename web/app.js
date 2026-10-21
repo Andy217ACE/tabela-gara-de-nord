@@ -165,13 +165,15 @@
 
   function updateCard(c, t, prevSig) {
     var d = Math.max(0, t.delay_min | 0);
-    var level = delayLevel(d);
+    // never "la timp" unless the delay cell was actually read (API `delay_read`)
+    var read = t.delay_read === true;
+    var level = read ? delayLevel(d) : "unread";
     var where = c.board === "arrivals" ? "din " : "spre ";
     c.train = t;
     c.li.dataset.delay = level;
 
     c.sched.textContent = t.sched_time || "--:--";
-    if (level === "ok") {
+    if (level === "ok" || level === "unread") {
       c.est.hidden = true;
       c.est.textContent = "";
       c.sched.removeAttribute("aria-label");
@@ -200,10 +202,12 @@
 
     c.delay.className = "delay delay-" + level;
     c.delay.replaceChildren(
-      icon(level === "ok" ? ICONS.ok : level === "minor" ? ICONS.clock : ICONS.alert),
-      document.createTextNode(level === "ok" ? "la timp" : "+" + d + " min")
+      icon(level === "ok" ? ICONS.ok : level === "minor" || level === "unread" ? ICONS.clock : ICONS.alert),
+      document.createTextNode(level === "unread" ? "necitit" : level === "ok" ? "la timp" : "+" + d + " min")
     );
-    c.delay.setAttribute("aria-label", level === "ok" ? "La timp" : "Întârziere " + d + " minute");
+    c.delay.setAttribute("aria-label", level === "unread" ? "Întârziere necitită"
+      : level === "ok" ? "La timp" : "Întârziere " + d + " minute");
+    c.delay.title = level === "unread" ? "Celula de întârziere nu a putut fi citită de pe tabela CFR" : "";
 
     var known = t.platform != null && t.platform !== "";
     c.plat.className = known ? "plat" : "plat plat-unknown";
@@ -214,7 +218,7 @@
     c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + (t.station || "");
     applyFollow(c);
 
-    var sig = d + "|" + (known ? t.platform : "-");
+    var sig = (read ? d : "?") + "|" + (known ? t.platform : "-");
     if (prevSig != null && prevSig !== sig) {
       c.li.classList.remove("flash");
       void c.li.offsetWidth; // restart the animation
