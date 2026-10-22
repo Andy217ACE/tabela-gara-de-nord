@@ -303,7 +303,8 @@ def test_icon_weights_and_precache_budget(client):
     assert "icon-512" not in shell and "icon-maskable" not in shell
     paths = re.findall(r'"(/[^"]*)"', shell) + ["/offline.html"]
     total = sum(len(client.get(p).content) for p in set(paths))
-    assert total <= 400_000, total
+    # 400 KB until Beta 1.05 (~396 KB); +~14 KB of JS/CSS for the all-days Istoric
+    assert total <= 420_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

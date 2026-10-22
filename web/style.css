@@ -959,6 +959,62 @@ main {
 
 .view-history.is-loading .h-results { opacity: 0.55; transition: opacity 0.2s ease; }
 
+/* Istoric — day picker: „Toate zilele” / „O zi anume” (shown with a train number) */
+.h-day-pick { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.h-day-pick > select,
+.h-day-pick > input { flex: 1 1 9.5rem; min-width: 0; }
+.h-day-pick > [hidden] { display: none; }
+
+/* Istoric — all days of one train: summary, day groups, actions, load more */
+.h-summary {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.h-summary[hidden] { display: none; }
+.h-summary p { margin: 4px 0; overflow-wrap: anywhere; }
+.h-sum-board { font-weight: 700; }
+.h-sum-states,
+.h-sum-note { color: var(--text-2); font-size: 0.8125rem; }
+.h-group + .h-group { margin-top: 14px; }
+.h-group-title {
+  margin: 0 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.h-acts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.h-act {
+  appearance: none;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.h-act:hover { text-decoration-thickness: 2px; }
+.lq-badge {
+  display: inline-flex;
+  padding: 1px 7px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.h-more { display: block; margin: 14px auto 4px; padding: 8px 18px; }
+.h-more[hidden] { display: none; }
+
 /* ---------- Istoric: results (cards on mobile, table on wide screens) ---------- */
 
 .h-table { width: 100%; border-collapse: separate; border-spacing: 0; }
@@ -1312,6 +1368,11 @@ main {
      (it pushed the page sideways on tablets / phones in landscape) */
   .filters { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); align-items: end; }
   .field-date, .field-wide { grid-column: auto; }
+  .h-group-title { margin: 0; padding: 10px 10px 4px; border-top: 1px solid var(--border-strong); }
+  .h-group:first-child .h-group-title { border-top: 0; }
+  .h-group + .h-group { margin-top: 0; }
+  .h-group .h-row .h-time,
+  .h-group .h-row .h-trn { white-space: nowrap; }
   .field input[type="time"] { padding: 8px 10px; }
   .filters .btn { grid-column: auto; min-height: 42px; margin-top: 0; }
 
@@ -1360,6 +1421,20 @@ main {
   .h-row .h-status { color: var(--text-2); }
   .h-row[data-delay="minor"] .h-time { box-shadow: 3px 0 0 var(--warn) inset; }
   .h-row[data-delay="major"] .h-time { box-shadow: 3px 0 0 var(--bad) inset; }
+}
+
+@media (min-width: 1100px) {
+  /* one table per day: same column widths in every group */
+  .h-group .h-table { table-layout: fixed; }
+  .h-group .h-table th:nth-child(1) { width: 7%; }
+  .h-group .h-table th:nth-child(2) { width: 9%; }
+  .h-group .h-table th:nth-child(3) { width: 10%; }
+  .h-group .h-table th:nth-child(5) { width: 12%; }
+  .h-group .h-table th:nth-child(6) { width: 13%; }
+  .h-group .h-table th:nth-child(7) { width: 15%; }
+  .h-group .h-table th:nth-child(8) { width: 6%; }
+  .h-group .h-table th:nth-child(9) { width: 11%; }
+  .h-group .h-row td { overflow-wrap: anywhere; }
 }
 
 /* ---------- desktop: side by side, no tabs ---------- */

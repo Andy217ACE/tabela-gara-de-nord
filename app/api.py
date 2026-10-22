@@ -29,7 +29,8 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import admin, captures, observations, poller, stats_api, trains_api, weather
+from app import (admin, captures, history_all, observations, poller, stats, stats_api, trains_api,
+                 weather)
 from app.config import Settings, get_settings
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
@@ -359,6 +360,11 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     @app.get("/api/history")
     def history(request: Request, response: Response):
         q = request.query_params
+        all_days = q.get("all") or "0"
+        if all_days not in ("0", "1"):
+            raise _bad("Parametru „all” invalid (0 sau 1).")
+        if all_days == "1":
+            return _history_all(request)
         day = _parse_date(q.get("date"))
         train = _parse_train(q["train"]) if q.get("train") else None
         board_ = q.get("board") or None
@@ -377,6 +383,42 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             services = services[:HISTORY_MAX]
             response.headers["X-Truncated"] = "1"
         return {"date": day.isoformat(), "services": services}
+
+    def _history_all(request: Request) -> dict:
+        """All days of one train (optionally one `date`), newest first, `limit` per page
+        (1–200) after `cursor`; see app.history_all."""
+        q = request.query_params
+        if not q.get("train"):
+            raise _bad("Pentru „Toate zilele” completează numărul trenului.")
+        train = _parse_train(q["train"])
+        day = _parse_date(q.get("date"), default_today=False) if q.get("date") else None
+        board_ = q.get("board") or None
+        if board_ is not None and board_ not in BOARDS:
+            raise _bad("Panou invalid (arrival sau departure).")
+        station = q.get("station") or None
+        if station is not None and len(station) > MAX_STATION_LEN:
+            raise _bad("Numele stației este prea lung.")
+        time_from = _parse_hhmm(q.get("from"), "de la")
+        time_to = _parse_hhmm(q.get("to"), "până la")
+        if time_from and time_to and time_from > time_to:
+            raise _bad("Ora „de la” este după ora „până la”.")
+        limit = stats_api._int(q.get("limit"), "limit", 1, history_all.PAGE_MAX) or history_all.PAGE_MAX
+        cursor = q.get("cursor") or None
+        if cursor is not None:
+            try:
+                history_all.parse_cursor(cursor)
+            except ValueError:
+                raise _bad("Cursor de paginare invalid.") from None
+        conf = q.get("doar_confirmate") or "0"
+        if conf not in ("0", "1"):
+            raise _bad("Parametru „doar_confirmate” invalid (0 sau 1).")
+        p = stats.Params(on_time=stats_api._int(q.get("prag"), "prag", 0, 60),
+                         min_sample=stats_api._int(q.get("min"), "min", 1, 1000),
+                         board=board_, date_from=day, date_to=day, confirmed_only=conf == "1")
+        d = history_all.page(store_of(request), train, p, station=station, time_from=time_from,
+                             time_to=time_to, limit=limit, cursor=cursor)
+        d["date"] = day.isoformat() if day else None
+        return d
 
     @app.get("/api/train/{no}")
     def train_events(request: Request, no: str):

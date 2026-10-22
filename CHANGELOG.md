@@ -5,7 +5,7 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
-## Beta 1.09 — 2026-10-22
+## Beta 1.10 — 2026-10-22
 
 Calitatea datelor, partea 2. Raportul de reanaliză din 22.10 a găsit trei probleme care apar
 mai ales noaptea: dubluri noi, redenumiri care oscilează și treceri repetate dispărut/apărut.
@@ -35,6 +35,19 @@ mai ales noaptea: dubluri noi, redenumiri care oscilează și treceri repetate d
   - arhivează tot, cu posibilitate de restaurare;
   - nu folosește niciodată legături în lanț (RM 7919 09:50 e un tren real);
   - recalculează lista chiar în momentul aplicării.
+
+## Beta 1.09 — 2026-10-22
+
+### Adăugat
+- **Istoric — tot istoricul unui tren:** când completezi „Nr. tren”, căutarea arată călătoriile trenului din **toate zilele** observate, cele mai noi primele, grupate pe zile. Pentru fiecare: data de serviciu, panoul (sosire/plecare), ora programată, stația, întârzierea finală (sau ultima citită) și maximul citit, rezultatul (confirmat / neconfirmat / necunoscut / în desfășurare), linia, plus link spre detaliu (grafic) și spre profilul trenului.
+- Selectorul de zi devine „Toate zilele” (implicit când e completat un număr de tren) sau „O zi anume”. Se combină cu filtrele de stație, oră și panou. Fără număr de tren, Istoricul rămâne pe o singură zi, ca până acum.
+- Antet: numărul de călătorii și perioada (prima–ultima zi) și un rezumat separat pe sosiri și plecări: N, medie, mediană și maxim, calculate doar din întârzierile citite. Sub eșantionul minim (implicit 5) nu se afișează procente.
+- Paginare: câte 200 de călătorii, cu butonul „Încarcă mai multe”.
+- API: `/api/history?train=N&all=1` (opțional `date`, `station`, `from`, `to`, `board`, `limit` ≤ 200, `cursor`).
+
+### Reguli de date
+- Întârzierea necunoscută rămâne „necitit”/necunoscută, nu 0, și nu intră în medie. Trenurile-fantomă nu apar. Evenimentele suspecte nu contează ca citiri. Călătoriile din perioada de calitate redusă (versiunea beta inițială) apar marcate, dar nu intră în rezumat (ca în statistici).
+
 ## Beta 1.08 — 2026-10-22
 
 ### Reparat

@@ -180,14 +180,20 @@
     <section class="view view-history" id="view-istoric" aria-labelledby="istoric-heading" hidden>
       <div class="page-head">
         <h1 id="istoric-heading">Istoric</h1>
-        <p class="page-sub">Ce a afișat tabela CFR într-o zi: ore programate, întârzieri observate și linii.</p>
+        <p class="page-sub">Ce a afișat tabela CFR într-o zi: ore programate, întârzieri observate și linii. Cu un număr de tren: tot istoricul trenului, din toate zilele.</p>
       </div>
 
       <form class="filters" id="h-form" role="search" aria-label="Filtre istoric" novalidate>
-        <label class="field field-date">
-          <span class="field-label">Ziua</span>
-          <input type="date" id="h-date" name="date" required>
-        </label>
+        <div class="field field-date">
+          <span class="field-label" id="h-day-label">Ziua</span>
+          <div class="h-day-pick">
+            <select id="h-scope" name="scope" aria-labelledby="h-day-label" hidden>
+              <option value="all">Toate zilele</option>
+              <option value="day">O zi anume</option>
+            </select>
+            <input type="date" id="h-date" name="date" aria-label="Ziua" required>
+          </div>
+        </div>
         <label class="field">
           <span class="field-label">Nr. tren</span>
           <input type="text" id="h-train" name="train" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="ex. 1636">
@@ -217,8 +223,10 @@
 
       <p class="h-count" id="h-count" role="status" aria-live="polite"></p>
       <p class="notice notice-error" id="h-error" role="alert" hidden></p>
+      <div class="h-summary" id="h-summary" hidden></div>
       <div class="h-results" id="h-results"></div>
       <p class="empty" id="h-empty" hidden></p>
+      <button class="btn btn-ghost h-more" type="button" id="h-more" hidden>Încarcă mai multe</button>
 
       <dialog class="sheet" id="h-detail" aria-labelledby="h-detail-title">
         <div class="sheet-head">
