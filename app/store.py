@@ -14,6 +14,7 @@ import logging
 import re
 import sqlite3
 import threading
+from collections import deque
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -34,7 +35,9 @@ PARTIAL_BASE = 6  # the partial-read guard applies once a panel had this many ro
 PARTIAL_FRAC = 0.5  # a panel suddenly under this share of its last good count is partial
 PARTIAL_ACCEPT_AFTER = 10  # ...unless it stays that small this many frames (it really shrank)
 CONFIRM_CONFIDENCE = 0.7  # a NEW service read below this needs a second consecutive reading
-RENAME_AFTER = 3  # a stored misread is renamed after this many frames read otherwise
+RENAME_AFTER = 3  # a stored misread is renamed after at least this many readings of the other key
+RENAME_WINDOW = 10  # ...that are also RENAME_SHARE of the last RENAME_WINDOW readings of it
+RENAME_SHARE = 0.7  # (a vote, not "3 in a row": 7917->7914->791->7914 ping-pong stops)
 BOARDS = ("arrival", "departure")
 GONE_AFTER_MISSES = 3  # OCR alternating between variants made 2 flap (data-quality report)
 REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'appeared'
@@ -313,8 +316,10 @@ class Store:
         self._pending_new_next: dict[tuple, str] = {}
         # service id -> ((train_no, sched_time) read instead of the stored one, frames in
         # a row): a stored misread is renamed once the other reading persists.
-        self._misread: dict[int, tuple[tuple, int]] = {}
-        self._misread_next: dict[int, tuple[tuple, int]] = {}
+        # service id -> last RENAME_WINDOW (train_no, sched_time) keys read for it (vote)
+        self._votes: dict[int, deque] = {}
+        # service id -> confident readings matched to it (seeded from its observations)
+        self._nreads: dict[int, int] = {}
         # (kind, service id) -> (board, value read, consecutive frames): a delay/platform
         # change is applied (and its event emitted) only once confirmed (app.quality).
         self._cand: dict[tuple[str, int], tuple[str, object, int]] = {}
@@ -482,7 +487,6 @@ class Store:
                 # pending new services of a rejected panel wait for its next reading
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
-                self._misread = self._misread_next
                 # a candidate waits while its panel is rejected; otherwise consecutive only
                 self._cand = {**{k: v for k, v in self._cand.items() if v[0] not in accepted},
                               **self._cand_next}
@@ -539,31 +543,66 @@ class Store:
             (r.train_no, r.sched_time, r.station, r.station_raw))]
         return hits[0] if len(hits) == 1 else None
 
+    def _vote(self, sid: int, key: tuple) -> None:
+        if len(self._votes) > 4000:  # bounded: old services drop out
+            self._votes = {}
+        self._votes.setdefault(sid, deque(maxlen=RENAME_WINDOW)).append(key)
+        self._nreads[sid] = self._reads(sid) + 1
+
+    def _reads(self, sid: int) -> int:
+        if sid not in self._nreads:
+            if len(self._nreads) > 4000:
+                self._nreads = {}
+            self._nreads[sid] = quality._obs_count(self._conn, [sid]).get(sid, 0)
+        return self._nreads[sid]
+
     def _maybe_rename(self, r: Row, s: sqlite3.Row) -> sqlite3.Row:
-        """Fuzzy-matched service `s`, renamed to `r`'s (train_no, sched_time) once that
-        reading persisted RENAME_AFTER accepted frames in a row (and the stored one was
-        not read meanwhile): the FIRST reading of a train may itself have been the
-        misread, and follows/notifications go by the train number."""
-        var = (r.train_no, r.sched_time)
-        prev = self._misread.get(s["id"])
-        n = prev[1] + 1 if prev and prev[0] == var else 1
-        if n < RENAME_AFTER or r.confidence < CONFIRM_CONFIDENCE or self._conn.execute(
-                "SELECT 1 FROM services WHERE board=? AND service_date=? AND train_no=?"
-                " AND sched_time=?", (s["board"], s["service_date"], *var)).fetchone():
-            self._misread_next[s["id"]] = (var, n)
+        """Service `s` (matched to a reading of another key), renamed to `r`'s
+        (train_no, sched_time) once that key is the clear majority of its recent
+        readings: at least RENAME_AFTER of them and RENAME_SHARE of the last
+        RENAME_WINDOW. The FIRST reading of a train may itself have been the misread,
+        and follows/notifications go by the train number. Never to a number with fewer
+        digits (a truncated read: 1571 -> 157), never onto an existing key."""
+        var, cur = (r.train_no, r.sched_time), (s["train_no"], s["sched_time"])
+        votes = self._votes.get(s["id"], ())
+        n = sum(1 for v in votes if v == var)
+        if (var == cur or n < RENAME_AFTER or n < RENAME_SHARE * len(votes)
+                or r.confidence < CONFIRM_CONFIDENCE
+                or len(str(var[0])) < len(str(cur[0])) or self._conn.execute(
+                    "SELECT 1 FROM services WHERE board=? AND service_date=? AND train_no=?"
+                    " AND sched_time=?", (s["board"], s["service_date"], *var)).fetchone()):
             return s
         self._conn.execute("UPDATE services SET train_no=?, sched_time=? WHERE id=?",
                            (*var, s["id"]))
-        log.warning("service %d renamed %s %s -> %s %s (read so %d frames in a row)",
-                    s["id"], s["train_no"], s["sched_time"], *var, n)
+        log.warning("service %d renamed %s %s -> %s %s (%d of the last %d readings)",
+                    s["id"], s["train_no"], s["sched_time"], *var, n, len(votes))
         return self._conn.execute("SELECT * FROM services WHERE id=?", (s["id"],)).fetchone()
+
+    def _majority_partner(self, cur: sqlite3.Row, seen: set[int],
+                          listed: list[sqlite3.Row]) -> sqlite3.Row | None:
+        """A listed one-character variant of `cur` (same panel/day, see `_near_dup`), not
+        read in this frame, with more readings than `cur`: the same board row, which the
+        OCR alternates between two keys (R 5011 / R 5014 for hours at night). The
+        reading goes to the majority; the minority one then leaves the board as a ghost."""
+        me = (cur["train_no"], cur["sched_time"], cur["station"], cur["station_raw"])
+        best = None
+        for p in listed:
+            if (p["id"] == cur["id"] or p["id"] in seen or p["board"] != cur["board"]
+                    or p["service_date"] != cur["service_date"]):
+                continue
+            if not _near_dup((p["train_no"], p["sched_time"], p["station"], p["station_raw"]),
+                             me):
+                continue
+            if self._reads(p["id"]) > self._reads(cur["id"]) and (
+                    best is None or self._reads(p["id"]) > self._reads(best["id"])):
+                best = p
+        return best
 
     def _diff(self, good: list[Row], low: list[Row], local: datetime,
               ts_s: str, boards: tuple[str, ...] = BOARDS) -> list[Event]:
         c = self._conn
         events: list[Event] = []
         seen: set[int] = set()
-        self._misread_next = {}
         self._cand_next = {}
         self.last_ghost_numbers = set()
 
@@ -579,6 +618,20 @@ class Store:
             if cur is not None:
                 seen.add(cur["id"])
             matches.append((r, sd, cur))
+        # Pass 1b: an exact match on the minority key of a row the OCR alternates
+        # between two listed services goes to the majority one.
+        listed = c.execute("SELECT * FROM services WHERE status='listed'").fetchall()
+        for i, (r, sd, cur) in enumerate(matches):
+            if cur is None:  # (a minority service already gone is not revived either)
+                continue
+            p = self._majority_partner(cur, seen, listed)
+            if p is not None:
+                seen.discard(cur["id"])
+                seen.add(p["id"])
+                matches[i] = (r, sd, p)
+                log.info("reading %s %s %s given to majority service %s %s (id %d, %d vs %d"
+                         " readings)", r.board, r.train_no, r.sched_time, p["train_no"],
+                         p["sched_time"], p["id"], self._reads(p["id"]), self._reads(cur["id"]))
         # Pass 2: sched_time jitter for the unmatched rows. Claim globally by
         # smallest |delta sched_time| (ties: row order, then service id) so the
         # outcome does not depend on the order of the incoming rows.
@@ -605,7 +658,12 @@ class Store:
                     log.info("misread %s %s %s matched to listed service %s %s (id %d)",
                              r.board, r.train_no, r.sched_time, s["train_no"],
                              s["sched_time"], s["id"])
-                    matches[i] = (r, sd, self._maybe_rename(r, s))
+        # Vote: every matched reading counts for its service; a key that becomes the clear
+        # majority of the recent readings renames it (see _maybe_rename).
+        for i, (r, sd, cur) in enumerate(matches):
+            if cur is not None:
+                self._vote(cur["id"], (r.train_no, r.sched_time))
+                matches[i] = (r, sd, self._maybe_rename(r, cur))
 
         self._pending_new_next = {}
         for r, sd, cur in matches:
@@ -629,6 +687,7 @@ class Store:
                      ts_s if r.delay_read else None),
                 ).lastrowid
                 seen.add(sid)
+                self._vote(sid, (r.train_no, r.sched_time))
                 self._pending_read[sid] = r.delay_read
                 emit(sid, "appeared", r, sd)
                 continue

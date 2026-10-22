@@ -497,3 +497,79 @@ def test_notifier_gone_after_short_return_is_pushed_again(store):
             await tick(_without(frame()), m)
     asyncio.run(run())
     assert sum("ieșit" in b for b in sent) == 2
+
+
+# -- Beta 1.07: vote-based rename, majority routing (data-quality-report-2) ---------------------
+
+def _no(store, sid):
+    return store._conn.execute("SELECT train_no FROM services WHERE id=?", (sid,)).fetchone()[0]
+
+
+def test_rename_ping_pong_stops(store):
+    # service 597 on 22.10: 7917 -> 7914 -> 791 -> 7914 -> 7911 -> 791 -> 7914 -> 7911
+    store.ingest(frame(extra=[R(7917, "09:10", station="AEROPORT H COANDA")]), at(0))
+    sid = svc(store, 7917)["id"]
+    for m, no in enumerate([7914, 791, 7914, 7911, 791, 7914, 7911, 7914, 791, 7911], 1):
+        store.ingest(frame(extra=[R(no, "09:10", station="AEROPORT H COANDA")]), at(m))
+    assert _no(store, sid) == 7917  # no key has a clear majority: no rename at all
+
+
+def test_rename_by_majority_still_heals_a_first_frame_misread(store):
+    store.ingest(frame(extra=[R(1574, "05:30", station="GALATI")]), at(0))
+    sid = svc(store, 1574)["id"]
+    for m in (1, 2, 3):
+        store.ingest(frame(extra=[R(1571, "05:30", station="GALATI")]), at(m))
+    assert _no(store, sid) == 1571
+
+
+def test_never_renamed_to_a_truncated_number(store):
+    # service 586 stayed "157" (truncated 1571)
+    store.ingest(frame(extra=[R(1571, "05:30", station="GALATI")]), at(0))
+    sid = svc(store, 1571)["id"]
+    for m in range(1, 8):
+        store.ingest(frame(extra=[R(157, "05:30", station="GALATI")]), at(m))
+    assert _no(store, sid) == 1571
+
+
+def test_alternating_row_goes_to_the_majority_service(store):
+    # R 5011 / R 5014 alternated minute by minute for 3 hours on 22.10
+    real = R(5011, "04:47", board="departure", station="BUZAU")
+    for m in range(0, 6):
+        store.ingest(frame(extra=[real]), at(m))
+    # a duplicate service that already had its own row (created before this fix)
+    store._conn.execute(
+        "INSERT INTO services(board, service_date, train_type, train_no, station, operator,"
+        " sched_time, first_seen, last_seen, station_raw) VALUES ('departure', ?, 'R', 5014,"
+        " 'BUZAU', 'CFR Calatori', '04:47', ?, ?, 'BUZAU')",
+        (at(0).date().isoformat(), at(5).isoformat(), at(5).isoformat()))
+    dup = R(5014, "04:47", board="departure", station="BUZAU")
+    evs = []
+    for m in range(6, 16):
+        evs += store.ingest(frame(extra=[dup if m % 2 else real]), at(m))
+    assert svc(store, 5011)["status"] == "listed"
+    assert [e.kind for e in evs if e.row.train_no == 5011] == []  # no gone/appeared flapping
+    assert svc(store, 5014)["status"] == "gone"
+    assert [e.kind for e in evs if e.row.train_no == 5014 and e.kind == "appeared"] == []
+
+
+def test_two_real_trains_read_together_are_never_merged(store):
+    a = R(1234, "12:40")
+    b = R(1284, "12:40")
+    for m in range(0, 5):
+        store.ingest(frame(extra=[a, b] if m else [a]), at(m))
+    assert svc(store, 1234)["status"] == svc(store, 1284)["status"] == "listed"
+
+
+def test_ghost_minority_dup_rule():
+    a = {"id": 1, "train_no": 5011, "sched_time": "04:47", "station": "BUZAU",
+         "station_raw": "BUZAU", "first_seen": "2026-10-22T00:40:00+03:00",
+         "last_seen": "2026-10-22T05:00:00+03:00", "status": "gone"}
+    b = dict(a, id=2, train_no=5014, first_seen="2026-10-22T01:00:00+03:00",
+             last_seen="2026-10-22T04:20:00+03:00")
+    assert quality.ghost_verdict(b, [a, b], 40, {1: 160, 2: 40}) == ("minority_dup", 1)
+    assert quality.ghost_verdict(b, [a, b], 90, {1: 160, 2: 90}) is None  # undecided (C3b)
+    assert quality.ghost_verdict(a, [a, b], 160, {1: 160, 2: 40}) is None
+
+
+def test_platform_2_5_confusion_needs_three():
+    assert quality.platform_needs(2, 5) == 3 and quality.platform_needs(5, 2) == 3

@@ -50,11 +50,13 @@ DELAY_PLUS_CONFIRM = 5
 PLATFORM_CONFIRM = 2
 PLATFORM_CONFUSED_CONFIRM = 3
 # digit pairs the OCR swaps on this board (5/6; 1/4/11/14; 3/8): measured flapping
-PLATFORM_CONFUSION = (frozenset({5, 6}), frozenset({1, 4, 11, 14}), frozenset({3, 8}))
+PLATFORM_CONFUSION = (frozenset({5, 6}), frozenset({1, 4, 11, 14}), frozenset({3, 8}),
+                      frozenset({2, 5}))  # 2/5 (RM 7907) measured in report 2
 
 # --- ghosts ------------------------------------------------------------------
 GHOST_MIN_LIFE_S = 120  # a service seen for less than 2 minutes is not a reliable train
 GHOST_MAX_OBS = 1  # a near-duplicate with at most this many observations is a misread
+GHOST_MAJORITY = 2  # ...or one whose overlapping variant has at least twice its observations
 
 # --- reduced-quality period (Beta, before captures/observations existed) -------------
 # First run 2026-10-21 00:32 local; first capture (v5, current pipeline) at 11:31:51 local.
@@ -249,14 +251,18 @@ def classify_delays(first_seen: str, last_seen: str, last_delay: int,
             "last": prev}
 
 
-def ghost_verdict(svc: dict, partners: list[dict], n_obs: int) -> tuple[str, int | None] | None:
+def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
+                  partner_obs: dict[int, int] | None = None) -> tuple[str, int | None] | None:
     """(reason, real service id) if `svc` is a ghost, else None.
 
     `svc`/`partners`: dicts with id, train_no, sched_time, station, station_raw,
     first_seen, last_seen, status (partners: same board and service date).
     A service still listed is never judged. Ghost when it lived < GHOST_MIN_LIFE_S
     ("short"), or when it has at most GHOST_MAX_OBS observations and a partner that
-    lived longer is a one-character variant of it ("near_dup": R 5011 + 5014/50141/501...).
+    lived longer is a one-character variant of it ("near_dup": R 5011 + 5014/50141/501...),
+    or when a one-character variant on the board at the same time has at least
+    GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
+    alternated between two keys; R 5014 90 vs R 5011 160 stays undecided).
     """
     from app.store import _near_dup  # local: store imports this module
 
@@ -276,6 +282,19 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int) -> tuple[str, int
                     best = (p_life, p["id"])
     if best is not None:
         return "near_dup", best[1]
+    if partner_obs and n_obs >= 1:
+        for p in partners:
+            p_obs = partner_obs.get(p["id"], 0)
+            if (p["id"] == svc["id"] or p_obs < GHOST_MAJORITY * n_obs
+                    or (p["train_no"], p["sched_time"]) == me[:2]
+                    or _ts(p["first_seen"]) > _ts(svc["last_seen"])
+                    or _ts(p["last_seen"]) < _ts(svc["first_seen"])):
+                continue
+            if _near_dup((p["train_no"], p["sched_time"], p["station"], p["station_raw"]), me):
+                if best is None or p_obs > best[0]:
+                    best = (p_obs, p["id"])
+        if best is not None:
+            return "minority_dup", best[1]
     if life < GHOST_MIN_LIFE_S:
         return "short", None
     return None
@@ -307,8 +326,9 @@ def judge_ghost(conn: sqlite3.Connection, service_id: int) -> tuple[str, int | N
         "SELECT id, train_no, sched_time, station, station_raw, first_seen, last_seen, status"
         " FROM services WHERE board=? AND service_date=? AND id != ?",
         (s["board"], s["service_date"], service_id)).fetchall()
-    n_obs = _obs_count(conn, [service_id]).get(service_id, 0)
-    verdict = ghost_verdict(dict(s), [dict(p) for p in partners], n_obs)
+    counts = _obs_count(conn, [service_id] + [p["id"] for p in partners])
+    verdict = ghost_verdict(dict(s), [dict(p) for p in partners],
+                            counts.get(service_id, 0), counts)
     if verdict is not None:
         upsert_service(conn, service_id, ghost=1, ghost_reason=verdict[0], ghost_of=verdict[1])
     elif (conn.execute("SELECT ghost FROM service_quality WHERE service_id=?",
@@ -420,7 +440,7 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
         for s in services:
             sid = s["id"]
             verdict = ghost_verdict(s, by_day[(s["board"], s["service_date"])],
-                                    n_obs.get(sid, 0))
+                                    n_obs.get(sid, 0), n_obs)
             fs = _ts(s["first_seen"])
             low = int(any(a <= fs < b for a, b in periods))
             st_c, op_c = _canonical_names(s)
