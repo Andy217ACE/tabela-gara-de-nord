@@ -23,6 +23,8 @@ from pathlib import Path, PurePosixPath
 import cv2
 import numpy as np
 
+from app.observations import parse_line_version
+
 log = logging.getLogger(__name__)
 
 SERVER_DATA_DIR = "/var/lib/tabela"
@@ -172,6 +174,39 @@ def _cap(r) -> dict:
             "expires_at": r["expires_at"]}
 
 
+_BOARD_KEYS = (("arrival", "arrivals"), ("departure", "departures"))
+
+
+def _board_counts(conn, ids: list[int]) -> dict[int, dict]:
+    """Per capture and panel: OCR lines, rows read (a train), empty/unread lines and
+    re-read lines (recovered = re-read with success). From the observations."""
+    out: dict[int, dict] = {i: {k: {"lines": 0, "rows": 0, "empty": 0, "unread": 0,
+                                   "retried": 0, "recovered": 0} for _, k in _BOARD_KEYS}
+                            for i in ids}
+    if not ids:
+        return out
+    marks = ",".join("?" * len(ids))
+    for cid, board, state, pv in conn.execute(
+            f"SELECT capture_id, board, validation_state, processing_version"
+            f" FROM observations WHERE capture_id IN ({marks})", ids):
+        key = dict(_BOARD_KEYS).get(board)
+        if key is None:
+            continue
+        b = out[cid][key]
+        line = parse_line_version(pv)
+        b["lines"] += 1
+        if line["state"] == "empty":
+            b["empty"] += 1
+        elif state == "incomplete" and line["state"] == "unread":
+            b["unread"] += 1
+        else:
+            b["rows"] += 1
+        if line["retry"]:
+            b["retried"] += 1
+            b["recovered"] += bool(line["retry"]["variant"])
+    return out
+
+
 def list_captures(store, limit: int = 50, before: int | None = None) -> list[dict]:
     limit = max(1, min(int(limit), LIST_MAX))
     where, args = ("WHERE id < ?", [before]) if before else ("", [])
@@ -179,7 +214,8 @@ def list_captures(store, limit: int = 50, before: int | None = None) -> list[dic
         found = store._conn.execute(
             f"SELECT {_CAP_COLS} FROM captures {where} ORDER BY id DESC LIMIT ?",
             (*args, limit)).fetchall()
-    return [_cap(r) for r in found]
+        counts = _board_counts(store._conn, [r["id"] for r in found])
+    return [{**_cap(r), "boards": counts[r["id"]]} for r in found]
 
 
 def capture_detail(store, cid: int) -> dict | None:
@@ -192,6 +228,8 @@ def capture_detail(store, cid: int) -> dict | None:
             "SELECT * FROM observations WHERE capture_id=? ORDER BY board, row_index, id",
             (cid,)).fetchall()
     out = _cap(c)
+    with store._lock:
+        out["boards"] = _board_counts(store._conn, [cid])[cid]
     out["observations"] = [{
         "id": o["id"], "board": o["board"], "row_index": o["row_index"],
         "service_id": o["service_id"], "raw_text": o["raw_text"],
@@ -203,6 +241,7 @@ def capture_detail(store, cid: int) -> dict | None:
         "row_conf": o["row_conf"], "uncertain": bool(o["uncertain"]),
         "validation_state": o["validation_state"],
         "processing_version": o["processing_version"],
+        "line": parse_line_version(o["processing_version"]),
     } for o in obs]
     return out
 

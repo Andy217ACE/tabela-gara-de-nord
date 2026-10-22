@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app import captures
+from app.ocr import stats as ocr_stats
 from app.store import TZ
 
 log = logging.getLogger(__name__)
@@ -270,6 +271,7 @@ async def stats(request: Request):
     out = await run_in_threadpool(captures.capture_system_stats, store, settings.db_path)
     age = await run_in_threadpool(store.last_ok_age, datetime.now(TZ))
     out["live_age_s"] = age
+    out["ocr"] = ocr_stats.snapshot()
     out["tesseract"] = await run_in_threadpool(tesseract_status, settings.tesseract_cmd)
     cs = _cap_settings(request)
     out["capture"] = {"enabled": cs.enabled, "retention_days": cs.retention_days}

@@ -6,6 +6,8 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
+
+from tests.conftest import EMPTY_OCR
 from fastapi.testclient import TestClient
 
 from app.version import __version__
@@ -76,7 +78,7 @@ def test_health_has_weather_age_without_changing_ok(client):
     none = {"age_s": None, "ok": False, "stale": True}
     assert client.get("/api/health").json() == {
         "ok": False, "age_s": None, "weather_age_s": None, "version": __version__,
-        "boards": {"arrivals": none, "departures": none}}
+        "boards": {"arrivals": none, "departures": none}, "ocr": EMPTY_OCR}
     seed(client, 5)
     h = client.get("/api/health").json()
     assert h["ok"] is False and 240 <= h["weather_age_s"] <= 400   # weather never makes ok

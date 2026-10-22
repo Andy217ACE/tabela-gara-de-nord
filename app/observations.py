@@ -36,7 +36,9 @@ log = logging.getLogger(__name__)
 # below this much free space on CAPTURE_DIR's disk no image file is written (the DB and
 # the live board share the disk; a full disk would stop the board). Env CAPTURE_MIN_FREE_MB.
 MIN_FREE_MB_DEFAULT = 2048
-PROCESSING_VERSION = "ocr-tess-digits-1"  # bump when OCR/parsing changes meaningfully
+# bump when OCR/parsing changes meaningfully. -2: 4x3 grid check + re-read of unreadable
+# lines; each observation's version also carries the line's OCR history (`line_version`)
+PROCESSING_VERSION = "ocr-tess-grid-2"
 STATES = ("ok", "uncertain", "rejected_low_conf", "incomplete")
 FIELDS = ("type", "no", "station", "operator", "time", "delay", "platform")
 
@@ -208,6 +210,34 @@ def validation_state(row: Row | None) -> str:
     return "ok"
 
 
+def line_version(base: str, entry: dict) -> str:
+    """Processing version of one observation: `base`, plus ``+empty`` (no text on the
+    line), ``+unread`` (text, no train read) and ``+retry:<variant>:<attempts>`` (the
+    line was re-read; variant ``none`` when no re-read succeeded)."""
+    v = base
+    state = entry.get("state")
+    if state in ("empty", "unread"):
+        v += "+" + state
+    retry = entry.get("retry")
+    if retry:
+        v += f"+retry:{retry.get('variant') or 'none'}:{int(retry.get('attempts') or 0)}"
+    return v
+
+
+def parse_line_version(v: str | None) -> dict:
+    """{state: ok|empty|unread, retry: None | {variant, attempts}} from `line_version`."""
+    parts = (v or "").split("+")
+    out: dict = {"state": "ok", "retry": None}
+    for p in parts[1:]:
+        if p in ("empty", "unread"):
+            out["state"] = p
+        elif p.startswith("retry:"):
+            _, variant, n = (p.split(":") + ["", "0"])[:3]
+            out["retry"] = {"variant": None if variant == "none" else variant,
+                            "attempts": int(n) if n.isdigit() else 0}
+    return out
+
+
 def _entries(rows: list[Row], debug: list[dict] | None) -> list[dict]:
     """Debug entries, or minimal ones built from the rows (no per-field data)."""
     if debug is not None:
@@ -372,7 +402,8 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
                      r.operator if r else (fields.get("operator") or {}).get("norm"),
                      r.operator_raw if r else (fields.get("operator") or {}).get("raw"),
                      (None if e.get("conf") is None else round(float(e["conf"]), 4)),
-                     int(bool(r and r.uncertain)), state, processing_version))
+                     int(bool(r and r.uncertain)), state,
+                     line_version(processing_version, e)))
                 if state in ("ok", "uncertain"):
                     nos.add(train_no)
             refresh_trains(conn, nos)

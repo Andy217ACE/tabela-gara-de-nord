@@ -23,3 +23,18 @@ def legacy_rules(monkeypatch):
     monkeypatch.setattr(store, "GONE_AFTER_MISSES", 2)
     monkeypatch.setattr(store, "REAPPEAR_QUIET_MIN", -1)
     monkeypatch.setattr(quality, "GHOST_MIN_LIFE_S", -1)  # short test services are not ghosts
+
+
+@pytest.fixture(autouse=True)
+def _fresh_ocr_stats():
+    """The in-memory OCR frame statistics are process-wide: every test starts empty."""
+    from app.ocr import stats
+    stats.reset()
+    yield
+    stats.reset()
+
+
+EMPTY_OCR = {"expected_rows": 12, "last": None,
+             "window": {"frames": 0, "full_frames": 0, "frames_retried": 0,
+                        "lines_retried": 0, "lines_recovered": 0, "duration_ms_max": None,
+                        "duration_ms_p50": None, "retry_ms_max": None}}

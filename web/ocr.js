@@ -14,6 +14,20 @@
     incomplete: "incomplet"
   };
   var BOARD_LABEL = { arrival: "Sosiri", departure: "Plecări" };
+  var LINE_LABEL = { empty: "rând gol", unread: "rând necitit" };
+
+  // "S 12 · P 11" (+ re-reads) from the per-panel counts of a capture
+  function boardsText(b) {
+    if (!b || !b.arrivals) return "—";
+    var t = "S " + b.arrivals.rows + " · P " + b.departures.rows;
+    var re = b.arrivals.retried + b.departures.retried;
+    if (re) t += " · recitite " + re + " (+" + (b.arrivals.recovered + b.departures.recovered) + ")";
+    return t;
+  }
+
+  function boardsShort(b) {
+    return b && b.arrivals && (b.arrivals.rows !== 12 || b.departures.rows !== 12);
+  }
   var PAGE = 50;
 
   var root = null;
@@ -237,6 +251,16 @@
         ms(s.duration_ms.avg) + " / " + ms(s.duration_ms.p95) + " (N=" + s.duration_ms.n + ")");
       stat(dl, "Erori 24 h", String(s.errors_24h), s.errors_24h ? "is-bad" : "");
       stat(dl, "Rânduri 24 h (cu probleme)", s.rows_24h + " (" + s.rows_with_errors_24h + ")");
+      if (s.ocr && s.ocr.window) {
+        var w = s.ocr.window, last = s.ocr.last;
+        stat(dl, "Cadre cu 12/12 rânduri", w.frames ? w.full_frames + " din " + w.frames + " (de la pornire, max. 60)" : "—",
+          w.frames && w.full_frames < w.frames ? "is-bad" : "");
+        stat(dl, "Recitiri OCR (rânduri recuperate)", w.lines_retried + " (" + w.lines_recovered + ") · max " + ms(w.retry_ms_max));
+        if (last && last.boards) {
+          stat(dl, "Ultimul cadru", "S " + last.boards.arrival.rows + " · P " + last.boards.departure.rows +
+            " · " + ms(last.duration_ms));
+        }
+      }
       stat(dl, "Vechime LIVE", age(s.live_age_s), s.live_age_s == null || s.live_age_s > 180 ? "is-bad" : "");
       stat(dl, "Imagini păstrate", s.images.count + " · " + bytes(s.images.bytes) +
         " · " + s.capture.retention_days + " zile");
@@ -286,7 +310,8 @@
     td.appendChild(b);
     tr.appendChild(td);
     tr.appendChild(el("td", null, c.ok ? "ok" : "eroare"));
-    tr.appendChild(el("td", "num", String(c.n_rows)));
+    tr.appendChild(el("td", "num" + (boardsShort(c.boards) ? " is-bad" : ""),
+      c.boards ? boardsText(c.boards) : String(c.n_rows)));
     tr.appendChild(el("td", "num", ms(c.duration_ms)));
     tr.appendChild(el("td", "num", bytes(c.bytes)));
     tr.appendChild(el("td", "mono", c.hash8));
@@ -321,7 +346,8 @@
     h.tabIndex = -1;
     box.appendChild(h);
     var meta = el("p", "ocr-meta",
-      (d.ok ? "OCR reușit" : "OCR eșuat") + " · " + d.n_rows + " rânduri valide · " +
+      (d.ok ? "OCR reușit" : "OCR eșuat") + " · " + d.n_rows + " rânduri valide (" +
+      boardsText(d.boards) + " din 12/12) · " +
       d.observations.length + " linii citite · " + ms(d.duration_ms) + " · " +
       (d.width ? d.width + "×" + d.height + " px · " : "") + bytes(d.bytes) + " · hash " + d.hash8);
     box.appendChild(meta);
@@ -403,7 +429,14 @@
       var r = el("tr", "ocr-state-" + o.validation_state);
       r.appendChild(el("td", "num", String(o.row_index)));
       var st = el("td", "ocr-state");
-      st.appendChild(el("span", "ocr-badge ocr-badge-" + o.validation_state, STATE_LABEL[o.validation_state] || o.validation_state));
+      var line = o.line || {};
+      var lbl = (line.state && LINE_LABEL[line.state]) || STATE_LABEL[o.validation_state] || o.validation_state;
+      st.appendChild(el("span", "ocr-badge ocr-badge-" + o.validation_state, lbl));
+      if (line.retry) {
+        st.appendChild(el("span", "ocr-rowconf", line.retry.variant
+          ? "recitit (" + line.retry.variant + ", " + line.retry.attempts + ")"
+          : "recitit fără succes (" + line.retry.attempts + ")"));
+      }
       if (o.row_conf != null) st.appendChild(el("span", "ocr-rowconf", Math.round(o.row_conf * 100) + "%"));
       r.appendChild(st);
       r.appendChild(el("td", "mono ocr-raw", o.raw_text || "—"));

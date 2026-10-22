@@ -65,6 +65,25 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
   (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
 
+## 12 rânduri pe panou (4 × 3) și recitirea rândurilor necitite
+
+- Tabela CFR are pe fiecare panou 4 grupuri albastre a câte 3 rânduri. Benzile de text
+  găsite prin proiecție sunt verificate pe grupuri (`preprocess.structured_bands`): un
+  grup cu alt număr de rânduri decât 3 primește grila lui fixă (derivată din imagine, nu
+  din text), așa că un rând slab sau gol nu dispare și nu se lipește de vecin.
+- Un rând cu text, dar fără tip/număr/oră citibile, e recitit automat doar pe coloanele
+  tip, număr și oră, cu preprocesări alternative (`preprocess.VARIANTS`: fără liniile
+  verticale de reflexie, prag mai mic/mai mare, ×4, prag adaptiv, decupaj mai larg), până
+  reușește sau se termină bugetul cadrului (`OCR_FRAME_BUDGET_S`, implicit 8 s, recitiri
+  incluse). Un panou cu mai mult de 4 rânduri necitite e considerat cadru stricat și nu
+  se recitește (nu se inventează trenuri).
+- Rândurile rămân `necitit` (nu 0, nu tren ghicit); un rând fără text e `rând gol`.
+  Versiunea de procesare a fiecărei observații (`ocr-tess-grid-2`) are sufixe:
+  `+empty`, `+unread`, `+retry:<variantă>:<încercări>`.
+- `/api/health` → `ocr`: rândurile pe panou din ultimul cadru, recitirile, durata, și
+  pe ultimele 60 de cadre câte au avut 12/12. Pagina „Capturi OCR” arată „S 12 · P 11”
+  și recitirile pe fiecare captură.
+
 ## Capturi și retenție
 
 - Schema v5 (migrare automată, fără ștergeri; din v1/v2/v3/v4): `captures` (o imagine

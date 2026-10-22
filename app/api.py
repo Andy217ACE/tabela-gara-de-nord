@@ -32,6 +32,7 @@ from starlette.concurrency import run_in_threadpool
 from app import (admin, captures, history_all, observations, poller, stats, stats_api, trains_api,
                  weather)
 from app.config import Settings, get_settings
+from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
 from app.notifier import Notifier, make_webpush_sender
@@ -341,7 +342,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         store = store_of(request)
         age = store.last_ok_age(datetime.now(TZ))
         return {"ok": age is not None and age <= STALE_S, "age_s": age, "version": __version__,
-                "boards": _boards(store),
+                "boards": _boards(store), "ocr": ocr_stats.snapshot(),
                 "weather_age_s": weather.age_s(store.latest_weather(), datetime.now(timezone.utc))}
 
     @app.get("/api/changelog")

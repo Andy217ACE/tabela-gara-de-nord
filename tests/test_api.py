@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+
+from tests.conftest import EMPTY_OCR
 from fastapi.testclient import TestClient
 
 from app.version import __version__
@@ -100,7 +102,8 @@ def test_health_false_without_data(client):
     none = {"age_s": None, "ok": False, "stale": True}
     assert r.json() == {"ok": False, "age_s": None, "weather_age_s": None,
                         "version": __version__,
-                        "boards": {"arrivals": none, "departures": none}}
+                        "boards": {"arrivals": none, "departures": none},
+                        "ocr": EMPTY_OCR}
 
 
 def test_health_ok_with_fresh_data_and_false_when_old(client):

@@ -168,12 +168,20 @@ def board_masks(board_bgr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     column detection. The text mask keeps every glyph pixel (a separator touching
     a "1" would otherwise erase it) and is what the cells are cut from.
     """
+    mask, layout, _, _ = board_masks_ctx(board_bgr)
+    return mask, layout
+
+
+def board_masks_ctx(board_bgr: np.ndarray
+                    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """`board_masks` plus the panel rows and the text level they were built with."""
     rows = panel_rows(board_bgr)
-    mask = text_mask(board_bgr, text_level(board_bgr, rows))
+    level = text_level(board_bgr, rows)
+    mask = text_mask(board_bgr, level)
     mask[~np.repeat(rows, SCALE)] = 255
     layout = mask.copy()
     _drop_vertical_lines(layout, rows)
-    return mask, layout
+    return mask, layout, rows, level
 
 
 def board_mask(board_bgr: np.ndarray) -> np.ndarray:
@@ -268,3 +276,129 @@ def row_bands(board_mask: np.ndarray) -> list[tuple[int, int]]:
         for i in range(k):
             bands.append((int(round(a + i * step)), int(round(a + (i + 1) * step))))
     return bands
+
+
+# -- fixed board structure: 4 blue groups x 3 text rows ------------------------------
+#
+# The CFR board always lists its trains in GROUPS blue boxes of ROWS_PER_GROUP lines
+# (checked on every capture of 21-22.10.2026: 12 lines per panel on 1143-1148 of 1149
+# frames; the exceptions are a corrupted JPEG and frames read by the pre-1.02 code).
+# The grid is derived from the image (the blue boxes), never from the text, so a faint
+# or empty line keeps its slot instead of vanishing or merging with a neighbour.
+
+GROUPS = 4
+ROWS_PER_GROUP = 3
+EXPECTED_ROWS = GROUPS * ROWS_PER_GROUP
+_GROUP_SPREAD = 1.35  # tallest/shortest blue group above this: not the 4x3 layout
+_CUT_WIN = 0.12  # a row cut may move this share of the group height to the emptiest row
+_MIN_LINE_PX = 4  # image rows of ink below this: specks/halo, not a text line
+
+
+def grid_bands(groups: list[tuple[int, int]], layout: np.ndarray
+               ) -> list[tuple[int, int]] | None:
+    """EXPECTED_ROWS bands (y0, y1 in the x3 mask), 3 per blue group, or None when the
+    groups do not look like the 4x3 layout. Each group is cut in three at the emptiest
+    mask row near its thirds; every band is then trimmed to its ink (an empty band is
+    kept whole: it is an empty line, not a missing one)."""
+    if len(groups) != GROUPS:
+        return None
+    heights = [b - a for a, b in groups]
+    if min(heights) <= 0 or max(heights) / min(heights) > _GROUP_SPREAD:
+        return None
+    ink = (layout == 0).sum(axis=1)
+    low = max(2, int(0.004 * layout.shape[1]))
+    s = SCALE
+    out: list[tuple[int, int]] = []
+    for a, b in groups:
+        top, bot = a * s, min(b * s, len(ink))
+        h = bot - top
+        cuts = [top]
+        for k in range(1, ROWS_PER_GROUP):
+            nominal = top + k * h / ROWS_PER_GROUP
+            win = max(1, int(_CUT_WIN * h))
+            lo = max(cuts[-1] + 1, int(nominal) - win)
+            hi = min(bot - 1, int(nominal) + win + 1)
+            if hi <= lo:
+                cuts.append(int(nominal))
+                continue
+            seg = ink[lo:hi]
+            best = np.flatnonzero(seg == seg.min()) + lo
+            cuts.append(int(best[np.argmin(np.abs(best - nominal))]))
+        cuts.append(bot)
+        for y0, y1 in zip(cuts[:-1], cuts[1:]):
+            lit = np.flatnonzero(ink[y0:y1] >= low)
+            if lit.size >= _MIN_LINE_PX * s:  # a text line, not a stray speck
+                y0, y1 = y0 + int(lit[0]), y0 + int(lit[-1]) + 1
+            out.append((y0, max(y0 + 1, y1)))
+    return out
+
+
+def structured_bands(layout: np.ndarray, rows: np.ndarray
+                     ) -> tuple[list[tuple[int, int]], int]:
+    """(bands, groups repaired): the text-line bands of `row_bands`, checked against the
+    4x3 structure of the blue groups in `rows` (see `panel_rows`). A group holding
+    exactly 3 detected lines keeps them (the calibrated path); a group with fewer
+    (faint or empty line, two lines merged) or more (glitch, split line) gets its 3
+    grid bands. Without the 4x3 structure (unknown layout): `row_bands` unchanged."""
+    bands = row_bands(layout)
+    groups = [(a, b) for a, b in _runs(rows)]
+    grid = grid_bands(groups, layout)
+    if grid is None:
+        return bands, 0
+    s = SCALE
+    out: list[tuple[int, int]] = []
+    repaired = 0
+    for gi, (a, b) in enumerate(groups):
+        inside = [bd for bd in bands if a * s <= (bd[0] + bd[1]) / 2 < b * s]
+        if len(inside) == ROWS_PER_GROUP:
+            out.extend(inside)
+        else:
+            out.extend(grid[gi * ROWS_PER_GROUP:(gi + 1) * ROWS_PER_GROUP])
+            repaired += 1
+    return out, repaired
+
+
+def band_has_ink(mask: np.ndarray, band: tuple[int, int], min_frac: float = 0.004) -> bool:
+    """True when a band of a black-on-white mask holds text (not an empty board line):
+    enough ink, spread over at least _MIN_LINE_PX image rows (a glyph's height, not
+    the halo of the neighbouring line)."""
+    strip = mask[band[0]:band[1]]
+    if strip.size == 0:
+        return False
+    ink = (strip == 0)
+    low = max(2, int(0.004 * mask.shape[1]))
+    tall = int((ink.sum(axis=1) >= low).sum()) >= _MIN_LINE_PX * SCALE
+    return tall and float(ink.mean()) >= min_frac
+
+
+# -- alternative preprocessing, for re-reading lines the first pass could not read -------
+
+VARIANTS = ("vline", "lvl-", "x4", "lvl+", "adapt", "wide")
+
+
+def variant_mask(board_bgr: np.ndarray, rows: np.ndarray, level: float, name: str
+                 ) -> np.ndarray:
+    """Text mask (x3, blanked outside the panel rows) under an alternative preprocessing.
+
+    ``lvl-``/``lvl+``: text threshold 15 % lower/higher (thicker/thinner glyphs);
+    ``adapt``: local (adaptive) threshold, for uneven exposure across the panel;
+    ``vline``: vertical glare/seam strokes crossing a row group removed;
+    anything else (``x4``, ``wide``: they change the cell scale or crop, not the
+    binarisation): the first-pass mask.
+    """
+    if name == "lvl-":
+        mask = text_mask(board_bgr, max(_LEVEL_MIN * 0.75, level * 0.85))
+    elif name == "lvl+":
+        mask = text_mask(board_bgr, min(250.0, level * 1.15))
+    elif name == "adapt":
+        big = cv2.resize(_brightness(board_bgr), None, fx=SCALE, fy=SCALE,
+                         interpolation=cv2.INTER_CUBIC)
+        loc = cv2.adaptiveThreshold(big, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                    cv2.THRESH_BINARY, 51, -12)
+        mask = np.where((loc > 0) & (big > 0.6 * level), 0, 255).astype(np.uint8)
+    else:
+        mask = text_mask(board_bgr, level)
+    mask[~np.repeat(rows, SCALE)] = 255
+    if name == "vline":
+        _drop_vertical_lines(mask, rows)
+    return mask

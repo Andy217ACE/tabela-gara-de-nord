@@ -110,3 +110,4 @@
 .ocr-badge-uncertain { color: var(--warn); background: var(--warn-bg); }
 .ocr-badge-rejected_low_conf, .ocr-badge-incomplete { color: var(--bad); background: var(--bad-bg); }
 .ocr-rowconf { margin-left: 6px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ocr-table td.is-bad { color: var(--bad); font-weight: 600; }
