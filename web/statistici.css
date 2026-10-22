@@ -64,7 +64,7 @@
 .ss-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 
 .st-root.is-loading .ss-body { opacity: 0.55; transition: opacity 0.2s ease; }
-.ss-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.ss-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
 
 /* ---------- cards ---------- */
 .ss-summary,
@@ -131,10 +131,12 @@
 .ss-key.ss-q4 { background: var(--c-seq); }
 .ss-key.ss-cell-low { background: var(--border-strong); }
 .ss-key.ss-cell-none { background: transparent; border: 1px solid var(--border-strong); }
+.ss-key.ss-cell-unread { background: var(--surface-2); border: 1px solid var(--text-3); }
 
 /* small multiples */
 .ss-multiples { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .ss-multiple { min-width: 0; }
+.ss-sub { min-width: 0; }
 .ss-mult-h { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 0.875rem; color: var(--text-2); }
 
 /* rankings (routes) */
@@ -219,6 +221,7 @@
 .ss-cell.ss-q4 { fill: var(--c-seq); }
 .ss-cell.ss-cell-low { fill: var(--border-strong); }
 .ss-cell.ss-cell-none { fill: none; stroke: var(--border); stroke-width: 1; }
+.ss-cell.ss-cell-unread { fill: var(--surface-2); stroke: var(--text-3); stroke-width: 1; }
 
 /* ---------- wider screens ---------- */
 @media (min-width: 760px) {

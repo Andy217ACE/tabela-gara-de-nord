@@ -174,3 +174,36 @@ def test_empty_database_explains(browser, empty_url, w):
         assert page.evaluate(NO_HSCROLL) and errors == []
     finally:
         ctx.close()
+
+
+@pytest.fixture(scope="module")
+def weather_url(tmp_path_factory):
+    from tests.test_stats_overview import add
+    db = tmp_path_factory.mktemp("stats2w") / "w.db"
+    s = Store(str(db))
+    s.migrate()
+    for day in range(10, 20):
+        wet = day % 2 == 0
+        weather(s._conn, day, 12, 8.0 if day < 15 else 18.0, 1.2 if wet else 0.0)
+        add(s._conn, "arrival", 100 + day, day, "12:00", 20 if wet else 1)
+    s.close()
+    server, t, url = _serve(db)
+    yield url
+    server.should_exit = True
+    t.join(5)
+
+
+@pytest.mark.parametrize("w", [390, 1280])
+def test_weather_section_per_board(browser, weather_url, w):
+    stats_overview.clear_cache()
+    ctx, page, errors = _open(browser, weather_url, w, 800, "dark", "#statistici")
+    try:
+        page.wait_for_selector(".ss-summary")
+        fig = page.locator(".ss-fig", has_text="Vremea și întârzierile")
+        assert fig.locator("svg.ss-svg").count() == 2  # arrivals: precipitation + temperature
+        text = fig.text_content()
+        assert "Sosiri" in text and "Plecări" in text and "analizate separat" in text
+        assert "Corelație, nu cauzalitate" in text
+        assert page.evaluate(NO_HSCROLL) and page.evaluate(INSIDE) == [] and errors == []
+    finally:
+        ctx.close()

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import bisect
+import logging
 import os
 import sqlite3
 import threading
@@ -23,12 +24,14 @@ import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from collections import OrderedDict
 from pathlib import Path
 
 from app import journeys, stations, stats
 from app import quality as dq
 
 TZ = journeys.TZ
+log = logging.getLogger(__name__)
 PERIODS = ("1", "7", "30", "all")
 HISTORY_MIN_DAYS = 7          # below: "date insuficiente încă" + no weather figures
 WEATHER_MIN_DAYS = 7
@@ -76,6 +79,10 @@ def _hour(h: int) -> str:
     return f"{h:02d}:00–{h:02d}:59"
 
 
+def _between(h: int) -> str:
+    return f"între {h:02d}:00 și {h:02d}:59"
+
+
 def _ttl() -> int:
     try:
         v = int(os.environ.get("STATS_CACHE_TTL_S", CACHE_TTL_DEFAULT))
@@ -104,12 +111,19 @@ def _reader(store):
                                    check_same_thread=False, timeout=5)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA query_only = ON")
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            # never silently: the fallback holds the store (OCR ingest) lock while computing
+            log.warning("statistici: conexiunea read-only a eșuat (%s); folosesc store-ul", e)
             conn = None
     if conn is not None:
         try:
+            conn.execute("BEGIN")  # one snapshot for every query of this computation
             yield conn
         finally:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
             conn.close()
         return
     with store._lock:
@@ -228,12 +242,24 @@ def _route(e) -> dict:
             "on_time_pct": s["on_time_pct"]}
 
 
-def _weather(js, wx, p) -> dict:
-    base = {"status": "collecting", "matched": 0, "days": 0, "needed_days": WEATHER_MIN_DAYS,
-            "observations": len(wx), "groups": {},
+def _weather(js, wx, p, boards) -> dict:
+    """Weather groups per board (arrivals and departures are never mixed); the top level
+    sums them up (ok when any board is)."""
+    per = {b: _weather_board([j for j in js if j["board"] == b], wx, p) for b in boards}
+    days = set()
+    for v in per.values():
+        days |= v.pop("_days")
+    return {"status": "ok" if any(v["status"] == "ok" for v in per.values()) else "collecting",
+            "matched": sum(v["matched"] for v in per.values()), "days": len(days),
+            "needed_days": WEATHER_MIN_DAYS, "observations": len(wx),
             "note": ("Corelație, nu cauzalitate: vremea coincide cu alți factori (ora din zi, "
                      "sezonul, lucrările); o diferență între grupe nu arată că vremea a "
-                     "produs întârzierea.")}
+                     "produs întârzierea."),
+            "boards": per}
+
+
+def _weather_board(js, wx, p) -> dict:
+    base = {"status": "collecting", "matched": 0, "days": 0, "groups": {}, "_days": set()}
     if not wx:
         return base
     stamps, keep = [], []
@@ -255,8 +281,9 @@ def _weather(js, wx, p) -> dict:
                    key=lambda k: abs(stamps[k] - ts), default=None)
         if best is not None and abs(stamps[best] - ts) <= lim:
             matched.append((j, keep[best]))
-    days = len({j["service_date"] for j, _ in matched})
-    base.update(matched=len(matched), days=days)
+    dset = {j["service_date"] for j, _ in matched}
+    days = len(dset)
+    base.update(matched=len(matched), days=days, _days=dset)
     precip, temp = defaultdict(list), defaultdict(list)
     for j, w in matched:
         v = j["result"]["observed_delay"]
@@ -295,22 +322,24 @@ def _insights(boards, by_board, hourly, routes, operators, traffic, platforms, q
                        f" cu întârziere citită (N = {n}) — prea puține pentru procente "
                        f"(minimum {p.min_sample}).")
         else:
+            were = "a fost" if s["on_time"] == 1 else "au fost"
+            had = "a avut" if s["over_30"] == 1 else "au avut"
             out.append(f"{BOARD_PL[b]}: din {_pl(n, 'călătorie încheiată', 'călătorii încheiate')}"
-                       f" cu întârziere citită, {s['on_time']} ({_fmt(s['on_time_pct'])} %) au fost"
+                       f" cu întârziere citită, {s['on_time']} ({_fmt(s['on_time_pct'])} %) {were}"
                        f" la timp (≤ {p.on_time} min); mediana {_fmt(s['median'])} min, iar "
-                       f"{s['over_30']} au avut peste 30 min (N = {n}).")
+                       f"{s['over_30']} {had} peste 30 min (N = {n}).")
     for b in boards:
         ok = [h for h in hourly[b] if h["sufficient"]]
         if not ok:
             continue
         # ranked by the mean (medians are often all 0 at departures), median shown too
         worst = max(ok, key=lambda h: (h["mean"], h["median"], -h["key"]))
-        line = (f"{BOARD_PL[b]}: cea mai mare întârziere medie o au trenurile programate între "
-                f"{_hour(worst['key'])} — {_fmt(worst['mean'])} min, mediana "
+        line = (f"{BOARD_PL[b]}: cea mai mare întârziere medie o au trenurile programate "
+                f"{_between(worst['key'])} — {_fmt(worst['mean'])} min, mediana "
                 f"{_fmt(worst['median'])} min (N = {worst['n']})")
         best = min(ok, key=lambda h: (h["mean"], h["median"], h["key"]))
         if len(ok) >= 2 and best["mean"] < worst["mean"]:
-            line += (f"; cea mai mică, între {_hour(best['key'])} — {_fmt(best['mean'])} min "
+            line += (f"; cea mai mică, {_between(best['key'])} — {_fmt(best['mean'])} min "
                      f"(N = {best['n']})")
         out.append(line + ".")
     for b in boards:
@@ -343,9 +372,11 @@ def _insights(boards, by_board, hourly, routes, operators, traffic, platforms, q
                    f"{_pl(sum(lines.values()), 'călătorie', 'călătorii')} cu linia citită).")
     if quality["finished"]:
         miss = quality["finished"] - quality["delay_known"]
+        share = (f" ({_fmt(quality['delay_known_pct'])} %)"
+                 if quality["finished"] >= p.min_sample else "")
         out.append(f"Întârzierea a fost citită la {quality['delay_known']} din "
-                   f"{_pl(quality['finished'], 'călătorie încheiată', 'călătorii încheiate')} "
-                   f"({_fmt(quality['delay_known_pct'])} %)"
+                   f"{_pl(quality['finished'], 'călătorie încheiată', 'călătorii încheiate')}"
+                   f"{share}"
                    + (f"; celelalte {miss} au întârzierea necunoscută (nu 0) și nu intră în "
                       "statistici." if miss else "."))
     return out
@@ -375,7 +406,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         cg = _groups(bj[b], p, lambda j: (date.fromisoformat(j["service_date"]).weekday(),
                                           int(j["sched_time"][:2])))
         heatmap[b] = [{"d": d, "h": h, "journeys": v["journeys"], **_summ(v["delays"], p)}
-                      for (d, h), v in sorted(cg.items()) if v["delays"]]
+                      for (d, h), v in sorted(cg.items()) if v["journeys"]]
         heatmap[b] = [{k: c[k] for k in ("d", "h", "journeys", "n", "mean", "median",
                                          "on_time_pct", "sufficient")} for c in heatmap[b]]
         dg = _groups(bj[b], p, lambda j: j["service_date"])
@@ -401,7 +432,9 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
     q = stats.quality(js)
     obs = extra.get("observations") or {}
     quality = {**q, "observations": obs, "observations_total": sum(obs.values()),
-               "excluded": extra.get("excluded") or {}}
+               "excluded": extra.get("excluded") or {},
+               # observations / exclusions are counted per board and period only
+               "counters_scope": "all" if (op or tip) else "filtered"}
     dates = [j["service_date"] for j in js]
     hist = extra.get("history") or {}
     history = {"first": hist.get("first"), "last": hist.get("last"), "days": hist.get("days", 0),
@@ -430,40 +463,75 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "routes": routes,
         "traffic": traffic,
         "platforms": platforms,
-        "weather": _weather(js, weather, p),
+        "weather": _weather(js, weather, p, boards),
         "quality": quality,
         "generated_at": datetime.now(TZ).isoformat(timespec="seconds"),
         "cache_ttl_s": _ttl(),
     }
 
 
-# ---- cache -----------------------------------------------------------------------------
+# ---- cache ----------------------------------------------------------------------------
+# Two levels: the database read (`fetch`, the expensive part) per board/period/thresholds,
+# shared by every operator / train-type filter; the built payload per filter on top (LRU).
+# A lock per key: a slow computation never blocks another filter.
 
-_cache: dict = {}
-_compute = threading.Lock()
+_fetched: OrderedDict = OrderedDict()
+_built: OrderedDict = OrderedDict()
+_locks: dict = {}
+_registry = threading.Lock()
+BUILT_MAX = 64
 
 
 def clear_cache() -> None:
-    _cache.clear()
+    _fetched.clear()
+    _built.clear()
+
+
+def _fresh(cache, key, ttl):
+    hit = cache.get(key)
+    if hit and time.monotonic() - hit[0] < ttl:
+        cache.move_to_end(key)
+        return hit[1]
+    return None
+
+
+def _put(cache, key, value, cap):
+    cache[key] = (time.monotonic(), value)
+    cache.move_to_end(key)
+    while len(cache) > cap:
+        cache.popitem(last=False)
+
+
+def _lock_for(key) -> threading.Lock:
+    with _registry:
+        lk = _locks.get(key)
+        if lk is None:
+            if len(_locks) > 256:
+                _locks.clear()
+            lk = _locks[key] = threading.Lock()
+        return lk
 
 
 def overview(store, p: stats.Params, filters: dict, today: date | None = None) -> dict:
     today = today or datetime.now(TZ).date()
-    key = (id(store), getattr(store, "path", None), tuple(sorted(p.echo().items())),
-           tuple(sorted((k, v) for k, v in filters.items() if v)), today.isoformat())
     ttl = _ttl()
-    hit = _cache.get(key)
-    if hit and time.monotonic() - hit[0] < ttl:
-        return hit[1]
-    with _compute:  # one computation at a time; the waiting requests reuse its result
-        hit = _cache.get(key)
-        if hit and time.monotonic() - hit[0] < ttl:
-            return hit[1]
-        rows, wx, extra = fetch(store, p)
-        d = build(rows, wx, extra, p, today, filters)
-        if len(_cache) >= CACHE_MAX:
-            _cache.clear()
-        _cache[key] = (time.monotonic(), d)
+    fkey = (id(store), getattr(store, "path", None), tuple(sorted(p.echo().items())),
+            today.isoformat())
+    bkey = fkey + (tuple(sorted((k, v) for k, v in filters.items() if v)),)
+    hit = _fresh(_built, bkey, ttl)
+    if hit is not None:
+        return hit
+    with _lock_for(bkey):  # concurrent requests for one key wait for one computation
+        hit = _fresh(_built, bkey, ttl)
+        if hit is not None:
+            return hit
+        with _lock_for(fkey):
+            data = _fresh(_fetched, fkey, ttl)
+            if data is None:
+                data = fetch(store, p)
+                _put(_fetched, fkey, data, CACHE_MAX)
+        d = build(*data, p, today, filters)
+        _put(_built, bkey, d, BUILT_MAX)
         return d
 
 
@@ -509,7 +577,8 @@ def to_csv(d: dict, name: str) -> str:
             rows += [[b, x["line"], x["n"]] for x in d[name][b]["lines"]]
             rows.append([b, "necitita", d[name][b]["missing"]])
     else:  # weather
-        head = ["dimension", "key", "label"] + _S
-        rows = [[dim, x["key"], x["label"]] + [x[k] for k in _S]
-                for dim, gs in d[name]["groups"].items() for x in gs]
+        head = ["board", "dimension", "key", "label"] + _S
+        rows = [[b, dim, x["key"], x["label"]] + [x[k] for k in _S]
+                for b, wb in d[name]["boards"].items()
+                for dim, gs in wb["groups"].items() for x in gs]
     return stats.to_csv(head, rows)

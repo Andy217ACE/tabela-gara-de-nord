@@ -174,6 +174,8 @@ async def stats_overview_v2(request: Request):
     p = params(request)
     today = datetime.now(journeys.TZ).date()
     if perioada != "all":
+        if p.date_from or p.date_to:
+            raise _bad("„perioada” și „from”/„to” nu se folosesc împreună.")
         p.date_from, p.date_to = overview_v2.period_range(perioada, today)
     fmt = _fmt(request)
     set_name = q.get("set") or ""

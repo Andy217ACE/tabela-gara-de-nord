@@ -110,6 +110,7 @@ def test_build_empty():
         assert d["platforms"][b]["missing"] == 0 and d["platforms"][b]["lines"] == []
     assert "Încă nu există" in d["insights"][0]
     assert d["weather"]["status"] == "collecting" and d["weather"]["matched"] == 0
+    assert "Încă nu există" in d["insights"][0]
 
 
 # ---- whole payload ---------------------------------------------------------------------
@@ -206,7 +207,7 @@ def test_insights_text(store):
     assert "Sosiri: din 8 călătorii încheiate cu întârziere citită" in text
     assert "(N = 8)" in text or "N = 8" in text
     assert "Plecări:" in text
-    assert "12:00–12:59" in text  # the only sufficient arrival hour
+    assert "între 12:00 și 12:59" in text  # the only sufficient arrival hour
     assert "linia 7" in text.lower()
 
 
@@ -219,7 +220,7 @@ def test_insights_small_sample_no_percent(store):
 def test_weather_collecting(store):
     w = ov(store)["weather"]
     assert w["status"] == "collecting" and w["matched"] == 0 and w["needed_days"] == 7
-    assert w["groups"] == {}
+    assert all(b["groups"] == {} for b in w["boards"].values())
 
 
 def test_weather_ok_groups(tmp_path):
@@ -235,7 +236,11 @@ def test_weather_ok_groups(tmp_path):
     w = so.overview(s, P, {}, today=TODAY)["weather"]
     s.close()
     assert w["status"] == "ok" and w["matched"] == 10 and w["days"] == 10
-    pr = {g["key"]: g for g in w["groups"]["precip"]}
+    # arrivals and departures are never mixed: one set of groups per board
+    assert w["boards"]["departure"]["status"] == "collecting"
+    a = w["boards"]["arrival"]
+    assert a["status"] == "ok" and a["matched"] == 10
+    pr = {g["key"]: g for g in a["groups"]["precip"]}
     assert pr["wet"]["n"] == 5 and pr["wet"]["mean"] == 20 and pr["dry"]["n"] == 5
     assert "cauz" in w["note"]
 
@@ -344,3 +349,44 @@ def test_api_csv_set(client):
 def test_api_csv_bad_set(client):
     assert client.get("/api/stats/overview?format=csv").status_code == 422
     assert client.get("/api/stats/overview?format=csv&set=x").status_code == 422
+
+
+def test_heatmap_keeps_cells_without_a_read_delay(store):
+    # 1731 departure 2026-10-19 (Monday) 08:15: delay never read -> journeys 1, N 0
+    cells = {(c["d"], c["h"]): c for c in ov(store)["heatmap"]["departure"]}
+    c = cells[(0, 8)]
+    assert c["journeys"] == 1 and c["n"] == 0 and c["mean"] is None
+
+
+def test_insight_grammar_and_hours(store):
+    d = ov(store, {"tip": "R"})
+    t = " ".join(d["insights"])
+    assert "între 13:00 și 13:59" not in t  # small sample: no hour insight
+    t = " ".join(ov(store)["insights"])
+    assert "între 12:00 și 12:59" in t and "12:00–12:59" not in t
+
+
+def test_quality_percent_withheld_below_min_sample(store):
+    d = ov(store, {"operator": "Transferoviar"})
+    assert d["quality"]["finished"] == 2
+    assert not any("%" in i for i in d["insights"] if i.startswith("Întârzierea a fost citită"))
+
+
+def test_filters_reuse_one_fetch(store, monkeypatch):
+    so.clear_cache()
+    calls = []
+    real = so.fetch
+    monkeypatch.setattr(so, "fetch", lambda *a: calls.append(1) or real(*a))
+    for op in ("A", "B", "C", None):
+        so.overview(store, P, {"operator": op}, today=TODAY)
+    assert len(calls) == 1
+
+
+def test_operator_filter_marks_global_counters(store):
+    d = ov(store, {"operator": "Transferoviar"})
+    assert d["quality"]["counters_scope"] == "all"
+    assert ov(store)["quality"]["counters_scope"] == "filtered"
+
+
+def test_api_period_with_dates_is_422(client):
+    assert client.get("/api/stats/overview?perioada=7&from=2026-10-01").status_code == 422
