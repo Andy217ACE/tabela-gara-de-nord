@@ -127,8 +127,9 @@ def test_top_menu_visible_and_reachable(browser, base_url, case, theme):  # noqa
         page.evaluate("window.scrollTo(0, 2000)")
         page.wait_for_timeout(100)
         s2 = page.evaluate(STATE)
-        if page.evaluate("scrollY") > 0:
-            assert abs(s2["top"]) <= 1, s2
+        sy = page.evaluate("scrollY")
+        # stuck at the top once the page scrolled past the header; before that it moves with it
+        assert abs(s2["top"] - max(0, s["top"] - sy)) <= 1, (sy, s["top"], s2["top"])
         page.evaluate("window.scrollTo(0, 0)")
 
         for href, label in NAV:
