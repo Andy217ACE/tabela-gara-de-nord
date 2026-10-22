@@ -480,8 +480,8 @@
   var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
     trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
     statii: "Stații", statie: "Stație" };
-  // nav item highlighted for a route without its own entry (#tren, #statii, #statie → „Trenuri”)
-  var NAV_PARENT = { tren: "trenuri", statii: "trenuri", statie: "trenuri" };
+  // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
+  var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;
 
   // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
@@ -509,6 +509,19 @@
     return { name: ROUTES[base] || "tabela", params: params };
   }
 
+  // The top menu scrolls sideways inside itself when it doesn't fit (phones): keep the
+  // active item in view, without scrolling the page.
+  function revealActiveNav() {
+    var nav = document.querySelector(".mainnav");
+    var a = nav && nav.querySelector('.nav-item[aria-current="page"]');
+    if (!a || nav.scrollWidth <= nav.clientWidth + 1) return;
+    var nr = nav.getBoundingClientRect();
+    var ar = a.getBoundingClientRect();
+    var pad = 24;
+    if (ar.left < nr.left + pad) nav.scrollLeft -= (nr.left + pad) - ar.left;
+    else if (ar.right > nr.right - pad) nav.scrollLeft += ar.right - (nr.right - pad);
+  }
+
   function route() {
     var r = parseHash();
     var name = r.name;
@@ -523,6 +536,7 @@
       if (a.dataset.route === (NAV_PARENT[name] || name)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    revealActiveNav();
     // a view may refine the title later (stats.js: „Tren 1636 · …”)
     document.title = name === "tabela" ? "Tabela Gara de Nord"
       : (TITLES[name] || "Tabela Gara de Nord") + " · Tabela Gara de Nord";
@@ -612,6 +626,11 @@
     initTabs();
     route();
     window.addEventListener("hashchange", route);
+    var navT = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(navT);
+      navT = setTimeout(revealActiveNav, 150);
+    });
     setInterval(renderLive, 1000);
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") refresh();
