@@ -129,6 +129,35 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   `FINAL_READ_MAX_GAP_MIN` (15).
 - Pe paginile de stație întârzierea este cea de la București Nord, nu de la stația respectivă.
 
+## Calitatea datelor (schema v7)
+
+Ce se citește de pe tabelă rămâne în baza de date exact cum a fost citit. Verdictele de calitate
+stau în tabele separate (`app/quality.py`, fiecare regulă e testată pe cazuri reale):
+
+- **Validarea la citire:** o schimbare de întârziere se aplică la a doua citire identică
+  consecutivă. Un salt mare (cel puțin 60 de minute, la peste 100 de minute) se aplică la a
+  treia. O valoare care pare semnul „+” citit ca cifră (25 → 425) se aplică abia la a cincea.
+  Pentru linie e nevoie de 2 citiri; pentru cifrele confundate (5/6, 1/4/11/14, 3/8), de 3.
+  Un tren e considerat plecat (GONE) după 3 citiri lipsă. Dacă revine în cel mult 10 minute,
+  nu se înregistrează o apariție nouă.
+- **Fantome** (`service_quality.ghost`): un serviciu văzut mai puțin de 2 minute, sau o
+  variantă la un caracter a altui serviciu mai longeviv (cu cel mult o observație).
+  Fantomele nu apar în Panou, Istoric, catalog, statistici sau pagini de stații.
+- **Perioada de calitate redusă** (`quality_periods`, 21.10.2026 00:00–11:31) e exclusă
+  implicit din statistici. Pentru a o include: `STATS_INCLUDE_LOW_QUALITY=1`.
+- **Corecția retroactivă** (idempotentă; se rulează cu serviciul oprit):
+
+      sudo systemctl stop tabela
+      sudo -u tabela env DB_PATH=/var/lib/tabela/tabela.db /opt/tabela/venv/bin/python -m app.quality --dry-run
+      sudo -u tabela env DB_PATH=/var/lib/tabela/tabela.db /opt/tabela/venv/bin/python -m app.quality
+      sudo systemctl start tabela
+
+  Comenzile `python` se rulează din `/opt/tabela/app`.
+- **Eliminarea fantomelor** (opțională, decizia administratorului): `scripts/purge_ghosts.py`.
+  Implicit face doar un dry run, care afișează numărul de rânduri și 20 de exemple. Cu
+  `--apply --backup-dir DIR` face întâi o copie completă a bazei, apoi arhivează reversibil
+  rândurile în `purged_rows`. Cu `--restore` le pune la loc.
+
 ## Deploy (server Ubuntu 24.04)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).

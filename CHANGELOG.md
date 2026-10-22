@@ -5,6 +5,28 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.06 — 2026-10-22
+
+Calitatea datelor (analiza din 21.10 pe baza live). Datele citite rămân în baza de date
+așa cum au fost citite; corecțiile sunt marcaje și câmpuri separate, iar nimic nu se șterge.
+
+### Reparat
+- **Întârzieri imposibile:** semnul „+” citit ca cifră („+25” citit 425, „+10” citit 410, „+20” citit 240, „+45” citit 435) nu mai ajunge pe tabelă. O asemenea valoare se aplică doar dacă rămâne aceeași 5 citiri la rând, cum ar face o întârziere reală de 150 după 15.
+- Orice schimbare de întârziere se aplică abia la a doua citire identică consecutivă. Un salt mare (de cel puțin 60 de minute, la peste 100 de minute) se aplică la a treia. Oscilațiile de tip 15→45→15 nu mai produc evenimente sau notificări.
+- **Linia (peronul):** o schimbare se aplică la a doua citire identică. Pentru cifrele pe care OCR-ul le confundă (5/6; 1/4/11/14; 3/8) e nevoie de a treia citire, iar o linie ștearsă trebuie citită goală de două ori. Prima linie afișată apare imediat.
+- **Apariții/dispariții:** un tren e scos de pe tabelă după 3 citiri lipsă (înainte, 2). Dacă revine în cel mult 10 minute, nu mai apare o „apariție” nouă. Dacă a ieșit cu adevărat după ce revenise, urmăritorii primesc din nou notificarea.
+- **Trenuri-fantomă:** sunt citiri greșite ale unui număr sau ale unei ore (de ex. R 5011 citit 5014, 50141, 501…) sau trenuri văzute mai puțin de 2 minute. Sunt marcate (nu șterse) și nu mai apar în Panou, Istoric, catalogul de trenuri, statistici, clasamente și paginile de stații. Ieșirea lor de pe tabelă nu mai trimite notificări.
+- **Tip tren:** „I” citit pe un număr de 3 cifre devine IC (531, 536, 553, 571, 581). „RN”/„RND”/„RNE”/„RIM”/„RR” pe numerele navetei Aeroport 79xx devin RM. Asteriscul („*”) se tratează separat de tip. Alte tipuri ilizibile rămân necitite: nu se ghicesc.
+- **Stații:** lista de stații cunoscute are acum 45 de nume reale. Variantele OCR se recunosc: „AD JUD” → ADJUD, „ARAD E” → ARAD, „RUSE I” → RUSE, „TIMISOA.RA NORD” → TIMISOARA NORD, „PLOIESTISUD” → PLOIESTI SUD. Un nume la 1–2 caractere de o stație cunoscută (sau care conține „!”, „.”) nu mai e învățat ca stație nouă.
+- **Operatori:** au fost adăugați Softrans Calat și Ferotrafic. Variantele citite greșit („CFR Calaitori”, „Transfernviar”, „Sofirans Calat”) se afișează cu numele corect; textul citit rămâne păstrat.
+- **Capturi:** eroarea „argmin of an empty sequence” (2 cadre pierdute pe 21.10) e reparată. La o celulă degenerată se folosește citirea Tesseract, iar evenimentul apare în jurnal.
+
+### Bază de date
+- **Schema v7** (după v6): tabelele `service_quality` (fantomă, perioadă de calitate redusă, întârziere maximă/finală confirmată, stație/operator canonic), `event_quality` (evenimente suspecte și motivul), `quality_periods`, `dq_meta`. Migrarea e aditivă și atomică, fără modificarea datelor existente.
+- **Corecție retroactivă:** `python -m app.quality --db … [--dry-run]` e idempotentă și nu modifică nimic din datele brute. Recalculează marcajele: fantome, evenimente de întârziere suspecte, `max_delay_clean`/`last_delay_clean` doar din valori confirmate (lipsă = necunoscut, niciodată 0) și numele canonice.
+- **Perioada 21.10.2026 00:00–11:31** (versiunea veche, înainte de capturi) e marcată „calitate redusă (beta)” și e exclusă implicit din statisticile publice. O poți include cu `STATS_INCLUDE_LOW_QUALITY=1`.
+- `scripts/purge_ghosts.py`: implicit doar afișează ce ar elimina (dry run). Cu `--apply` face întâi o copie completă a bazei, apoi arhivează reversibil rândurile în `purged_rows`. Cu `--restore` le pune la loc. Nu se rulează automat.
+
 ## Beta 1.05 — 2026-10-21
 
 ### Adăugat
