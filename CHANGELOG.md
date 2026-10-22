@@ -5,6 +5,15 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.08 — 2026-10-22
+
+### Reparat
+- **Meniul de sus se vede pe orice ecran.** Pe telefon, cu „Site pentru desktop” activat, pagina e așezată la ~980 px lățime (sub pragul vechi de 1024 px), iar meniul ajungea o bară fixă JOS, afișată micșorată — minusculă sau ieșită din ecran, niciodată sus. Acum meniul (Tabelă, Istoric, Urmărite, Trenuri, Statistici, Clasamente, Stații) e o bară proprie sub antet, lipită sus la derulare, la orice lățime: telefon, telefon culcat, tabletă, desktop, „Site pentru desktop” pe Chrome Android și Safari iOS.
+- Când elementele nu încap, bara se derulează orizontal în interiorul ei (pagina nu se mai mișcă lateral); secțiunea curentă e adusă automat în vedere. Ținte de atingere de cel puțin 44 px; pe ecrane tactile, ceva mai mari; în „Site pentru desktop” (pagina micșorată), mult mai mari, ca să rămână lizibile.
+- Bara de jos de pe telefon a fost înlocuită de bara de sus (un singur meniu, nu două).
+- **Stații** are acum intrare în meniu; paginile unei stații o evidențiază (înainte evidențiau „Trenuri”).
+- Istoric: filtrele nu mai împing pagina lateral pe tablete și pe telefoane culcate (760–1023 px).
+
 ## Beta 1.06 — 2026-10-22
 
 Calitatea datelor (analiza din 21.10 pe baza live). Datele citite rămân în baza de date

@@ -109,12 +109,13 @@ def test_station_views_wired():
                    "d.note", "Atenție: ", "openJourney", "timeSections"):
         assert needle in js, needle
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    for needle in ('"#statii": "statii"', '"#statie": "statie"', 'statii: "trenuri"',
-                   'statie: "trenuri"'):
+    for needle in ('"#statii": "statii"', '"#statie": "statie"', 'statie: "statii"',
+                   'tren: "trenuri"'):
         assert needle in app, needle
     html = (WEB / "index.html").read_text(encoding="utf-8")
     for needle in ('id="view-statii"', 'id="view-statie"', 'id="st-statii"', 'id="st-statie"',
-                   'id="statie-heading"', 'id="statie-sub"', 'href="#statii"'):
+                   'id="statie-heading"', 'id="statie-sub"', 'href="#statii"',
+                   '<a class="nav-item" href="#statii" data-route="statii">'):
         assert needle in html, needle
     assert html.count("<footer") == 1
 
