@@ -150,6 +150,36 @@ class _Composite:
         return out
 
 
+PLATFORM_UP = 0.35  # share of the line height a right-hand cell may grow upwards
+GROW_UP = ("platform",)  # read grown upwards (digit tops cut by the band: perspective)
+# read grown upwards only when the templates do not trust the cell as cut (measured on
+# the truth set: grown always, the time column gained 3 cells and lost 4)
+GROW_ALT = ("time",)
+ALT = "^"  # key suffix of the grown cell in the cells dict
+
+
+def grow_up(mask: np.ndarray, band: tuple[int, int], x0: int, x1: int, up: int
+            ) -> np.ndarray:
+    """The cell ``mask[band, x0:x1]``, grown upwards by up to `up` px when its ink touches
+    its top row: at the right edge of the board the platform digit sits higher than the
+    text line (perspective) and the band cut its top (audit OCR13: 8 -> 3, 9 -> 3,
+    6 -> 5). Only ink reaching into the original cell is kept, so the digit of the
+    line above (in the added rows) never enters the cell."""
+    y0, y1 = band
+    cell = mask[y0:y1, x0:x1]
+    top = max(0, y0 - up)
+    if top == y0 or cell.size == 0 or not (cell[0] == 0).any():
+        return cell
+    big = mask[top:y1, x0:x1]
+    n, lab, st, _ = cv2.connectedComponentsWithStats((big == 0).astype(np.uint8),
+                                                     connectivity=8)
+    out = np.full_like(big, 255)
+    for i in range(1, n):
+        if st[i, 1] + st[i, 3] > y0 - top:
+            out[lab == i] = 0
+    return out
+
+
 def _train_no(s: str) -> int:
     digits = "".join(c for c in (s or "") if c in _DIGITS)
     return int(digits) if digits else 0
@@ -176,13 +206,25 @@ class _Panel:
             self._variants[name] = preprocess.variant_mask(self.img, self.rows, self.level, name)
         return self._variants[name]
 
-    def cells(self, i: int, mask: np.ndarray | None = None, pad_y: int = 0
-              ) -> dict[str, np.ndarray]:
+    def cells(self, i: int, mask: np.ndarray | None = None, pad_y: int = 0,
+              grow: bool = True) -> dict[str, np.ndarray]:
+        """Cells of line `i`; with `grow` the platform cell is grown upwards and the
+        time cell's grown copy is added under "time^" (``grow_up``)."""
         mask = self.mask if mask is None else mask
         y0, y1 = self.bands[i]
         strip = mask[max(0, y0 - pad_y):min(mask.shape[0], y1 + pad_y)]
         e = self.edges[i]
-        return {name: strip[:, x0:x1] for name, x0, x1 in zip(_ORDER, e[:-1], e[1:])}
+        out = {name: strip[:, x0:x1] for name, x0, x1 in zip(_ORDER, e[:-1], e[1:])}
+        if pad_y == 0 and grow:
+            for name in GROW_UP:
+                k = _ORDER.index(name)
+                out[name] = grow_up(mask, (y0, y1), e[k], e[k + 1],
+                                    int(PLATFORM_UP * (y1 - y0)))
+            for name in GROW_ALT:
+                k = _ORDER.index(name)
+                out[name + ALT] = grow_up(mask, (y0, y1), e[k], e[k + 1],
+                                          int(PLATFORM_UP * (y1 - y0)))
+        return out
 
     def boxes(self, i: int) -> dict[str, tuple[int, int, int, int]]:
         s = preprocess.SCALE
@@ -196,15 +238,18 @@ class _Panel:
         return preprocess.band_has_ink(self.mask, self.bands[i])
 
 
-def cell_grid(board_bgr: np.ndarray) -> list[dict[str, np.ndarray]]:
-    """Per detected row of one board: {column name: binary cell image (x3)}."""
-    return [cells for cells, _ in _cell_grid_geo(board_bgr)]
+def cell_grid(board_bgr: np.ndarray, grow: bool = True) -> list[dict[str, np.ndarray]]:
+    """Per detected row of one board: {column name: binary cell image (x3)}.
+    ``grow=False``: the cells as the band cuts them (the digit templates were
+    calibrated on those)."""
+    return [cells for cells, _ in _cell_grid_geo(board_bgr, grow)]
 
 
-def _cell_grid_geo(board_bgr: np.ndarray) -> list[tuple[dict[str, np.ndarray], dict]]:
+def _cell_grid_geo(board_bgr: np.ndarray, grow: bool = True
+                   ) -> list[tuple[dict[str, np.ndarray], dict]]:
     """cell_grid plus each cell's box (x, y, w, h) in board pixels (not the x3 mask)."""
     p = _Panel(board_bgr)
-    return [(p.cells(i), p.boxes(i)) for i in range(len(p))]
+    return [(p.cells(i, grow=grow), p.boxes(i)) for i in range(len(p))]
 
 
 _matcher: DigitMatcher | None = None
@@ -231,11 +276,14 @@ def _time_colon(s: str) -> str:
 
 
 def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
-             matcher: DigitMatcher | None) -> tuple[str, float | None]:
+             matcher: DigitMatcher | None, alt: np.ndarray | None = None
+             ) -> tuple[str, float | None]:
     """Pick the text of a numeric cell: glyph templates first, Tesseract as fallback.
 
     The returned confidence is Tesseract's when both readers agree; when the
     template reading overrides Tesseract it is the template's weakest glyph score.
+    `alt` is the same cell grown upwards (``grow_up``): read only when the templates do
+    not trust the cell as cut by the band, and taken only if they trust it.
     """
     t_text, t_conf = tess[0].replace(" ", ""), tess[1]
     if name == "time":
@@ -244,6 +292,10 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
         return t_text, t_conf
     try:
         m_text, m_score, trusted = matcher.read(cell, _ALLOWED[name])
+        if m_text and not trusted and alt is not None and alt.shape != cell.shape:
+            a_text, a_score, a_trusted = matcher.read(alt, _ALLOWED[name])
+            if a_trusted and (name != "time" or parse_time(_time_colon(a_text))):
+                cell, m_text, m_score, trusted = alt, a_text, a_score, True
     except ValueError:  # a degenerate cell must not fail the whole frame
         log.warning("glyph templates failed on a %s cell %s; Tesseract reading kept",
                     name, getattr(cell, "shape", None), exc_info=True)
@@ -257,10 +309,43 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
         if parse_time(m_text) is None and parse_time(t_text) is not None:
             return t_text, t_conf
     if not trusted:
+        if _confirmed(matcher, cell, name, tess[0].replace(" ", "")):
+            return m_text, t_conf if t_conf is not None else m_score * 100
         return t_text, t_conf
     if m_text == t_text and t_conf is not None:
         return m_text, t_conf
     return m_text, m_score * 100
+
+
+def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
+    """True when Tesseract confirms every glyph the templates do not trust.
+
+    The glyph count comes from the segmentation (Tesseract drops or adds a digit on this
+    font: 8121 -> 812, 1583 -> 13583); a doubtful glyph (near tie, e.g. 8 vs 3) is kept
+    only where Tesseract reads the same character at the same place (same length; trusted
+    glyphs win over Tesseract: 1584 -> "4584" by Tesseract, "1" trusted). When the
+    lengths differ the readings must be equal but for that one character: Tesseract
+    short of the trusted last "1" (cut by the seam) or with one character too many.
+    Never a shifted alignment: 79111 vs "7919" would confirm a doubtful "1" with the
+    "1" of another place.
+    """
+    glyphs_of = getattr(matcher, "glyphs", None)
+    if glyphs_of is None or not t_text:
+        return False
+    try:
+        gl = glyphs_of(cell, _ALLOWED[name])
+    except ValueError:
+        return False
+    m = "".join(ch for ch, *_ in gl)
+    weak = [not digits.glyph_trusted(s, mg) for _, s, mg, *_ in gl]
+    n, t = len(m), t_text
+    if len(t) == n:  # same length: every doubtful glyph read the same by Tesseract
+        return all(not w or t[k] == m[k] for k, w in enumerate(weak))
+    if len(t) == n - 1:  # Tesseract dropped the trusted last "1" (seam), all else equal
+        return n > 1 and m[-1] == "1" and not weak[-1] and m[:-1] == t
+    if len(t) == n + 1:  # one spurious character in Tesseract's reading, all else equal
+        return any(t[:j] + t[j + 1:] == m for j in range(n + 1))
+    return False
 
 
 DELAY_UNREAD = "+?"  # a delay cell with text that cannot be read safely (parse: None)
@@ -501,8 +586,11 @@ def _merge(old: dict, slot, base: dict, vcells: dict, vtext: dict, ctx: "_Ctx"
     tess = {n: (old["fields"][n]["_tess"], old["fields"][n]["_tess_conf"]) for n in _ORDER}
     cells = dict(base)
     for name in missing:
+        if _lost_ink(base[name], vcells[name]):
+            return None
         tess[name] = vtext[name]
         cells[name] = vcells[name]
+        cells.pop(name + ALT, None)  # the grown copy is of the first-pass mask
     boxes = {n: tuple(old["fields"][n]["bbox"]) for n in _ORDER}
     new = _assemble(board, j, tess, cells, boxes, ctx)
     if not _complete(new):
@@ -511,6 +599,27 @@ def _merge(old: dict, slot, base: dict, vcells: dict, vtext: dict, ctx: "_Ctx"
         if n not in missing and new["fields"][n]["norm"] != old["fields"][n]["norm"]:
             return None
     return new
+
+
+def _ink_span(cell: np.ndarray) -> tuple[int, int] | None:
+    """x extent of the glyphs the segmentation finds in a cell (specks dropped)."""
+    try:
+        spans = [sp for _, sp, _ in digits.segment_spans(cell)]
+    except ValueError:
+        return None
+    return (spans[0][0], spans[-1][1]) if spans else None
+
+
+def _lost_ink(base: np.ndarray, variant: np.ndarray) -> bool:
+    """True when a re-read binarisation lost a whole glyph the first pass saw: its
+    glyphs start or end more than half a line height inside the first pass's. A glare
+    remnant of the first digit vanishes under "lvl+" and the rest reads as a trusted,
+    wrong value ("4:37" -> "7:37"): such a re-read is not taken."""
+    a, b = _ink_span(base), _ink_span(variant)
+    if a is None or b is None or base.shape[1] != variant.shape[1]:
+        return False
+    tol = 0.5 * base.shape[0]
+    return b[0] - a[0] > tol or a[1] - b[1] > tol
 
 
 def _duplicate(new: dict, entries: list[dict], i: int) -> bool:
@@ -589,7 +698,7 @@ def _variant_cells(slot, variant: str) -> dict[str, np.ndarray]:
         if j + 1 < len(p.bands):
             pad = min(pad, max(0, (p.bands[j + 1][0] - y1) // 2))
         return p.cells(j, pad_y=pad)
-    return p.cells(j, mask=p.variant(variant))
+    return p.cells(j, mask=p.variant(variant), grow=False)
 
 
 class _Ctx:
@@ -607,7 +716,8 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
     cell = dict(tess)
     for name in _ALLOWED:
         if name != "delay":
-            cell[name] = _numeric(name, cells[name], cell[name], ctx.matcher)
+            cell[name] = _numeric(name, cells[name], cell[name], ctx.matcher,
+                                  cells.get(name + ALT))
     d_text, d_conf, d_why = _delay(cells["delay"], cell["delay"], ctx.matcher)
     cell["delay"] = (d_text, d_conf)
     type_text, flagged = strip_flag(cell["type"][0])

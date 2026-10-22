@@ -37,7 +37,7 @@ def test_parse_delay_rejects_noise_and_huge(s, exp):
 
 
 @pytest.mark.parametrize("s,exp", [
-    ("1", 1), ("12", 12), ("30", 30), ("0", None), ("31", None),
+    ("1", 1), ("12", 12), ("14", 14), ("15", None), ("30", None), ("0", None), ("31", None),
     ("", None), ("x", None), ("l2", 12), ("O", None), ("1O", 10),
 ])
 def test_parse_platform(s, exp):

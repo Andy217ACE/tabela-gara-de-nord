@@ -91,16 +91,70 @@ def segment_spans(cell: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int], b
     line_top = min(b[1] for b in merged)
     line_bot = max(b[1] + b[3] for b in merged)
     line_h = line_bot - line_top
-    # Drop fragments that are tiny in both directions (noise, neighbour slivers).
+    merged = _glue_seam_split(merged, line_top, line_h)
+    # Drop fragments that are tiny in both directions (noise, neighbour slivers) and
+    # hair-thin vertical lines (a lit joint between two LED modules of the board).
     glyphs = []
-    for x, y, w, h in merged:
+    for k, (x, y, w, h) in enumerate(merged):
         if h < 0.15 * line_h and w < 0.15 * line_h:
+            continue
+        if w <= SEAM_MAX_W * line_h and 0 < k < len(merged) - 1:
+            # only between two glyphs: a sliver at the start or the end of the text can
+            # be what glare left of a digit, and dropping it would make a wrong but
+            # trusted reading ("4:37" -> "7:37")
             continue
         parts = _split_touching(ink[line_top:line_bot], x, w, line_h)
         for x0, x1 in parts:
             crop = ink[line_top:line_bot, x0:x1].astype(np.float32)
             glyphs.append((_normalise(crop), (int(x0), int(x1)), len(parts) > 1))
     return glyphs
+
+
+SEAM_MAX_W = 0.08     # a "glyph" this thin (x line height) between two glyphs is the
+                      # board's module joint, not a digit (a "1" stem is >= 4 px at x3)
+FLAG_MAX_H = 0.45     # the flag of "1": shorter than this (x line height)...
+FLAG_MAX_TOP = 0.35   # ...starting this close to the top of the line...
+FLAG_MAX_GAP = 0.10   # ...at most this far (x line height) left of a stem
+STEM_MIN_H = 0.75     # the stem: nearly the full line height...
+STEM_MAX_W = 0.40     # ...and thin
+
+
+def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list[list[int]]:
+    """Glue the flag of a "1" back onto its stem.
+
+    A vertical joint between two LED modules of the board runs through the last digit
+    of the train number and cuts the thin "1" into two components: the flag (a short
+    fragment at the top) and the stem (thin, full height) 1-3 px to its right. Measured
+    (audit OCR13): 3021 -> 302, 1661 -> 166, 9101 -> 9104. Only that shape is glued: a
+    colon (its two dots already merged, as tall as half the line) or a fragment at the
+    bottom of the line is left alone.
+    """
+    out: list[list[int]] = []
+    i = 0
+    while i < len(boxes):
+        x, y, w, h = boxes[i]
+        if i + 1 < len(boxes):
+            sx, sy, sw, sh = boxes[i + 1]
+            if sx - (x + w) <= 1 and sx + sw - x <= PITCH * line_h:
+                # two pieces at most 1 px apart and together one digit wide: one glyph
+                # cut by the joint ("9" -> "9" + "1": 7909 -> 79091). Neighbouring
+                # digits of the fixed-pitch font are >= 4 px apart.
+                y0 = min(y, sy)
+                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0])
+                i += 2
+                continue
+            if (h <= FLAG_MAX_H * line_h and w <= FLAG_MAX_H * line_h
+                    and y - line_top <= FLAG_MAX_TOP * line_h
+                    and -(sw // 2) <= sx - (x + w) <= max(1, FLAG_MAX_GAP * line_h)
+                    and sh >= STEM_MIN_H * line_h and sw <= STEM_MAX_W * line_h
+                    and y >= sy and y + h <= sy + sh):
+                y0 = min(y, sy)
+                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0])
+                i += 2
+                continue
+        out.append([x, y, w, h])
+        i += 1
+    return out
 
 
 def _split_touching(line: np.ndarray, x: int, w: int, line_h: int) -> list[tuple[int, int]]:
@@ -214,7 +268,7 @@ def _calibration_samples(image_path: Path, golden_path: Path, boards: tuple[str,
     for board, half in zip(BOARDS, preprocess.split_boards(img)):
         if board not in boards:
             continue
-        for cells, exp in zip(cell_grid(half), golden[board]):
+        for cells, exp in zip(cell_grid(half, grow=False), golden[board]):
             samples.append((cells["no"], str(exp["train_no"])))
             samples.append((cells["time"], exp["sched_time"]))
             if exp["delay_min"]:

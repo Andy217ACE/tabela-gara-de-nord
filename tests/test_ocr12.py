@@ -37,13 +37,17 @@ def _line(debug, board, idx):
 
 # (fixture, board, line, type, number, time) — the line the first pass lost
 DEGRADED = [
-    ("2026_10_22_001807-61bd84a4", "departure", 4, "IR", 16565, "04:41"),   # "4:4"
     ("2026_10_21_090907-b612b282", "arrival", 0, "RE", 10061, "11:03"),     # "*RE" lost
     ("2026_10_21_090907-b612b282", "arrival", 1, "IC", 552, "11:47"),
     ("2026_10_21_095407-217d4d46", "arrival", 11, "IRN", 347, "13:38"),     # "43:38"
     ("2026_10_21_090409-d9214f34", "arrival", 3, "IC", 552, "11:47"),       # "*C"
     ("2026_10_21_092905-dd4de195", "departure", 1, "RM", 7923, "12:30"),    # "*RI"
-    ("2026_10_21_190106-efc14957", "departure", 10, "RE", 10101, "01:10"),  # "1:1:0"
+]
+# lost by the first pass up to Beta 1.15 (the panel joint through a thin "1": "4:4",
+# "1:1:0"); read by the first pass since Beta 1.16 (seam fixes, test_ocr14.py)
+NOW_FIRST_PASS = [
+    ("2026_10_22_001807-61bd84a4", "departure", 4, "IR", 16565, "04:41"),
+    ("2026_10_21_190106-efc14957", "departure", 10, "RE", 10101, "01:10"),
 ]
 
 
@@ -71,13 +75,20 @@ def test_degraded_line_is_recovered_by_a_reread(name, board, idx, ttype, no, sch
             assert d["row"] == d0["row"] and "retry" not in d
 
 
+@pytest.mark.parametrize("name,board,idx,ttype,no,sched", NOW_FIRST_PASS)
+def test_seam_lines_read_in_the_first_pass(name, board, idx, ttype, no, sched):
+    _, debug0 = _read(name, budget_s=0)
+    r = _line(debug0, board, idx)["row"]
+    assert (r.train_type, r.train_no, r.sched_time) == (ttype, no, sched)
+
+
 def test_accuracy_before_after_on_real_fixtures():
-    names = sorted({n for n, *_ in DEGRADED}) + ["2026_10_21_213504-8f4c45f0"]
+    names = sorted({n for n, *_ in DEGRADED + NOW_FIRST_PASS}) + ["2026_10_21_213504-8f4c45f0"]
     before = after = 0
     for n in names:
         before += _per_board(_read(n, budget_s=0)[0]) == {"arrival": 12, "departure": 12}
         after += _per_board(_read(n)[0]) == {"arrival": 12, "departure": 12}
-    assert (before, after) == (1, len(names))
+    assert (before, after) == (3, len(names))  # Beta 1.15: (1, 7)
 
 
 def test_corrupted_frame_is_not_reread_into_invented_rows():
@@ -204,9 +215,9 @@ def test_structured_bands_unknown_layout_falls_back():
 # -- budget, stats ---------------------------------------------------------------------
 
 def test_budget_zero_means_no_retry_and_is_reported():
-    rows, debug = _read("2026_10_22_001807-61bd84a4", budget_s=0)
+    rows, debug = _read("2026_10_21_092905-dd4de195", budget_s=0)
     assert _per_board(rows) == {"arrival": 12, "departure": 11}
-    line = _line(debug, "departure", 4)
+    line = _line(debug, "departure", 1)
     assert line["state"] == "unread" and "retry" not in line  # never re-read: not reported
     snap = stats.snapshot()
     assert snap["last"]["retried"] == 0 and snap["last"]["recovered"] == 0
@@ -255,30 +266,30 @@ def test_capture_admin_shows_rows_per_panel_and_rereads(tmp_path):
 
     from app import captures, observations
     from app.store import Store
-    img = cv2.imread(str(FIX / "2026_10_22_001807-61bd84a4.jpg"))
-    data = _jpg(_blank_line(img, "arrival", 2))
+    img = cv2.imread(str(FIX / "2026_10_21_090409-d9214f34.jpg"))
+    data = _jpg(_blank_line(img, "departure", 2))
     rows, debug = read_board_debug(data)
     s = Store(":memory:")
     s.migrate()
     try:
-        ts = datetime(2026, 10, 22, 3, 18, tzinfo=ZoneInfo("Europe/Bucharest")).timestamp()
+        ts = datetime(2026, 10, 21, 12, 4, tzinfo=ZoneInfo("Europe/Bucharest")).timestamp()
         s.ingest(rows, datetime.fromtimestamp(ts, ZoneInfo("Europe/Bucharest")), "")
         cid = observations.record_capture(s, data, rows, debug, ts, capture_dir=None)
         listed = captures.list_captures(s)[0]
-        assert listed["boards"]["arrivals"] == {"lines": 12, "rows": 11, "empty": 1,
-                                                "unread": 0, "retried": 0, "recovered": 0}
-        assert listed["boards"]["departures"] == {"lines": 12, "rows": 12, "empty": 0,
-                                                  "unread": 0, "retried": 1, "recovered": 1}
+        assert listed["boards"]["departures"] == {"lines": 12, "rows": 11, "empty": 1,
+                                                  "unread": 0, "retried": 0, "recovered": 0}
+        assert listed["boards"]["arrivals"] == {"lines": 12, "rows": 12, "empty": 0,
+                                                "unread": 0, "retried": 1, "recovered": 1}
         det = captures.capture_detail(s, cid)
         assert det["boards"] == listed["boards"]
-        dep4 = next(o for o in det["observations"]
-                    if o["board"] == "departure" and o["row_index"] == 4)
-        assert dep4["line"]["retry"]["variant"] in preprocess.VARIANTS
-        assert dep4["sched_time"] == "04:41" and dep4["train_no"] == 16565
-        arr2 = next(o for o in det["observations"]
-                    if o["board"] == "arrival" and o["row_index"] == 2)
-        assert arr2["line"]["state"] == "empty" and arr2["validation_state"] == "incomplete"
-        assert arr2["train_no"] is None  # an empty line is not a train (and not 0)
+        arr3 = next(o for o in det["observations"]
+                    if o["board"] == "arrival" and o["row_index"] == 3)
+        assert arr3["line"]["retry"]["variant"] in preprocess.VARIANTS
+        assert arr3["sched_time"] == "11:47" and arr3["train_no"] == 552
+        dep2 = next(o for o in det["observations"]
+                    if o["board"] == "departure" and o["row_index"] == 2)
+        assert dep2["line"]["state"] == "empty" and dep2["validation_state"] == "incomplete"
+        assert dep2["train_no"] is None  # an empty line is not a train (and not 0)
     finally:
         s.close()
 
@@ -288,7 +299,7 @@ def test_health_reports_ocr_rows_per_panel():
 
     from app.api import create_app
     from tests.test_api import settings
-    _read("2026_10_22_001807-61bd84a4")
+    _read("2026_10_21_092905-dd4de195")
     with TestClient(create_app(settings(), start_poller=False)) as c:
         ocr = c.get("/api/health").json()["ocr"]
     assert ocr["expected_rows"] == 12
@@ -315,18 +326,18 @@ class _FailingEngine:
 
 @pytest.mark.parametrize("exc", [reader.OcrError("timeout"), cv2.error("boom")])
 def test_failed_reread_keeps_the_first_pass(exc):
-    first, _ = _read("2026_10_22_001807-61bd84a4", budget_s=0)
-    rows, debug = _read("2026_10_22_001807-61bd84a4", engine=_FailingEngine(exc))
+    first, _ = _read("2026_10_21_092905-dd4de195", budget_s=0)
+    rows, debug = _read("2026_10_21_092905-dd4de195", engine=_FailingEngine(exc))
     assert rows == first
-    assert _line(debug, "departure", 4)["state"] == "unread"
+    assert _line(debug, "departure", 1)["state"] == "unread"
 
 
 def test_reread_never_replaces_a_value_the_first_pass_read():
     """The time and type of departure line 4 read in the first pass; only the number
     or time that did not read may come from a re-read."""
-    _, d0 = _read("2026_10_22_001807-61bd84a4", budget_s=0)
-    _, d1 = _read("2026_10_22_001807-61bd84a4")
-    f0, f1 = _line(d0, "departure", 4)["fields"], _line(d1, "departure", 4)["fields"]
+    _, d0 = _read("2026_10_21_092905-dd4de195", budget_s=0)
+    _, d1 = _read("2026_10_21_092905-dd4de195")
+    f0, f1 = _line(d0, "departure", 1)["fields"], _line(d1, "departure", 1)["fields"]
     for n in ("type", "no", "time"):
         if f0[n]["norm"] is not None:
             assert f1[n]["norm"] == f0[n]["norm"]

@@ -39,7 +39,8 @@ log = logging.getLogger(__name__)
 MIN_FREE_MB_DEFAULT = 2048
 # bump when OCR/parsing changes meaningfully. -2: 4x3 grid check + re-read of unreadable
 # lines; each observation's version also carries the line's OCR history (`line_version`)
-PROCESSING_VERSION = "ocr-tess-grid-3"  # 3: delay "+" / glare rules (Beta 1.13)
+PROCESSING_VERSION = "ocr-tess-grid-4"  # 4: panel seam, platform top (Beta 1.16)
+# 3: delay "+" / glare rules (Beta 1.15)
 STATES = ("ok", "uncertain", "rejected_low_conf", "incomplete")
 FIELDS = ("type", "no", "station", "operator", "time", "delay", "platform")
 

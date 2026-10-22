@@ -5,6 +5,22 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.16 — 2026-10-23
+
+### Reparat
+- **Numărul trenului fără ultimul „1” (3021 → 302, 5011 → 501, 1661 → 166) sau cu „4” în loc de „1” (9101 → 9104, 1571 → 1574).** Cauza, găsită pe capturi: o îmbinare verticală între două module ale tabelei trece exact prin ultima cifră a numărului și rupe „1”-ul subțire în steag și picior. Segmentarea lipește acum la loc steagul de piciorul lui și o cifră tăiată în două (7909 nu mai devine 79091); o cifră de care șabloanele nu sunt sigure e păstrată doar dacă Tesseract o citește la fel, pe aceeași poziție.
+- **Ora cu „1” citit „4” (1:10 → 1:40, 3:10 → 3:40):** linia luminoasă a îmbinării nu mai e luată drept cifră.
+- **Peronul cu vârful cifrei tăiat (8 → 3, 6 → 5, 9 necitit):** în dreapta tabelei cifra peronului stă mai sus decât rândul (perspectivă); celula peronului se extinde acum în sus, fără cerneala rândului de deasupra. La oră, aceeași extindere se folosește doar când citirea normală e nesigură.
+- **Peronul trebuie să fie între 1 și 14** (liniile din Gara de Nord); orice alt număr e o citire greșită și rămâne necitit.
+- O recitire (altă binarizare) care pierde o cifră văzută la prima trecere nu mai e folosită.
+
+### Calitate măsurată
+- Set de adevăr nou: 16 capturi reale, 384 de rânduri, fiecare câmp verificat vizual pe imagine (`tests/fixtures/ocr_truth/truth.json`), cu scriptul `scripts/ocr_eval.py` (metrici pe câmp: corect / necitit / greșit) și teste care pică dacă OCR-ul citește mai prost decât acum.
+- Greșeli pe setul de adevăr, Beta 1.15 → 1.16: nr. tren 19 → 4, oră 6 → 2, peron 5 greșite + 3 necitite → 1 greșit, tip 0 → 0, întârziere 0 → 0 (8 necitite rămase, sub reflexie), stație 2 → 2, operator 1 → 1.
+
+### Tehnic
+- Service worker v20. Observațiile noi au versiunea de procesare `ocr-tess-grid-4`. Observațiile vechi nu s-au modificat.
+
 ## Beta 1.15 — 2026-10-23
 
 ### Reparat

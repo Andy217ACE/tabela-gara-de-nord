@@ -56,12 +56,15 @@ def parse_delay(s: str | None) -> int | None:
     return n if n <= MAX_DELAY else None
 
 
+PLATFORM_MAX = 14  # Gara de Nord has platform lines 1-14: any other number is a misread
+
+
 def parse_platform(s: str) -> int | None:
     s = (s or "").strip()
     if not _NUM.match(s):
         return None
     n = int(_digits(s))
-    return n if 1 <= n <= 30 else None
+    return n if 1 <= n <= PLATFORM_MAX else None
 
 
 def normalize_type(s: str) -> str | None:
