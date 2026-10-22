@@ -142,6 +142,10 @@ stau în tabele separate (`app/quality.py`, fiecare regulă e testată pe cazuri
   nu se înregistrează o apariție nouă.
 - **Fantome** (`service_quality.ghost`): un serviciu văzut mai puțin de 2 minute, sau o
   variantă la un caracter a altui serviciu mai longeviv (cu cel mult o observație).
+  Tot fantomă e și varianta minoritară a unui rând pe care OCR-ul îl citește alternativ:
+  trenul real trebuie să aibă cel puțin dublul observațiilor ei. Citirile unui astfel de rând
+  merg la serviciul majoritar. Redenumirea unui serviciu se face prin vot: cel puțin 3 citiri
+  și 70% din ultimele 10.
   Fantomele nu apar în Panou, Istoric, catalog, statistici sau pagini de stații.
 - **Perioada de calitate redusă** (`quality_periods`, 21.10.2026 00:00–11:31) e exclusă
   implicit din statistici. Pentru a o include: `STATS_INCLUDE_LOW_QUALITY=1`.

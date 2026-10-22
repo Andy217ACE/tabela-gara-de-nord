@@ -5,6 +5,37 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.07 — 2026-10-22
+
+Calitatea datelor, partea 2. Raportul de reanaliză din 22.10 a găsit trei probleme care apar
+mai ales noaptea: dubluri noi, redenumiri care oscilează și treceri repetate dispărut/apărut.
+
+### Reparat
+- **Același rând citit alternativ ca două trenuri.** Exemplu: R 5011 / R 5014 BUZĂU 04:47, ore
+  întregi. Citirea merge acum la serviciul cu cele mai multe citiri, deci cel minoritar nu mai
+  „apare” și „dispare” la fiecare minut. Când iese de pe tabelă, e marcat ca fantomă dacă trenul
+  real are cel puțin dublul citirilor lui. Două trenuri reale citite în același cadru nu sunt
+  comasate niciodată.
+- **Redenumirea trenului se face prin vot**, nu după „3 citiri la rând”: un număr nou trebuie să
+  aibă cel puțin 3 citiri și 70% din ultimele 10. S-a oprit oscilația 7917→7914→791→7914→7911.
+  Un tren nu mai e redenumit într-un număr trunchiat (1571 nu devine 157).
+- **Linia:** 2/5 e acum tratată ca pereche de cifre confundabile (3 citiri pentru o schimbare).
+- **Stații învățate:** un nume care repetă cuvintele unei stații cunoscute în altă ordine
+  („KIEV - CHISINAU” față de CHISINAU-KIEV) nu mai e învățat ca stație nouă. Lista stațiilor
+  învățate se recalculează din oră în oră (înainte, o dată pe zi).
+
+### Bază de date
+- Corecția retroactivă (`python -m app.quality`) marchează și perechile dispărut→apărut sub
+  3 minute (`flap`) și fantomele „minoritare”. Rămâne idempotentă și nu modifică datele brute.
+- `scripts/purge_ghosts.py` (implicit doar simulare; aplicarea o decide administratorul):
+  - observațiile unei fantome trec la trenul ei real (comasare);
+  - șterge întârzierile imposibile (de ex. 10→410→10), perechile dispărut→apărut sub 3 minute
+    și rândurile de catalog fără nicio călătorie;
+  - corectează întârzierea finală citită greșit (de ex. 945→15);
+  - arhivează tot, cu posibilitate de restaurare;
+  - nu folosește niciodată legături în lanț (RM 7919 09:50 e un tren real);
+  - recalculează lista chiar în momentul aplicării.
+
 ## Beta 1.06 — 2026-10-22
 
 Calitatea datelor (analiza din 21.10 pe baza live). Datele citite rămân în baza de date
