@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.14 — 2026-10-23
+
+### Nou
+- **Statistici refăcute** (`#statistici`): pagina explică ce arată. Sus, „Pe scurt” — un rezumat în cuvinte generat din date (cât la sută au fost la timp la sosiri și la plecări, ora cu cea mai mare întârziere medie, ruta cea mai întârziată, cel mai punctual operator, ora cea mai aglomerată, linia folosită cel mai des, cât din întârzieri au fost citite), cu perioada, numărul de călătorii, trenuri și observații și ce s-a exclus (fantome, perioada de calitate redusă). Cât timp istoricul are sub 7 zile, un mesaj clar: „Date insuficiente încă — X zile de istoric”.
+- Câte un card pe panou (Sosiri, Plecări) cu procentul la timp ca cifră principală, mediană, medie, p90, peste 30 min, maxim și N.
+- Grafice noi, fiecare cu întrebarea la care răspunde, „Cum se citește”, legendă, N, avertisment de eșantion mic, tabel „Vezi datele” și export CSV: distribuția întârzierilor (0 / 1–5 / 6–15 / 16–30 / 31–60 / > 60 min), evoluția pe zile, mediana pe ora programată (cu banda N pe oră; orele cu sub 5 călătorii apar ca cercuri goale), harta oră × zi a săptămânii (celulele cu eșantion mic în gri), operatori și tipuri de tren (% la timp), rutele cele mai întârziate / cele mai punctuale, aglomerația pe ore (sosiri vs plecări), liniile (peroanele) folosite — „linie necitită” separat, nu ca linia 0 —, meteo și întârzieri (apare după 7 zile cu date; până atunci „în curs de adunare”; corelație, nu cauzalitate) și calitatea datelor (rezultate confirmate / neconfirmate / necunoscute, citiri OCR complete / nesigure / respinse / incomplete). Glosar la final.
+- Filtre: perioadă (tot istoricul / 30 de zile / 7 zile / azi), panou, operator, tip de tren, doar rezultate confirmate — selecția rămâne în adresă (ex. `#statistici?perioada=7&board=arrival`), deci poate fi trimisă ca link.
+- API: `GET /api/stats/overview` (aceiași parametri; `format=csv&set=…` exportă un set: distribution, hourly, heatmap, daily, operators, types, routes, traffic, platforms, weather).
+
+### Tehnic
+- Statisticile se calculează pe o conexiune SQLite separată, doar pentru citire — nu mai așteaptă și nu mai blochează citirea OCR a tabelei —, cu rezultat păstrat 60 s (`STATS_CACHE_TTL_S`) și un singur calcul simultan; pagina face o singură cerere.
+- Culori de serie noi în ambele teme (sosiri albastru, plecări chihlimbar, o singură nuanță pentru harta de căldură), verificate pentru daltonism și contrast. Service worker v18.
 ## Beta 1.13 — 2026-10-22
 
 ### Schimbat
