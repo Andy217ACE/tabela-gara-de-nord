@@ -317,7 +317,7 @@
   }
 
   function minSigned(v) {
-    return v == null ? "—" : (v <= 0 ? "0" : "+" + numFmt.format(v)) + " min";
+    return v == null ? "—" : (v === 0 ? "0" : (v > 0 ? "+" : "") + numFmt.format(v)) + " min";
   }
 
   function allParams(q, cursor) {
@@ -362,7 +362,7 @@
     var st = (data.quality && data.quality.states) || {};
     var states = ["confirmed", "unconfirmed", "unknown", "in_progress"].filter(function (k) { return st[k]; })
       .map(function (k) { return STATE_SHORT[k] + ": " + st[k]; });
-    if (states.length) box.append(el("p", "h-sum-states", "Rezultate — " + states.join(" · ")));
+    if (states.length) box.append(el("p", "h-sum-states", "Rezultate (toată lista) — " + states.join(" · ")));
     if (data.low_quality_excluded) {
       box.append(el("p", "h-sum-note", plural(data.low_quality_excluded, "călătorie", "călătorii") +
         " din perioada de calitate redusă (versiunea beta inițială) apar în listă, dar nu intră în rezumat."));
@@ -524,7 +524,13 @@
         st.ctrl = null;
         btn.disabled = false;
         btn.textContent = "Încarcă mai multe";
+        var hadFocus = document.activeElement === btn;
         btn.hidden = !st.next;
+        if (hadFocus && btn.hidden) { // last page: keep keyboard focus on the page, not <body>
+          var cnt = $("h-count");
+          cnt.tabIndex = -1;
+          cnt.focus();
+        }
       });
   }
 
