@@ -41,7 +41,7 @@ REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'a
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -336,8 +336,7 @@ class Store:
     def migrate(self) -> None:
         """Version ladder: each step is additive and atomic together with its version bump
         (a failure leaves the previous version in place), so re-running is safe.
-        Never renumber a step. The data-quality tables (app.quality) are ensured on
-        every start, independently of the version."""
+        Never renumber a step."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version < 3:
@@ -349,8 +348,8 @@ class Store:
                 migrate_to_5(self._conn)
             if version < 6:
                 self._migrate_to_6()
-            # data-quality side tables: additive, idempotent, outside the version ladder
-            quality.ensure_schema(self._conn)
+            if version < 7:  # v7: data-quality tables (app.quality)
+                quality.migrate_to_7(self._conn)
 
     def _script(self, sql: str) -> None:
         try:

@@ -16,6 +16,8 @@ ladder of other branches):
 - ``quality_periods``: time ranges whose data is of reduced quality.
 - ``dq_meta``: version of this layer and the moment live validation started.
 
+Schema v7 (``migrate_to_7``, called by ``Store.migrate`` after v6).
+
 Every rule below is backed by cases measured on the live database
 (``.superpowers/sdd/2026-10-21-master-plan/data-quality-report.md``).
 """
@@ -121,6 +123,23 @@ def _create(conn: sqlite3.Connection) -> None:
             conn.execute(stmt)
     conn.execute("INSERT INTO dq_meta(key, value) VALUES ('version', ?)"
                  " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (DQ_VERSION,))
+
+
+def migrate_to_7(conn: sqlite3.Connection, now_iso: str | None = None) -> None:
+    """Schema v6 -> v7: the quality tables (additive), ``live_since`` and the version
+    bump in one transaction (a failure leaves v6 in place). Re-runnable."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 7:
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        _create(conn)
+        conn.execute("INSERT OR IGNORE INTO dq_meta(key, value) VALUES ('live_since', ?)",
+                     (now_iso or datetime.now().astimezone().isoformat(),))
+        conn.execute("PRAGMA user_version = 7")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def ensure_schema(conn: sqlite3.Connection, now_iso: str | None = None) -> None:

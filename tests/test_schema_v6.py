@@ -45,11 +45,11 @@ def store():
 
 
 def test_schema_version_is_6():
-    assert SCHEMA_VERSION == 6
+    assert SCHEMA_VERSION >= 6  # v7 (data quality) builds on it
 
 
 def test_fresh_db_has_column(store):
-    assert version(store) == 6
+    assert version(store) == SCHEMA_VERSION
     cols = {r[1] for r in store._conn.execute("PRAGMA table_info(services)")}
     assert "delay_read_at" in cols
 
@@ -116,7 +116,7 @@ def test_v5_to_v6_backfill(tmp_path):
     p, (a, b, d, e, g) = _v5(tmp_path)
     s = Store(str(p))
     s.migrate()
-    assert version(s) == 6
+    assert version(s) == SCHEMA_VERSION  # v5 -> v6 -> v7
     got = dict(s._conn.execute("SELECT id, delay_read_at FROM services"))
     assert got[a] is None
     assert got[b] is None
@@ -150,7 +150,7 @@ def test_live_fixture_migrates(tmp_path):
     shutil.copy(FIXTURE, p)
     s = Store(str(p))
     s.migrate()
-    assert version(s) == 6
+    assert version(s) == SCHEMA_VERSION  # v6 and later steps
     n = s._conn.execute("SELECT COUNT(*) FROM services").fetchone()[0]
     assert n > 0
     s.close()

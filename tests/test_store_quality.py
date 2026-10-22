@@ -264,7 +264,7 @@ def _tables(conn):
     return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
 
-def test_fresh_db_has_quality_tables_and_keeps_version(store):
+def test_fresh_db_is_v7_with_quality_tables(store):
     assert {"service_quality", "event_quality", "quality_periods", "dq_meta"} <= _tables(
         store._conn)
     assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
@@ -273,18 +273,53 @@ def test_fresh_db_has_quality_tables_and_keeps_version(store):
         == quality.DQ_VERSION
 
 
-def test_v5_db_gets_quality_tables_without_touching_data(tmp_path):
+def _as_v6(db):
+    """Turn a current DB back into a v6 one (Beta 1.05: no quality tables)."""
+    raw = sqlite3.connect(db)
+    for t in ("service_quality", "event_quality", "quality_periods", "dq_meta"):
+        raw.execute(f"DROP TABLE {t}")
+    raw.execute("PRAGMA user_version = 6")
+    raw.commit()
+    raw.close()
+
+
+def test_live_v2_fixture_migrates_to_v7(tmp_path):
+    db = tmp_path / "v2.db"
+    shutil.copy(FIX / "live_v2.db", db)
+    s = Store(str(db))
+    s.migrate()  # v2 -> v3 -> v4 -> v5 -> v6 -> v7
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 7 == SCHEMA_VERSION
+    assert {"service_quality", "event_quality"} <= _tables(s._conn)
+    s.close()
+
+
+def test_v7_migration_failure_leaves_v6(tmp_path, monkeypatch):
+    db = tmp_path / "f.db"
+    s = Store(str(db))
+    s.migrate()
+    s.close()
+    _as_v6(db)
+
+    def boom(conn):
+        conn.execute("CREATE TABLE IF NOT EXISTS dq_meta (key TEXT PRIMARY KEY, value TEXT)")
+        raise RuntimeError("x")
+    monkeypatch.setattr(quality, "_create", boom)
+    s = Store(str(db))
+    with pytest.raises(RuntimeError):
+        s.migrate()
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert "dq_meta" not in _tables(s._conn)
+    s.close()
+
+
+def test_v6_db_gets_quality_tables_without_touching_data(tmp_path):
     db = tmp_path / "v.db"
     shutil.copy(FIX / "live_v2.db", db)
     s = Store(str(db))
-    s.migrate()  # v2 -> v5 (+ quality tables)
+    s.migrate()
     before = s._conn.execute("SELECT * FROM services ORDER BY id").fetchall()
     s.close()
-    raw = sqlite3.connect(db)  # simulate a v5 DB from Beta 1.02: no quality tables yet
-    for t in ("service_quality", "event_quality", "quality_periods", "dq_meta"):
-        raw.execute(f"DROP TABLE {t}")
-    raw.commit()
-    raw.close()
+    _as_v6(db)
     s = Store(str(db))
     s.migrate()
     assert {"service_quality", "event_quality"} <= _tables(s._conn)
