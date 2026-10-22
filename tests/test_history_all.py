@@ -255,3 +255,17 @@ def test_history_js_all_days_mode():
     assert "necunoscut, nu 0" in js and "fără procente sub N" in js
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", "setAttribute(\"style\""):
         assert bad not in js
+
+
+def test_revert_of_a_plus_misread_does_not_count_its_old_value(store):
+    """Beta 1.13 audit (IC 538, 21.10): "10 -> 410" was marked suspect, but the revert
+    "410 -> 10" was not, and its old value 410 became the maximum read."""
+    sid = store._ids[17]
+    ev = store._conn.execute("INSERT INTO events(service_id, ts, kind, old, new)"
+                             " VALUES (?,?,'delay','10','410')",
+                             (sid, "2026-10-17T12:05:00+03:00")).lastrowid
+    store._conn.execute("INSERT INTO event_quality(event_id, suspect, reason)"
+                        " VALUES (?,1,'plus_misread')", (ev,))
+    delay_event(store, sid, "2026-10-17T12:06:00+03:00", "410", "10")
+    js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
+    assert js[sid]["max_read_delay"] == 10

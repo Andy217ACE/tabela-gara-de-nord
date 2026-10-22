@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 MIN_FREE_MB_DEFAULT = 2048
 # bump when OCR/parsing changes meaningfully. -2: 4x3 grid check + re-read of unreadable
 # lines; each observation's version also carries the line's OCR history (`line_version`)
-PROCESSING_VERSION = "ocr-tess-grid-2"
+PROCESSING_VERSION = "ocr-tess-grid-3"  # 3: delay "+" / glare rules (Beta 1.13)
 STATES = ("ok", "uncertain", "rejected_low_conf", "incomplete")
 FIELDS = ("type", "no", "station", "operator", "time", "delay", "platform")
 
@@ -213,7 +213,9 @@ def validation_state(row: Row | None) -> str:
 def line_version(base: str, entry: dict) -> str:
     """Processing version of one observation: `base`, plus ``+empty`` (no text on the
     line), ``+unread`` (text, no train read) and ``+retry:<variant>:<attempts>`` (the
-    line was re-read; variant ``none`` when no re-read succeeded)."""
+    line was re-read; variant ``none`` when no re-read succeeded), ``+delay:<reason>``
+    (delay cell left unread by the delay rules, e.g. glare) and
+    ``+delay-retry:<variant>:<attempts>`` (delay cell re-read)."""
     v = base
     state = entry.get("state")
     if state in ("empty", "unread"):
@@ -221,6 +223,13 @@ def line_version(base: str, entry: dict) -> str:
     retry = entry.get("retry")
     if retry:
         v += f"+retry:{retry.get('variant') or 'none'}:{int(retry.get('attempts') or 0)}"
+    delay = (entry.get("fields") or {}).get("delay") or {}
+    if delay.get("check"):
+        v += f"+delay:{delay['check']}"
+    d_retry = delay.get("retry")
+    if d_retry:
+        v += (f"+delay-retry:{d_retry.get('variant') or 'none'}"
+              f":{int(d_retry.get('attempts') or 0)}")
     return v
 
 

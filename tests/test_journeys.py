@@ -167,3 +167,27 @@ def test_series_skips_unapplied_observation(store):
                   (cap, sid, at(12, k).isoformat(), v, state))
     vals = [p["delay"] for p in journeys.detail(store, sid)["delay_series"]]
     assert 945 not in vals and 99 not in vals and vals[-1] == 16
+
+
+def test_series_skips_repeated_plus_misread(store):
+    """Beta 1.13: "+45" read "+465" in two consecutive glared frames is not drawn (a value
+    >= DELAY_BIG is drawn only when the store applied it)."""
+    store.ingest(frame(t1621=45), at(12, 0))
+    store.ingest(frame(t1621=45), at(12, 1))
+    sid = store._conn.execute("SELECT id FROM services WHERE train_no=1621").fetchone()[0]
+    c = store._conn
+    cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES ('x','h2',1)").lastrowid
+    for k, v in enumerate((45, 465, 465, 45)):
+        c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
+                  " delay_min, delay_read, validation_state, processing_version)"
+                  " VALUES (?,?,'arrival',0,?,?,1,'ok','t')",
+                  (cap, sid, at(12, 2 + k).isoformat(), v))
+    vals = [p["delay"] for p in journeys.detail(store, sid)["delay_series"]]
+    assert 465 not in vals and 45 in vals
+
+
+def test_plus_revert():
+    assert journeys.plus_revert({"old": "410", "new": "10"})
+    assert journeys.plus_revert({"old": "240", "new": "20"})
+    assert not journeys.plus_revert({"old": "40", "new": "10"})
+    assert not journeys.plus_revert({"old": None, "new": "10"})

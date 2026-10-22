@@ -37,6 +37,34 @@ def segment(cell: np.ndarray) -> list[np.ndarray]:
     specks are dropped. Each glyph keeps its vertical position inside the text
     line, so ``+`` and ``:`` stay distinguishable from digits.
     """
+    return [g for g, _, _ in segment_spans(cell)]
+
+
+def is_plus(glyph: np.ndarray) -> bool:
+    """Shape test of the board's "+" on a normalised glyph (``segment``): a cross —
+    ink along the middle row and the middle column of its ink box, the four corners of
+    the box empty, and shorter than a digit (it does not reach the top or the bottom of
+    the text line). A digit fused with a glare blob fails it (filled corners)."""
+    ys, xs = np.nonzero(glyph > 0.5)
+    if ys.size == 0:
+        return False
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    h, w = y1 - y0, x1 - x0
+    if h < 0.3 * GLYPH_H or h > 0.85 * GLYPH_H or w < 0.5 * h or w > 1.6 * h:
+        return False
+    box = glyph[y0:y1, x0:x1] > 0.5
+    ch, cw = max(1, h // 3), max(1, w // 3)
+    corners = [box[:ch, :cw], box[:ch, -cw:], box[-ch:, :cw], box[-ch:, -cw:]]
+    if max(float(c.mean()) for c in corners) > 0.25:
+        return False
+    mid_row = box[h // 2 - max(1, h // 8):h // 2 + max(1, h // 8) + 1, :]
+    mid_col = box[:, w // 2 - max(1, w // 8):w // 2 + max(1, w // 8) + 1]
+    return float(mid_row.any(axis=0).mean()) > 0.8 and float(mid_col.any(axis=1).mean()) > 0.8
+
+
+def segment_spans(cell: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int], bool]]:
+    """`segment` plus each glyph's x span (x0, x1) in the cell and whether it was cut out
+    of a wider component (glyphs touching each other, e.g. fused by a glare blob)."""
     ink = (cell == 0).astype(np.uint8)
     if not ink.any():
         return []
@@ -68,9 +96,10 @@ def segment(cell: np.ndarray) -> list[np.ndarray]:
     for x, y, w, h in merged:
         if h < 0.15 * line_h and w < 0.15 * line_h:
             continue
-        for x0, x1 in _split_touching(ink[line_top:line_bot], x, w, line_h):
+        parts = _split_touching(ink[line_top:line_bot], x, w, line_h)
+        for x0, x1 in parts:
             crop = ink[line_top:line_bot, x0:x1].astype(np.float32)
-            glyphs.append(_normalise(crop))
+            glyphs.append((_normalise(crop), (int(x0), int(x1)), len(parts) > 1))
     return glyphs
 
 
@@ -142,12 +171,21 @@ class DigitMatcher:
         An empty cell gives ("", 1.0, True).
         """
         text, worst, trusted = [], 1.0, True
-        for g in segment(cell):
-            ch, score, margin = self.classify(g, allowed)
+        for ch, score, margin, *_ in self.glyphs(cell, allowed):
             text.append(ch)
             worst = min(worst, score)
             trusted &= score >= MIN_SCORE and margin >= MIN_MARGIN
         return "".join(text), worst, trusted
+
+    def glyphs(self, cell: np.ndarray, allowed: str
+               ) -> list[tuple[str, float, float, np.ndarray, bool]]:
+        """Per glyph of the cell, left to right: (character, score, margin, glyph,
+        fused = cut out of a component holding several glyphs)."""
+        return [(*self.classify(g, allowed), g, fused) for g, _, fused in segment_spans(cell)]
+
+
+def glyph_trusted(score: float, margin: float) -> bool:
+    return score >= MIN_SCORE and margin >= MIN_MARGIN
 
 
 def build_templates(samples: list[tuple[np.ndarray, str]]) -> tuple[str, np.ndarray]:

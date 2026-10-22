@@ -15,6 +15,7 @@ names (``app.canonical``); the text as read is kept in ``*_raw``.
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 import time
@@ -34,7 +35,7 @@ from app.normalize import (
     parse_time,
     strip_flag,
 )
-from app.ocr import preprocess, stats
+from app.ocr import digits, preprocess, stats
 from app.ocr.digits import DigitMatcher
 from app.ocr.engine import TESSERACT_TIMEOUT, OcrEngine, OcrError, TesseractEngine
 
@@ -262,6 +263,72 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     return m_text, m_score * 100
 
 
+DELAY_UNREAD = "+?"  # a delay cell with text that cannot be read safely (parse: None)
+DELAY_MAX_DIGITS = 3  # "+N" with 1..3 digits; anything longer is not a delay
+# a delay digit cut out of a blob fused with its neighbours is trusted only on a clear
+# match (glare: "+45" gave "1" at 0.78 / margin 0.041 under the adaptive threshold)
+FUSED_MIN_SCORE = 0.80
+FUSED_MIN_MARGIN = 0.10
+
+
+def _delay(cell: np.ndarray, tess: tuple[str, float | None], matcher: DigitMatcher | None
+           ) -> tuple[str, float | None, str | None]:
+    """(text, confidence 0-100, reason the cell is unread or None) of a delay cell.
+
+    The board prints a delay as "+" and 1-3 digits. Measured misreads (audit Beta 1.13):
+    a glare blob over the first digit fuses "+" with it, Tesseract then reads one digit
+    too many ("+65" -> "+465", "+20" -> "+240") or flips the blurred digit (60/80, 5/35/95)
+    while the glyph templates find the right number of glyphs but cannot trust them.
+    So: the first glyph must be a "+" (template and cross shape); the digit count comes
+    from the glyph segmentation; a digit the templates do not trust is accepted only if
+    Tesseract reads the same digit at the same place, and never when it was cut out of
+    a blob fused with its neighbours (glare: both readers guess the hidden part, 6 -> 8
+    in agreement); three digits (>= 100 min) need
+    every glyph trusted AND both readers agreeing. Otherwise the cell is unread
+    (DELAY_UNREAD -> parse_delay None): a missing delay, never 0 and never a guess.
+    """
+    t_text, t_conf = tess[0].replace(" ", ""), tess[1]
+    if matcher is None:
+        return t_text, t_conf, None
+    try:
+        gl = matcher.glyphs(cell, _ALLOWED["delay"])
+    except ValueError:
+        log.warning("glyph templates failed on a delay cell %s; Tesseract reading kept",
+                    getattr(cell, "shape", None), exc_info=True)
+        return t_text, t_conf, None
+    if not gl:
+        return "", None, None  # no ink: the board's "on time"
+    ch0, s0, m0, g0, _ = gl[0]
+    if ch0 != "+" or not (digits.glyph_trusted(s0, m0) or digits.is_plus(g0)):
+        return DELAY_UNREAD, None, "no_plus"
+    if any(ch == "+" for ch, *_ in gl[1:]):
+        return DELAY_UNREAD, None, "plus_twice"
+    digs = gl[1:]
+    n = len(digs)
+    if not 1 <= n <= DELAY_MAX_DIGITS:
+        return DELAY_UNREAD, None, "digits"
+    m_digits = "".join(ch for ch, *_ in digs)
+    # a digit cut out of a fused blob (glare) needs a clear match, not a near tie
+    trusted = [digits.glyph_trusted(s, m) and (not fused or (s >= FUSED_MIN_SCORE
+                                                             and m >= FUSED_MIN_MARGIN))
+               for _, s, m, _, fused in digs]
+    t_digits = t_text[1:] if t_text.startswith("+") else t_text
+    t_ok = t_digits.isdigit() and len(t_digits) == n
+    worst = min(s for _, s, *_ in gl) * 100
+    if n == DELAY_MAX_DIGITS and not (all(trusted) and t_ok and t_digits == m_digits):
+        return DELAY_UNREAD, None, "three_digits"
+    if all(trusted):
+        return "+" + m_digits, (t_conf if t_ok and t_digits == m_digits and t_conf is not None
+                                else worst), None
+    if any(not ok and fused for ok, (*_, fused) in zip(trusted, digs)):
+        return DELAY_UNREAD, None, "glare"
+    if not t_ok:
+        return DELAY_UNREAD, None, "count"
+    if any(not ok and t_digits[i] != m_digits[i] for i, ok in enumerate(trusted)):
+        return DELAY_UNREAD, None, "disagree"
+    return "+" + m_digits, t_conf if t_conf is not None else worst, None
+
+
 def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
                stations: Iterable[str] = ()) -> list[Row]:
     """Rows of both boards. `engine` defaults to Tesseract; `stations` are the
@@ -366,6 +433,7 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
         else:
             entries[i]["retry"]["attempts"] = n
     retry_s = time.perf_counter() - t_retry if attempts else 0.0
+    _reread_delays(engine, slots, entries, ctx, t_start, budget)
 
     for e in entries:
         for f in e["fields"].values():
@@ -450,6 +518,63 @@ def _duplicate(new: dict, entries: list[dict], i: int) -> bool:
                and e["row"].train_no == no for k, e in enumerate(entries))
 
 
+DELAY_VARIANTS = ("lvl+", "vline", "lvl-", "adapt")  # binarisations tried on unread delays
+
+
+def _reread_delays(engine: OcrEngine, slots, entries: list[dict], ctx: "_Ctx",
+                   t_start: float, budget: float) -> None:
+    """Re-read, within the frame budget, the delay cells `_delay` left unread (glare,
+    readers disagreeing), with other binarisations (a stricter threshold can cut the
+    glare bridge between "+" and the digit). A variant's reading is taken only when it
+    passes the same rules as the first pass; otherwise the delay stays unread. Records
+    ``fields.delay.retry`` = {attempts, variant (None: still unread)}."""
+    todo = [i for i, e in enumerate(entries)
+            if e["row"] is not None and e["fields"]["delay"].get("check")]
+    if not todo or ctx.matcher is None:
+        return
+    tries = {i: 0 for i in todo}
+    try:
+        for variant in DELAY_VARIANTS:
+            if not todo or time.perf_counter() - t_start >= budget:
+                break
+            cells = [_variant_cells(slots[i], variant)["delay"] for i in todo]
+            old_timeout = getattr(engine, "timeout", None)
+            if old_timeout is not None:
+                engine.timeout = max(1.0, min(old_timeout,
+                                              budget - (time.perf_counter() - t_start)))
+            try:
+                texts = _Composite(cells).read(engine, *_TESS["delay"])
+            finally:
+                if old_timeout is not None:
+                    engine.timeout = old_timeout
+            left = []
+            for k, i in enumerate(todo):
+                tries[i] += 1
+                text, conf, why = _delay(cells[k], texts[k], ctx.matcher)
+                value = parse_delay(text)
+                if why is None and value is not None:
+                    _set_delay(entries[i], text, conf, value,
+                               {"attempts": tries[i], "variant": variant})
+                else:
+                    left.append(i)
+            todo = left
+    except Exception:  # optional: the first pass (delay unread) stays
+        log.warning("OCR delay re-read failed; delay left unread", exc_info=True)
+    for i in todo:
+        if tries[i]:
+            entries[i]["fields"]["delay"]["retry"] = {"attempts": tries[i], "variant": None}
+
+
+def _set_delay(entry: dict, text: str, conf: float | None, value: int, retry: dict) -> None:
+    f = entry["fields"]["delay"]
+    f.update(raw=text, norm=value, retry=retry,
+             conf=None if conf is None else round(min(100.0, max(0.0, conf)), 1))
+    f.pop("check", None)
+    f.pop("seen", None)
+    entry["row"] = dataclasses.replace(entry["row"], delay_min=value, delay_read=True)
+    entry["raw_text"] = " ".join(t for t in (entry["fields"][n]["raw"] for n in _ORDER) if t)
+
+
 def _variant_cells(slot, variant: str) -> dict[str, np.ndarray]:
     _, j, p, _ = slot
     if variant == "wide":  # crop wider: glyph tops/bottoms cut by a tight band
@@ -478,7 +603,10 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
     Tesseract readings `tess` {column: (text, conf)} and the cell images `cells`."""
     cell = dict(tess)
     for name in _ALLOWED:
-        cell[name] = _numeric(name, cells[name], cell[name], ctx.matcher)
+        if name != "delay":
+            cell[name] = _numeric(name, cells[name], cell[name], ctx.matcher)
+    d_text, d_conf, d_why = _delay(cells["delay"], cell["delay"], ctx.matcher)
+    cell["delay"] = (d_text, d_conf)
     type_text, flagged = strip_flag(cell["type"][0])
     # "*" (flag) is stripped first; "I"/"RN".. are resolved only where measured
     train_type = resolve_type(type_text, _train_no(cell["no"][0]))
@@ -506,6 +634,9 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
                        "_tess": tess[n][0], "_tess_conf": tess[n][1]} for n in _ORDER},
         "station_score": s_score, "operator_score": o_score,
     }
+    if d_why is not None:  # why the delay is unread, and what Tesseract alone saw
+        entry["fields"]["delay"]["check"] = d_why
+        entry["fields"]["delay"]["seen"] = tess["delay"][0]
     if train_type is None or sched is None:
         return entry
     entry["row"] = Row(

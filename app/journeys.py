@@ -20,6 +20,8 @@ import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app import quality
+
 TZ = ZoneInfo("Europe/Bucharest")
 FINAL_READ_MAX_GAP_MIN_DEFAULT = 15
 STATES = ("in_progress", "confirmed", "unconfirmed", "unknown")
@@ -178,22 +180,33 @@ def delay_series(store, service_id: int, s) -> list[dict]:
                         + _NOT_SUSPECT + " ORDER BY ts, id", (service_id,)).fetchall()
     for e in evs:
         add(e["ts"], _int(e["new"]), "event")
-    if evs and (_int(evs[0]["old"]) or 0) > 0:
+    if evs and (_int(evs[0]["old"]) or 0) > 0 and not plus_revert(evs[0]):
         # a non-zero previous value was a real reading, held since the first sighting
         add(s["first_seen"], _int(evs[0]["old"]), "event")
     # An OCR reading the store did not apply (e.g. a one-frame jump "15" -> "945") is not
     # drawn: keep an observation only if its value was applied (a delay event / the
-    # stored value) or the next reading confirms it (the two-readings rule).
-    applied = {_int(e["new"]) for e in evs} | {_int(e["old"]) for e in evs}
+    # stored value) or the next reading confirms it (the two-readings rule) — the latter
+    # never for a value >= DELAY_BIG ("+45" read "+465" in consecutive glared frames).
+    applied = {_int(e["new"]) for e in evs} | {_int(e["old"]) for e in evs
+                                               if not plus_revert(e)}
     if s["delay_read_at"]:
         applied.add(s["last_delay"])
     for k, o in enumerate(obs):
         nxt = obs[k + 1]["delay_min"] if k + 1 < len(obs) else None
-        if o["delay_min"] in applied or o["delay_min"] == nxt:
+        if o["delay_min"] in applied or (o["delay_min"] == nxt
+                                         and o["delay_min"] < quality.DELAY_BIG):
             add(o["observed_at"], o["delay_min"], "observation")
     if s["delay_read_at"]:
         add(s["delay_read_at"], s["last_delay"], "last_read")
     return sorted(pts.values(), key=lambda p: _dt(p["t"]))
+
+
+def plus_revert(e) -> bool:
+    """A delay event going back from a misread "+" (old 410 -> new 10, 240 -> 20): its
+    previous value is the misread, not a reading — even when the event that set it was
+    never stored or marked (Beta 1.13 audit: IC 538 "410 -> 10" kept 410 as a maximum)."""
+    old, new = _int(e["old"]), _int(e["new"])
+    return old is not None and new is not None and quality.digit_dropped(old, new)
 
 
 def _int(v) -> int | None:

@@ -67,13 +67,19 @@ def max_readings(store, ids: list[int]) -> dict[int, int | None]:
             "SELECT service_id, max_delay_clean, last_delay_clean FROM service_quality"
             f" WHERE delay_checked = 1 AND service_id IN ({marks})", ids).fetchall()
         evs = c.execute(
-            "SELECT e.service_id, MAX(CAST(e.new AS INTEGER)) AS mx_new,"
-            " MAX(CASE WHEN e.old GLOB '[0-9]*' THEN CAST(e.old AS INTEGER) END) AS mx_old"
-            " FROM events e WHERE e.kind = 'delay' AND e.new GLOB '[0-9]*'"
-            f" AND NOT {quality.SUSPECT_EVENT_SQL} AND e.service_id IN ({marks})"
-            " GROUP BY e.service_id", ids).fetchall()
-    out: dict[int, int | None] = {
-        r["service_id"]: max(v for v in (r["mx_new"], r["mx_old"]) if v is not None) for r in evs}
+            "SELECT e.service_id, e.old, e.new FROM events e WHERE e.kind = 'delay'"
+            f" AND e.new GLOB '[0-9]*' AND NOT {quality.SUSPECT_EVENT_SQL}"
+            f" AND e.service_id IN ({marks})", ids).fetchall()
+    out: dict[int, int | None] = {}
+    for e in evs:
+        # the previous value counts as a reading, unless the event goes back from a
+        # misread "+" (410 -> 10: 410 was never on the board)
+        vals = [journeys._int(e["new"])]
+        if e["old"] and str(e["old"]).isdigit() and not journeys.plus_revert(e):
+            vals.append(int(e["old"]))
+        vals = [v for v in vals if v is not None]
+        if vals:
+            out[e["service_id"]] = max(vals + [out.get(e["service_id"]) or 0])
     for r in checked:
         out[r["service_id"]] = (None if r["last_delay_clean"] is None
                                 else max(r["max_delay_clean"] or 0, r["last_delay_clean"]))

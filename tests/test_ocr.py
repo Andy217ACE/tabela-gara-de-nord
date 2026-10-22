@@ -423,16 +423,16 @@ def test_learned_stations_used(monkeypatch):
 def test_garbled_delay_cell_is_unread(monkeypatch):
     """A delay cell OCR cannot read gives delay_read=False (never a silent 0)."""
     from app.ocr import reader
-    real = reader._numeric
+    real = reader._delay
     hit = {"n": 0}
 
-    def garble(name, cell, tess, matcher):
-        text, conf = real(name, cell, tess, matcher)
-        if name == "delay" and hit["n"] == 0:
+    def garble(cell, tess, matcher):
+        text, conf, why = real(cell, tess, matcher)
+        if hit["n"] == 0:
             hit["n"] += 1
-            return "S?#", 40.0
-        return text, conf
-    monkeypatch.setattr(reader, "_numeric", garble)
+            return "S?#", 40.0, None
+        return text, conf, why
+    monkeypatch.setattr(reader, "_delay", garble)
     got = read_board(_bytes())
     unread = [r for r in got if not r.delay_read]
     assert len(unread) == 1 and unread[0].delay_min == 0

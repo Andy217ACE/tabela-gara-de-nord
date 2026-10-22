@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.15 — 2026-10-23
+
+### Reparat
+- **Întârzieri citite aiurea (ex. 465 sau 945 de minute).** Cauza, găsită pe capturile reale: o reflexie (o pată albă) pe tabelă acoperă prima cifră a întârzierii în primele rânduri de la Sosiri. Pata lipea semnul „+” de cifră, iar OCR-ul citea o cifră în plus („+65” devenea „+465”, „+20” devenea „+240”) sau alterna cifra ascunsă (60/80, 5/35/95).
+- Coloana de întârziere se citește acum după regulile tabelei: întâi trebuie găsit semnul „+” (formă de cruce); numărul de cifre (1–3) vine din separarea glifelor; o cifră nesigură e acceptată doar dacă ambele metode de citire o văd la fel, și niciodată dintr-o zonă lipită de reflexie; o întârziere de 3 cifre (100+ minute) cere ca ambele citiri să fie sigure și de acord.
+- Ce nu trece aceste reguli rămâne **necitit**: întârzierea lipsește pentru acel cadru, nu devine 0 și nu e ghicită. Celulele necitite sunt recitite automat cu alte preprocesări, în limita celor 8 secunde pe cadru.
+- Istoric și grafice: o întârziere de 100+ minute din observații apare doar dacă a fost confirmată; revenirea dintr-o citire greșită („410 → 10”) nu mai face din 410 maximul citit.
+
+### Nou
+- Service worker v19. Observațiile au versiunea de procesare `ocr-tess-grid-3`, cu marcajul `+delay:<motiv>` (ex. `glare`) când întârzierea a rămas necitită și `+delay-retry:<variantă>` când a fost recitită.
+
 ## Beta 1.14 — 2026-10-23
 
 ### Nou
@@ -17,6 +28,7 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 ### Tehnic
 - Statisticile se calculează pe o conexiune SQLite separată, doar pentru citire — nu mai așteaptă și nu mai blochează citirea OCR a tabelei —, cu rezultat păstrat 60 s (`STATS_CACHE_TTL_S`) și un singur calcul simultan; pagina face o singură cerere.
 - Culori de serie noi în ambele teme (sosiri albastru, plecări chihlimbar, o singură nuanță pentru harta de căldură), verificate pentru daltonism și contrast. Service worker v18.
+
 ## Beta 1.13 — 2026-10-22
 
 ### Schimbat
