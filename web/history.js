@@ -1,6 +1,8 @@
 // © 2026 Andy217Ace
-// Tabela Gara de Nord — Istoric: what the CFR board showed on a given day.
-// State lives in the URL hash (#istoric?date=…&train=…) so a search can be shared.
+// Tabela Gara de Nord — Istoric: what the CFR board showed on a given day, or — with a
+// train number — every journey of that train across ALL days (newest first, grouped by
+// day, „Încarcă mai multe”). State lives in the URL hash so a search can be shared:
+// #istoric?date=… (one day), #istoric?train=… (all days), #istoric?train=…&date=… (one day).
 // DOM built with createElement/textContent only; the chart is SVG via createElementNS,
 // styled from style.css (no inline styles: CSP). All values are *observed* on the board,
 // never confirmed arrival/departure results.
@@ -19,7 +21,9 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var form, inputs = {}, timer = null, inflight = null, detailCtrl = null, lastQuery = null;
-  var lastFocus = null;
+  var lastFocus = null, scopeSel = null, prevTrain = "";
+  var PAGE = 200;                 // journeys per page in „Toate zilele” (server max 200)
+  var allState = null;            // {q, next, groups: {day: tbody}, shown, ctrl}
 
   // ---- time helpers ------------------------------------------------------------
 
@@ -67,20 +71,43 @@
 
   // ---- URL state -----------------------------------------------------------------
 
+  // With a train number the day selector offers „Toate zilele” (default) or „O zi anume”;
+  // q.date === "" then means all days. Without a train the search is always one day.
+  function allDays() {
+    return !!(inputs.train.value || "").trim() && scopeSel.value === "all";
+  }
+
   function readForm() {
     var q = {};
     FIELDS.forEach(function (f) { q[f] = (inputs[f].value || "").trim(); });
+    if (allDays()) q.date = "";
     return q;
   }
 
   function writeForm(q) {
-    FIELDS.forEach(function (f) { inputs[f].value = q[f] || ""; });
+    FIELDS.forEach(function (f) {
+      if (f === "date" && !q.date) return; // keep the last picked day for „O zi anume”
+      inputs[f].value = q[f] || "";
+    });
+    if (!inputs.date.value) inputs.date.value = todayBucharest();
+    scopeSel.value = q.train && !q.date ? "all" : "day";
+    prevTrain = q.train || "";
+    syncScope();
+  }
+
+  function syncScope() {
+    var hasTrain = !!(inputs.train.value || "").trim();
+    scopeSel.hidden = !hasTrain;
+    var all = hasTrain && scopeSel.value === "all";
+    inputs.date.hidden = all;
+    inputs.date.required = !all;
+    $("h-day-label").textContent = hasTrain ? "Zile" : "Ziua";
   }
 
   function queryFromParams(params) {
     var q = {};
     FIELDS.forEach(function (f) { q[f] = (params.get(f) || "").trim(); });
-    if (!q.date) q.date = todayBucharest();
+    if (!q.date && !q.train) q.date = todayBucharest();
     if (q.board !== "arrival" && q.board !== "departure") q.board = "";
     return q;
   }
@@ -105,8 +132,10 @@
 
   function validate(q) {
     var today = todayBucharest();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(q.date)) return "Alege o zi validă.";
-    if (q.date > today) return "Ziua nu poate fi în viitor — istoricul începe cu ce s-a observat deja.";
+    if (q.date || !q.train) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(q.date)) return "Alege o zi validă.";
+      if (q.date > today) return "Ziua nu poate fi în viitor — istoricul începe cu ce s-a observat deja.";
+    }
     if (q.train && !/^\d{1,6}$/.test(q.train)) return "Numărul trenului are doar cifre (maxim 6).";
     if (q.from && q.to && q.from > q.to) return "Ora „de la” este după ora „până la”.";
     return null;
@@ -269,6 +298,225 @@
     $("h-results").replaceChildren();
     $("h-count").textContent = "";
     $("h-empty").hidden = true;
+    $("h-summary").replaceChildren();
+    $("h-summary").hidden = true;
+    $("h-more").hidden = true;
+    if (allState && allState.ctrl) allState.ctrl.abort();
+    allState = null;
+  }
+
+  // ---- all days of one train (/api/history?train=N&all=1) ---------------------------------
+
+  var shortDayFmt = new Intl.DateTimeFormat("ro-RO", { timeZone: "UTC", day: "2-digit", month: "2-digit",
+                                                       year: "numeric" });
+  var numFmt = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 1 });
+
+  function shortDay(iso) {
+    var d = new Date(iso + "T12:00:00Z");
+    return isNaN(d.getTime()) ? iso : shortDayFmt.format(d);
+  }
+
+  function minSigned(v) {
+    return v == null ? "—" : (v <= 0 ? "0" : "+" + numFmt.format(v)) + " min";
+  }
+
+  function allParams(q, cursor) {
+    var p = new URLSearchParams();
+    p.set("all", "1");
+    p.set("train", q.train);
+    ["date", "station", "from", "to", "board"].forEach(function (f) { if (q[f]) p.set(f, q[f]); });
+    p.set("limit", String(PAGE));
+    if (cursor) p.set("cursor", cursor);
+    return p.toString();
+  }
+
+  // One line per board: N (journeys with a READ delay), mean/median/max; % only from the
+  // minimum sample on (the server withholds it below, `sufficient`).
+  function summaryLine(board, s, params) {
+    var p = el("p", "h-sum-line");
+    p.append(el("strong", "h-sum-board", board === "arrival" ? "Sosiri" : "Plecări"), " — ");
+    if (!s || !s.n) {
+      p.append("nicio întârziere citită pentru călătoriile încheiate (necunoscut, nu 0).");
+      return p;
+    }
+    var parts = ["N = " + s.n + " cu întârzierea citită", "medie " + minSigned(s.mean),
+                 "mediană " + minSigned(s.median), "maxim " + minSigned(s.max)];
+    if (s.sufficient && s.on_time_pct != null) {
+      parts.push("la timp (≤ " + params.on_time_max_min + " min) " + numFmt.format(s.on_time_pct) + "%");
+    } else {
+      parts.push("fără procente sub N = " + params.min_sample);
+    }
+    p.append(parts.join(" · "));
+    return p;
+  }
+
+  function renderSummary(data) {
+    var box = $("h-summary");
+    box.replaceChildren();
+    if (!data.total) { box.hidden = true; return; }
+    var params = data.params || {};
+    var sum = data.summary || {};
+    ["arrival", "departure"].forEach(function (b) {
+      if (sum[b]) box.append(summaryLine(b, sum[b], params));
+    });
+    var st = (data.quality && data.quality.states) || {};
+    var states = ["confirmed", "unconfirmed", "unknown", "in_progress"].filter(function (k) { return st[k]; })
+      .map(function (k) { return STATE_SHORT[k] + ": " + st[k]; });
+    if (states.length) box.append(el("p", "h-sum-states", "Rezultate — " + states.join(" · ")));
+    box.append(el("p", "h-sum-note",
+      "Întârzierea este cea CITITĂ pe tabela din București Nord. Media, mediana și maximul folosesc doar " +
+      "călătoriile încheiate cu întârzierea citită (" + (params.confirmed_only ? "doar confirmate" :
+      "confirmate și neconfirmate") + "); cele necunoscute nu intră și nu sunt 0."));
+    box.hidden = false;
+  }
+
+  function allCount(q, data) {
+    var count = $("h-count");
+    var per = data.period || {};
+    var text = "Trenul " + q.train + ": " + plural(data.total, "călătorie", "călătorii");
+    if (q.date) text += " · " + dayLabel(q.date);
+    else if (per.first) {
+      text += " în perioada " + shortDay(per.first) + " – " + shortDay(per.last) + " (" +
+        plural(per.days, "zi", "zile") + ")";
+    }
+    count.textContent = text;
+    if (allState && allState.shown < data.total) {
+      count.append(" · ", el("strong", "h-truncated", "afișate " + allState.shown + " (cele mai noi)"));
+    }
+  }
+
+  function journeyDelay(j) {
+    var r = j.result || {};
+    if (r.state === "confirmed") return delayBadge(r.final_delay, "Întârziere finală (rezultat confirmat)", true);
+    if (r.delay_known) {
+      return delayBadge(r.observed_delay, "Ultima întârziere citită — rezultat " +
+                        (STATE_SHORT[r.state] || "necunoscut"), true);
+    }
+    return delayBadge(null, "", false);
+  }
+
+  function journeyRow(j) {
+    var r = j.result || {};
+    var tr = el("tr", "h-row");
+    var known = j.max_read_delay != null;
+    tr.dataset.delay = known ? delayLevel(j.max_read_delay) : "unread";
+    cell(tr, "Ora programată", "h-time", j.sched_time || "--:--");
+    cell(tr, "Panou", "h-board", BOARD_LABEL[j.board] || j.board);
+    var hint = { train_type: j.train_type, train_no: j.train_no, board: j.board, sched_time: j.sched_time,
+                 station: j.station, service_date: j.service_date };
+    var train = el("button", "h-train");
+    train.type = "button";
+    train.append(el("span", App.typeClass(j.train_type), j.train_type || "?"),
+                 el("span", "t-no", String(j.train_no)));
+    train.setAttribute("aria-label", "Detaliu și grafic: tren " + (j.train_type || "") + " " + j.train_no +
+      ", " + (BOARD_LABEL[j.board] || "") + " " + (j.sched_time || "") + ", " + dayLabel(j.service_date));
+    train.addEventListener("click", function () { openJourney(j.id, train, hint); });
+    cell(tr, "Tren", "h-trn", train);
+    cell(tr, "Stație", "h-station", j.station ? stationLink(j.station, nameNode(titleCase(j.station), j)) : "—");
+    var acts = el("span", "h-acts");
+    var g = el("button", "h-act", "Grafic");
+    g.type = "button";
+    g.setAttribute("aria-label", "Detaliu și grafic, " + dayLabel(j.service_date) + " " + (j.sched_time || ""));
+    g.addEventListener("click", function () { openJourney(j.id, g, hint); });
+    var prof = el("a", "h-act", "Profil tren");
+    prof.href = "#tren?nr=" + encodeURIComponent(j.train_no);
+    acts.append(g, prof);
+    cell(tr, "Detalii", "h-op", acts);
+    cell(tr, "Întârziere max. citită", "h-max",
+         known ? delayBadge(j.max_read_delay, "Cea mai mare întârziere citită pe tabelă", true)
+               : delayBadge(null, "", false));
+    cell(tr, "Întârziere finală / ultima citită", "h-last", journeyDelay(j));
+    var hasPlat = j.platform != null && j.platform !== "";
+    var plat = el("span", hasPlat ? "plat plat-sm" : "plat plat-sm plat-unknown", hasPlat ? String(j.platform) : "—");
+    plat.setAttribute("aria-label", hasPlat ? "Linia " + j.platform : "Linie neanunțată");
+    cell(tr, "Linia", "h-plat", plat);
+    var res = resultBadge(r);
+    if (r.reason) res.title = r.reason;
+    cell(tr, "Rezultat", "h-status", res);
+    tr.addEventListener("click", function (e) {
+      if (e.target.closest("button, a")) return;
+      openJourney(j.id, train, hint);
+    });
+    return tr;
+  }
+
+  function dayGroup(day) {
+    var sec = el("section", "h-group");
+    var label = dayLabel(day);
+    sec.append(el("h2", "h-group-title", label.charAt(0).toUpperCase() + label.slice(1)));
+    var table = el("table", "h-table");
+    var thead = el("thead");
+    var hr = el("tr");
+    ["Ora prog.", "Panou", "Tren", "Stație", "Detalii", "Întârziere max. citită",
+     "Întârziere finală / ultima citită", "Linia", "Rezultat"].forEach(function (h) {
+      var th = el("th", null, h);
+      th.scope = "col";
+      hr.append(th);
+    });
+    thead.append(hr);
+    var tbody = el("tbody");
+    table.append(el("caption", "sr-only", "Călătoriile din " + dayLabel(day)), thead, tbody);
+    sec.append(table);
+    $("h-results").append(sec);
+    return tbody;
+  }
+
+  function appendJourneys(list) {
+    list.forEach(function (j) {
+      var tb = allState.groups[j.service_date];
+      if (!tb) tb = allState.groups[j.service_date] = dayGroup(j.service_date);
+      tb.append(journeyRow(j));
+    });
+    allState.shown += list.length;
+  }
+
+  function renderAll(q, data) {
+    clearResults();
+    var list = Array.isArray(data.journeys) ? data.journeys : [];
+    allState = { q: q, next: data.next || null, groups: {}, shown: 0, ctrl: null };
+    if (!data.total) {
+      $("h-count").textContent = "Trenul " + q.train + ": " + plural(0, "călătorie", "călătorii");
+      var empty = $("h-empty");
+      empty.textContent = q.station || q.from || q.to || q.board || q.date
+        ? "Nu există călătorii observate ale acestui tren pentru aceste filtre."
+        : "Trenul " + q.train + " nu a fost observat pe tabelă.";
+      empty.hidden = false;
+      return;
+    }
+    renderSummary(data);
+    appendJourneys(list);
+    allCount(q, data);
+    $("h-more").hidden = !allState.next;
+  }
+
+  function loadMore() {
+    if (!allState || !allState.next || allState.ctrl) return;
+    var st = allState;
+    var btn = $("h-more");
+    var ctrl = new AbortController();
+    st.ctrl = ctrl;
+    btn.disabled = true;
+    btn.textContent = "Se încarcă…";
+    getJSON("/api/history?" + allParams(st.q, st.next), ctrl)
+      .then(function (data) {
+        if (allState !== st) return;
+        appendJourneys(Array.isArray(data && data.journeys) ? data.journeys : []);
+        st.next = (data && data.next) || null;
+        allCount(st.q, data || {});
+        $("h-error").hidden = true;
+      })
+      .catch(function (e) {
+        if (allState !== st || e.aborted) return;
+        $("h-error").textContent = errorText(e);
+        $("h-error").hidden = false;
+      })
+      .then(function () {
+        if (allState !== st) return;
+        st.ctrl = null;
+        btn.disabled = false;
+        btn.textContent = "Încarcă mai multe";
+        btn.hidden = !st.next;
+      });
   }
 
   function setLoading(on) {
@@ -296,11 +544,14 @@
     inflight = ctrl;
     var params = new URLSearchParams();
     FIELDS.forEach(function (f) { if (q[f]) params.set(f, q[f]); });
+    var all = !!q.train; // a train number: the journeys view (all days, or the picked day)
     setLoading(true);
-    getJSON("/api/history?" + params.toString(), ctrl)
+    getJSON("/api/history?" + (all ? allParams(q) : params.toString()), ctrl)
       .then(function (data) {
         if (inflight !== ctrl) return;
         errBox.hidden = true;
+        if (all) { renderAll(q, data || {}); return; }
+        clearResults();
         renderResults(q, Array.isArray(data && data.services) ? data.services : [], !!ctrl.truncated);
       })
       .catch(function (e) {
@@ -728,6 +979,7 @@
     var cur = readForm();
     var changed = FIELDS.some(function (f) { return (cur[f] || "") !== (q[f] || ""); });
     if (changed) writeForm(q);
+    else syncScope();
     inputs.date.max = todayBucharest();
     search(false);
   }
@@ -736,24 +988,33 @@
     form = $("h-form");
     if (!form) return;
     FIELDS.forEach(function (f) { inputs[f] = $("h-" + f); });
+    scopeSel = $("h-scope");
     inputs.date.value = todayBucharest();
     inputs.date.max = todayBucharest();
+    syncScope();
     form.addEventListener("submit", function (e) { e.preventDefault(); clearTimeout(timer); search(true); });
     form.addEventListener("input", function (e) {
       if (e.target === inputs.train) {
         var digits = inputs.train.value.replace(/\D+/g, "").slice(0, 6);
         if (digits !== inputs.train.value) inputs.train.value = digits;
+        if (digits && !prevTrain) scopeSel.value = "all"; // a train number: all days by default
+        prevTrain = digits;
       }
+      syncScope();
       debounced();
     });
-    form.addEventListener("change", debounced);
+    form.addEventListener("change", function () { syncScope(); debounced(); });
     form.addEventListener("reset", function () {
       setTimeout(function () {
         inputs.date.value = todayBucharest();
+        scopeSel.value = "all";
+        prevTrain = "";
+        syncScope();
         clearTimeout(timer);
         search(true);
       }, 0);
     });
+    $("h-more").addEventListener("click", loadMore);
     var dlg = $("h-detail");
     // the dialog is shared with other views (#tren): keep it outside the hidden #view-istoric
     document.body.appendChild(dlg);
