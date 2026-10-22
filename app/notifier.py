@@ -160,6 +160,13 @@ class Notifier:
     def _process(self, events: list[Event], today: date) -> list[Event]:
         run = self.store.last_ok_run()
         run_id, run_ts = run if run else (None, None)
+        # 0. A train back on the board after a pushed 'gone' (a short return emits no
+        # 'appeared' event): its next 'gone' is a new transition.
+        for key in [k for k in self._last if k[1] == "gone"]:
+            sd, no, board, sched = key[0]
+            st = self.store.service_state(board, sd, no, sched)
+            if st is not None and st["status"] == "listed":
+                del self._last[key]
         # 1. Re-check older pending changes against the latest ok reading.
         for key, p in list(self._pending.items()):
             if p.run_id == run_id:

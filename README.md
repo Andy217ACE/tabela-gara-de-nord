@@ -107,6 +107,28 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   `Cache-Control: private, no-store` și nu trec prin cache-ul service worker-ului.
   Schimbarea `ADMIN_TOKEN` invalidează toate sesiunile.
 
+## Călătorii, statistici, stații
+
+- **Călătorie** = o apariție a unui tren pe un panou (sosiri sau plecări din București Nord) într-o
+  *zi de serviciu* (ziua orei programate; 00:05 citit la 23:58 aparține zilei următoare).
+  **Tren** = număr de tren. **Observație** = o linie citită dintr-o captură OCR. Se raportează separat.
+- **Întârzierea** folosită este ultima valoare CITITĂ pe tabela din București Nord, doar cu dovada
+  citirii (`services.delay_read_at`, schema v6). Datele de dinainte de v6 au dovada doar din
+  observații (v5); restul rămân „întârziere necunoscută” (nu 0). Un salt de peste 30 min într-un
+  singur cadru se aplică doar după a doua citire identică (misread de tip „15” → „945”).
+- **Rezultat final** (`app/journeys.py`): `confirmed` doar cu dispariție observată după ora estimată
+  (programat + întârziere) și întârziere citită cu cel mult `FINAL_READ_MAX_GAP_MIN` înainte;
+  altfel `unconfirmed` (cu motiv) sau `unknown`; `in_progress` cât e pe tabelă.
+- **Statistici** (`app/stats.py`): N, medie, mediană, p90, max, % la timp (≤ prag), > 30 min; sub
+  eșantionul minim procentele și p90 nu se afișează. Sosiri și plecări mereu separat.
+- **API** (JSON, `format=csv` pentru export): `/api/journeys`, `/api/journeys/{id}`,
+  `/api/trains/stats`, `/api/trains/{nr}/journeys`, `/api/stats`, `/api/stats/rankings`,
+  `/api/stations`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys`. Parametri: `prag`,
+  `min`, `board`, `from`, `to` (AAAA-LL-ZZ), `doar_confirmate=1`.
+- **Env** (opționale): `ON_TIME_MAX_MIN` (implicit 5), `STATS_MIN_SAMPLE` (5),
+  `FINAL_READ_MAX_GAP_MIN` (15).
+- Pe paginile de stație întârzierea este cea de la București Nord, nu de la stația respectivă.
+
 ## Deploy (server Ubuntu 24.04)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).

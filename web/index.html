@@ -45,6 +45,8 @@
   <link rel="stylesheet" href="weather.css">
   <script src="weather.js" defer></script>
   <script src="versions.js" defer></script>
+  <link rel="stylesheet" href="stats.css">
+  <script src="stats.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -90,6 +92,18 @@
         <a class="nav-item" href="#urmarite" data-route="urmarite">
           <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
           <span>Urmărite</span>
+        </a>
+        <a class="nav-item" href="#trenuri" data-route="trenuri">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M9 17l-2.5 4M15 17l2.5 4"/><path d="M8.5 13.5h.01M15.5 13.5h.01"/></svg>
+          <span>Trenuri</span>
+        </a>
+        <a class="nav-item" href="#statistici" data-route="statistici">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V6M17 16.5v-8"/></svg>
+          <span>Statistici</span>
+        </a>
+        <a class="nav-item" href="#clasamente" data-route="clasamente">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7"/></svg>
+          <span>Clasamente</span>
         </a>
       </nav>
     </div>
@@ -230,6 +244,39 @@
       <p class="h-count" id="f-count"></p>
       <ul class="f-list" id="f-list"></ul>
       <p class="empty" id="f-empty" hidden>Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
+    </section>
+
+    <section class="view view-stats" id="view-trenuri" aria-labelledby="trenuri-heading" hidden>
+      <div class="page-head">
+        <h1 id="trenuri-heading">Trenuri</h1>
+        <p class="page-sub">Catalogul trenurilor observate pe tabela din Gara de Nord, cu statistici de întârziere: un rând pentru fiecare număr de tren și panou (sosiri și plecări separat). Întârzierea este cea citită pe tabela de la București Nord.</p>
+      </div>
+      <div class="st-root" id="st-trenuri"></div>
+    </section>
+
+    <section class="view view-stats" id="view-tren" aria-labelledby="tren-heading" hidden>
+      <div class="page-head">
+        <h1 id="tren-heading">Tren</h1>
+        <p class="page-sub" id="tren-sub"></p>
+      </div>
+      <div class="st-root" id="st-tren"></div>
+    </section>
+
+    <section class="view view-stats" id="view-statistici" aria-labelledby="statistici-heading" hidden>
+      <div class="page-head">
+        <h1 id="statistici-heading">Statistici</h1>
+        <p class="page-sub">Cât de punctuale au fost trenurile, după întârzierea citită pe tabela de la București Nord. Sosirile și plecările sunt mereu separate.</p>
+      </div>
+      <div class="st-root" id="st-statistici"></div>
+    </section>
+
+    <section class="view view-stats" id="view-clasamente" aria-labelledby="clasamente-heading" hidden>
+      <div class="page-head">
+        <h1 id="clasamente-heading">Clasamente</h1>
+        <p class="page-sub">Cele mai întârziate și cele mai punctuale trenuri (număr de tren × panou), doar cu eșantion suficient. Întârzierea este cea citită pe tabela de la București Nord.</p>
+      </div>
+      <div class="st-root" id="st-clasamente"></div>
+      <div class="st-rank-stations" id="rank-stations"></div>
     </section>
 
     <section class="view view-versions" id="view-versiuni" aria-labelledby="versiuni-heading" hidden>

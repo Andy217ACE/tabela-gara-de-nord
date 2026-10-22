@@ -22,3 +22,4 @@ def legacy_rules(monkeypatch):
         monkeypatch.setattr(quality, name, 1)
     monkeypatch.setattr(store, "GONE_AFTER_MISSES", 2)
     monkeypatch.setattr(store, "REAPPEAR_QUIET_MIN", -1)
+    monkeypatch.setattr(quality, "GHOST_MIN_LIFE_S", -1)  # short test services are not ghosts

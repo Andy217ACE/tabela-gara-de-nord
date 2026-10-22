@@ -190,7 +190,8 @@
     c.station.setAttribute("aria-label", where + (t.station || "stație necunoscută") +
       (unsure ? " (citire nesigură)" : ""));
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
-    c.station.title = unsure ? UNSURE : "";
+    // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
+    c.station.title = t.station ? t.station + (unsure ? " (" + UNSURE + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = t.train_type || "?";
     c.type.title = "Tip tren " + (t.train_type || "necunoscut");
@@ -199,7 +200,7 @@
     c.op.textContent = t.operator || "";
     c.op.hidden = !t.operator;
     c.op.classList.toggle("is-uncertain", unsure && !!t.operator);
-    c.op.title = unsure ? UNSURE : "";
+    c.op.title = t.operator ? t.operator + (unsure ? " (" + UNSURE + ")" : "") : "";
 
     c.delay.className = "delay delay-" + level;
     c.delay.replaceChildren(
@@ -459,7 +460,14 @@
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
-    "#ocr": "ocr", "#versiuni": "versiuni" };
+    "#ocr": "ocr", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
+    "#statistici": "statistici", "#clasamente": "clasamente" };
+  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "versiuni", "trenuri", "tren", "statistici",
+    "clasamente"];
+  var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
+    trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente" };
+  // nav item highlighted for a route without its own entry (#tren → „Trenuri”)
+  var NAV_PARENT = { tren: "trenuri" };
   var currentRoute = null;
 
   // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
@@ -493,18 +501,17 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
-    ["tabela", "istoric", "urmarite", "ocr", "versiuni"].forEach(function (v) {
+    VIEWS.forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
     });
     document.querySelectorAll(".nav-item").forEach(function (a) {
-      if (a.dataset.route === name) a.setAttribute("aria-current", "page");
+      if (a.dataset.route === (NAV_PARENT[name] || name)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    // a view may refine the title later (stats.js: „Tren 1636 · …”)
     document.title = name === "tabela" ? "Tabela Gara de Nord"
-      : (name === "istoric" ? "Istoric" : name === "ocr" ? "Capturi OCR"
-        : name === "versiuni" ? "Versiuni" : "Urmărite") +
-        " · Tabela Gara de Nord";
+      : (TITLES[name] || "Tabela Gara de Nord") + " · Tabela Gara de Nord";
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);
     if (changed) window.scrollTo(0, 0);

@@ -40,6 +40,9 @@ DELAY_CONFIRM = 2  # a delay change is applied after this many consecutive ident
 DELAY_BIG = 100  # a reading at least this large...
 DELAY_BIG_JUMP = 60  # ...this far from the confirmed value...
 DELAY_BIG_CONFIRM = 3  # ...needs this many consecutive readings
+# a value that is the confirmed one plus one extra digit (25 -> 425: the "+" read as a
+# digit) needs this many: a one-off misread never lasts that long, a real 150 after 15 does
+DELAY_PLUS_CONFIRM = 5
 
 # --- platform validation -----------------------------------------------------
 PLATFORM_CONFIRM = 2
@@ -112,16 +115,21 @@ def public_services_where(alias: str = "s") -> str:
     return " AND ".join(parts)
 
 
+def _create(conn: sqlite3.Connection) -> None:
+    for stmt in _SCHEMA.split(";"):
+        if stmt.strip():
+            conn.execute(stmt)
+    conn.execute("INSERT INTO dq_meta(key, value) VALUES ('version', ?)"
+                 " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (DQ_VERSION,))
+
+
 def ensure_schema(conn: sqlite3.Connection, now_iso: str | None = None) -> None:
-    """Create the quality tables (idempotent, additive, atomic). Records when live
-    validation started (``live_since``) the first time only."""
+    """Create the quality tables (idempotent, additive, atomic). Called by the app at
+    start (Store.migrate): records when live validation started (``live_since``), the
+    first time only (never by the backfill)."""
     conn.execute("BEGIN IMMEDIATE")
     try:
-        for stmt in _SCHEMA.split(";"):
-            if stmt.strip():
-                conn.execute(stmt)
-        conn.execute("INSERT INTO dq_meta(key, value) VALUES ('version', ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (DQ_VERSION,))
+        _create(conn)
         conn.execute("INSERT OR IGNORE INTO dq_meta(key, value) VALUES ('live_since', ?)",
                      (now_iso or datetime.now().astimezone().isoformat(),))
         conn.execute("COMMIT")
@@ -141,11 +149,10 @@ def digit_dropped(value: int, ref: int | None) -> bool:
     return any(int(s[:i] + s[i + 1:]) == ref for i in range(len(s)))
 
 
-def delay_needs(value: int, confirmed: int | None) -> int | None:
-    """Consecutive identical readings needed before `value` replaces `confirmed`;
-    None: never (a misread "+")."""
+def delay_needs(value: int, confirmed: int | None) -> int:
+    """Consecutive identical readings needed before `value` replaces `confirmed`."""
     if digit_dropped(value, confirmed):
-        return None
+        return DELAY_PLUS_CONFIRM
     if confirmed is not None and value >= DELAY_BIG and abs(value - confirmed) >= DELAY_BIG_JUMP:
         return DELAY_BIG_CONFIRM
     return DELAY_CONFIRM
@@ -173,7 +180,7 @@ def run_times(conn: sqlite3.Connection) -> list[float]:
 
 def classify_delays(first_seen: str, last_seen: str, last_delay: int,
                     events: list[tuple[int, str, str | None, str | None]],
-                    run_ts: list[str]) -> dict:
+                    run_ts: list[float]) -> dict:
     """Retroactive delay check of one service.
 
     `events`: its delay events (id, ts, old, new), chronological. `run_ts`: sorted
@@ -196,6 +203,7 @@ def classify_delays(first_seen: str, last_seen: str, last_delay: int,
     suspect: dict[int, str] = {}
     confirmed_vals: list[int] = []
     prev: int | None = None
+    last_raw: int | None = None  # previous value as read (reference while none confirmed)
     for i, (start, value, eid) in enumerate(segs):
         if value is None:
             continue
@@ -204,9 +212,13 @@ def classify_delays(first_seen: str, last_seen: str, last_delay: int,
         hi = bisect_right(run_ts, end) if last else bisect_left(run_ts, end)
         frames = max(0, hi - bisect_left(run_ts, _ts(start).timestamp()))
         nxt = None if last else segs[i + 1][1]
-        need = delay_needs(value, prev) if prev is not None else DELAY_CONFIRM
-        plus = digit_dropped(value, prev) or digit_dropped(value, nxt)
-        if not plus and need is not None and frames >= need:
+        ref = prev if prev is not None else last_raw
+        need = delay_needs(value, ref) if ref is not None else DELAY_CONFIRM
+        last_raw = value
+        if digit_dropped(value, nxt):
+            need = max(need, DELAY_PLUS_CONFIRM)
+        plus = need == DELAY_PLUS_CONFIRM
+        if frames >= need:
             prev = value
             confirmed_vals.append(value)
             continue
@@ -360,11 +372,13 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
     raw column is modified. Delay verdicts cover services first seen before live
     validation started (``dq_meta.live_since``); later ones were validated live.
     Returns {"before": summary, "after": summary, "changed": {...}}."""
-    ensure_schema(conn)
     before = summary(conn)
-    live_since = conn.execute("SELECT value FROM dq_meta WHERE key='live_since'").fetchone()[0]
     conn.execute("BEGIN IMMEDIATE")
     try:
+        _create(conn)  # inside the transaction: a dry run leaves no trace
+        row = conn.execute("SELECT value FROM dq_meta WHERE key='live_since'").fetchone()
+        # never set here: if the new code never ran, all of the history is "before"
+        live_since = row[0] if row else "9999-12-31T00:00:00+00:00"
         for start, end, label, note in LOW_QUALITY_PERIODS:
             conn.execute("INSERT INTO quality_periods(start_ts, end_ts, label, note)"
                          " VALUES (?,?,?,?) ON CONFLICT(start_ts, end_ts) DO UPDATE SET"
@@ -396,11 +410,18 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
                       "ghost_of": verdict[1] if verdict else None,
                       "low_quality": low, "station_canonical": st_c,
                       "operator_canonical": op_c}
-            if fs < live_dt:
+            if s["status"] == "gone" and _ts(s["last_seen"]) < live_dt:
                 res = classify_delays(s["first_seen"], s["last_seen"], s["last_delay"],
                                       events.get(sid, []), run_ts)
                 fields.update(delay_checked=1, max_delay_clean=res["max"],
                               last_delay_clean=res["last"])
+                for (eid,) in conn.execute(
+                        "SELECT q.event_id FROM event_quality q JOIN events e ON e.id=q.event_id"
+                        " WHERE e.service_id=? AND q.suspect=1", (sid,)).fetchall():
+                    if eid not in res["suspect"]:  # verdict changed: derived flag cleared
+                        changed["suspect_events"] += 1
+                        conn.execute("UPDATE event_quality SET suspect=0, reason='cleared'"
+                                     " WHERE event_id=?", (eid,))
                 for eid, why in res["suspect"].items():
                     cur = conn.execute("SELECT reason FROM event_quality WHERE event_id=?",
                                        (eid,)).fetchone()

@@ -14,8 +14,8 @@ BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
 DAY = date(2026, 10, 20)
 KEYS = {"board", "train_type", "train_no", "station", "operator", "sched_time", "max_delay",
-        "final_delay", "platform", "status", "first_seen", "last_seen", "uncertain",
-        "low_quality"}
+        "final_delay", "platform", "status", "first_seen", "last_seen", "uncertain", "id",
+        "delay_known", "delay_seen", "low_quality"}
 
 
 def R(board, no, t, delay=0, platform=None, station="Brasov"):

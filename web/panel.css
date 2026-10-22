@@ -240,7 +240,7 @@ html[data-view="panou"] main { max-width: 1760px; }
 }
 
 .pnl-filters { flex: 1 1 520px; min-width: 0; }
-.pnl-filters-sum { display: none; }
+.pnl-filters .pnl-filters-sum { display: none; }
 .pnl-filters-box {
   display: flex;
   flex-wrap: wrap;
@@ -483,17 +483,53 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
 .pnl-row.is-recent .c-changed,
 .pnl-row.is-recent .c-msg { color: var(--p-info); }
 
-.c-fav { width: 4.5rem; padding-right: 0 !important; }
+.c-fav { padding-right: 0 !important; }
 .pnl-rowbtns { display: inline-flex; align-items: center; gap: 2px; }
-.c-time { width: 5rem; font-weight: 700; font-size: 1.15em; color: var(--p-amber); white-space: nowrap; }
+.pnl-row .c-time { font-weight: 700; font-size: 1.15em; color: var(--p-amber); white-space: nowrap; }
 .c-train { white-space: nowrap; }
-.c-station { font-family: var(--font); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere; }
-.c-op { font-family: var(--font); font-size: 0.85em; color: var(--p-text-2); }
+.pnl-row .c-station { font-family: var(--font); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.pnl-row .c-op { font-family: var(--font); font-size: 0.85em; color: var(--p-text-2); }
 .c-delay { white-space: nowrap; }
-.c-plat { width: 4rem; text-align: center; }
-.c-msg { font-family: var(--font); font-size: 0.8em; color: var(--p-text-2); }
-.c-changed { width: 6rem; font-size: 0.85em; color: var(--p-text-2); white-space: nowrap; }
-thead .c-plat { text-align: center; }
+.c-plat { text-align: center; }
+.pnl-row .c-msg { font-family: var(--font); font-size: 0.8em; color: var(--p-text-2); }
+.pnl-row .c-changed { font-size: 0.85em; color: var(--p-text-2); white-space: nowrap; }
+
+/* text lung (stație, operator, mesaj): cel mult 2 rânduri, apoi „…"; valoarea completă
+   e în title-ul celulei, în aria-label-ul rândului și în detaliu — lățimile coloanelor și
+   înălțimea rândurilor nu mai depind de date */
+.pnl-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+
+/* desktop/tabletă: lățimi de coloană fixe (table-layout: fixed, nu după conținut) și rânduri
+   de aceeași înălțime. th are fontul tabelului, ca unitățile em să fie aceleași ca în rânduri;
+   eticheta rămâne mică. Coloana „Din / spre" primește restul lățimii. */
+@media (min-width: 760px) {
+  .pnl-table { table-layout: fixed; }
+  .pnl-table thead th { font-size: 1em; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+  .pnl-th-label,
+  .pnl-table thead .pnl-sortbtn { font-size: 0.6875rem; letter-spacing: 0.12em; }
+  .pnl-table thead .pnl-sortbtn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .pnl-table .c-fav { width: 4.5rem; }
+  .pnl-table .c-time { width: calc(4em + 20px); }
+  .pnl-table .c-train { width: calc(6.6em + 20px); }
+  .pnl-table .c-op { width: 17%; }
+  .pnl-table .c-delay { width: calc(4.6em + 40px); }
+  .pnl-table .c-plat { width: calc(2.2em + 28px); }
+  .pnl-table .c-msg { width: 15%; }
+  .pnl-table .c-changed { width: calc(3em + 20px); }
+  .pnl-row td { overflow: hidden; }
+  .pnl-row .c-fav { height: calc(2.4em + 24px); } /* ≥ 2 rânduri de stație sau caseta liniei */
+  .pnl-row .c-train,
+  .pnl-row .c-delay { text-overflow: ellipsis; }
+  .pnl-plat { vertical-align: middle; }
+}
 
 .pnl-train { display: inline-flex; align-items: center; gap: 8px; }
 .pnl-no { font-weight: 700; }
@@ -621,6 +657,11 @@ thead .c-plat { text-align: center; }
 }
 html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
 .pnl.is-fs .pnl-table { font-size: clamp(1rem, 0.7rem + 0.8vw, 1.6rem); }
+/* ecran complet cu „Toate" alăturate: jumătate de lățime → font ceva mai mic, ca stația să
+   aibă loc (aceeași mărime în ambele panouri) */
+@media (min-width: 1600px) {
+  .pnl.is-fs[data-board="all"] .pnl-table { font-size: clamp(1rem, 0.4rem + 0.7vw, 1.4rem); }
+}
 .pnl.is-fs .pnl-detail { bottom: 16px; }
 
 /* ---------- telefon: rânduri pe două niveluri, fără scroll orizontal ---------- */
@@ -633,7 +674,7 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
   .pnl-chip { padding: 3px 8px; }
   .pnl-boardseg { width: 100%; }
   .pnl-filters { flex-basis: 100%; }
-  .pnl-filters-sum { display: inline-flex; width: 100%; justify-content: center; }
+  .pnl-filters .pnl-filters-sum { display: inline-flex; width: 100%; justify-content: center; }
   .pnl-filters[open] .pnl-filters-sum { margin-bottom: 10px; }
   .pnl-boardseg .pnl-seg { flex: 1; }
   .pnl-field { flex: 1 1 40%; }
@@ -707,10 +748,11 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
 @media (min-width: 1600px) {
   .pnl[data-board="all"] .pnl-body {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
   }
+  .pnl[data-board="all"] .pnl-board { min-width: 0; }
   .pnl[data-board="all"] .c-msg { display: none; }
 }
 

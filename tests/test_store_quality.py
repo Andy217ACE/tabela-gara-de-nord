@@ -88,6 +88,14 @@ def test_plus_read_as_digit_is_never_applied(store, prev, misread):
     assert svc(store)["last_delay"] == prev
 
 
+def test_real_large_delay_after_small_one_is_applied_eventually(store):
+    # 15 -> 150 is also "15 plus a digit": a real 150 lasts, so it is applied after 5 frames
+    store.ingest(frame(15), at(0))
+    for m in range(1, 6):
+        store.ingest(frame(150), at(m))
+    assert delays(store) == [("15", "150")]
+
+
 def test_huge_jump_needs_three_frames(store):
     # R 10260: 15 -> 945 in one frame; a real jump of that size must persist 3 frames
     store.ingest(frame(15), at(0))
@@ -280,7 +288,7 @@ def test_v5_db_gets_quality_tables_without_touching_data(tmp_path):
     s = Store(str(db))
     s.migrate()
     assert {"service_quality", "event_quality"} <= _tables(s._conn)
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert s._conn.execute("SELECT * FROM services ORDER BY id").fetchall() == before
     s.close()
 
@@ -391,3 +399,66 @@ def test_backfill_cli(tmp_path, capsys):
     assert quality.main(["--db", str(db)]) == 0
     out = capsys.readouterr().out
     assert '"ghosts": 8' in out
+
+
+def test_ghost_leaving_emits_no_gone_event(store):
+    store.ingest(frame(), at(0))
+    store.ingest(frame(extra=[R(9014, "09:12", station="BUZAU")]), at(1))
+    evs = []
+    for m in (2, 3, 4):
+        evs += store.ingest(frame(), at(m))
+    assert [e for e in evs if e.row.train_no == 9014] == []
+    assert kinds(store, "gone", 9014) == []
+
+
+def test_unknown_clean_delay_is_not_zero_in_history(tmp_path):
+    s = Store(str(tmp_path / "u.db"))
+    s.migrate()
+    c = s._conn
+    c.execute("UPDATE dq_meta SET value='2026-10-22T00:00:00+03:00' WHERE key='live_since'")
+    base = datetime(2026, 10, 21, 7, 0, tzinfo=BUC)
+    for m in range(0, 10):
+        c.execute("INSERT INTO runs(ts, ok, n_rows) VALUES (?,1,24)",
+                  ((base + timedelta(minutes=m)).isoformat(),))
+    sid = c.execute(
+        "INSERT INTO services(board, service_date, train_type, train_no, station, operator,"
+        " sched_time, first_seen, last_seen, last_delay, status, station_raw)"
+        " VALUES ('arrival','2026-10-21','R',4242,'X','o','07:30',?,?,425,'gone','X')",
+        ((base + timedelta(minutes=3)).isoformat(), (base + timedelta(minutes=5)).isoformat())
+    ).lastrowid
+    c.execute("INSERT INTO events(service_id, ts, kind, old, new) VALUES (?,?,'delay','25','425')",
+              (sid, (base + timedelta(minutes=4)).isoformat()))
+    quality.backfill(c)
+    h = [x for x in s.history(base.date()) if x["train_no"] == 4242][0]
+    assert h["max_delay"] is None and h["final_delay"] is None and h["delay_seen"] is False
+    s.close()
+
+
+def test_notifier_gone_after_short_return_is_pushed_again(store):
+    import asyncio
+
+    from app.notifier import Notifier
+
+    sent = []
+
+    async def send(sub, data):
+        sent.append(data["body"])
+
+    store.subscribe("https://fcm.googleapis.com/x", "k", "a")
+    store.follow("https://fcm.googleapis.com/x", 5030, T0.date(), today=T0.date())
+    n = Notifier(store, send)
+
+    async def tick(rows, m):
+        await n.handle(store.ingest(rows, at(m)), T0.date())
+
+    async def run():
+        for m in range(0, 4):  # a real train: on the board for minutes
+            await tick(frame(), m)
+        for m in range(4, 9):
+            await tick(_without(frame()), m)
+        await tick(frame(), 10)  # short return: no 'appeared'
+        await tick(frame(), 11)
+        for m in range(12, 17):
+            await tick(_without(frame()), m)
+    asyncio.run(run())
+    assert sum("ieșit" in b for b in sent) == 2

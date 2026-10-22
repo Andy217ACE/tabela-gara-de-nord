@@ -5,6 +5,32 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.04 — 2026-10-21
+
+### Adăugat
+- **Rezultatul final al fiecărei călătorii** (în detaliul din Istoric): „confirmat” doar cu dovadă — întârzierea citită cu cel mult 15 min înainte ca trenul să dispară de pe tabelă, iar dispariția observată după ora estimată (programat + întârziere). Altfel „neconfirmat” (cu motivul) sau „necunoscut”; niciodată presupus.
+- **Data de serviciu** afișată explicit (ziua orei programate; un tren de 00:05 citit la 23:58 aparține zilei următoare) și graficul evoluției întârzierii din citirile reale, cu momentul dispariției.
+- **Trenuri**: catalog cu un rând pe număr de tren și panou — N călătorii, câte au întârzierea citită, % la timp (prag configurabil), medie, mediană, p90, maxim, peste 30 min, calitatea datelor; căutare, sortare, export CSV/JSON.
+- **Profil tren** (`#tren?nr=`): statistici separate pe sosiri și plecări, distribuția întârzierilor, lista călătoriilor cu rezultatul fiecăreia.
+- **Statistici**: perioada, călătorii / trenuri / observații, calitatea datelor, distribuții și medii pe oră, zi a săptămânii și lună, cu filtre (panou, perioadă, prag, eșantion minim, doar confirmate).
+- **Clasamente**: cele mai întârziate și cele mai punctuale trenuri, doar cu eșantion minim (implicit 5 călătorii), cu N afișat și avertisment când nu există suficiente date.
+- API public: `/api/journeys`, `/api/journeys/{id}`, `/api/trains/stats`, `/api/trains/{nr}/journeys`, `/api/stats`, `/api/stats/rankings` (JSON și `format=csv`); `/api/stations*` pregătit pentru paginile pe stații.
+
+### Reguli de date
+- Întârzierea folosită este ultima valoare CITITĂ pe tabela din București Nord, doar cu dovada citirii (schema DB v6, `delay_read_at`). Pentru călătoriile de dinainte, dovada vine doar din observațiile OCR păstrate; restul au întârzierea „necunoscută” (nu 0) și nu intră în statistici.
+- Sub eșantionul minim se afișează doar cifrele brute, fără procente și fără p90.
+- Un salt al întârzierii de peste 30 min într-un singur cadru (ex. „15” citit „945”) se aplică doar după a doua citire identică.
+
+## Beta 1.03 — 2026-10-21
+
+### Reparat
+- Modul „Panou”: lățimea coloanelor nu mai depinde de date — numele lungi de stație sau operator (ex. „Chișinău Triaj Internațional – Nord”) nu mai lățesc zona de text și coloanele nu mai sar de la o actualizare la alta (tabel cu lățimi fixe).
+- Textul lung (stație, operator, stare) se afișează pe cel mult 2 rânduri, apoi „…”; valoarea completă rămâne în tooltip (title), în detaliul trenului și pentru cititoarele de ecran.
+- Toate rândurile au aceeași înălțime, în ambele panouri.
+- Ecran complet pe desktop: coloanele „Sosiri” și „Plecări” au aceeași lățime, antetele și rândurile sunt aliniate sus și pe orizontală; fontul se adaptează când cele două panouri stau alăturate.
+- Modul „Carduri”: pe desktop, cele două coloane au aceeași lățime și cardurile aceeași înălțime (rândurile rămân aliniate); operatorul lung e trunchiat cu „…”, numele complet e în tooltip. Pe telefon, stația are cel mult 2 rânduri și nu apare scroll orizontal.
+- Butonul „Caută, filtrează, sortează” nu mai apare pe desktop (era vizibil deși filtrele sunt deja deschise).
+
 ## Beta 1.02 — 2026-10-21
 
 ### Reparat

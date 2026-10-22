@@ -23,7 +23,7 @@ BUC = ZoneInfo("Europe/Bucharest")
 ])
 def test_digit_dropped_real_cases(value, ref):
     assert q.digit_dropped(value, ref)
-    assert q.delay_needs(value, ref) is None
+    assert q.delay_needs(value, ref) == q.DELAY_PLUS_CONFIRM
 
 
 @pytest.mark.parametrize("value,ref", [(45, 15), (100, 40), (945, 15), (25, None), (40, 10)])

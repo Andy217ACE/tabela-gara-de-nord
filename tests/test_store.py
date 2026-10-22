@@ -196,6 +196,7 @@ def test_ingest_uses_bucharest_service_date(store):
 
 
 def test_gone_after_three_consecutive_misses(store):
+    store.ingest(base_rows(), T0 - timedelta(minutes=5))  # listed for minutes: not a ghost
     store.ingest(base_rows(), T0)
     rows = base_rows()[1:] + [R("arrival", 1650, "13:00")]
     ev = store.ingest(rows, T0 + timedelta(minutes=1))

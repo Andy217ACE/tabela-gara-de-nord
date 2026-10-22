@@ -41,7 +41,7 @@ REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'a
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -247,6 +247,30 @@ def _iso(d: date | str) -> str:
     return d if isinstance(d, str) else d.isoformat()
 
 
+def _backfill_delay_read_at(c: sqlite3.Connection) -> None:
+    """Set delay_read_at for services stored before v6 from observations with
+    delay_read=1 only (v5+, both 0 and non-zero readings). Older evidence (delay
+    events, non-zero last_delay) exists only for DELAYED trains: using it would bias
+    the statistics towards delays, so those services keep NULL (delay unknown)."""
+    has_obs = c.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
+                        " AND name='observations'").fetchone()
+    if not has_obs:
+        return
+    upd = []
+    # only readings the store applied: confident rows whose value is the stored one
+    for sid, at in c.execute("SELECT o.service_id, MAX(o.observed_at) FROM observations o"
+                             " JOIN services s ON s.id = o.service_id"
+                             " WHERE o.delay_read=1 AND o.validation_state IN ('ok','uncertain')"
+                             " AND o.delay_min = s.last_delay"
+                             " GROUP BY o.service_id").fetchall():
+        try:
+            t = _local(datetime.fromisoformat(at.replace("Z", "+00:00")))
+        except (ValueError, AttributeError):
+            continue
+        upd.append((t.isoformat(), sid))
+    c.executemany("UPDATE services SET delay_read_at=? WHERE id=? AND delay_read_at IS NULL", upd)
+
+
 def _today() -> date:
     """Today in Europe/Bucharest (patched in tests)."""
     return datetime.now(TZ).date()
@@ -256,7 +280,9 @@ def _clean_delays(s: sqlite3.Row) -> dict:
     """max_delay / final_delay of one history row: the confirmed values of a service
     checked retroactively (when any was confirmed), else the stored ones without the
     suspect events."""
-    if s["delay_checked"] and s["last_delay_clean"] is not None:
+    if s["delay_checked"]:
+        if s["last_delay_clean"] is None:  # no value confirmed: unknown, never 0
+            return {"max_delay": None, "final_delay": None, "delay_seen": False}
         return {"max_delay": max(s["max_delay_clean"] or 0, s["last_delay_clean"]),
                 "final_delay": s["last_delay_clean"]}
     return {"max_delay": max(s["last_delay"] or 0, s["ev_max"] or 0),
@@ -321,6 +347,8 @@ class Store:
             if version < 5:
                 from app.observations import migrate_to_5  # v5: captures/observations/trains
                 migrate_to_5(self._conn)
+            if version < 6:
+                self._migrate_to_6()
             # data-quality side tables: additive, idempotent, outside the version ladder
             quality.ensure_schema(self._conn)
 
@@ -346,6 +374,23 @@ class Store:
     def _migrate_to_4(self) -> None:
         """v3 -> v4: weather_observations (additive)."""
         self._script("BEGIN;" + _WEATHER_SCHEMA + "PRAGMA user_version = 4;COMMIT;")
+
+    def _migrate_to_6(self) -> None:
+        """v5 -> v6: services.delay_read_at (proof that the delay cell was read), backfilled
+        only from real evidence, in one transaction with the version bump."""
+        c = self._conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(services)")}
+            if "delay_read_at" not in cols:
+                c.execute("ALTER TABLE services ADD COLUMN delay_read_at TEXT")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_events_kind_service ON events(kind, service_id)")
+            _backfill_delay_read_at(c)
+            c.execute("PRAGMA user_version = 6")
+            c.execute("COMMIT")
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
 
     # -- ingest -----------------------------------------------------------
 
@@ -577,11 +622,12 @@ class Store:
                     "INSERT INTO services(board, service_date, train_type, train_no, station,"
                     " operator, sched_time, first_seen, last_seen, last_delay, last_platform,"
                     " flagged, status, miss_count, last_read, operator_raw, station_raw,"
-                    " uncertain)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?)",
+                    " uncertain, delay_read_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'listed',0,?,?,?,?,?)",
                     (r.board, sd, r.train_type, r.train_no, r.station, r.operator,
                      r.sched_time, first, ts_s, r.delay_min, r.platform, int(r.flagged), ts_s,
-                     r.operator_raw, r.station_raw, int(r.uncertain)),
+                     r.operator_raw, r.station_raw, int(r.uncertain),
+                     ts_s if r.delay_read else None),
                 ).lastrowid
                 seen.add(sid)
                 self._pending_read[sid] = r.delay_read
@@ -605,10 +651,10 @@ class Store:
             self._pending_read[sid] = r.delay_read
             if r.delay_read and r.delay_min != delay:
                 need = quality.delay_needs(r.delay_min, delay)
-                if need is None:
-                    log.info("delay %d of service %d rejected ('+' read as a digit of %d)",
-                             r.delay_min, sid, delay)
-                elif self._confirmed("delay", sid, cur["board"], r.delay_min, need):
+                if need == quality.DELAY_PLUS_CONFIRM:
+                    log.info("delay %d of service %d looks like '+' read as a digit of %d:"
+                             " waiting for %d readings", r.delay_min, sid, delay, need)
+                if self._confirmed("delay", sid, cur["board"], r.delay_min, need):
                     emit(sid, "delay", row, sd, str(delay), str(r.delay_min))
                     delay = r.delay_min
             elif not r.delay_read and ("delay", sid) in self._cand:
@@ -619,6 +665,9 @@ class Store:
                     quality.platform_needs(platform, r.platform)):
                 emit(sid, "platform", row, sd, _plat(platform), _plat(r.platform))
                 platform = r.platform
+            # proof of a reading (delay_read_at, v6) only from a value actually applied:
+            # the stored one read again, or a change just confirmed (not a pending one)
+            applied = r.delay_read and r.delay_min == delay
             names = (r.station, r.operator, r.station_raw, r.operator_raw, int(r.uncertain))
             if r.uncertain and not cur["uncertain"]:
                 # Never replace names matched to a known value by unmatched OCR text.
@@ -627,9 +676,10 @@ class Store:
             c.execute(
                 "UPDATE services SET train_type=?, station=?, operator=?, station_raw=?,"
                 " operator_raw=?, uncertain=?, last_seen=?, last_delay=?, last_platform=?,"
-                " flagged=?, status='listed', miss_count=0, last_read=? WHERE id=?",
+                " flagged=?, status='listed', miss_count=0, last_read=?,"
+                " delay_read_at=CASE WHEN ? THEN ? ELSE delay_read_at END WHERE id=?",
                 (r.train_type, *names, ts_s, delay, platform,
-                 int(r.flagged), ts_s, sid),
+                 int(r.flagged), ts_s, int(applied), ts_s, sid),
             )
 
         # Low-confidence rows: only keep an exactly matching service alive.
@@ -655,8 +705,8 @@ class Store:
             elif misses >= GONE_AFTER_MISSES:
                 c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
                           (misses, s["id"]))
-                emit(s["id"], "gone", self._row_of(s), s["service_date"])
-                self._judge_ghost(s)
+                if not self._judge_ghost(s):  # a ghost leaving is no event, no push
+                    emit(s["id"], "gone", self._row_of(s), s["service_date"])
             else:
                 c.execute("UPDATE services SET miss_count=? WHERE id=?", (misses, s["id"]))
         return events
@@ -671,7 +721,7 @@ class Store:
         self._cand_next[(kind, sid)] = (board, value, n)
         return False
 
-    def _judge_ghost(self, s: sqlite3.Row) -> None:
+    def _judge_ghost(self, s: sqlite3.Row) -> bool:
         """A service leaving the board: flag it if it was a misread duplicate or a
         one-off sighting (app.quality.ghost_verdict). Never deletes anything."""
         verdict = quality.judge_ghost(self._conn, s["id"])
@@ -679,6 +729,7 @@ class Store:
             self.last_ghost_numbers.add(s["train_no"])
             log.info("service %d (%s %s) flagged ghost: %s", s["id"], s["train_no"],
                      s["sched_time"], verdict[0])
+        return verdict is not None
 
     @staticmethod
     def _row_of(s: sqlite3.Row) -> Row:
@@ -831,11 +882,12 @@ class Store:
             where.append("s.sched_time <= ?")
             args.append(time_to)
         sql = (
-            "SELECT s.board, s.train_type, s.train_no,"
+            "SELECT s.id, s.board, s.train_type, s.train_no,"
             " COALESCE(q.station_canonical, s.station) AS station,"
             " COALESCE(q.operator_canonical, s.operator) AS operator, s.sched_time,"
             " s.last_delay, s.last_platform, s.status, s.first_seen, s.last_seen, s.uncertain,"
-            " q.delay_checked, q.max_delay_clean, q.last_delay_clean, q.low_quality,"
+            " s.delay_read_at, q.delay_checked, q.max_delay_clean, q.last_delay_clean,"
+            " q.low_quality,"
             " (SELECT MAX(MAX(COALESCE(CAST(e.old AS INTEGER), 0),"
             "                 COALESCE(CAST(e.new AS INTEGER), 0)))"
             "    FROM events e WHERE e.service_id = s.id AND e.kind = 'delay'"
@@ -847,6 +899,11 @@ class Store:
         with self._lock:
             found = self._conn.execute(sql, args).fetchall()
         return [{
+            "id": s["id"], "delay_known": s["delay_read_at"] is not None,
+            # display only: a delay was read at some point (pre-v6 delay events count);
+            # statistics use delay_known (proof stored per journey)
+            "delay_seen": s["delay_read_at"] is not None or (s["ev_max"] or 0) > 0
+            or (s["last_delay"] or 0) > 0,
             "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
             "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
             **_clean_delays(s), "platform": s["last_platform"],
