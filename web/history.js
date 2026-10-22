@@ -225,7 +225,7 @@
         " (" + (BOARD_LABEL[s.board] || "") + " " + (s.sched_time || "") + ")");
       train.addEventListener("click", function () { openDetail(s, q.date, train); });
       cell(tr, "Tren", "h-trn", train);
-      cell(tr, "Stație", "h-station", s.station ? nameNode(titleCase(s.station), s) : "—");
+      cell(tr, "Stație", "h-station", s.station ? stationLink(s.station, nameNode(titleCase(s.station), s)) : "—");
       cell(tr, "Operator", "h-op", s.operator ? nameNode(s.operator, s) : "—");
       cell(tr, "Întârziere max. observată", "h-max",
            delayBadge(s.max_delay, "Cea mai mare întârziere văzută pe tabelă", known));
@@ -239,13 +239,21 @@
       cell(tr, "Linia", "h-plat", plat);
       cell(tr, "Stare", "h-status", STATUS_LABEL[s.status] || s.status || "—");
       tr.addEventListener("click", function (e) {
-        if (e.target.closest("button")) return;
+        if (e.target.closest("button, a")) return;
         openDetail(s, q.date, train);
       });
       tbody.append(tr);
     });
     table.append(cap, thead, tbody);
     box.append(table);
+  }
+
+  // station name → its page (#statie?nume=<canonical>, web/stats.js); `content` = text or node
+  function stationLink(name, content) {
+    var a = el("a", "station-link");
+    a.href = "#statie?nume=" + encodeURIComponent(name);
+    a.append(content == null ? titleCase(name) : content);
+    return a;
   }
 
   // canonical name from an uncertain OCR match (API field `uncertain`): dotted underline
@@ -631,9 +639,14 @@
 
   function journeyHead(j) {
     $("h-detail-title").textContent = (j.train_type || "Tren") + " " + j.train_no;
-    $("h-detail-sub").textContent = (BOARD_LABEL[j.board] || "") + " " + (j.sched_time || "") +
-      (j.station ? " · " + titleCase(j.station) : "") +
-      (j.service_date ? " · " + dayLabel(j.service_date) : "");
+    var sub = $("h-detail-sub");
+    sub.replaceChildren((BOARD_LABEL[j.board] || "") + " " + (j.sched_time || ""));
+    if (j.station) {
+      var sl = stationLink(j.station);
+      sl.addEventListener("click", closeDetail);   // also when the hash does not change
+      sub.append(" · ", sl);
+    }
+    if (j.service_date) sub.append(" · " + dayLabel(j.service_date));
   }
 
   function showDialog() {
