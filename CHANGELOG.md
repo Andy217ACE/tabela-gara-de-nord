@@ -5,6 +5,15 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.11 — 2026-10-22
+
+### Reparat
+- Istoric pe toate zilele, pe telefoane (390 px și mai înguste): rezultatul „necunoscut” împreună cu marcajul „calitate redusă” nu mai împinge pagina lateral (problema a apărut live la trenuri văzute și pe 21.10, în perioada beta).
+- Marcajul „calitate redusă” trece pe rândul următor, sub rezultat, în loc să iasă din card.
+- La fel pentru orice rezultat lung din cardurile Istoricului pe toate zilele: rândul „Rezultat” se poate împărți pe două rânduri.
+- Istoricul pe o singură zi și tabelul de pe desktop rămân neschimbate.
+- Teste noi în browser: niciun element din Istoric nu iese din ecran la 360, 390 și 1280 px, în temă luminoasă și întunecată.
+
 ## Beta 1.10 — 2026-10-22
 
 Calitatea datelor, partea 2. Raportul de reanaliză din 22.10 a găsit trei probleme care apar

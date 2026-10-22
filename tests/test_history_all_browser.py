@@ -59,7 +59,8 @@ def base_url(tmp_path_factory):
     _journey(c, "arrival", 1731, LAST, "08:15", 0)
     # one journey of the reduced-quality (beta) period: listed, marked, not in the summary
     lq = c.execute("SELECT id FROM services WHERE train_no=1621 AND board='arrival'"
-                   " AND service_date=?", (LAST.isoformat(),)).fetchone()[0]
+                   " AND service_date=?", ((LAST - timedelta(days=4)).isoformat(),)).fetchone()[0]
+    # (day 4 has an unread delay: "necunoscut" + the badge is the widest result cell at 390 px)
     c.execute("INSERT INTO service_quality(service_id, low_quality, updated_at) VALUES (?,1,?)",
               (lq, "2026-10-22T00:00:00Z"))
     c.commit()
@@ -112,9 +113,13 @@ def _open(browser, base_url, w, h, theme, hash_):
 
 
 NO_HSCROLL = "() => document.documentElement.scrollWidth <= window.innerWidth"
+# stricter: nothing in the Istoric view sticks out of the viewport (fonts differ between
+# machines; live a "necunoscut" + "calitate redusă" result cell overflowed at 390 px)
+INSIDE = """() => [...document.querySelectorAll('#view-istoric *')].filter(e => {
+  const r = e.getBoundingClientRect(); return r.width > 0 && r.right > innerWidth + 0.5; }).length"""
 
 
-@pytest.mark.parametrize("w,h", [(1280, 800), (390, 844)])
+@pytest.mark.parametrize("w,h", [(1280, 800), (390, 844), (360, 740)])
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_all_days_view(browser, base_url, w, h, theme):
     ctx, page, errors = _open(browser, base_url, w, h, theme, "#istoric?train=1621")
@@ -136,6 +141,7 @@ def test_all_days_view(browser, base_url, w, h, theme):
         assert page.locator("#h-results .delay-unread").count() > 0  # unknown is not 0
         assert page.evaluate(NO_HSCROLL)
         assert page.evaluate(COUNT_JS) == 1
+        assert page.evaluate(INSIDE) == 0
         page.click("#h-more")
         expect(page.locator("#h-results .h-row")).to_have_count(213)
         assert not page.is_visible("#h-more")
