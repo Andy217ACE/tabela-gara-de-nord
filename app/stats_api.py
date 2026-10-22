@@ -4,13 +4,14 @@ rankings. JSON by default, `format=csv` for exports. Delays are those READ on th
 București Nord board; arrivals and departures are never mixed."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from app import journeys, stations, stats
+from app import stats_overview as overview_v2
 
 router = APIRouter()
 MAX_QUERY = 40
@@ -153,6 +154,35 @@ async def stats_overview(request: Request):
     if _fmt(request) == "csv":
         raise _bad("Pentru export CSV folosiți /api/journeys?format=csv sau /api/trains/stats?format=csv.")
     return await run_in_threadpool(stats.overview, _store(request), p)
+
+
+@router.get("/api/stats/overview")
+async def stats_overview_v2(request: Request):
+    """Everything the #statistici page shows, in one cached read-only computation:
+    `perioada` (1|7|30|all), `board`, `operator`, `tip`, `doar_confirmate`, `prag`, `min`;
+    `format=csv&set=<name>` exports one data set."""
+    q = request.query_params
+    perioada = q.get("perioada") or "all"
+    if perioada not in overview_v2.PERIODS:
+        raise _bad("Perioadă invalidă (1, 7, 30 sau all).")
+    filters = {"perioada": perioada}
+    for name in ("operator", "tip"):
+        v = (q.get(name) or "").strip()
+        if len(v) > MAX_QUERY:
+            raise _bad(f"Parametru „{name}” prea lung.")
+        filters[name] = v or None
+    p = params(request)
+    today = datetime.now(journeys.TZ).date()
+    if perioada != "all":
+        p.date_from, p.date_to = overview_v2.period_range(perioada, today)
+    fmt = _fmt(request)
+    set_name = q.get("set") or ""
+    if fmt == "csv" and set_name not in overview_v2.SETS:
+        raise _bad("Set invalid pentru export CSV (" + ", ".join(overview_v2.SETS) + ").")
+    d = await run_in_threadpool(overview_v2.overview, _store(request), p, filters, today)
+    if fmt == "csv":
+        return _csv(overview_v2.to_csv(d, set_name), f"statistici-{set_name}.csv")
+    return d
 
 
 @router.get("/api/stats/rankings")
