@@ -88,7 +88,7 @@ async def journeys_list(request: Request):
     if len(station) > MAX_QUERY:
         raise _bad("Numele stației este prea lung.")
     if station:
-        where.append("s.station = ?")
+        where.append(f"{journeys.STATION_SQL} = ?")
         args.append(stations.canonical(station) or station.upper())
     state = q.get("state") or None
     if state is not None and state not in STATES:

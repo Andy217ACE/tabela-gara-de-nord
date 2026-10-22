@@ -16,6 +16,7 @@ from collections import defaultdict
 from datetime import date
 
 from app import journeys
+from app import quality as dq
 
 ON_TIME_MAX_DEFAULT = 5     # env ON_TIME_MAX_MIN: delay <= this counts as "la timp"
 MIN_SAMPLE_DEFAULT = 5      # env STATS_MIN_SAMPLE: below this, no percentages
@@ -104,7 +105,8 @@ class Params:
         self.confirmed_only = confirmed_only
 
     def where(self) -> tuple[list[str], list]:
-        w, a = [], []
+        # never ghosts; the reduced-quality (beta) period only with STATS_INCLUDE_LOW_QUALITY=1
+        w, a = [dq.public_services_where("s")], []
         if self.board:
             w.append("s.board = ?")
             a.append(self.board)
@@ -122,6 +124,7 @@ class Params:
                 "from": self.date_from.isoformat() if self.date_from else None,
                 "to": self.date_to.isoformat() if self.date_to else None,
                 "confirmed_only": self.confirmed_only,
+                "include_low_quality": dq.include_low_quality(),
                 "final_read_max_gap_min": journeys.final_gap_min()}
 
 
@@ -299,7 +302,8 @@ def catalog(store, p: Params, query: str | None = None) -> dict:
             args.append(q + "%")
         else:
             esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-            where.append("(s.station LIKE ? ESCAPE '!' OR UPPER(s.operator) LIKE ? ESCAPE '!')")
+            where.append(f"({journeys.STATION_SQL} LIKE ? ESCAPE '!'"
+                         " OR UPPER(COALESCE(q.operator_canonical, s.operator)) LIKE ? ESCAPE '!')")
             args += [f"%{esc}%", f"%{esc}%"]
     js = load(store, p, where, args)
     entries = train_entries(js, p, _catalog_extra(store))

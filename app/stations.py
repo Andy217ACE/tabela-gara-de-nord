@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 
-from app import stats
+from app import journeys, quality, stats
 from app.normalize import clean_station
 
 NOTE = ("Întârzierea este cea afișată pe tabela din București Nord (la sosirea sau "
@@ -35,15 +35,20 @@ def list_stations(store, query: str | None = None, limit: int = 100) -> list[dic
     if query:
         q = canonical(query) or query.strip().upper()
         esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-        where = " WHERE station LIKE ? ESCAPE '!'"
+        where = " AND station LIKE ? ESCAPE '!'"
         args.append(f"%{esc}%")
+    # canonical names; ghosts (and the beta period unless included) left out
+    src = (f"(SELECT s.board, s.train_no, s.status, s.uncertain, s.service_date,"
+           f" s.delay_read_at, {journeys.STATION_SQL} AS station FROM services s"
+           f" LEFT JOIN service_quality q ON q.service_id = s.id"
+           f" WHERE {quality.public_services_where('s')})")
     sql = ("SELECT station, COUNT(*) AS journeys,"
            " SUM(board='arrival') AS arrivals, SUM(board='departure') AS departures,"
            " COUNT(DISTINCT train_no) AS trains,"
            " SUM(delay_read_at IS NOT NULL AND status='gone') AS delay_known,"
            " SUM(uncertain=0) AS certain,"
            " MIN(service_date) AS first_date, MAX(service_date) AS last_date"
-           f" FROM services{where} GROUP BY station"
+           f" FROM {src} WHERE 1=1{where} GROUP BY station"
            " ORDER BY journeys DESC, station LIMIT ?")
     with store._lock:
         rows = store._conn.execute(sql, args + [int(limit)]).fetchall()
@@ -87,7 +92,7 @@ def detail(store, name: str, p: stats.Params) -> dict | None:
     name = canonical(name)
     if not name:
         return None
-    js = stats.load(store, p, ["s.station = ?"], [name])
+    js = stats.load(store, p, [f"{journeys.STATION_SQL} = ?"], [name])
     if not js:
         return None
     every = stats.load(store, p)
@@ -133,7 +138,7 @@ def journeys_page(store, name: str, p: stats.Params, limit: int = 100,
     name = canonical(name)
     if not name:
         return None
-    where, args = ["s.station = ?"], [name]
+    where, args = [f"{journeys.STATION_SQL} = ?"], [name]
     if before is not None:
         where.append("s.id < ?")
         args.append(before)

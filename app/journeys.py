@@ -32,16 +32,27 @@ LABELS = {
 BOARD_LABEL = {"arrival": "Sosire", "departure": "Plecare"}
 
 # Columns every journey query returns (s = services). gone_at/appeared_at: latest events.
+# Data quality (app.quality): canonical station/operator when a corrected form exists;
+# for journeys checked retroactively, the last CONFIRMED delay (none confirmed -> unknown).
+STATION_SQL = "COALESCE(q.station_canonical, s.station)"
+_CHECKED_NONE = "(q.delay_checked = 1 AND q.last_delay_clean IS NULL)"
 JOURNEY_SQL = (
-    "SELECT s.id, s.board, s.service_date, s.train_type, s.train_no, s.station, s.operator,"
-    " s.sched_time, s.first_seen, s.last_seen, s.last_delay, s.last_platform, s.status,"
-    " s.uncertain, s.delay_read_at,"
+    "SELECT s.id, s.board, s.service_date, s.train_type, s.train_no,"
+    f" {STATION_SQL} AS station, COALESCE(q.operator_canonical, s.operator) AS operator,"
+    " s.sched_time, s.first_seen, s.last_seen,"
+    " CASE WHEN q.delay_checked = 1 AND q.last_delay_clean IS NOT NULL"
+    "  THEN q.last_delay_clean ELSE s.last_delay END AS last_delay,"
+    " s.last_platform, s.status, s.uncertain,"
+    f" CASE WHEN {_CHECKED_NONE} THEN NULL ELSE s.delay_read_at END AS delay_read_at,"
+    " COALESCE(q.ghost, 0) AS ghost, COALESCE(q.low_quality, 0) AS low_quality,"
     " (SELECT e.ts FROM events e WHERE e.service_id = s.id AND e.kind = 'gone'"
     "  ORDER BY e.id DESC LIMIT 1) AS gone_at,"
     " (SELECT e.ts FROM events e WHERE e.service_id = s.id AND e.kind = 'appeared'"
     "  ORDER BY e.id DESC LIMIT 1) AS appeared_at"
-    " FROM services s"
+    " FROM services s LEFT JOIN service_quality q ON q.service_id = s.id"
 )
+# delay events marked suspect (e.g. "+25" read as 425) are not readings
+_NOT_SUSPECT = " AND id NOT IN (SELECT event_id FROM event_quality WHERE suspect=1)"
 
 
 def final_gap_min() -> int:
@@ -164,7 +175,7 @@ def delay_series(store, service_id: int, s) -> list[dict]:
                         " AND validation_state IN ('ok', 'uncertain') ORDER BY id",
                         (service_id,)).fetchall() if has_obs else []
         evs = c.execute("SELECT ts, old, new FROM events WHERE service_id=? AND kind='delay'"
-                        " ORDER BY ts, id", (service_id,)).fetchall()
+                        + _NOT_SUSPECT + " ORDER BY ts, id", (service_id,)).fetchall()
     for e in evs:
         add(e["ts"], _int(e["new"]), "event")
     if evs and (_int(evs[0]["old"]) or 0) > 0:
@@ -199,7 +210,7 @@ def detail(store, service_id: int) -> dict | None:
     s = rows[0]
     with store._lock:
         evs = store._conn.execute("SELECT ts, kind, old, new FROM events WHERE service_id=?"
-                                  " ORDER BY ts, id", (service_id,)).fetchall()
+                                  + _NOT_SUSPECT + " ORDER BY ts, id", (service_id,)).fetchall()
     d = as_dict(s)
     d["events"] = [dict(e) for e in evs]
     d["delay_series"] = delay_series(store, service_id, s)
