@@ -116,7 +116,8 @@
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
   --radius: 16px;
   --gutter: 16px;
-  --nav-h: 64px;
+  --nav-h: 0px; /* no bottom bar any more (menu is the sticky top bar) */
+  --topnav-h: 57px; /* sticky .navbar height: 44 + 2×6 padding + 1 border */
 }
 
 /* ---------- base ---------- */
@@ -143,7 +144,7 @@ body {
   line-height: 1.45;
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   overflow-x: hidden;
 }
 
@@ -345,43 +346,48 @@ svg { flex: none; }
   80%, 100% { transform: scale(3); opacity: 0; }
 }
 
-/* main nav: bottom bar on mobile, pills in header on desktop */
+/* main nav: its own bar, sticky at the top at EVERY width (no bottom bar, no width
+   breakpoint that moves it: with „Site pentru desktop” phones lay the page out at ~980 px and
+   the old bottom bar became tiny/hidden). Items that don't fit scroll inside the bar, never
+   the page; the active item is scrolled into view by app.js. */
 
-.mainnav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.navbar {
+  position: sticky;
+  top: 0;
   z-index: 20;
-  /* 6 items: they share the width; on very narrow screens the bar scrolls inside
-     itself (never the page) */
-  display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
-  padding: 0 2px env(safe-area-inset-bottom, 0px);
   background: var(--nav-bg);
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   backdrop-filter: blur(14px) saturate(140%);
 }
 
+.mainnav {
+  display: flex;
+  gap: 4px;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 6px max(var(--gutter), env(safe-area-inset-right, 0px)) 6px max(var(--gutter), env(safe-area-inset-left, 0px));
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scroll-padding-inline: var(--gutter);
+  -webkit-overflow-scrolling: touch;
+}
+
 .mainnav::-webkit-scrollbar { display: none; }
 .nav-item {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  margin: 6px 0;
-  padding: 0 3px;
-  border-radius: 12px;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   text-decoration: none;
   white-space: nowrap;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-2);
   letter-spacing: 0.01em;
@@ -399,11 +405,29 @@ svg { flex: none; }
   stroke-linejoin: round;
 }
 
-.nav-icon { width: 22px; height: 22px; }
+.nav-icon { width: 18px; height: 18px; }
 
-.nav-item[aria-current="page"] { color: var(--accent); }
-.nav-item:hover { color: var(--text); }
-.nav-item[aria-current="page"]:hover { color: var(--accent); }
+.nav-item[aria-current="page"] {
+  color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.nav-item:hover { color: var(--text); background: var(--surface); }
+.nav-item[aria-current="page"]:hover { color: var(--accent); background: var(--surface-2); }
+
+/* touch screens: a bit more room per item (target ≥ 44 px already) */
+@media (pointer: coarse) {
+  :root { --topnav-h: 59px; }
+  .nav-item { min-height: 46px; padding: 0 14px; font-size: 0.9375rem; }
+  .nav-icon { width: 20px; height: 20px; }
+}
+
+/* phone in „Site pentru desktop” (page laid out much wider than the screen and shown zoomed
+   out; class set by theme-init.js): bigger bar so it stays readable and tappable */
+html.zoomed-out { --topnav-h: 109px; }
+html.zoomed-out .mainnav { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+html.zoomed-out .nav-item { min-height: 88px; padding: 0 24px; gap: 12px; font-size: 1.75rem; border-radius: 18px; }
+html.zoomed-out .nav-icon { width: 36px; height: 36px; }
 
 /* ---------- main ---------- */
 
@@ -434,7 +458,7 @@ main {
 
 .tabs {
   position: sticky;
-  top: 0;
+  top: var(--topnav-h); /* under the sticky menu bar */
   z-index: 10;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1284,7 +1308,9 @@ main {
 /* ---------- Istoric on wide screens: real table ---------- */
 
 @media (min-width: 760px) {
-  .filters { grid-template-columns: 11rem 7rem minmax(9rem, 1fr) 7rem 7rem 8.5rem auto; align-items: end; }
+  /* 760–1023 px: the one-row filter template (~59rem) doesn't fit → wrapping columns
+     (it pushed the page sideways on tablets / phones in landscape) */
+  .filters { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); align-items: end; }
   .field-date, .field-wide { grid-column: auto; }
   .field input[type="time"] { padding: 8px 10px; }
   .filters .btn { grid-column: auto; min-height: 42px; margin-top: 0; }
@@ -1336,44 +1362,17 @@ main {
   .h-row[data-delay="major"] .h-time { box-shadow: 3px 0 0 var(--bad) inset; }
 }
 
-/* ---------- desktop: side by side, no tabs, nav in header ---------- */
+/* ---------- desktop: side by side, no tabs ---------- */
 
 @media (min-width: 1024px) {
-  body { padding-bottom: 0; }
+  .filters { grid-template-columns: 11rem 7rem minmax(9rem, 1fr) 7rem 7rem 8.5rem auto; }
 
   .topbar { padding-top: 22px; padding-bottom: 10px; }
   .brand-title { font-size: 1.5rem; }
   #logo { width: 46px; height: 46px; }
 
-  .live { order: 3; }
+  .live { order: 3; margin-left: auto; }
   .theme-btn { order: 4; margin-left: 0; width: 40px; height: 40px; }
-  .mainnav {
-    position: static;
-    order: 2;
-    height: auto;
-    margin-left: auto;
-    padding: 4px;
-    display: flex;
-    flex-wrap: wrap;
-    overflow: visible;
-    gap: 2px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: var(--surface);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .nav-item {
-    flex: 0 0 auto;
-    flex-direction: row;
-    gap: 8px;
-    margin: 0;
-    padding: 8px 12px;
-    font-size: 0.875rem;
-    border-radius: 10px;
-  }
-  .nav-icon { width: 18px; height: 18px; }
-  .nav-item[aria-current="page"] { background: var(--surface-2); }
 
   .tabs { display: none; }
   .boards {

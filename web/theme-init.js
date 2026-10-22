@@ -65,3 +65,26 @@
   };
   document.addEventListener("DOMContentLoaded", function () { syncMeta(current); });
 })();
+
+// „Site pentru desktop” pe telefon: pagina e așezată mult mai lată decât ecranul (~980 px pe
+// un ecran de ~400 px) și afișată micșorată. Marcăm <html class="zoomed-out"> ca meniul de sus
+// (style.css) să fie mai mare, lizibil și ușor de apăsat. Doar pe ecrane tactile (pointer
+// coarse): pe desktop, zoom-ul browserului nu trebuie să schimbe meniul.
+(function () {
+  var root = document.documentElement;
+  function check() {
+    try {
+      var coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+      var sw = (window.screen && window.screen.width) || 0;
+      var sh = (window.screen && window.screen.height) || 0;
+      // iOS nu rotește screen.width: lățimea ecranului după orientare
+      var land = window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
+      var dev = land ? Math.max(sw, sh) : Math.min(sw, sh);
+      var on = !!coarse && dev > 0 && window.innerWidth >= dev * 1.6;
+      root.classList.toggle("zoomed-out", on);
+    } catch (e) { /* fără matchMedia/screen: meniul normal */ }
+  }
+  check();
+  window.addEventListener("resize", check);
+  window.addEventListener("orientationchange", check);
+})();
