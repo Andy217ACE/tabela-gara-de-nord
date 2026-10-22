@@ -35,6 +35,11 @@
   --t-r: #b4c0d3;
   --t-rm: #9fd86b;
   --t-other: #a3aec0;
+  /* chart series (Statistici): arrivals blue, departures amber, one sequential hue;
+     validated with the dataviz palette checker (CVD/contrast) on each surface */
+  --c-arr: #4a96e6;
+  --c-dep: #c97d12;
+  --c-seq: #9a7ff0;
 
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --nav-bg: rgba(14, 18, 25, 0.86);
@@ -71,6 +76,9 @@
     --t-r: #4a5566;
     --t-rm: #3d6e14;
     --t-other: #4f5866;
+    --c-arr: #1f5fb8;
+    --c-dep: #965200;
+    --c-seq: #5b3bb8;
 
     --shadow: 0 1px 2px rgba(18, 22, 28, 0.05), 0 8px 24px -16px rgba(18, 22, 28, 0.25);
     --nav-bg: rgba(255, 255, 255, 0.9);
@@ -107,6 +115,9 @@
   --t-r: #4a5566;
   --t-rm: #3d6e14;
   --t-other: #4f5866;
+  --c-arr: #1f5fb8;
+  --c-dep: #965200;
+  --c-seq: #5b3bb8;
   --shadow: 0 1px 2px rgba(18, 22, 28, 0.05), 0 8px 24px -16px rgba(18, 22, 28, 0.25);
   --nav-bg: rgba(255, 255, 255, 0.9);
 }

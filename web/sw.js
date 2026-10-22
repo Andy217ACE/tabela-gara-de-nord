@@ -29,6 +29,8 @@ var SHELL = [
   "/versions.js",
   "/stats.css",
   "/stats.js",
+  "/statistici.css",
+  "/statistici.js",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/icons/logo-96.png",

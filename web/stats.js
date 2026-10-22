@@ -1,6 +1,5 @@
 // © 2026 Andy217Ace
-// Tabela Gara de Nord — Trenuri (#trenuri), profil tren (#tren?nr=), Statistici
-// (#statistici), Clasamente (#clasamente), Stații (#statii) și pagina unei stații
+// Tabela Gara de Nord — Trenuri (#trenuri), profil tren (#tren?nr=), Clasamente (#clasamente), Stații (#statii) și pagina unei stații
 // (#statie?nume=). Data: /api/trains/stats, /api/trains/{no}/journeys, /api/stats,
 // /api/stats/rankings, /api/stations, /api/stations/{name}[/journeys]. Every delay is the one READ on the București Nord board;
 // arrivals and departures are never mixed; a missing value is shown as „—”, never 0; N is
@@ -754,16 +753,7 @@
     render: renderTren
   });
 
-  // ---- #statistici -------------------------------------------------------------------
-
-  var SS_FIELDS = ["board", "from", "to", "doar_confirmate", "prag", "min"];
-
-  function tile(box, label, value, sub) {
-    var t = el("div", "st-tile");
-    t.append(el("span", "st-tile-label", label), el("span", "st-tile-value", value));
-    if (sub) t.append(el("span", "st-tile-sub", sub));
-    box.append(t);
-  }
+  // ---- per-hour / weekday / month charts (shared by #statie) -----------------------
 
   function groupItems(groups, labelFn) {
     return (groups || []).map(function (g) {
@@ -809,85 +799,6 @@
       });
     });
   }
-
-  function renderStatistici(v, d) {
-    var params = d.params || {};
-    var q = d.quality || {};
-    var st = q.states || {};
-    var boards = BOARDS.filter(function (b) { return d.boards && d.boards[b]; });
-
-    v.body.append(el("p", "h-count", explainParams(params)));
-
-    var tiles = el("div", "st-tiles");
-    tile(tiles, "Perioada", d.period ? period(d.period.first, d.period.last) : "—",
-         d.period ? plural(d.period.days || 0, "zi cu date", "zile cu date") : null);
-    tile(tiles, "Călătorii", String(q.journeys || 0), (q.finished || 0) + " încheiate");
-    tile(tiles, "Trenuri (numere)", String(d.trains == null ? "—" : d.trains));
-    tile(tiles, "Observații (citiri OCR)", d.observations == null ? "necunoscut" : String(d.observations));
-    tile(tiles, "Întârziere citită", String(q.delay_known || 0), pct(q.delay_known_pct) + " din cele încheiate");
-    v.body.append(tiles);
-
-    var qs = el("section", "st-section");
-    qs.append(el("h2", "st-h2", "Calitatea datelor"));
-    var ul = el("ul", "st-states");
-    ["confirmed", "unconfirmed", "unknown", "in_progress"].forEach(function (k) {
-      var li = el("li");
-      li.append(el("span", "res-badge " + STATE_CLASS[k], STATE_TEXT[k]), el("strong", null, String(st[k] || 0)));
-      ul.append(li);
-    });
-    qs.append(ul);
-    qs.append(el("p", "st-note", (q.uncertain_names || 0) + " călătorii au numele stației/operatorului citit nesigur."));
-    qs.append(el("p", "st-warn",
-      "Înainte de Beta 1.04 citirea întârzierii nu era înregistrată pe fiecare călătorie: pentru majoritatea " +
-      "călătoriilor de atunci întârzierea este „necunoscută” (nu 0) și nu intră în statistici. Doar cele cu " +
-      "citiri păstrate în observațiile OCR (din Beta 1.01) sunt folosite."));
-    v.body.append(qs);
-
-    var cards = el("div", "st-cards");
-    v.body.append(cards);
-    boards.forEach(function (b) {
-      var s = d.boards[b];
-      var card = el("section", "st-card");
-      card.append(el("h2", "st-card-h", BOARD_PL[b]));
-      card.append(statsGrid(s, params));
-      var w = sampleWarn(s, params);
-      if (w) card.append(w);
-      cards.append(card);
-      var dist = d.distribution && d.distribution[b];
-      if (dist) {
-        card.append(el("h3", "detail-h", "Distribuția întârzierii citite (N = " + (s.n || 0) + ")"));
-        card.append(distChart(card, dist, b));
-      }
-    });
-
-    timeSections(v.body, d.by_time, boards, params, BOARD_PL);
-
-    var note = el("section", "st-section st-explain");
-    note.append(el("h2", "st-h2", "Cum citești aceste cifre"));
-    [
-      "Întârzierea este cea CITITĂ pe tabela de la București Nord (nu ora reală de sosire/plecare). " +
-        "Intră în statistici doar călătoriile încheiate (dispărute de pe tabelă) cu întârzierea citită.",
-      "Confirmat = dispariția de pe tabelă a fost observată după ora estimată (programat + întârziere), iar " +
-        "întârzierea a fost citită cu cel mult " + (params.final_read_max_gap_min || 15) +
-        " min înainte. Altfel rezultatul e neconfirmat (sau necunoscut, dacă întârzierea nu a fost citită niciodată).",
-      "„La timp” = întârziere citită ≤ prag (acum " + params.on_time_max_min + " min). p90 = 90% dintre " +
-        "călătorii au avut cel mult această întârziere.",
-      "Eșantion minim (acum " + params.min_sample + "): sub el nu afișăm procente și p90, doar media, " +
-        "mediana, maximul și N.",
-      "Călătorie = o apariție pe un panou într-o zi de serviciu; tren = număr de tren; observație = o citire " +
-        "OCR a tabelei. Sosirile și plecările sunt mereu separate."
-    ].forEach(function (t) { note.append(el("p", "st-note", t)); });
-    v.body.append(note);
-  }
-
-  var statistici = makeView({
-    root: "st-statistici", route: "statistici", fields: SS_FIELDS,
-    url: function (v) {
-      var q = toSearch(v.p, SS_FIELDS).toString();
-      return "/api/stats" + (q ? "?" + q : "");
-    },
-    render: renderStatistici
-  });
 
   // ---- #clasamente -------------------------------------------------------------------
 
@@ -1407,9 +1318,11 @@
 
   App.views.trenuri = { show: trenuri.show };
   App.views.tren = { show: tren.show };
-  App.views.statistici = { show: statistici.show };
   App.views.clasamente = { show: clasamente.show };
   App.views.statii = { show: statii.show };
   App.views.statie = { show: statie.show };
-  App.stats = { stationLink: stationLink, barChart: barChart, statsGrid: statsGrid, sampleWarn: sampleWarn };
+  // shared with statistici.js (#statistici, Statistici v2)
+  App.stats = { stationLink: stationLink, barChart: barChart, statsGrid: statsGrid, sampleWarn: sampleWarn,
+                getJSON: getJSON, errorText: errorText, plural: plural, titleCase: titleCase,
+                dayText: dayText, numFmt: numFmt, svg: svg, notice: notice };
 })();

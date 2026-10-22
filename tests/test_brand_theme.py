@@ -304,7 +304,9 @@ def test_icon_weights_and_precache_budget(client):
     paths = re.findall(r'"(/[^"]*)"', shell) + ["/offline.html"]
     total = sum(len(client.get(p).content) for p in set(paths))
     # 400 KB until Beta 1.05 (~396 KB); +~14 KB of JS/CSS for the all-days Istoric
-    assert total <= 420_000, total
+    # +~60 KB (uncompressed; ~15 KB gzip) for Statistici v2 (statistici.js/.css): the page
+    # stays usable offline as a shell with an explicit „offline” message
+    assert total <= 480_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

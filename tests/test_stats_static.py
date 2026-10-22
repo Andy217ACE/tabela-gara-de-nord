@@ -36,12 +36,12 @@ def test_stats_js_uses_api_and_rules():
     js = (WEB / "stats.js").read_text(encoding="utf-8")
     for needle in ("/api/trains/stats", "/api/trains/", "/journeys", "/api/stats",
                    "/api/stats/rankings", '"format", "csv"', "doar_confirmate", "prag",
-                   "App.views.trenuri", "App.views.tren", "App.views.statistici",
+                   "App.views.trenuri", "App.views.tren",
                    "App.views.clasamente", "openJourney", "station-link", "#statie?nume=",
                    "encodeURIComponent(name)", "#tren?nr=",
                    "Eșantion mic (N = ", "procentele nu sunt afișate",
                    "Încă nu există trenuri cu cel puțin", "below_min",
-                   "Beta 1.04", "București Nord", "sufficient === false", "history.replaceState"):
+                   "București Nord", "sufficient === false", "history.replaceState"):
         assert needle in js, needle
     # a missing value is „—”, never 0
     assert 'v == null ? "—"' in js
