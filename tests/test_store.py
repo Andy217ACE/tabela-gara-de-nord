@@ -637,7 +637,7 @@ def test_known_stations_cache_follows_patchable_today(store, monkeypatch):
     import app.store as st
     monkeypatch.setattr(st, "_today", lambda: date(2026, 10, 20))
     store.known_stations()
-    assert store._known_cache[0][0] == date(2026, 10, 20)
+    assert store._known_cache[0][0][0] == date(2026, 10, 20)  # (day, hour)
     monkeypatch.setattr(st, "_today", lambda: date(2026, 10, 21))
     store.known_stations()
-    assert store._known_cache[0][0] == date(2026, 10, 21)  # new day -> recomputed
+    assert store._known_cache[0][0][0] == date(2026, 10, 21)  # new day -> recomputed

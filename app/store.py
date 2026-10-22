@@ -855,7 +855,7 @@ class Store:
         the reader, so it always wins. At most KNOWN_STATIONS_MAX names; computed
         once per (Bucharest) day — the poller asks before every image.
         """
-        today = _today()
+        today = (_today(), datetime.now(TZ).hour)  # recomputed every hour, not once a day
         cached = self._known_cache
         if cached and cached[0] == (today, min_services, min_days):
             return set(cached[1])

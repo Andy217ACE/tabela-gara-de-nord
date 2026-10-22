@@ -66,3 +66,9 @@ def test_split_touching_degenerate_component_no_argmin_crash():
     line = np.ones((1, 2), np.float32)  # w=2, line_h=1: the old code raised here
     parts = digits._split_touching(line, 0, 2, 1)
     assert parts and all(b > a for a, b in parts)
+
+
+def test_near_name_word_order():
+    # "KIEV - CHISINAU" next to CHISINAU-KIEV (report 2): not learned as a new station
+    assert canonical.near_name("KIEV - CHISINAU", "CHISINAU-KIEV")
+    assert not canonical.near_name("SUCEAVA NORD", "SUCEAVA")

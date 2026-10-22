@@ -75,6 +75,9 @@ def near_name(a: str, b: str) -> bool:
     ka, kb = _key(a), _key(b)
     if ka.replace(" ", "") == kb.replace(" ", ""):
         return True
+    wa, wb = re.split(r"[\s-]+", (a or "").upper()), re.split(r"[\s-]+", (b or "").upper())
+    if sorted(w for w in wa if w) == sorted(w for w in wb if w):  # "KIEV - CHISINAU"
+        return True
     for x, y in ((ka, kb), (kb, ka)):  # a stray one-character token: "RUSE I" / RUSE
         w = x.split()
         if len(w) >= 2 and len(w[-1]) == 1 and " ".join(w[:-1]) == y:
