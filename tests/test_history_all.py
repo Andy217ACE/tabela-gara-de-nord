@@ -210,7 +210,6 @@ def test_api_day_mode_unchanged(client):
 
 
 @pytest.mark.parametrize("params", [
-    {"all": "1"},                                  # all days needs a train number
     {"train": "1621", "all": "2"},
     {"train": "1621", "all": "1", "limit": "0"},
     {"train": "1621", "all": "1", "limit": "201"},
@@ -243,7 +242,8 @@ def _web(name):
 
 def test_index_has_all_days_selector_and_load_more():
     html = _web("index.html")
-    assert 'id="h-scope"' in html and "Toate zilele" in html and "O zi anume" in html
+    assert 'id="h-alldays"' in html and "Toate zilele" in html and 'id="h-scope"' not in html
+    assert 'id="h-date"' in html and 'id="h-date" name="date" required' not in html
     assert 'id="h-more"' in html and "Încarcă mai multe" in html and 'id="h-summary"' in html
     assert "style=" not in html
 

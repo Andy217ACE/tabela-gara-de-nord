@@ -386,12 +386,10 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         return {"date": day.isoformat(), "services": services}
 
     def _history_all(request: Request) -> dict:
-        """All days of one train (optionally one `date`), newest first, `limit` per page
-        (1–200) after `cursor`; see app.history_all."""
+        """All days (optionally one `date`) of one `train` or — without it — of every
+        train, newest first, `limit` per page (1–200) after `cursor`; see app.history_all."""
         q = request.query_params
-        if not q.get("train"):
-            raise _bad("Pentru „Toate zilele” completează numărul trenului.")
-        train = _parse_train(q["train"])
+        train = _parse_train(q["train"]) if q.get("train") else None
         day = _parse_date(q.get("date"), default_today=False) if q.get("date") else None
         board_ = q.get("board") or None
         if board_ is not None and board_ not in BOARDS:

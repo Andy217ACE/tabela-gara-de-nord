@@ -959,11 +959,15 @@ main {
 
 .view-history.is-loading .h-results { opacity: 0.55; transition: opacity 0.2s ease; }
 
-/* Istoric — day picker: „Toate zilele” / „O zi anume” (shown with a train number) */
+/* Istoric — day picker: empty day = „Toate zilele” (default); the button clears the day */
 .h-day-pick { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.h-day-pick > select,
 .h-day-pick > input { flex: 1 1 9.5rem; min-width: 0; }
-.h-day-pick > [hidden] { display: none; }
+.h-day-pick > .h-alldays { flex: 0 0 auto; min-height: 42px; margin-top: 0; padding: 8px 14px; }
+.h-alldays[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 
 /* Istoric — all days of one train: summary, day groups, actions, load more */
 .h-summary {

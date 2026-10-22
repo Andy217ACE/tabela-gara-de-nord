@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
-"""Istoric — every journey of ONE train across all days (`/api/history?train=N&all=1`).
+"""Istoric across all days (`/api/history?all=1`): every journey of ONE train
+(`train=N`) or — without a train — of EVERY train, optionally one `date`.
 
 Newest first: (service_date, sched_time, id) DESC, paginated with a keyset cursor
 "YYYY-MM-DD_HH:MM_id" so new readings never shift a page. Same data rules as the rest:
@@ -12,16 +13,26 @@ Newest first: (service_date, sched_time, id) DESC, paginated with a keyset curso
 - delays/results are `journeys.result` (confirmed values for services checked
   retroactively); `max_read_delay` ignores delay events marked suspect.
 `total`, `period`, `quality` and `summary` describe the WHOLE filtered result, not the page.
+
+Without a train the whole history can be large: the page is read with SQL (keyset +
+LIMIT, index on service_date), `total`/`period` with one SQL aggregate (always fresh), and
+only `quality`/`summary` need every journey's result — computed outside the store lock
+(the lock covers the SQL read only) and cached per store for AGG_TTL_S seconds (or until
+the data changes, whichever lasts longer: a new reading every poll would defeat a pure
+data-generation cache).
 """
 from __future__ import annotations
 
 import re
+import time
 from datetime import date
 
 from app import journeys, quality, stats
 from app.normalize import clean_station
 
 PAGE_MAX = 200
+AGG_TTL_S = 60.0  # summary/quality cache for the every-train view (see module doc)
+_AGG_MAX = 32     # cached filter combinations per store
 _CURSOR = re.compile(r"^(\d{4}-\d{2}-\d{2})_((?:[01]\d|2[0-3]):[0-5]\d)_(\d{1,12})$")
 
 
@@ -81,8 +92,11 @@ def _public(j: dict, mx: dict) -> dict:
                                       "low_quality": bool(j.get("low_quality"))}
 
 
-def _load(store, train: int, p: stats.Params, station, time_from, time_to) -> list[dict]:
-    where, args = ["s.train_no = ?", "NOT " + quality.GHOST_SQL], [train]
+def _where(train: int | None, p: stats.Params, station, time_from, time_to):
+    where, args = ["NOT " + quality.GHOST_SQL], []
+    if train is not None:
+        where.append("s.train_no = ?")
+        args.append(train)
     if p.board:
         where.append("s.board = ?")
         args.append(p.board)
@@ -103,42 +117,103 @@ def _load(store, train: int, p: stats.Params, station, time_from, time_to) -> li
     if time_to:
         where.append("s.sched_time <= ?")
         args.append(time_to)
+    return where, args
+
+
+def _with_result(rows) -> list[dict]:
     gap = journeys.final_gap_min()
     out = []
-    for s in journeys.query(store, where, args):
+    for s in rows:
         d = dict(s)
         d["result"] = journeys.result(s, gap)
         out.append(d)
     return out
 
 
-def page(store, train: int, p: stats.Params, *, station: str | None = None,
-         time_from: str | None = None, time_to: str | None = None,
-         limit: int = PAGE_MAX, cursor: str | None = None) -> dict:
-    js = sorted(_load(store, train, p, station, time_from, time_to), key=_key, reverse=True)
+def _aggregates(js: list[dict], p: stats.Params) -> dict:
+    """quality / low_quality_excluded / summary of the whole filtered result."""
     public = js if quality.include_low_quality() else [j for j in js if not j["low_quality"]]
-    start = 0
-    if cursor:
-        c = parse_cursor(cursor)
-        start = next((i for i, j in enumerate(js) if _key(j) < c), len(js))
-    chunk = js[start:start + max(1, min(limit, PAGE_MAX))]
-    more = start + len(chunk) < len(js)
-    mx = max_readings(store, [j["id"] for j in chunk])
-    dates = [j["service_date"] for j in js]
     return {
-        "mode": "all",
-        "train": train,
-        "params": p.echo(),
-        "total": len(js),
-        "period": {"first": min(dates) if dates else None, "last": max(dates) if dates else None,
-                   "days": len(set(dates))},
         "quality": stats.quality(js),
         "low_quality_excluded": len(js) - len(public),
         "summary": {b: stats.summarize(stats.delays([j for j in public if j["board"] == b], p),
                                        p.on_time, p.min_sample)
                     for b in stats.BOARDS if not p.board or p.board == b},
+    }
+
+
+def page(store, train: int | None, p: stats.Params, *, station: str | None = None,
+         time_from: str | None = None, time_to: str | None = None,
+         limit: int = PAGE_MAX, cursor: str | None = None) -> dict:
+    limit = max(1, min(limit, PAGE_MAX))
+    where, args = _where(train, p, station, time_from, time_to)
+    if train is None:
+        return _page_every_train(store, p, where, args, limit, cursor)
+    # one train: at most a few journeys per day — load them all, sort in Python
+    js = sorted(_with_result(journeys.query(store, where, args)), key=_key, reverse=True)
+    start = 0
+    if cursor:
+        c = parse_cursor(cursor)
+        start = next((i for i, j in enumerate(js) if _key(j) < c), len(js))
+    chunk = js[start:start + limit]
+    more = start + len(chunk) < len(js)
+    dates = [j["service_date"] for j in js]
+    period = {"first": min(dates) if dates else None, "last": max(dates) if dates else None,
+              "days": len(set(dates))}
+    return _finish(store, train, p, len(js), period, _aggregates(js, p), chunk, more)
+
+
+def _finish(store, train, p, total, period, agg, chunk, more) -> dict:
+    mx = max_readings(store, [j["id"] for j in chunk])
+    return {
+        "mode": "all",
+        "train": train,
+        "params": p.echo(),
+        "total": total,
+        "period": period,
+        **agg,
         "n": len(chunk),
         "next": _cursor(chunk[-1]) if more and chunk else None,
         "journeys": [_public(j, mx) for j in chunk],
         "final_read_max_gap_min": journeys.final_gap_min(),
     }
+
+
+_FROM = " FROM services s LEFT JOIN service_quality q ON q.service_id = s.id WHERE "
+
+
+def _page_every_train(store, p, where, args, limit, cursor) -> dict:
+    w, a = list(where), list(args)
+    if cursor:
+        w.append("(s.service_date, s.sched_time, s.id) < (?, ?, ?)")
+        a.extend(parse_cursor(cursor))
+    rows = journeys.query(store, w, a, order="s.service_date DESC, s.sched_time DESC, s.id DESC",
+                          limit=limit + 1)
+    more = len(rows) > limit
+    chunk = _with_result(rows[:limit])
+    with store._lock:
+        r = store._conn.execute(
+            "SELECT COUNT(*), MIN(s.service_date), MAX(s.service_date),"
+            " COUNT(DISTINCT s.service_date)" + _FROM + " AND ".join(where), args).fetchone()
+    period = {"first": r[1], "last": r[2], "days": r[3]}
+    return _finish(store, None, p, r[0], period, _cached_aggregates(store, p, where, args), chunk, more)
+
+
+def _cached_aggregates(store, p, where, args) -> dict:
+    key = (tuple(where), tuple(args), p.on_time, p.min_sample, p.board, p.confirmed_only,
+           quality.include_low_quality(), journeys.final_gap_min())
+    with store._lock:
+        stamp = tuple(store._conn.execute(
+            "SELECT (SELECT MAX(id) FROM runs), (SELECT MAX(id) FROM events),"
+            " (SELECT COUNT(*) FROM services), (SELECT MAX(id) FROM services),"
+            " (SELECT COUNT(*) FROM service_quality)").fetchone())
+    cache = store.__dict__.setdefault("_history_agg", {})
+    hit = cache.get(key)
+    now = time.monotonic()
+    if hit is not None and (hit[0] == stamp or now - hit[1] < AGG_TTL_S):
+        return hit[2]
+    agg = _aggregates(_with_result(journeys.query(store, where, args)), p)
+    if len(cache) >= _AGG_MAX:
+        cache.clear()
+    cache[key] = (stamp, now, agg)
+    return agg

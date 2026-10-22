@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.13 — 2026-10-22
+
+### Schimbat
+- **Istoric: implicit toate zilele.** Pagina Istoric nu mai pornește pe ziua de azi. Dacă nu alegi o zi, vezi tot istoricul, din toate zilele: cele mai noi primele, grupat pe zi, câte 200 pe pagină, cu butonul „Încarcă mai multe”. Câmpul „Ziua” rămâne gol, nu se completează singur cu data de azi.
+- Orice filtru fără zi (număr de tren, stație, interval orar, sosiri/plecări) caută în toate zilele. Sus apar numărul total de călătorii și perioada (prima zi – ultima zi, câte zile).
+- Dacă alegi o zi, lista arată doar ziua aceea. Butonul „Toate zilele” golește ziua și revine la tot istoricul.
+- Filtrele se văd în adresa paginii (`#istoric`, `#istoric?date=…`, `#istoric?station=…&board=…`), deci o căutare se poate trimite cuiva.
+- Rezumatul (N, medie, mediană, maxim, procente doar peste eșantionul minim) folosește doar întârzierile citite. O întârziere necitită nu este 0. Călătoriile din perioada de calitate redusă apar în listă, marcate, dar nu intră în rezumat.
+
+### API
+- `/api/history?all=1` merge acum și fără `train`: toate trenurile din toate zilele, cu `limit` (1–200) și `cursor`. Filtre opționale: `train`, `date`, `station`, `from`/`to`, `board`. `total` și `period` sunt calculate mereu la zi. Rezumatul pe toate trenurile se recalculează cel mult o dată la 60 de secunde, ca să nu țină baza de date ocupată. `/api/history` fără `all=1` rămâne neschimbat: o singură zi.
+
 ## Beta 1.12 — 2026-10-22
 
 ### Reparat

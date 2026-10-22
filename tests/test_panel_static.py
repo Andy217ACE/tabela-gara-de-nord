@@ -109,10 +109,12 @@ def test_panel_keeps_attribution_in_fullscreen():
     assert "d.detail, credit);" in js  # appended inside .pnl
 
 
-def test_history_shows_truncation_notice():
+def test_history_paginates_instead_of_truncating():
+    """Beta 1.13+: Istoric always reads /api/history?all=1 (200 per page + cursor), so the
+    old one-day 500-row cut (X-Truncated) is no longer shown — nothing is silently cut."""
     js = (WEB / "history.js").read_text(encoding="utf-8")
-    assert 'r.headers.get("X-Truncated") === "1"' in js
-    assert "primele 500 — restrânge filtrele (oră/stație/tren)" in js
+    assert 'p.set("cursor", cursor)' in js and "afișate " in js
+    assert "primele 500" not in js
 
 
 def test_exactly_one_attribution_footer_visible():

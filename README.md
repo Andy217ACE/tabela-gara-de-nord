@@ -144,11 +144,14 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   `/api/trains/stats`, `/api/trains/{nr}/journeys`, `/api/stats`, `/api/stats/rankings`,
   `/api/stations`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys`. Parametri: `prag`,
   `min`, `board`, `from`, `to` (AAAA-LL-ZZ), `doar_confirmate=1`.
-- **Istoricul unui tren pe toate zilele**: `/api/history?train=N&all=1` (opțional `date`,
+- **Istoric pe toate zilele**: `/api/history?all=1` = toate trenurile, toate zilele;
+  `train=N` restrânge la un tren (opțional `date`,
   `station`, `from`/`to` HH:MM, `board`, `limit` 1–200, `cursor` din răspunsul anterior,
   `min`, `prag`, `doar_confirmate`). Călătoriile, cele mai noi primele, fără fantome; perioada
   de calitate redusă apare marcată (`low_quality`) și nu intră în rezumat. `total`, `period` și
-  `summary` (pe panou, doar întârzieri citite) descriu tot rezultatul, nu doar pagina. Fără
+  `summary` (pe panou, doar întârzieri citite) descriu tot rezultatul, nu doar pagina (fără
+  tren, `summary`/`quality` sunt calculate o dată la cel mult 60 s, `total`/`period` mereu
+  la zi). Pagina Istoric pornește fără zi aleasă = toate zilele. Fără
   `all=1`, `/api/history` rămâne pe o singură zi (`date`, implicit azi).
 - **Env** (opționale): `ON_TIME_MAX_MIN` (implicit 5), `STATS_MIN_SAMPLE` (5),
   `FINAL_READ_MAX_GAP_MIN` (15).

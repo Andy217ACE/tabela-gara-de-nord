@@ -125,8 +125,8 @@ def test_all_days_view(browser, base_url, w, h, theme):
     ctx, page, errors = _open(browser, base_url, w, h, theme, "#istoric?train=1621")
     try:
         page.wait_for_selector("#h-results .h-group")
-        assert page.input_value("#h-scope") == "all" and page.is_visible("#h-scope")
-        assert not page.is_visible("#h-date")
+        assert page.input_value("#h-date") == "" and page.is_visible("#h-date")
+        assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
         count = page.text_content("#h-count")
         assert "213 călătorii" in count and "perioada" in count and "afișate 200" in count
         summary = page.text_content("#h-summary")
@@ -155,27 +155,24 @@ def test_all_days_view(browser, base_url, w, h, theme):
         ctx.close()
 
 
-def test_scope_switch_and_day_mode(browser, base_url):
+def test_day_then_train_then_all_days(browser, base_url):
     ctx, page, errors = _open(browser, base_url, 1280, 800, "light", "#istoric?date=2026-10-20")
     try:
         page.wait_for_selector("#h-results .h-row")
-        assert not page.is_visible("#h-scope") and page.is_visible("#h-date")
-        assert page.locator("#h-results .h-group").count() == 0  # no train: one day, as before
+        assert page.input_value("#h-date") == "2026-10-20"
+        assert page.get_attribute("#h-alldays", "aria-pressed") == "false"
+        assert page.locator("#h-results .h-group").count() == 1  # one day: one group
+        expect(page.locator("#h-results .h-row")).to_have_count(3)  # 1621 ×2 + 1731
         page.fill("#h-train", "1621")
-        page.wait_for_selector("#h-results .h-group")
-        assert page.input_value("#h-scope") == "all"
-        assert "date=" not in page.evaluate("location.hash")
-        page.select_option("#h-scope", "day")
-        assert page.is_visible("#h-date")
-        page.fill("#h-date", "2026-10-19")
         expect(page.locator("#h-results .h-row")).to_have_count(2)
-        assert page.locator("#h-results .h-group").count() == 1
-        assert "date=2026-10-19" in page.evaluate("location.hash")
+        assert "date=2026-10-20" in page.evaluate("location.hash")
         # combinable with the board/station filters
         page.select_option("#h-board", "departure")
         expect(page.locator("#h-results .h-row")).to_have_count(1)
-        page.select_option("#h-scope", "all")
-        expect(page.locator("#h-results .h-row")).to_have_count(3)
+        page.click("#h-alldays")
+        expect(page.locator("#h-results .h-row")).to_have_count(3)  # 3 departures of 1621
+        assert page.input_value("#h-date") == ""
+        assert "date=" not in page.evaluate("location.hash")
         assert errors == []
     finally:
         ctx.close()

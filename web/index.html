@@ -180,19 +180,17 @@
     <section class="view view-history" id="view-istoric" aria-labelledby="istoric-heading" hidden>
       <div class="page-head">
         <h1 id="istoric-heading">Istoric</h1>
-        <p class="page-sub">Ce a afișat tabela CFR într-o zi: ore programate, întârzieri observate și linii. Cu un număr de tren: tot istoricul trenului, din toate zilele.</p>
+        <p class="page-sub">Tot ce a afișat tabela CFR, din toate zilele (cele mai noi primele): ore programate, întârzieri citite și linii. Alege o zi, un tren, o stație sau un interval orar ca să restrângi lista.</p>
       </div>
 
       <form class="filters" id="h-form" role="search" aria-label="Filtre istoric" novalidate>
         <div class="field field-date">
-          <span class="field-label" id="h-day-label">Ziua</span>
+          <label class="field-label" id="h-day-label" for="h-date">Ziua</label>
           <div class="h-day-pick">
-            <select id="h-scope" name="scope" aria-labelledby="h-day-label" hidden>
-              <option value="all">Toate zilele</option>
-              <option value="day">O zi anume</option>
-            </select>
-            <input type="date" id="h-date" name="date" aria-label="Ziua" required>
+            <input type="date" id="h-date" name="date" aria-describedby="h-day-hint">
+            <button class="btn btn-ghost h-alldays" type="button" id="h-alldays" aria-pressed="true">Toate zilele</button>
           </div>
+          <span class="sr-only" id="h-day-hint">Lasă ziua necompletată pentru toate zilele.</span>
         </div>
         <label class="field">
           <span class="field-label">Nr. tren</span>

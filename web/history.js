@@ -1,8 +1,10 @@
 // © 2026 Andy217Ace
-// Tabela Gara de Nord — Istoric: what the CFR board showed on a given day, or — with a
-// train number — every journey of that train across ALL days (newest first, grouped by
-// day, „Încarcă mai multe”). State lives in the URL hash so a search can be shared:
-// #istoric?date=… (one day), #istoric?train=… (all days), #istoric?train=…&date=… (one day).
+// Tabela Gara de Nord — Istoric: every journey the CFR board showed, from ALL days by
+// default (newest first, grouped by day, 200 per page + „Încarcă mai multe”); a day, a
+// train number, a station, a time range and the board narrow it, in any combination.
+// No day picked = all days (the day field stays empty; „Toate zilele” clears it). State
+// lives in the URL hash so a search can be shared: #istoric (all days),
+// #istoric?date=… (one day), #istoric?train=…&station=… (all days of those filters).
 // DOM built with createElement/textContent only; the chart is SVG via createElementNS,
 // styled from style.css (no inline styles: CSP). All values are *observed* on the board,
 // never confirmed arrival/departure results.
@@ -17,12 +19,11 @@
   var TIMEOUT_MS = 10000;
   var FIELDS = ["date", "train", "station", "from", "to", "board"];
   var BOARD_LABEL = { arrival: "Sosire", departure: "Plecare" };
-  var STATUS_LABEL = { listed: "pe tabelă", gone: "dispărut de pe tabelă" };
 
   var $ = function (id) { return document.getElementById(id); };
   var form, inputs = {}, timer = null, inflight = null, detailCtrl = null, lastQuery = null;
-  var lastFocus = null, scopeSel = null, prevTrain = "";
-  var PAGE = 200;                 // journeys per page in „Toate zilele” (server max 200)
+  var lastFocus = null, allBtn = null;
+  var PAGE = 200;                 // journeys per page (server max 200)
   var allState = null;            // {q, next, groups: {day: tbody}, shown, ctrl}
 
   // ---- time helpers ------------------------------------------------------------
@@ -71,59 +72,38 @@
 
   // ---- URL state -----------------------------------------------------------------
 
-  // With a train number the day selector offers „Toate zilele” (default) or „O zi anume”;
-  // q.date === "" then means all days. Without a train the search is always one day.
-  function allDays() {
-    return !!(inputs.train.value || "").trim() && scopeSel.value === "all";
-  }
-
+  // q.date === "" means ALL days (the default — never pre-filled with today).
   function readForm() {
     var q = {};
     FIELDS.forEach(function (f) { q[f] = (inputs[f].value || "").trim(); });
-    if (allDays()) q.date = "";
     return q;
   }
 
   function writeForm(q) {
-    FIELDS.forEach(function (f) {
-      if (f === "date" && !q.date) return; // keep the last picked day for „O zi anume”
-      inputs[f].value = q[f] || "";
-    });
-    if (!inputs.date.value) inputs.date.value = todayBucharest();
-    scopeSel.value = q.train && !q.date ? "all" : "day";
-    prevTrain = q.train || "";
+    FIELDS.forEach(function (f) { inputs[f].value = q[f] || ""; });
     syncScope();
   }
 
+  // „Toate zilele” is pressed while no day is picked; pressing it clears the day.
   function syncScope() {
-    var hasTrain = !!(inputs.train.value || "").trim();
-    scopeSel.hidden = !hasTrain;
-    var all = hasTrain && scopeSel.value === "all";
-    inputs.date.hidden = all;
-    inputs.date.required = !all;
-    $("h-day-label").textContent = hasTrain ? "Zile" : "Ziua";
+    allBtn.setAttribute("aria-pressed", inputs.date.value ? "false" : "true");
   }
 
   function queryFromParams(params) {
     var q = {};
     FIELDS.forEach(function (f) { q[f] = (params.get(f) || "").trim(); });
-    if (!q.date && !q.train) q.date = todayBucharest();
     if (q.board !== "arrival" && q.board !== "departure") q.board = "";
     return q;
   }
 
-  function toSearch(q, includeDefaultDate) {
+  function toSearch(q) {
     var p = new URLSearchParams();
-    FIELDS.forEach(function (f) {
-      if (!q[f]) return;
-      if (f === "date" && !includeDefaultDate && q.date === todayBucharest()) return;
-      p.set(f, q[f]);
-    });
+    FIELDS.forEach(function (f) { if (q[f]) p.set(f, q[f]); });
     return p.toString();
   }
 
   function syncHash(q) {
-    var s = toSearch(q, true);
+    var s = toSearch(q);
     var hash = "#istoric" + (s ? "?" + s : "");
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
@@ -131,10 +111,11 @@
   // ---- validation (mirrors the API; the API stays the authority) ----------------------
 
   function validate(q) {
-    var today = todayBucharest();
-    if (q.date || !q.train) {
+    if (q.date) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(q.date)) return "Alege o zi validă.";
-      if (q.date > today) return "Ziua nu poate fi în viitor — istoricul începe cu ce s-a observat deja.";
+      if (q.date > todayBucharest()) {
+        return "Ziua nu poate fi în viitor — istoricul începe cu ce s-a observat deja.";
+      }
     }
     if (q.train && !/^\d{1,6}$/.test(q.train)) return "Numărul trenului are doar cifre (maxim 6).";
     if (q.from && q.to && q.from > q.to) return "Ora „de la” este după ora „până la”.";
@@ -147,8 +128,6 @@
     var to = setTimeout(function () { ctrl.timedOut = true; ctrl.abort(); }, TIMEOUT_MS);
     return fetch(url, { signal: ctrl.signal, cache: "no-store", headers: { Accept: "application/json" } })
       .then(function (r) {
-        // /api/history returns at most 500 rows and flags the cut with X-Truncated: 1
-        ctrl.truncated = r.headers.get("X-Truncated") === "1";
         return r.json().catch(function () { return null; }).then(function (body) {
           if (!r.ok) {
             var err = new Error("http");
@@ -206,77 +185,6 @@
     return b;
   }
 
-  var TRUNCATED_TEXT = "primele 500 — restrânge filtrele (oră/stație/tren)";
-
-  function renderResults(q, services, truncated) {
-    var box = $("h-results");
-    box.replaceChildren();
-    var n = services.length;
-    var count = $("h-count");
-    count.textContent = plural(n, "rezultat", "rezultate") + " · " + dayLabel(q.date) +
-      (n ? " · valori observate pe tabela CFR, nu ore reale confirmate" : "");
-    if (truncated) {
-      count.append(" · ", el("strong", "h-truncated", TRUNCATED_TEXT));
-    }
-    var empty = $("h-empty");
-    if (!n) {
-      empty.textContent = q.date === todayBucharest() && !q.train && !q.station && !q.from && !q.to
-        ? "Nu există încă trenuri observate azi."
-        : "Nu există trenuri observate pentru aceste filtre.";
-      empty.hidden = false;
-      return;
-    }
-    empty.hidden = true;
-
-    var table = el("table", "h-table");
-    var cap = el("caption", "sr-only", "Trenuri observate pe " + dayLabel(q.date));
-    var thead = el("thead");
-    var hr = el("tr");
-    ["Ora prog.", "Panou", "Tren", "Stație", "Operator", "Întârziere max. observată",
-     "Ultima întârziere observată", "Linia", "Stare"].forEach(function (h) {
-      var th = el("th", null, h);
-      th.scope = "col";
-      hr.append(th);
-    });
-    thead.append(hr);
-    var tbody = el("tbody");
-    services.forEach(function (s) {
-      var tr = el("tr", "h-row");
-      var known = s.delay_seen != null ? s.delay_seen !== false : s.delay_known !== false;
-      tr.dataset.delay = known ? delayLevel(s.max_delay) : "unread";
-      cell(tr, "Ora programată", "h-time", s.sched_time || "--:--");
-      cell(tr, "Panou", "h-board", BOARD_LABEL[s.board] || s.board);
-      var train = el("button", "h-train");
-      train.type = "button";
-      var type = el("span", App.typeClass(s.train_type), s.train_type || "?");
-      train.append(type, el("span", "t-no", String(s.train_no)));
-      train.setAttribute("aria-label", "Detalii tren " + (s.train_type || "") + " " + s.train_no +
-        " (" + (BOARD_LABEL[s.board] || "") + " " + (s.sched_time || "") + ")");
-      train.addEventListener("click", function () { openDetail(s, q.date, train); });
-      cell(tr, "Tren", "h-trn", train);
-      cell(tr, "Stație", "h-station", s.station ? stationLink(s.station, nameNode(titleCase(s.station), s)) : "—");
-      cell(tr, "Operator", "h-op", s.operator ? nameNode(s.operator, s) : "—");
-      cell(tr, "Întârziere max. observată", "h-max",
-           delayBadge(s.max_delay, "Cea mai mare întârziere văzută pe tabelă", known));
-      cell(tr, "Ultima întârziere observată", "h-last",
-           delayBadge(s.final_delay, "Ultima întârziere văzută pe tabelă (nu ora reală de sosire/plecare)",
-                      known));
-      var hasPlat = s.platform != null && s.platform !== "";
-      var plat = el("span", hasPlat ? "plat plat-sm" : "plat plat-sm plat-unknown",
-                    hasPlat ? String(s.platform) : "—");
-      plat.setAttribute("aria-label", hasPlat ? "Linia " + s.platform : "Linie neanunțată");
-      cell(tr, "Linia", "h-plat", plat);
-      cell(tr, "Stare", "h-status", STATUS_LABEL[s.status] || s.status || "—");
-      tr.addEventListener("click", function (e) {
-        if (e.target.closest("button, a")) return;
-        openDetail(s, q.date, train);
-      });
-      tbody.append(tr);
-    });
-    table.append(cap, thead, tbody);
-    box.append(table);
-  }
-
   // station name → its page (#statie?nume=<canonical>, web/stats.js); `content` = text or node
   function stationLink(name, content) {
     var a = el("a", "station-link");
@@ -305,7 +213,7 @@
     allState = null;
   }
 
-  // ---- all days of one train (/api/history?train=N&all=1) ---------------------------------
+  // ---- journeys, all days or one (/api/history?all=1[&train=N][&date=…]) ----------------
 
   var shortDayFmt = new Intl.DateTimeFormat("ro-RO", { timeZone: "UTC", day: "2-digit", month: "2-digit",
                                                        year: "numeric" });
@@ -323,8 +231,7 @@
   function allParams(q, cursor) {
     var p = new URLSearchParams();
     p.set("all", "1");
-    p.set("train", q.train);
-    ["date", "station", "from", "to", "board"].forEach(function (f) { if (q[f]) p.set(f, q[f]); });
+    ["train", "date", "station", "from", "to", "board"].forEach(function (f) { if (q[f]) p.set(f, q[f]); });
     p.set("limit", String(PAGE));
     if (cursor) p.set("cursor", cursor);
     return p.toString();
@@ -377,7 +284,7 @@
   function allCount(q, data) {
     var count = $("h-count");
     var per = data.period || {};
-    var text = "Trenul " + q.train + ": " + plural(data.total, "călătorie", "călătorii");
+    var text = (q.train ? "Trenul " + q.train + ": " : "") + plural(data.total, "călătorie", "călătorii");
     if (q.date) text += " · " + dayLabel(q.date);
     else if (per.first) {
       text += " în perioada " + shortDay(per.first) + " – " + shortDay(per.last) + " (" +
@@ -484,11 +391,15 @@
     var list = Array.isArray(data.journeys) ? data.journeys : [];
     allState = { q: q, next: data.next || null, groups: {}, shown: 0, ctrl: null };
     if (!data.total) {
-      $("h-count").textContent = "Trenul " + q.train + ": " + plural(0, "călătorie", "călătorii");
+      $("h-count").textContent = (q.train ? "Trenul " + q.train + ": " : "") +
+        plural(0, "călătorie", "călătorii") + (q.date ? " · " + dayLabel(q.date) : "");
       var empty = $("h-empty");
-      empty.textContent = q.station || q.from || q.to || q.board || q.date
-        ? "Nu există călătorii observate ale acestui tren pentru aceste filtre."
-        : "Trenul " + q.train + " nu a fost observat pe tabelă.";
+      var narrowed = q.station || q.from || q.to || q.board || q.date;
+      empty.textContent = q.train
+        ? (narrowed ? "Nu există călătorii observate ale acestui tren pentru aceste filtre."
+                    : "Trenul " + q.train + " nu a fost observat pe tabelă.")
+        : (narrowed ? "Nu există trenuri observate pentru aceste filtre."
+                    : "Nu există încă trenuri observate.");
       empty.hidden = false;
       return;
     }
@@ -551,23 +462,18 @@
       lastQuery = null;
       return;
     }
-    var key = toSearch(q, true);
+    var key = toSearch(q);
     if (!force && key === lastQuery) return;
     lastQuery = key;
     if (inflight) inflight.abort();
     var ctrl = new AbortController();
     inflight = ctrl;
-    var params = new URLSearchParams();
-    FIELDS.forEach(function (f) { if (q[f]) params.set(f, q[f]); });
-    var all = !!q.train; // a train number: the journeys view (all days, or the picked day)
     setLoading(true);
-    getJSON("/api/history?" + (all ? allParams(q) : params.toString()), ctrl)
+    getJSON("/api/history?" + allParams(q), ctrl)
       .then(function (data) {
         if (inflight !== ctrl) return;
         errBox.hidden = true;
-        if (all) { renderAll(q, data || {}); return; }
-        clearResults();
-        renderResults(q, Array.isArray(data && data.services) ? data.services : [], !!ctrl.truncated);
+        renderAll(q, data || {});
       })
       .catch(function (e) {
         if (inflight !== ctrl || e.aborted) return;
@@ -747,45 +653,6 @@
     }
   }
 
-  function renderDetail(service, day, events) {
-    var body = $("h-detail-body");
-    body.replaceChildren();
-    var pts = delaySeries(events, service);
-    var chartBox = el("section", "detail-block");
-    chartBox.append(el("h3", "detail-h", "Întârzierea observată în timp"));
-    if (pts.length >= 2) {
-      chartBox.append(buildChart(pts));
-      var nChanges = pts.filter(function (p) { return p.change; }).length;
-      chartBox.append(el("p", "detail-note",
-        plural(nChanges, "schimbare de întârziere observată", "schimbări de întârziere observate") +
-        ". Axa X: ora citirii tabelei (ora României). Axa Y: întârzierea afișată, în minute. " +
-        "Valori observate, nu ora reală de sosire/plecare."));
-    } else {
-      chartBox.append(el("p", "detail-note", "Prea puține observații pentru grafic."));
-    }
-    body.append(chartBox);
-
-    var tl = el("section", "detail-block");
-    tl.append(el("h3", "detail-h", "Evenimente (" + events.length + ")"));
-    if (!events.length) {
-      tl.append(el("p", "detail-note", "Nu există evenimente înregistrate pentru acest tren în ziua aleasă."));
-    } else {
-      var ol = el("ol", "timeline");
-      events.forEach(function (e) {
-        var li = el("li", "tl-item tl-" + e.kind);
-        var time = el("time", "tl-time", localTime(e.ts));
-        time.dateTime = e.ts;
-        var txt = el("span", "tl-text", eventText(e));
-        var meta = el("span", "tl-meta", (BOARD_LABEL[e.board] || e.board || "") +
-          (e.sched_time ? " " + e.sched_time : "") + (e.station ? " · " + titleCase(e.station) : ""));
-        li.append(time, txt, meta);
-        ol.append(li);
-      });
-      tl.append(ol);
-    }
-    body.append(tl);
-  }
-
   // ---- journey (/api/journeys/{id}): final result + real delay readings ---------------
 
   var STATE_CLASS = { confirmed: "res-confirmed", unconfirmed: "res-unconfirmed",
@@ -945,36 +812,6 @@
       });
   }
 
-  function openDetail(service, day, opener) {
-    if (service.id != null) {
-      openJourney(service.id, opener, { train_type: service.train_type, train_no: service.train_no,
-        board: service.board, sched_time: service.sched_time, station: service.station,
-        service_date: day });
-      return;
-    }
-    // older API without `id`: the day's events for this train number
-    var dlg = $("h-detail");
-    lastFocus = opener || null;
-    $("h-detail-title").textContent = (service.train_type || "Tren") + " " + service.train_no;
-    $("h-detail-sub").textContent = (BOARD_LABEL[service.board] || "") + " " + (service.sched_time || "") +
-      (service.station ? " · " + titleCase(service.station) : "") + " · " + dayLabel(day);
-    var body = $("h-detail-body");
-    body.replaceChildren(el("p", "detail-note", "Se încarcă evenimentele…"));
-    if (typeof dlg.showModal === "function") { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute("open", "");
-    if (detailCtrl) detailCtrl.abort();
-    var ctrl = new AbortController();
-    detailCtrl = ctrl;
-    getJSON("/api/train/" + encodeURIComponent(service.train_no) + "?date=" + encodeURIComponent(day), ctrl)
-      .then(function (data) {
-        if (detailCtrl !== ctrl) return;
-        renderDetail(service, day, Array.isArray(data && data.events) ? data.events : []);
-      })
-      .catch(function (e) {
-        if (detailCtrl !== ctrl || e.aborted) return;
-        body.replaceChildren(el("p", "notice notice-error", errorText(e)));
-      });
-  }
-
   function closeDetail() {
     var dlg = $("h-detail");
     if (detailCtrl) { detailCtrl.abort(); detailCtrl = null; }
@@ -1003,17 +840,22 @@
     form = $("h-form");
     if (!form) return;
     FIELDS.forEach(function (f) { inputs[f] = $("h-" + f); });
-    scopeSel = $("h-scope");
-    inputs.date.value = todayBucharest();
+    allBtn = $("h-alldays");
+    inputs.date.value = "";            // all days by default — never pre-filled with today
     inputs.date.max = todayBucharest();
     syncScope();
+    allBtn.addEventListener("click", function () {
+      if (!inputs.date.value) return;
+      inputs.date.value = "";
+      syncScope();
+      clearTimeout(timer);
+      search(true);
+    });
     form.addEventListener("submit", function (e) { e.preventDefault(); clearTimeout(timer); search(true); });
     form.addEventListener("input", function (e) {
       if (e.target === inputs.train) {
         var digits = inputs.train.value.replace(/\D+/g, "").slice(0, 6);
         if (digits !== inputs.train.value) inputs.train.value = digits;
-        if (digits && !prevTrain) scopeSel.value = "all"; // a train number: all days by default
-        prevTrain = digits;
       }
       syncScope();
       debounced();
@@ -1021,9 +863,7 @@
     form.addEventListener("change", function () { syncScope(); debounced(); });
     form.addEventListener("reset", function () {
       setTimeout(function () {
-        inputs.date.value = todayBucharest();
-        scopeSel.value = "all";
-        prevTrain = "";
+        inputs.date.value = "";
         syncScope();
         clearTimeout(timer);
         search(true);

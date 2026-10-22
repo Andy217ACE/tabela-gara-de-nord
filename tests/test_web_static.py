@@ -190,7 +190,7 @@ def test_index_loads_split_scripts_and_real_views():
 
 def test_history_js_uses_api():
     js = (WEB / "history.js").read_text(encoding="utf-8")
-    for needle in ("/api/history", "/api/train/", "Europe/Bucharest", "createElementNS",
+    for needle in ("/api/history", "Europe/Bucharest", "createElementNS",
                    "rezultat", "AbortController"):
         assert needle in js, needle
 
@@ -201,7 +201,7 @@ def test_history_js_journey_result():
     js = (WEB / "history.js").read_text(encoding="utf-8")
     for needle in ('"/api/journeys/"', "delay_series", "disappeared_at", "estimated_at",
                    "Data de serviciu", "zilei următoare", "București Nord", "chart-gone",
-                   "s.delay_known !== false", '"necitit"', '"#tren?nr="', "openJourney",
+                   "j.max_read_delay != null", '"necitit"', '"#tren?nr="', "openJourney",
                    "final_delay", "document.body.appendChild(dlg)"):
         assert needle in js, needle
     css = (WEB / "style.css").read_text(encoding="utf-8")
