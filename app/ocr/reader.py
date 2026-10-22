@@ -288,7 +288,10 @@ def _delay(cell: np.ndarray, tess: tuple[str, float | None], matcher: DigitMatch
     (DELAY_UNREAD -> parse_delay None): a missing delay, never 0 and never a guess.
     """
     t_text, t_conf = tess[0].replace(" ", ""), tess[1]
-    if matcher is None:
+    if matcher is None:  # no templates: Tesseract only, still never 3+ digits
+        t_digits = t_text.lstrip("+")
+        if len(t_digits) >= DELAY_MAX_DIGITS:
+            return DELAY_UNREAD, None, "three_digits"
         return t_text, t_conf, None
     try:
         gl = matcher.glyphs(cell, _ALLOWED["delay"])
@@ -535,8 +538,8 @@ def _reread_delays(engine: OcrEngine, slots, entries: list[dict], ctx: "_Ctx",
     tries = {i: 0 for i in todo}
     try:
         for variant in DELAY_VARIANTS:
-            if not todo or time.perf_counter() - t_start >= budget:
-                break
+            if not todo or budget - (time.perf_counter() - t_start) < 1.0:
+                break  # less than a second left: a Tesseract call would overrun
             cells = [_variant_cells(slots[i], variant)["delay"] for i in todo]
             old_timeout = getattr(engine, "timeout", None)
             if old_timeout is not None:

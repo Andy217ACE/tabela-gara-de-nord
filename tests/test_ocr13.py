@@ -252,3 +252,13 @@ def test_delay_reread_takes_a_variant_only_when_the_rules_pass(monkeypatch):
     assert "retry" in f  # the first pass left it unread (glare)
     assert f["norm"] == 65 and f["retry"]["variant"] == reader.DELAY_VARIANTS[1]
     assert d["row"].delay_read and d["row"].delay_min == 65 and "check" not in f
+
+
+def test_line_version_parses_variant_names_with_plus():
+    from app.observations import parse_line_version
+    got = parse_line_version("ocr-tess-grid-3+retry:lvl+:2+delay-retry:lvl+:1")
+    assert got["retry"] == {"variant": "lvl+", "attempts": 2}
+
+
+def test_no_templates_still_refuses_three_digit_delays():
+    assert _delay(CELL, ("+465", 80.0), None)[::2] == (DELAY_UNREAD, "three_digits")

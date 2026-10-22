@@ -71,7 +71,13 @@ def max_readings(store, ids: list[int]) -> dict[int, int | None]:
             f" AND e.new GLOB '[0-9]*' AND NOT {quality.SUSPECT_EVENT_SQL}"
             f" AND e.service_id IN ({marks})", ids).fetchall()
     out: dict[int, int | None] = {}
+    by_sid: dict[int, list] = {}
     for e in evs:
+        by_sid.setdefault(e["service_id"], []).append(e)
+    bad = {sid: journeys.misread_values(es) for sid, es in by_sid.items()}
+    for e in evs:
+        if journeys._int(e["new"]) in bad[e["service_id"]]:
+            continue  # set by a misread "+" that a later event reverted
         # the previous value counts as a reading, unless the event goes back from a
         # misread "+" (410 -> 10: 410 was never on the board)
         vals = [journeys._int(e["new"])]

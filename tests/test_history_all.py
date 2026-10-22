@@ -269,3 +269,11 @@ def test_revert_of_a_plus_misread_does_not_count_its_old_value(store):
     delay_event(store, sid, "2026-10-17T12:06:00+03:00", "410", "10")
     js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
     assert js[sid]["max_read_delay"] == 10
+
+
+def test_unmarked_plus_misread_and_its_revert_are_not_readings(store):
+    sid = store._ids[17]
+    delay_event(store, sid, "2026-10-17T12:05:00+03:00", "10", "410")
+    delay_event(store, sid, "2026-10-17T12:06:00+03:00", "410", "10")
+    js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
+    assert js[sid]["max_read_delay"] == 10

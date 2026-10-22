@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 from collections import Counter
@@ -235,7 +236,8 @@ def line_version(base: str, entry: dict) -> str:
 
 def parse_line_version(v: str | None) -> dict:
     """{state: ok|empty|unread, retry: None | {variant, attempts}} from `line_version`."""
-    parts = (v or "").split("+")
+    # split on a "+" that starts a tag (a letter follows): variant names hold "+" ("lvl+")
+    parts = re.split(r"\+(?=[a-z])", v or "")
     out: dict = {"state": "ok", "retry": None}
     for p in parts[1:]:
         if p in ("empty", "unread"):

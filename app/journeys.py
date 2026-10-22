@@ -178,6 +178,8 @@ def delay_series(store, service_id: int, s) -> list[dict]:
                         (service_id,)).fetchall() if has_obs else []
         evs = c.execute("SELECT ts, old, new FROM events WHERE service_id=? AND kind='delay'"
                         + _NOT_SUSPECT + " ORDER BY ts, id", (service_id,)).fetchall()
+    bad = misread_values(evs)
+    evs = [e for e in evs if _int(e["new"]) not in bad]
     for e in evs:
         add(e["ts"], _int(e["new"]), "event")
     if evs and (_int(evs[0]["old"]) or 0) > 0 and not plus_revert(evs[0]):
@@ -207,6 +209,12 @@ def plus_revert(e) -> bool:
     never stored or marked (Beta 1.13 audit: IC 538 "410 -> 10" kept 410 as a maximum)."""
     old, new = _int(e["old"]), _int(e["new"])
     return old is not None and new is not None and quality.digit_dropped(old, new)
+
+
+def misread_values(evs) -> set[int]:
+    """Values a revert shows to be a misread "+" (the old value of a `plus_revert`): the
+    event that set them is not a reading either, even when it is not marked suspect."""
+    return {_int(e["old"]) for e in evs if plus_revert(e)}
 
 
 def _int(v) -> int | None:
