@@ -573,3 +573,25 @@ def test_ghost_minority_dup_rule():
 
 def test_platform_2_5_confusion_needs_three():
     assert quality.platform_needs(2, 5) == 3 and quality.platform_needs(5, 2) == 3
+
+
+def test_flap_pairs_marked_by_backfill(tmp_path):
+    s = Store(str(tmp_path / "f.db"))
+    s.migrate()
+    c = s._conn
+    sid = c.execute(
+        "INSERT INTO services(board, service_date, train_type, train_no, station, operator,"
+        " sched_time, first_seen, last_seen, status, station_raw) VALUES ('arrival',"
+        " '2026-10-21','R',8001,'CONSTANTA','o','06:17','2026-10-21T03:00:00+03:00',"
+        " '2026-10-21T06:20:00+03:00','gone','CONSTANTA')").lastrowid
+    ids = [c.execute("INSERT INTO events(service_id, ts, kind) VALUES (?,?,?)",
+                     (sid, ts, k)).lastrowid for ts, k in (
+        ("2026-10-21T03:00:00+03:00", "appeared"), ("2026-10-21T04:00:00+03:00", "gone"),
+        ("2026-10-21T04:02:00+03:00", "appeared"),   # 120 s: flapping
+        ("2026-10-21T05:00:00+03:00", "gone"), ("2026-10-21T05:30:00+03:00", "appeared"))]
+    assert quality.flap_pairs(c) == [(ids[1], ids[2])]
+    quality.backfill(c)
+    assert dict(c.execute("SELECT event_id, reason FROM event_quality").fetchall()) == {
+        ids[1]: "flap", ids[2]: "flap"}
+    assert quality.backfill(c)["changed"] == {}
+    s.close()

@@ -51,7 +51,10 @@ def test_dry_run_is_default_and_writes_nothing(tmp_path, capsys):
     rep = json.loads(capsys.readouterr().out)
     assert rep["mode"] == "dry-run"
     assert rep["would_remove"]["services"] == 8
-    assert rep["would_remove"]["observation_links"] == 1
+    assert rep["would_remove"]["observations_moved_to_real_service"] == 1  # merged into 5011
+    assert rep["would_remove"]["suspect_events"] == {"delay": 3}  # 425, its return, 945
+    assert rep["would_remove"]["last_delay_fixed"] == [
+        {"service": ids["10260"], "stored": 945, "confirmed": 15}]
     assert sum(rep["by_reason"].values()) == 8 and set(rep["by_reason"]) <= {"near_dup", "short"}
     assert len(rep["examples"]) == 8
     assert any(e["ghost_of"] == ids["5011"] for e in rep["examples"])
@@ -79,7 +82,12 @@ def test_apply_archives_backs_up_is_idempotent_and_restores(tmp_path, capsys):
     c = sqlite3.connect(db)
     left = {r[0] for r in c.execute("SELECT id FROM services")}
     assert not (left & set(ids["dups"])) and ids["5011"] in left
-    assert c.execute("SELECT service_id FROM observations").fetchone()[0] is None  # kept, unlinked
+    # the ghost's observation is kept and merged into the real service
+    assert c.execute("SELECT service_id FROM observations").fetchone()[0] == ids["5011"]
+    assert c.execute("SELECT last_delay FROM services WHERE id=?",
+                     (ids["10260"],)).fetchone()[0] == 15
+    assert not c.execute("SELECT 1 FROM events WHERE new IN ('425', '945') OR old='425'"
+                         ).fetchall()
     assert c.execute("SELECT COUNT(*) FROM purged_rows").fetchone()[0] > 8
     c.close()
     # idempotent

@@ -373,6 +373,24 @@ def _canonical_names(row) -> tuple[str | None, str | None]:
     return st_out, op_out
 
 
+FLAP_S = 180  # gone -> appeared within this many seconds is flapping (report 2: 626 such)
+
+
+def flap_pairs(conn: sqlite3.Connection) -> list[tuple[int, int]]:
+    """(gone event id, appeared event id) pairs of one service within FLAP_S seconds."""
+    out = []
+    prev: dict[int, tuple[int, str, str]] = {}
+    for sid, eid, ts, kind in conn.execute(
+            "SELECT service_id, id, ts, kind FROM events WHERE kind IN ('appeared', 'gone')"
+            " ORDER BY service_id, ts, id"):
+        p = prev.get(sid)
+        if (kind == "appeared" and p is not None and p[1] == "gone"
+                and (_ts(ts) - _ts(p[2])).total_seconds() <= FLAP_S):
+            out.append((p[0], eid))
+        prev[sid] = (eid, kind, ts)
+    return out
+
+
 def summary(conn: sqlite3.Connection) -> dict:
     """Headline numbers (read-only) used to compare before/after a backfill."""
     def one(sql, *a):
@@ -456,7 +474,8 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
                               last_delay_clean=res["last"])
                 for (eid,) in conn.execute(
                         "SELECT q.event_id FROM event_quality q JOIN events e ON e.id=q.event_id"
-                        " WHERE e.service_id=? AND q.suspect=1", (sid,)).fetchall():
+                        " WHERE e.service_id=? AND q.suspect=1 AND e.kind='delay'",
+                        (sid,)).fetchall():
                     if eid not in res["suspect"]:  # verdict changed: derived flag cleared
                         changed["suspect_events"] += 1
                         conn.execute("UPDATE event_quality SET suspect=0, reason='cleared'"
@@ -474,6 +493,16 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
             if old is None or any(old[k] != v for k, v in fields.items()):
                 changed["services"] += 1
                 upsert_service(conn, sid, **fields)
+        # gone -> appeared within FLAP_S: OCR flapping, not a train leaving and returning
+        for gone_id, app_id in flap_pairs(conn):
+            for eid in (gone_id, app_id):
+                cur = conn.execute("SELECT reason FROM event_quality WHERE event_id=?",
+                                   (eid,)).fetchone()
+                if cur is None or cur[0] != "flap":
+                    changed["flap_events"] += 1
+                    conn.execute("INSERT INTO event_quality(event_id, suspect, reason)"
+                                 " VALUES (?,1,'flap') ON CONFLICT(event_id) DO UPDATE SET"
+                                 " suspect=1, reason='flap'", (eid,))
         from app.observations import refresh_trains  # local: observations imports store
         if conn.execute("SELECT 1 FROM sqlite_master WHERE name='trains'").fetchone():
             refresh_trains(conn, [s["train_no"] for s in services]
