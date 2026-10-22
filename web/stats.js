@@ -288,7 +288,7 @@
     prag: { label: "„La timp” ≤ (min)", type: "number", lo: 0, hi: 60, placeholder: "5" },
     min: { label: "Eșantion minim", type: "number", lo: 1, hi: 1000, placeholder: "5" },
     doar_confirmate: { label: "Doar rezultate confirmate", type: "checkbox" },
-    q: { label: "Caută stația", type: "search", placeholder: "ex. Galați, Brașov, Aeroport", max: 64 }
+    q: { label: "Caută stația", type: "search", placeholder: "ex. Galați, Brașov, Aeroport", max: 40 }
   };
 
   function clean(field, raw) {
@@ -1378,7 +1378,7 @@
 
   var statie = makeView({
     root: "st-statie", route: "statie", fields: SN_FIELDS,
-    onParams: function (v, params) { v.nume = (params.get("nume") || "").trim().slice(0, 80); },
+    onParams: function (v, params) { v.nume = (params.get("nume") || "").trim().slice(0, 40); },
     hashExtra: function (v) { return v.nume ? { nume: v.nume } : null; },
     title: function (v) {
       stationHeading(v.nume ? "Stația " + titleCase(v.nume) : "Stație", "");
