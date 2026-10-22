@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.12 — 2026-10-22
+
+### Reparat
+- **12 rânduri pe panou.** Tabela CFR are pe fiecare panou 4 grupuri a câte 3 rânduri. Când un rând avea text greu de citit (un „1” subțire lângă o linie de reflexie, un „*” mic, „13:38” citit „43:38”, ora „4:41” citită „4:4”), rândul se pierdea și panoul arăta 11 trenuri în loc de 12. Asta se întâmpla la aproximativ 1 cadru din 15. Acum un asemenea rând este recitit automat, doar pe coloanele tip, număr și oră, cu alte preprocesări (fără liniile de reflexie, prag mai mic sau mai mare, imagine mărită, prag adaptiv, decupaj mai larg). Recitirea are o limită de 8 secunde pe cadru.
+- O recitire nu schimbă nicio valoare citită deja corect. Nu se acceptă numărul unui tren de pe alt rând, iar un cadru stricat (imagine trunchiată, cu peste 4 rânduri ilizibile pe un panou) nu se recitește: nu se inventează trenuri.
+- Rândurile sunt verificate pe structura 4 × 3, derivată din imagine. Un rând slab sau gol își păstrează locul și nu se mai lipește de vecin. Un rând fără text e „rând gol”, unul cu text ilizibil e „rând necitit” (niciodată 0 sau tren ghicit).
+
+### Nou
+- `/api/health` → `ocr`: rândurile citite pe fiecare panou în ultimul cadru, câte rânduri au fost recitite și recuperate, durata OCR și câte cadre din ultimele 60 au avut 12/12.
+- Capturi OCR (admin): fiecare captură arată „S 12 · P 11” și recitirile. Fiecare rând arată „rând gol” / „rând necitit” / „recitit (variantă)”. Versiunea de procesare a observațiilor este `ocr-tess-grid-2`.
+
 ## Beta 1.11 — 2026-10-22
 
 ### Reparat

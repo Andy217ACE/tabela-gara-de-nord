@@ -169,6 +169,8 @@ class _Panel:
         return len(self.bands)
 
     def variant(self, name: str) -> np.ndarray:
+        if name not in ("vline", "lvl-", "lvl+", "adapt"):
+            return self.mask  # x4/wide change the scale or crop, not the binarisation
         if name not in self._variants:
             self._variants[name] = preprocess.variant_mask(self.img, self.rows, self.level, name)
         return self._variants[name]
@@ -327,46 +329,38 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
     attempts = {i: 0 for i in todo}
     est = first_s * len(_RETRY_COLS) / len(_ORDER)  # cost of one variant, until measured
     t_retry = time.perf_counter()
-    for variant in preprocess.VARIANTS:
-        if not todo:
-            break
-        if time.perf_counter() - t_start + est > budget:
-            log.info("OCR re-read stopped by the %.1f s frame budget (%d line(s) left)",
-                     budget, len(todo))
-            break
-        t_v = time.perf_counter()
-        vcells = [_variant_cells(slots[i], variant) for i in todo]
-        vreads = {name: _Composite([c[name] for c in vcells],
-                                   upscale=_X4 if variant == "x4" else 1.0
-                                   ).read(engine, *_TESS[name])
-                  for name in _RETRY_COLS}
-        left = []
-        for k, i in enumerate(todo):
-            attempts[i] += 1
-            board, j, _, _ = slots[i]
-            old = entries[i]
-            boxes = {n: tuple(old["fields"][n]["bbox"]) for n in _ORDER}
-            # first replace only the columns that did not read, then all three
-            missing = tuple(n for n in _RETRY_COLS if old["fields"][n]["norm"] is None)
-            for cols in dict.fromkeys((missing or _RETRY_COLS, _RETRY_COLS)):
-                tess = {n: (old["fields"][n]["_tess"], old["fields"][n]["_tess_conf"])
-                        for n in _ORDER}
-                cells = dict(base_cells[i])
-                for name in cols:
-                    tess[name] = vreads[name][k]
-                    cells[name] = vcells[k][name]
-                new = _assemble(board, j, tess, cells, boxes, ctx)
-                if _complete(new):
-                    break
-            if _complete(new) or (new["row"] is not None and old["row"] is None):
-                new["state"] = "ok"
-                new["retry"] = {"attempts": attempts[i], "variant": variant}
-                entries[i] = new
-            if not _complete(entries[i]):
-                left.append(i)
-        todo = left
-        est = time.perf_counter() - t_v
+    try:
+        for variant in preprocess.VARIANTS:
+            if not todo:
+                break
+            if time.perf_counter() - t_start + est > budget:
+                log.info("OCR re-read stopped by the %.1f s frame budget (%d line(s) left)",
+                         budget, len(todo))
+                break
+            t_v = time.perf_counter()
+            vreads = _reread(engine, [_variant_cells(slots[i], variant) for i in todo],
+                             variant, t_start, budget)
+            if vreads is None:  # budget spent between two columns
+                break
+            vcells, vtext = vreads
+            left = []
+            for k, i in enumerate(todo):
+                attempts[i] += 1
+                new = _merge(entries[i], slots[i], base_cells[i], vcells[k],
+                             {n: vtext[n][k] for n in _RETRY_COLS}, ctx)
+                if new is not None and not _duplicate(new, entries, i):
+                    new["state"] = "ok"
+                    new["retry"] = {"attempts": attempts[i], "variant": variant}
+                    entries[i] = new
+                else:
+                    left.append(i)
+            todo = left
+            est = time.perf_counter() - t_v
+    except Exception:  # an optional re-read never costs the first pass's rows
+        log.warning("OCR re-read failed; first-pass reading kept", exc_info=True)
     for i, n in attempts.items():
+        if n == 0:
+            continue  # never re-read (budget): not reported as a re-read
         if "retry" not in entries[i]:
             entries[i]["retry"] = {"attempts": n, "variant": None}
         else:
@@ -378,7 +372,8 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
             f.pop("_tess", None)
             f.pop("_tess_conf", None)
     rows = [e["row"] for e in entries if e["row"] is not None]
-    stats.record(_summary(panels, entries, len(attempts), retry_s, t_start))
+    stats.record(_summary(panels, entries, sum(n > 0 for n in attempts.values()),
+                          retry_s, t_start))
     return rows, entries
 
 
@@ -401,11 +396,71 @@ def _complete(entry: dict) -> bool:
     return r is not None and bool(r.train_no)
 
 
+def _reread(engine: OcrEngine, vcells: list[dict], variant: str, t_start: float,
+            budget: float):
+    """(cells, {column: readings}) of the re-read columns, or None when the frame budget
+    runs out between two columns. Each Tesseract call gets at most the remaining budget
+    (at least 1 s) as its timeout."""
+    out = {}
+    old_timeout = getattr(engine, "timeout", None)
+    try:
+        for name in _RETRY_COLS:
+            left = budget - (time.perf_counter() - t_start)
+            if left <= 0:
+                return None
+            if old_timeout is not None:
+                engine.timeout = max(1.0, min(old_timeout, left))
+            out[name] = _Composite([c[name] for c in vcells],
+                                   upscale=_X4 if variant == "x4" else 1.0
+                                   ).read(engine, *_TESS[name])
+    finally:
+        if old_timeout is not None:
+            engine.timeout = old_timeout
+    return vcells, out
+
+
+def _merge(old: dict, slot, base: dict, vcells: dict, vtext: dict, ctx: "_Ctx"
+           ) -> dict | None:
+    """The line re-assembled with the re-read value of ONLY the columns that did not
+    read (a value the first pass read is never replaced), or None if still incomplete."""
+    board, j, _, _ = slot
+    missing = [n for n in _RETRY_COLS if old["fields"][n]["norm"] is None]
+    if not missing:
+        return None
+    tess = {n: (old["fields"][n]["_tess"], old["fields"][n]["_tess_conf"]) for n in _ORDER}
+    cells = dict(base)
+    for name in missing:
+        tess[name] = vtext[name]
+        cells[name] = vcells[name]
+    boxes = {n: tuple(old["fields"][n]["bbox"]) for n in _ORDER}
+    new = _assemble(board, j, tess, cells, boxes, ctx)
+    if not _complete(new):
+        return None
+    for n in _RETRY_COLS:  # belt and braces: values read in the first pass stay
+        if n not in missing and new["fields"][n]["norm"] != old["fields"][n]["norm"]:
+            return None
+    return new
+
+
+def _duplicate(new: dict, entries: list[dict], i: int) -> bool:
+    """A re-read giving the train number of another line of the same panel is a read of
+    the neighbouring line (wider crop), not this one: rejected."""
+    no = new["row"].train_no
+    return any(k != i and e["board"] == new["board"] and e["row"] is not None
+               and e["row"].train_no == no for k, e in enumerate(entries))
+
+
 def _variant_cells(slot, variant: str) -> dict[str, np.ndarray]:
     _, j, p, _ = slot
     if variant == "wide":  # crop wider: glyph tops/bottoms cut by a tight band
         y0, y1 = p.bands[j]
-        return p.cells(j, pad_y=max(2, (y1 - y0) // 4))
+        pad = max(2, (y1 - y0) // 4)
+        # ...but never past half the gap to a neighbouring line (its glyphs)
+        if j > 0:
+            pad = min(pad, max(0, (y0 - p.bands[j - 1][1]) // 2))
+        if j + 1 < len(p.bands):
+            pad = min(pad, max(0, (p.bands[j + 1][0] - y1) // 2))
+        return p.cells(j, pad_y=pad)
     return p.cells(j, mask=p.variant(variant))
 
 
@@ -480,7 +535,7 @@ def _summary(panels, entries: list[dict], retried: int, retry_s: float,
     for board, p, _ in panels:
         es = [e for e in entries if e["board"] == board]
         per[board] = {
-            "lines": len(p), "rows": sum(e["row"] is not None for e in es),
+            "lines": len(p), "rows": sum(_complete(e) for e in es),
             "unread": sum(e["state"] == "unread" for e in es),
             "empty": sum(e["state"] == "empty" for e in es),
             "groups_repaired": p.repaired,

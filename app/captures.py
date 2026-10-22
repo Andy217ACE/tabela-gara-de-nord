@@ -197,7 +197,7 @@ def _board_counts(conn, ids: list[int]) -> dict[int, dict]:
         b["lines"] += 1
         if line["state"] == "empty":
             b["empty"] += 1
-        elif state == "incomplete" and line["state"] == "unread":
+        elif state == "incomplete":  # text but no train (also pre-grid captures)
             b["unread"] += 1
         else:
             b["rows"] += 1

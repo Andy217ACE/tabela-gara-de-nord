@@ -25,8 +25,10 @@
     return t;
   }
 
+  var EXPECTED = 12;  // lines per panel (4 groups x 3); /api/admin/stats ocr.expected_rows
+
   function boardsShort(b) {
-    return b && b.arrivals && (b.arrivals.rows !== 12 || b.departures.rows !== 12);
+    return b && b.arrivals && (b.arrivals.rows !== EXPECTED || b.departures.rows !== EXPECTED);
   }
   var PAGE = 50;
 
@@ -253,11 +255,12 @@
       stat(dl, "Rânduri 24 h (cu probleme)", s.rows_24h + " (" + s.rows_with_errors_24h + ")");
       if (s.ocr && s.ocr.window) {
         var w = s.ocr.window, last = s.ocr.last;
-        stat(dl, "Cadre cu 12/12 rânduri", w.frames ? w.full_frames + " din " + w.frames + " (de la pornire, max. 60)" : "—",
+        if (s.ocr.expected_rows) EXPECTED = s.ocr.expected_rows;
+        stat(dl, "Cadre cu " + EXPECTED + "/" + EXPECTED + " rânduri", w.frames ? w.full_frames + " din " + w.frames + " (de la pornire, max. 60)" : "—",
           w.frames && w.full_frames < w.frames ? "is-bad" : "");
         stat(dl, "Recitiri OCR (rânduri recuperate)", w.lines_retried + " (" + w.lines_recovered + ") · max " + ms(w.retry_ms_max));
         if (last && last.boards) {
-          stat(dl, "Ultimul cadru", "S " + last.boards.arrival.rows + " · P " + last.boards.departure.rows +
+          stat(dl, "Ultimul cadru", "S " + (last.boards.arrival || {}).rows + " · P " + (last.boards.departure || {}).rows +
             " · " + ms(last.duration_ms));
         }
       }
@@ -347,7 +350,7 @@
     box.appendChild(h);
     var meta = el("p", "ocr-meta",
       (d.ok ? "OCR reușit" : "OCR eșuat") + " · " + d.n_rows + " rânduri valide (" +
-      boardsText(d.boards) + " din 12/12) · " +
+      boardsText(d.boards) + " din " + EXPECTED + "/" + EXPECTED + ") · " +
       d.observations.length + " linii citite · " + ms(d.duration_ms) + " · " +
       (d.width ? d.width + "×" + d.height + " px · " : "") + bytes(d.bytes) + " · hash " + d.hash8);
     box.appendChild(meta);

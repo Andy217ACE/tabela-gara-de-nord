@@ -207,9 +207,10 @@ def test_budget_zero_means_no_retry_and_is_reported():
     rows, debug = _read("2026_10_22_001807-61bd84a4", budget_s=0)
     assert _per_board(rows) == {"arrival": 12, "departure": 11}
     line = _line(debug, "departure", 4)
-    assert line["retry"] == {"attempts": 0, "variant": None}
+    assert line["state"] == "unread" and "retry" not in line  # never re-read: not reported
     snap = stats.snapshot()
-    assert snap["last"]["retried"] == 1 and snap["last"]["recovered"] == 0
+    assert snap["last"]["retried"] == 0 and snap["last"]["recovered"] == 0
+    assert snap["last"]["boards"]["departure"]["unread"] == 1
     assert snap["window"]["frames"] == 1 and snap["window"]["full_frames"] == 0
 
 
@@ -293,3 +294,49 @@ def test_health_reports_ocr_rows_per_panel():
     assert ocr["expected_rows"] == 12
     assert ocr["last"]["boards"]["departure"]["rows"] == 12
     assert ocr["last"]["recovered"] == 1 and ocr["window"]["full_frames"] == 1
+
+
+# -- review fixes ------------------------------------------------------------------------
+
+class _FailingEngine:
+    """Tesseract for the first pass, then fails (timeout / crash) on the re-read."""
+
+    def __init__(self, exc):
+        from app.ocr.engine import TesseractEngine
+        self.real, self.calls, self.exc = TesseractEngine(), 0, exc
+        self.timeout = self.real.timeout
+
+    def read_cells(self, *a):
+        self.calls += 1
+        if self.calls > len(reader._ORDER):
+            raise self.exc
+        return self.real.read_cells(*a)
+
+
+@pytest.mark.parametrize("exc", [reader.OcrError("timeout"), cv2.error("boom")])
+def test_failed_reread_keeps_the_first_pass(exc):
+    first, _ = _read("2026_10_22_001807-61bd84a4", budget_s=0)
+    rows, debug = _read("2026_10_22_001807-61bd84a4", engine=_FailingEngine(exc))
+    assert rows == first
+    assert _line(debug, "departure", 4)["state"] == "unread"
+
+
+def test_reread_never_replaces_a_value_the_first_pass_read():
+    """The time and type of departure line 4 read in the first pass; only the number
+    or time that did not read may come from a re-read."""
+    _, d0 = _read("2026_10_22_001807-61bd84a4", budget_s=0)
+    _, d1 = _read("2026_10_22_001807-61bd84a4")
+    f0, f1 = _line(d0, "departure", 4)["fields"], _line(d1, "departure", 4)["fields"]
+    for n in ("type", "no", "time"):
+        if f0[n]["norm"] is not None:
+            assert f1[n]["norm"] == f0[n]["norm"]
+    for n in ("station", "operator", "delay", "platform"):
+        assert f1[n] == f0[n]
+    assert all("_tess" not in f and "_tess_conf" not in f for f in f1.values())
+
+
+def test_reread_giving_a_neighbours_number_is_rejected():
+    e = {"board": "departure", "row": type("R", (), {"train_no": 9251})()}
+    other = {"board": "departure", "row": type("R", (), {"train_no": 9251})()}
+    assert reader._duplicate(e, [other, e], 1)
+    assert not reader._duplicate(e, [{"board": "arrival", "row": other["row"]}, e], 1)
