@@ -363,6 +363,10 @@
     var states = ["confirmed", "unconfirmed", "unknown", "in_progress"].filter(function (k) { return st[k]; })
       .map(function (k) { return STATE_SHORT[k] + ": " + st[k]; });
     if (states.length) box.append(el("p", "h-sum-states", "Rezultate — " + states.join(" · ")));
+    if (data.low_quality_excluded) {
+      box.append(el("p", "h-sum-note", plural(data.low_quality_excluded, "călătorie", "călătorii") +
+        " din perioada de calitate redusă (versiunea beta inițială) apar în listă, dar nu intră în rezumat."));
+    }
     box.append(el("p", "h-sum-note",
       "Întârzierea este cea CITITĂ pe tabela din București Nord. Media, mediana și maximul folosesc doar " +
       "călătoriile încheiate cu întârzierea citită (" + (params.confirmed_only ? "doar confirmate" :
@@ -432,7 +436,12 @@
     cell(tr, "Linia", "h-plat", plat);
     var res = resultBadge(r);
     if (r.reason) res.title = r.reason;
-    cell(tr, "Rezultat", "h-status", res);
+    var resCell = cell(tr, "Rezultat", "h-status", res);
+    if (j.low_quality === true) {
+      var lq = el("span", "lq-badge", "calitate redusă");
+      lq.title = "Citită în perioada de calitate redusă (versiunea beta inițială) — nu intră în rezumat";
+      resCell.append(" ", lq);
+    }
     tr.addEventListener("click", function (e) {
       if (e.target.closest("button, a")) return;
       openJourney(j.id, train, hint);

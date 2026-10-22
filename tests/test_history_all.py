@@ -114,6 +114,55 @@ def test_cursor_parse():
             history_all.parse_cursor(bad)
 
 
+# ---- data quality (schema v7): same exclusions as the rest --------------------------------
+
+def sq(store, sid, **kw):
+    cols = ["service_id", "updated_at"] + list(kw)
+    store._conn.execute(f"INSERT INTO service_quality({', '.join(cols)}) VALUES"
+                        f" ({', '.join('?' * len(cols))})", [sid, "2026-10-22T00:00:00Z", *kw.values()])
+
+
+def test_ghost_never_listed_nor_counted(store):
+    ghost = add(store, "arrival", 1621, 21, "12:10", 90)
+    sq(store, ghost, ghost=1, ghost_reason="misread")
+    d = history_all.page(store, 1621, P())
+    assert ghost not in [j["id"] for j in d["journeys"]] and d["total"] == 9
+    assert d["summary"]["arrival"]["max"] == 35
+
+
+def test_low_quality_listed_but_not_in_summary(store, monkeypatch):
+    beta = add(store, "arrival", 1621, 21, "12:10", 90)
+    sq(store, beta, low_quality=1)
+    d = history_all.page(store, 1621, P())
+    first = d["journeys"][0]
+    assert first["id"] == beta and first["low_quality"] is True
+    assert d["total"] == 10 and d["low_quality_excluded"] == 1
+    assert d["summary"]["arrival"]["n"] == 7 and d["summary"]["arrival"]["max"] == 35
+    monkeypatch.setenv("STATS_INCLUDE_LOW_QUALITY", "1")
+    assert history_all.page(store, 1621, P())["summary"]["arrival"]["max"] == 90
+
+
+def test_suspect_event_is_not_a_reading(store):
+    sid = store._ids[17]
+    ev = store._conn.execute("INSERT INTO events(service_id, ts, kind, old, new)"
+                             " VALUES (?,?,'delay','0','425')", (sid, "2026-10-17T12:05:00+03:00")).lastrowid
+    store._conn.execute("INSERT INTO event_quality(event_id, suspect, reason) VALUES (?,1,'plus_misread')",
+                        (ev,))
+    js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
+    assert js[sid]["max_read_delay"] == 10
+
+
+def test_checked_without_confirmed_value_is_unknown(store):
+    sid = store._ids[16]
+    sq(store, sid, delay_checked=1)
+    js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
+    assert js[sid]["max_read_delay"] is None and js[sid]["result"]["delay_known"] is False
+    sid2 = store._ids[15]
+    sq(store, sid2, delay_checked=1, max_delay_clean=6, last_delay_clean=2)
+    js = {j["id"]: j for j in history_all.page(store, 1621, P())["journeys"]}
+    assert js[sid2]["max_read_delay"] == 6 and js[sid2]["result"]["observed_delay"] == 2
+
+
 # ---- API --------------------------------------------------------------------------
 
 @pytest.fixture

@@ -57,6 +57,11 @@ def base_url(tmp_path_factory):
         if i < 3:
             _journey(c, "departure", 1621, day, "18:40", 2, station="CONSTANTA")
     _journey(c, "arrival", 1731, LAST, "08:15", 0)
+    # one journey of the reduced-quality (beta) period: listed, marked, not in the summary
+    lq = c.execute("SELECT id FROM services WHERE train_no=1621 AND board='arrival'"
+                   " AND service_date=?", (LAST.isoformat(),)).fetchone()[0]
+    c.execute("INSERT INTO service_quality(service_id, low_quality, updated_at) VALUES (?,1,?)",
+              (lq, "2026-10-22T00:00:00Z"))
     c.commit()
     s.close()
     settings = Settings(db_path=str(db), source_url="http://127.0.0.1:9/none",
@@ -121,7 +126,8 @@ def test_all_days_view(browser, base_url, w, h, theme):
         assert "213 călătorii" in count and "perioada" in count and "afișate 200" in count
         summary = page.text_content("#h-summary")
         assert "Sosiri" in summary and "Plecări" in summary and "N = " in summary
-        assert "nu sunt 0" in summary
+        assert "nu sunt 0" in summary and "calitate redusă" in summary
+        assert page.locator("#h-results .lq-badge").count() == 1
         assert page.locator("#h-results .h-row").count() == 200
         first = page.text_content("#h-results .h-group-title")
         assert "20 octombrie 2026" in first

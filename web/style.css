@@ -1002,6 +1002,16 @@ main {
   text-underline-offset: 3px;
 }
 .h-act:hover { text-decoration-thickness: 2px; }
+.lq-badge {
+  display: inline-flex;
+  padding: 1px 7px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .h-more { display: block; margin: 14px auto 4px; padding: 8px 18px; }
 .h-more[hidden] { display: none; }
 
