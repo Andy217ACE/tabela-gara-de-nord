@@ -142,3 +142,15 @@ def test_sw_precache_still_complete():
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
     for f in ("/app.js", "/history.js", "/panel.js", "/stats.js", "/stats.css"):
         assert f'"{f}"' in shell, f
+
+
+def test_nginx_rate_limits_expensive_endpoints():
+    root = WEB.parent / "deploy"
+    limits = (root / "tabela-limits.conf").read_text(encoding="utf-8")
+    site = (root / "nginx-tabela.conf").read_text(encoding="utf-8")
+    assert re.search(r"limit_req_zone \$binary_remote_addr zone=tabela_stats:\S+ rate=60r/m;", limits)
+    loc = re.search(r"location ~ \^/api/\((.*?)\)\(/\|\$\) \{(.*?)\}", site, re.S)
+    assert loc and "limit_req zone=tabela_stats" in loc.group(2)
+    for p in ("stats", "trains/stats", "stations", "journeys"):
+        assert p in loc.group(1).split("|"), p
+    assert site.index("location ~ ^/api/(stats") < site.index("location /api/ {")
