@@ -1,0 +1,304 @@
+# © 2026 Andy217Ace
+"""Glyph template matching for the numeric fields (the board uses one fixed font).
+
+Templates live in ``digit_templates.npz`` next to this module. They are averaged
+glyph bitmaps cut from a calibration image whose values are known (see
+``build_templates`` and ``python -m app.ocr.digits``). Glyphs are normalised to a
+fixed box, so the matcher is independent of the source resolution.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import sys
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+log = logging.getLogger(__name__)
+
+GLYPH_H = 32
+GLYPH_W = 32
+_SHIFT = 2  # tolerated misalignment (px, normalised box) when matching
+PITCH = 0.78  # digit advance / text line height in the board font
+WIDE = 1.0    # a component wider than this x line height holds several glyphs
+MIN_SCORE = 0.60   # glyph match below this correlation is not trusted
+MIN_MARGIN = 0.04  # ...nor a near-tie with the runner-up template (5 vs 6 split by a grid line)
+TEMPLATES_PATH = Path(__file__).with_name("digit_templates.npz")
+# Calibration panels used by default; departures are kept unseen as a held-out check.
+DEFAULT_BOARDS: tuple[str, ...] = ("arrival",)
+
+
+def segment(cell: np.ndarray) -> list[np.ndarray]:
+    """Split a black-on-white cell into normalised glyph images (float 0..1, ink = 1).
+
+    Connected components overlapping horizontally are merged (``:`` is two dots);
+    specks are dropped. Each glyph keeps its vertical position inside the text
+    line, so ``+`` and ``:`` stay distinguishable from digits.
+    """
+    return [g for g, _, _ in segment_spans(cell)]
+
+
+def is_plus(glyph: np.ndarray) -> bool:
+    """Shape test of the board's "+" on a normalised glyph (``segment``): a cross —
+    ink along the middle row and the middle column of its ink box, the four corners of
+    the box empty, and shorter than a digit (it does not reach the top or the bottom of
+    the text line). A digit fused with a glare blob fails it (filled corners)."""
+    ys, xs = np.nonzero(glyph > 0.5)
+    if ys.size == 0:
+        return False
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    h, w = y1 - y0, x1 - x0
+    if h < 0.3 * GLYPH_H or h > 0.85 * GLYPH_H or w < 0.5 * h or w > 1.6 * h:
+        return False
+    box = glyph[y0:y1, x0:x1] > 0.5
+    ch, cw = max(1, h // 3), max(1, w // 3)
+    corners = [box[:ch, :cw], box[:ch, -cw:], box[-ch:, :cw], box[-ch:, -cw:]]
+    if max(float(c.mean()) for c in corners) > 0.25:
+        return False
+    mid_row = box[h // 2 - max(1, h // 8):h // 2 + max(1, h // 8) + 1, :]
+    mid_col = box[:, w // 2 - max(1, w // 8):w // 2 + max(1, w // 8) + 1]
+    return float(mid_row.any(axis=0).mean()) > 0.8 and float(mid_col.any(axis=1).mean()) > 0.8
+
+
+def segment_spans(cell: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int], bool]]:
+    """`segment` plus each glyph's x span (x0, x1) in the cell and whether it was cut out
+    of a wider component (glyphs touching each other, e.g. fused by a glare blob)."""
+    ink = (cell == 0).astype(np.uint8)
+    if not ink.any():
+        return []
+    n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    boxes = [list(stats[i, :4]) for i in range(1, n)]  # x, y, w, h
+    if not boxes:
+        return []
+    ref_h = max(b[3] for b in boxes)
+    min_area = 0.015 * ref_h * ref_h
+    boxes = [b for b, i in zip(boxes, range(1, n)) if stats[i, 4] >= min_area]
+    boxes.sort(key=lambda b: b[0])
+    merged: list[list[int]] = []
+    for x, y, w, h in boxes:
+        if merged:
+            mx, my, mw, mh = merged[-1]
+            overlap = min(mx + mw, x + w) - max(mx, x)
+            if overlap > 0.5 * min(mw, w):
+                x0, y0 = min(mx, x), min(my, y)
+                merged[-1] = [x0, y0, max(mx + mw, x + w) - x0, max(my + mh, y + h) - y0]
+                continue
+        merged.append([x, y, w, h])
+    if not merged:
+        return []
+    line_top = min(b[1] for b in merged)
+    line_bot = max(b[1] + b[3] for b in merged)
+    line_h = line_bot - line_top
+    merged = _glue_seam_split(merged, line_top, line_h)
+    # Drop fragments that are tiny in both directions (noise, neighbour slivers) and
+    # hair-thin vertical lines (a lit joint between two LED modules of the board).
+    glyphs = []
+    for k, (x, y, w, h) in enumerate(merged):
+        if h < 0.15 * line_h and w < 0.15 * line_h:
+            continue
+        if w <= SEAM_MAX_W * line_h and 0 < k < len(merged) - 1:
+            # only between two glyphs: a sliver at the start or the end of the text can
+            # be what glare left of a digit, and dropping it would make a wrong but
+            # trusted reading ("4:37" -> "7:37")
+            continue
+        parts = _split_touching(ink[line_top:line_bot], x, w, line_h)
+        for x0, x1 in parts:
+            crop = ink[line_top:line_bot, x0:x1].astype(np.float32)
+            glyphs.append((_normalise(crop), (int(x0), int(x1)), len(parts) > 1))
+    return glyphs
+
+
+SEAM_MAX_W = 0.08     # a "glyph" this thin (x line height) between two glyphs is the
+                      # board's module joint, not a digit (a "1" stem is >= 4 px at x3)
+FLAG_MAX_H = 0.45     # the flag of "1": shorter than this (x line height)...
+FLAG_MAX_TOP = 0.35   # ...starting this close to the top of the line...
+FLAG_MAX_GAP = 0.10   # ...at most this far (x line height) left of a stem
+STEM_MIN_H = 0.75     # the stem: nearly the full line height...
+STEM_MAX_W = 0.40     # ...and thin
+
+
+def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list[list[int]]:
+    """Glue the flag of a "1" back onto its stem.
+
+    A vertical joint between two LED modules of the board runs through the last digit
+    of the train number and cuts the thin "1" into two components: the flag (a short
+    fragment at the top) and the stem (thin, full height) 1-3 px to its right. Measured
+    (audit OCR13): 3021 -> 302, 1661 -> 166, 9101 -> 9104. Only that shape is glued: a
+    colon (its two dots already merged, as tall as half the line) or a fragment at the
+    bottom of the line is left alone.
+    """
+    out: list[list[int]] = []
+    i = 0
+    while i < len(boxes):
+        x, y, w, h = boxes[i]
+        if i + 1 < len(boxes):
+            sx, sy, sw, sh = boxes[i + 1]
+            if sx - (x + w) <= 1 and sx + sw - x <= PITCH * line_h:
+                # two pieces at most 1 px apart and together one digit wide: one glyph
+                # cut by the joint ("9" -> "9" + "1": 7909 -> 79091). Neighbouring
+                # digits of the fixed-pitch font are >= 4 px apart.
+                y0 = min(y, sy)
+                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0])
+                i += 2
+                continue
+            if (h <= FLAG_MAX_H * line_h and w <= FLAG_MAX_H * line_h
+                    and y - line_top <= FLAG_MAX_TOP * line_h
+                    and -(sw // 2) <= sx - (x + w) <= max(1, FLAG_MAX_GAP * line_h)
+                    and sh >= STEM_MIN_H * line_h and sw <= STEM_MAX_W * line_h
+                    and y >= sy and y + h <= sy + sh):
+                y0 = min(y, sy)
+                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0])
+                i += 2
+                continue
+        out.append([x, y, w, h])
+        i += 1
+    return out
+
+
+def _split_touching(line: np.ndarray, x: int, w: int, line_h: int) -> list[tuple[int, int]]:
+    """Split a component wider than one glyph (touching digits) at the thinnest columns.
+
+    The board font has fixed-pitch digits about PITCH x line height apart.
+    """
+    if w <= WIDE * line_h:
+        return [(x, x + w)]
+    k = max(2, int(round(w / (PITCH * line_h))))
+    col_ink = line[:, x:x + w].sum(axis=0)
+    step = w / k
+    win = max(1, int(0.2 * step))
+    cuts = [x]
+    for i in range(1, k):
+        c = int(round(i * step))
+        lo, hi = max(1, c - win), min(w - 1, c + win + 1)
+        if hi <= lo:  # degenerate component (a sliver a few pixels wide): cut evenly
+            log.warning("touching glyphs: empty cut window (w=%d, line_h=%d); even split",
+                        w, line_h)
+            cuts.append(x + min(max(c, 1), max(w - 1, 1)))
+            continue
+        cuts.append(x + lo + int(np.argmin(col_ink[lo:hi])))
+    cuts.append(x + w)
+    return [(a, b) for a, b in zip(cuts[:-1], cuts[1:]) if b > a]
+
+
+def _normalise(crop: np.ndarray) -> np.ndarray:
+    h, w = crop.shape
+    scale = GLYPH_H / h
+    nw = max(1, min(GLYPH_W, int(round(w * scale))))
+    img = cv2.resize(crop, (nw, GLYPH_H), interpolation=cv2.INTER_AREA)
+    out = np.zeros((GLYPH_H, GLYPH_W), np.float32)
+    x0 = (GLYPH_W - nw) // 2
+    out[:, x0:x0 + nw] = img
+    return out
+
+
+class DigitMatcher:
+    def __init__(self, labels: str, templates: np.ndarray, boards: tuple[str, ...] = ()):
+        self.labels = labels
+        self.templates = templates.astype(np.float32)
+        self.boards = boards  # calibration panels the templates were built from
+
+    @classmethod
+    def load(cls, path: Path | None = None) -> "DigitMatcher":
+        with np.load(path or TEMPLATES_PATH) as data:
+            boards = tuple(str(b) for b in data["boards"]) if "boards" in data else ()
+            return cls(str(data["labels"]), data["templates"], boards)
+
+    def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
+        """(best character, its score 0..1, margin over the runner-up)."""
+        padded = cv2.copyMakeBorder(glyph, _SHIFT, _SHIFT, _SHIFT, _SHIFT,
+                                    cv2.BORDER_CONSTANT, value=0)
+        scored = sorted(
+            ((float(cv2.matchTemplate(padded, tpl, cv2.TM_CCOEFF_NORMED).max()), ch)
+             for ch, tpl in zip(self.labels, self.templates) if ch in allowed),
+            reverse=True)
+        if not scored:
+            return "", 0.0, 0.0
+        runner_up = scored[1][0] if len(scored) > 1 else 0.0
+        return scored[0][1], scored[0][0], scored[0][0] - runner_up
+
+    def read(self, cell: np.ndarray, allowed: str) -> tuple[str, float, bool]:
+        """(text, weakest glyph score 0..1, trusted) for a numeric cell.
+
+        ``trusted`` is False when any glyph matched poorly or ambiguously.
+        An empty cell gives ("", 1.0, True).
+        """
+        text, worst, trusted = [], 1.0, True
+        for ch, score, margin, *_ in self.glyphs(cell, allowed):
+            text.append(ch)
+            worst = min(worst, score)
+            trusted &= score >= MIN_SCORE and margin >= MIN_MARGIN
+        return "".join(text), worst, trusted
+
+    def glyphs(self, cell: np.ndarray, allowed: str
+               ) -> list[tuple[str, float, float, np.ndarray, bool]]:
+        """Per glyph of the cell, left to right: (character, score, margin, glyph,
+        fused = cut out of a component holding several glyphs)."""
+        return [(*self.classify(g, allowed), g, fused) for g, _, fused in segment_spans(cell)]
+
+
+def glyph_trusted(score: float, margin: float) -> bool:
+    return score >= MIN_SCORE and margin >= MIN_MARGIN
+
+
+def build_templates(samples: list[tuple[np.ndarray, str]]) -> tuple[str, np.ndarray]:
+    """Average glyphs per character from (cell, known text) pairs.
+
+    Cells whose glyph count differs from the text length are skipped.
+    """
+    acc: dict[str, list[np.ndarray]] = {}
+    for cell, text in samples:
+        glyphs = segment(cell)
+        if len(glyphs) != len(text):
+            continue
+        for g, ch in zip(glyphs, text):
+            acc.setdefault(ch, []).append(g)
+    labels = "".join(sorted(acc))
+    return labels, np.stack([np.mean(acc[c], axis=0) for c in labels])
+
+
+def _calibration_samples(image_path: Path, golden_path: Path, boards: tuple[str, ...]):
+    from app.ocr import preprocess
+    from app.ocr.reader import BOARDS, cell_grid
+
+    img = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    golden = json.loads(golden_path.read_text(encoding="utf-8"))
+    samples = []
+    for board, half in zip(BOARDS, preprocess.split_boards(img)):
+        if board not in boards:
+            continue
+        for cells, exp in zip(cell_grid(half, grow=False), golden[board]):
+            samples.append((cells["no"], str(exp["train_no"])))
+            samples.append((cells["time"], exp["sched_time"]))
+            if exp["delay_min"]:
+                samples.append((cells["delay"], f"+{exp['delay_min']}"))
+            if exp["platform"] is not None:
+                samples.append((cells["platform"], str(exp["platform"])))
+    return samples
+
+
+def build_from_fixture(image_path: Path, golden_path: Path,
+                       boards: tuple[str, ...] = DEFAULT_BOARDS) -> tuple[str, np.ndarray]:
+    return build_templates(_calibration_samples(image_path, golden_path, boards))
+
+
+def main(argv: list[str]) -> int:
+    """python -m app.ocr.digits IMAGE GOLDEN_JSON [board ...] — rebuild the templates.
+
+    Defaults to the arrivals panel only, so departures stay a held-out check
+    (tests/test_ocr.py::test_digit_templates_generalise_to_held_out_board).
+    """
+    if len(argv) < 2:
+        print(main.__doc__)
+        return 2
+    boards = tuple(argv[2:]) or DEFAULT_BOARDS
+    labels, templates = build_from_fixture(Path(argv[0]), Path(argv[1]), boards)
+    np.savez_compressed(TEMPLATES_PATH, labels=np.array(labels), templates=templates,
+                        boards=np.array(boards))
+    print(f"saved {len(labels)} templates ({labels!r}) from {boards} to {TEMPLATES_PATH}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

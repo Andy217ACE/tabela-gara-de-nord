@@ -1,0 +1,113 @@
+/* © 2026 Andy217Ace */
+/* „Capturi OCR" (#ocr) — admin diagnostic view; loaded on demand, uses the theme tokens of style.css. */
+
+.view-ocr { padding-bottom: 32px; }
+.ocr-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ocr-bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.ocr-bar .btn { margin-top: 0; }
+
+.ocr-login { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.ocr-login .btn { align-self: flex-start; margin-top: 0; }
+
+.ocr-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.ocr-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.ocr-stat dt { color: var(--text-3); font-size: 0.75rem; }
+.ocr-stat dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.ocr-stat.is-bad dd { color: var(--bad); }
+
+.ocr-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 1100px) {
+  .ocr-layout { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
+}
+.ocr-list, .ocr-detail {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  min-width: 0;
+}
+.ocr-h2 { font-size: 1rem; margin: 0 0 8px; }
+.ocr-h2:focus { outline: none; }
+.ocr-h3 { font-size: 0.9375rem; margin: 16px 0 6px; }
+.ocr-meta { color: var(--text-2); font-size: 0.8125rem; margin: 0 0 8px; overflow-wrap: anywhere; }
+
+.ocr-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.ocr-table { border-collapse: collapse; width: 100%; font-size: 0.8125rem; }
+.ocr-table th, .ocr-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: nowrap;
+}
+.ocr-table th { color: var(--text-3); font-weight: 600; font-size: 0.75rem; }
+.ocr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ocr-table .mono, .ocr-raw-val { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.ocr-table tr.is-error td { color: var(--bad); }
+.ocr-table tr[aria-current="true"] td { background: var(--surface-2); }
+.ocr-err { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.ocr-raw { white-space: normal; min-width: 180px; }
+
+.ocr-open {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ocr-open:focus-visible, .ocr-toggle input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.ocr-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.ocr-tools .btn { margin-top: 0; }
+.ocr-toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-size: 0.875rem; }
+.ocr-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.ocr-figure { margin: 0 0 8px; }
+.ocr-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.ocr-legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 0.75rem; color: var(--text-3); }
+
+.ocr-field { display: table-cell; }
+.ocr-field > span { margin-right: 4px; }
+.ocr-norm { color: var(--text-2); }
+.ocr-conf {
+  display: inline-block;
+  min-width: 2.2em;
+  text-align: center;
+  border-radius: 6px;
+  padding: 0 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ocr-conf-hi { color: var(--ok); background: var(--ok-bg); }
+.ocr-conf-mid { color: var(--warn); background: var(--warn-bg); }
+.ocr-conf-lo, .ocr-conf-none { color: var(--bad); background: var(--bad-bg); }
+.ocr-unsure { color: var(--warn); font-weight: 700; font-size: 0.75rem; }
+
+.ocr-badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 0.6875rem; font-weight: 600; }
+.ocr-badge-ok { color: var(--ok); background: var(--ok-bg); }
+.ocr-badge-uncertain { color: var(--warn); background: var(--warn-bg); }
+.ocr-badge-rejected_low_conf, .ocr-badge-incomplete { color: var(--bad); background: var(--bad-bg); }
+.ocr-rowconf { margin-left: 6px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ocr-table td.is-bad { color: var(--bad); font-weight: 600; }

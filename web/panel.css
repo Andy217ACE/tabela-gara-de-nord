@@ -1,0 +1,783 @@
+/* © 2026 Andy217Ace */
+/* Tabela Gara de Nord — mod „Panou" (afișaj de gară). Culorile de întârziere sunt
+   date de atributul data-level (ok | low | mid | high | unknown); pragurile vin din
+   /api/config. Când datele sunt vechi/indisponibile, .pnl[data-fresh] le face gri.
+   Fără stiluri inline (CSP). */
+
+/* ---------- tokens (dark implicit) ---------- */
+
+.pnl {
+  --p-bg: #06080c;
+  --p-surface: #0c1118;
+  --p-row: #0f151e;
+  --p-row-alt: #0c1219;
+  --p-row-hover: #141c27;
+  --p-line: #1d2633;
+  --p-line-strong: #2b3646;
+  --p-text: #eef2f7;
+  --p-text-2: #a3aec0;
+  --p-dim: #7d899c;
+  --p-amber: #ffb547;
+  --p-ok: #4ade80;
+  --p-low: #facc15;
+  --p-mid: #fb923c;
+  --p-high: #f87171;
+  --p-unknown: #8b95a5;
+  --p-info: #60a5fa;
+  --p-warn-bg: rgba(251, 191, 36, 0.12);
+  --p-warn: #fbbf24;
+  --p-tint: 18%;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .pnl {
+    --p-bg: #fbfaf6;
+    --p-surface: #ffffff;
+    --p-row: #ffffff;
+    --p-row-alt: #f7f5f0;
+    --p-row-hover: #f1eee6;
+    --p-line: #e6e1d6;
+    --p-line-strong: #cfc8b9;
+    --p-text: #12161c;
+    --p-text-2: #4f5866;
+    --p-dim: #626b79;
+    --p-amber: #8f4e00;
+    --p-ok: #0d7337;
+    --p-low: #7a5d00;
+    --p-mid: #b4500a;
+    --p-high: #b4232a;
+    --p-unknown: #5d6673;
+    --p-info: #1d5fbf;
+    --p-warn-bg: #fdf0d5;
+    --p-warn: #8a4f00;
+    --p-tint: 14%;
+  }
+}
+
+:root[data-theme="light"] .pnl {
+  --p-bg: #fbfaf6;
+  --p-surface: #ffffff;
+  --p-row: #ffffff;
+  --p-row-alt: #f7f5f0;
+  --p-row-hover: #f1eee6;
+  --p-line: #e6e1d6;
+  --p-line-strong: #cfc8b9;
+  --p-text: #12161c;
+  --p-text-2: #4f5866;
+  --p-dim: #626b79;
+  --p-amber: #8f4e00;
+  --p-ok: #0d7337;
+  --p-low: #7a5d00;
+  --p-mid: #b4500a;
+  --p-high: #b4232a;
+  --p-unknown: #5d6673;
+  --p-info: #1d5fbf;
+  --p-warn-bg: #fdf0d5;
+  --p-warn: #8a4f00;
+  --p-tint: 14%;
+}
+
+/* niveluri: aceeași variabilă --lvl pentru rânduri, legendă și detaliu */
+.pnl [data-level="ok"] { --lvl: var(--p-ok); }
+.pnl [data-level="low"] { --lvl: var(--p-low); }
+.pnl [data-level="mid"] { --lvl: var(--p-mid); }
+.pnl [data-level="high"] { --lvl: var(--p-high); }
+.pnl [data-level="unknown"] { --lvl: var(--p-unknown); }
+.pnl [data-level="recent"] { --lvl: var(--p-info); }
+
+/* date vechi / indisponibile: nu colorăm nimic ca „actual" */
+.pnl[data-fresh="stale"] .pnl-row,
+.pnl[data-fresh="offline"] .pnl-row,
+.pnl[data-fresh="none"] .pnl-row,
+.pnl[data-fresh="stale"] .pnl-detail-delay,
+.pnl[data-fresh="offline"] .pnl-detail-delay { --lvl: var(--p-unknown); }
+.pnl[data-fresh="stale"] .pnl-row,
+.pnl[data-fresh="offline"] .pnl-row { color: var(--p-text-2); }
+
+/* ---------- comutare Panou / Carduri ---------- */
+
+html[data-view="panou"] #view-tabela > .tabs,
+html[data-view="panou"] #boards,
+html[data-view="panou"] #banner { display: none !important; }
+
+html[data-view="panou"] main { max-width: 1760px; }
+
+.pnl-root { margin-top: 8px; }
+
+.pnl-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.pnl-seg {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.pnl-seg[aria-pressed="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+}
+
+/* ---------- panou ---------- */
+
+.pnl {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 18px;
+  background: var(--p-bg);
+  color: var(--p-text);
+  box-shadow: var(--shadow);
+  font-variant-numeric: tabular-nums;
+}
+.pnl:focus { outline: none; }
+
+.pnl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--p-line-strong);
+}
+
+.pnl-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pnl-logo { width: 40px; height: 40px; }
+.pnl.is-fs .pnl-logo { width: 56px; height: 56px; }
+
+.pnl-title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  color: var(--p-amber);
+  text-transform: uppercase;
+}
+
+.pnl-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--mono);
+  line-height: 1.1;
+}
+.pnl-clock-time {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.25rem, 0.8rem + 1.8vw, 2.4rem);
+  font-weight: 700;
+  color: var(--p-text);
+  letter-spacing: 0.02em;
+}
+.pnl-clock-date {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--p-text-2);
+}
+
+/* stare */
+.pnl-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+.pnl-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  background: var(--p-surface);
+  color: var(--p-text-2);
+}
+.pnl-fresh {
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--p-unknown);
+  border-color: currentColor;
+}
+.pnl-fresh[data-state="live"] { color: var(--p-ok); }
+.pnl-fresh[data-state="stale"],
+.pnl-fresh[data-state="offline"] { color: var(--p-warn); background: var(--p-warn-bg); }
+
+.pnl-banner {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--p-warn) 45%, transparent);
+  border-radius: 12px;
+  background: var(--p-warn-bg);
+  color: var(--p-warn);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* comenzi */
+.pnl-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.pnl-filters { flex: 1 1 520px; min-width: 0; }
+.pnl-filters .pnl-filters-sum { display: none; }
+.pnl-filters-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.pnl-boardseg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  background: var(--p-surface);
+}
+.pnl-boardseg .pnl-seg {
+  border-color: transparent;
+  background: transparent;
+  padding: 7px 14px;
+  font-size: 0.875rem;
+}
+.pnl-boardseg .pnl-seg[aria-pressed="true"] {
+  background: var(--p-amber);
+  color: var(--p-bg);
+  box-shadow: none;
+}
+
+.pnl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.pnl-field-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.pnl-input,
+.pnl-select {
+  font: inherit;
+  font-size: 0.875rem;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface);
+  color: var(--p-text);
+}
+.pnl-search { flex: 1 1 200px; }
+.pnl-input { width: 100%; }
+
+.pnl-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  font-size: 0.875rem;
+  color: var(--p-text-2);
+  cursor: pointer;
+}
+.pnl-check input { width: 16px; height: 16px; accent-color: var(--p-amber); }
+
+.pnl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.pnl-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: var(--p-surface);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  list-style: none;
+}
+.pnl-btn::-webkit-details-marker { display: none; }
+.pnl-btn:hover { background: var(--p-row-hover); }
+.pnl-btn[disabled] { opacity: 0.6; cursor: progress; }
+.pnl-btn[aria-busy="true"] .pnl-ico { animation: pnl-spin 0.9s linear infinite; }
+.pnl-btn[aria-pressed="true"] { border-color: var(--p-amber); color: var(--p-amber); }
+.pnl-btn-primary { background: var(--p-amber); color: var(--p-bg); border-color: var(--p-amber); }
+.pnl-btn-primary:hover { background: var(--p-amber); filter: brightness(1.08); }
+
+.pnl-ico {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes pnl-spin { to { transform: rotate(360deg); } }
+
+.pnl-cols { position: relative; }
+.pnl-cols-box {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 12px;
+  background: var(--p-surface);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.45);
+}
+.pnl-cols-box legend {
+  float: left;
+  width: 100%;
+  margin-bottom: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+
+/* legendă */
+.pnl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--p-text-2);
+}
+.pnl-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pnl-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--lvl);
+}
+
+/* ---------- tabele ---------- */
+
+.pnl-body { display: flex; flex-direction: column; gap: 18px; }
+
+.pnl-board-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--p-amber);
+}
+.pnl[data-board="arrivals"] .pnl-board-title,
+.pnl[data-board="departures"] .pnl-board-title { display: none; }
+.pnl-board-count {
+  font-size: 0.75rem;
+  color: var(--p-dim);
+  letter-spacing: 0.04em;
+}
+
+.pnl-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  font-family: var(--mono);
+  font-size: clamp(0.875rem, 0.7rem + 0.45vw, 1.1875rem);
+}
+
+.pnl-table thead th {
+  padding: 4px 10px 6px;
+  font-family: var(--font);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--p-dim);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--p-line);
+}
+
+.pnl-sortbtn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.pnl-sortbtn:hover { color: var(--p-text); }
+th[aria-sort] .pnl-sortbtn { color: var(--p-amber); }
+th[aria-sort="ascending"] .pnl-sortbtn::after { content: " ▲"; }
+th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
+
+.pnl-row { --lvl: var(--p-unknown); cursor: pointer; }
+.pnl-row td {
+  padding: 9px 10px;
+  background: var(--p-row);
+  border-top: 1px solid var(--p-line);
+  border-bottom: 1px solid var(--p-line);
+  vertical-align: middle;
+}
+.pnl-row:nth-child(even) td { background: var(--p-row-alt); }
+.pnl-row td:first-child {
+  border-left: 1px solid var(--p-line);
+  border-radius: 8px 0 0 8px;
+  box-shadow: inset 4px 0 0 var(--lvl);
+}
+.pnl-row td:last-child { border-right: 1px solid var(--p-line); border-radius: 0 8px 8px 0; }
+.pnl-row:hover td { background: var(--p-row-hover); }
+.pnl-row:focus { outline: none; }
+.pnl-row:focus-visible td { border-color: var(--focus); }
+.pnl-row:focus-visible td:first-child { border-left-color: var(--focus); }
+.pnl-row:focus-visible td:last-child { border-right-color: var(--focus); }
+.pnl-row.is-selected td { border-color: var(--p-amber); }
+.pnl-row.is-recent td { background: color-mix(in srgb, var(--p-info) 10%, var(--p-row)); }
+.pnl-row.is-recent .c-changed,
+.pnl-row.is-recent .c-msg { color: var(--p-info); }
+
+.c-fav { padding-right: 0 !important; }
+.pnl-rowbtns { display: inline-flex; align-items: center; gap: 2px; }
+.pnl-row .c-time { font-weight: 700; font-size: 1.15em; color: var(--p-amber); white-space: nowrap; }
+.c-train { white-space: nowrap; }
+.pnl-row .c-station { font-family: var(--font); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.pnl-row .c-op { font-family: var(--font); font-size: 0.85em; color: var(--p-text-2); }
+.c-delay { white-space: nowrap; }
+.c-plat { text-align: center; }
+.pnl-row .c-msg { font-family: var(--font); font-size: 0.8em; color: var(--p-text-2); }
+.pnl-row .c-changed { font-size: 0.85em; color: var(--p-text-2); white-space: nowrap; }
+
+/* text lung (stație, operator, mesaj): cel mult 2 rânduri, apoi „…"; valoarea completă
+   e în title-ul celulei, în aria-label-ul rândului și în detaliu — lățimile coloanelor și
+   înălțimea rândurilor nu mai depind de date */
+.pnl-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+
+/* desktop/tabletă: lățimi de coloană fixe (table-layout: fixed, nu după conținut) și rânduri
+   de aceeași înălțime. th are fontul tabelului, ca unitățile em să fie aceleași ca în rânduri;
+   eticheta rămâne mică. Coloana „Din / spre" primește restul lățimii. */
+@media (min-width: 760px) {
+  .pnl-table { table-layout: fixed; }
+  .pnl-table thead th { font-size: 1em; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+  .pnl-th-label,
+  .pnl-table thead .pnl-sortbtn { font-size: 0.6875rem; letter-spacing: 0.12em; }
+  .pnl-table thead .pnl-sortbtn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .pnl-table .c-fav { width: 4.5rem; }
+  .pnl-table .c-time { width: calc(4em + 20px); }
+  .pnl-table .c-train { width: calc(6.6em + 20px); }
+  .pnl-table .c-op { width: 17%; }
+  .pnl-table .c-delay { width: calc(4.6em + 40px); }
+  .pnl-table .c-plat { width: calc(2.2em + 28px); }
+  .pnl-table .c-msg { width: 15%; }
+  .pnl-table .c-changed { width: calc(3em + 20px); }
+  .pnl-row td { overflow: hidden; }
+  .pnl-row .c-fav { height: calc(2.4em + 24px); } /* ≥ 2 rânduri de stație sau caseta liniei */
+  .pnl-row .c-train,
+  .pnl-row .c-delay { text-overflow: ellipsis; }
+  .pnl-plat { vertical-align: middle; }
+}
+
+.pnl-train { display: inline-flex; align-items: center; gap: 8px; }
+.pnl-no { font-weight: 700; }
+.pnl-flag { color: var(--p-amber); font-weight: 700; }
+
+.pnl-delay {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-weight: 700;
+  color: var(--lvl);
+  background: color-mix(in srgb, var(--lvl) var(--p-tint), transparent);
+  border: 1px solid color-mix(in srgb, var(--lvl) 45%, transparent);
+}
+
+.pnl-plat {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.2em;
+  height: 2.2em;
+  padding: 0 4px;
+  border: 2px solid var(--p-text);
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.pnl-unk { color: var(--p-dim); }
+.pnl-credit { margin: 4px 0 0; font-size: 0.75rem; color: var(--p-text-2); text-align: center; }
+.pnl-credit a { color: inherit; text-underline-offset: 2px; }
+.pnl-delay.pnl-unread { font-weight: 600; font-style: italic; }
+
+.pnl-star {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-dim);
+  cursor: pointer;
+}
+.pnl-star:hover { color: var(--p-text); background: var(--p-row-hover); }
+.pnl-star .pnl-ico { width: 18px; height: 18px; }
+.pnl-star[aria-pressed="true"] { color: var(--p-amber); }
+.pnl-star[aria-pressed="true"] .pnl-ico { fill: currentColor; }
+.pnl-follow[aria-pressed="true"] { color: var(--p-info); }
+.pnl-follow[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+.pnl-empty {
+  margin: 0;
+  padding: 28px 16px;
+  border: 1px dashed var(--p-line-strong);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--p-text-2);
+}
+
+/* coloane ascunse din „Coloane" */
+.pnl-body.hide-station .c-station,
+.pnl-body.hide-op .c-op,
+.pnl-body.hide-delay .c-delay,
+.pnl-body.hide-plat .c-plat,
+.pnl-body.hide-msg .c-msg,
+.pnl-body.hide-changed .c-changed { display: none; }
+
+/* ---------- detaliu ---------- */
+
+.pnl-detail {
+  position: fixed;
+  z-index: 45;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--nav-h) + 8px + env(safe-area-inset-bottom, 0px));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 16px;
+  background: var(--p-surface);
+  color: var(--p-text);
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.55);
+}
+.pnl-detail:focus { outline: none; }
+.pnl-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pnl-detail-title { margin: 0; font-family: var(--mono); font-size: 1.375rem; color: var(--p-amber); }
+.pnl-icon-btn {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--p-text);
+  cursor: pointer;
+}
+.pnl-icon-btn .pnl-ico { width: 18px; height: 18px; }
+.pnl-dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 14px 0 10px;
+  font-size: 0.9375rem;
+}
+.pnl-dl dt { color: var(--p-dim); font-size: 0.8125rem; }
+.pnl-dl dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pnl-detail-note { margin: 0 0 12px; font-size: 0.8125rem; color: var(--p-text-2); }
+.pnl-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- ecran complet ---------- */
+
+.pnl:fullscreen { overflow: auto; border-radius: 0; padding: 20px 28px; }
+.pnl::backdrop { background: #000; }
+.pnl.is-pseudo-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  border-radius: 0;
+  padding: 20px 24px;
+}
+html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
+.pnl.is-fs .pnl-table { font-size: clamp(1rem, 0.7rem + 0.8vw, 1.6rem); }
+/* ecran complet cu „Toate" alăturate: jumătate de lățime → font ceva mai mic, ca stația să
+   aibă loc (aceeași mărime în ambele panouri) */
+@media (min-width: 1600px) {
+  .pnl.is-fs[data-board="all"] .pnl-table { font-size: clamp(1rem, 0.4rem + 0.7vw, 1.4rem); }
+}
+.pnl.is-fs .pnl-detail { bottom: 16px; }
+
+/* ---------- telefon: rânduri pe două niveluri, fără scroll orizontal ---------- */
+
+@media (max-width: 759px) {
+  .pnl { padding: 10px; border-radius: 14px; }
+  .pnl-head { align-items: flex-start; }
+  .pnl-clock { align-items: flex-start; }
+  .pnl-status { font-size: 0.75rem; }
+  .pnl-chip { padding: 3px 8px; }
+  .pnl-boardseg { width: 100%; }
+  .pnl-filters { flex-basis: 100%; }
+  .pnl-filters .pnl-filters-sum { display: inline-flex; width: 100%; justify-content: center; }
+  .pnl-filters[open] .pnl-filters-sum { margin-bottom: 10px; }
+  .pnl-boardseg .pnl-seg { flex: 1; }
+  .pnl-field { flex: 1 1 40%; }
+  .pnl-field.pnl-search { flex-basis: 100%; }
+  .pnl-select { width: 100%; }
+  .pnl-actions { margin-left: 0; }
+  .pnl-actions .pnl-btn-text { font-size: 0.75rem; }
+  .pnl-cols-box { left: 0; right: auto; min-width: 240px; }
+
+  .pnl-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .pnl-table, .pnl-table tbody { display: block; }
+  .pnl-table tbody { display: flex; flex-direction: column; gap: 6px; }
+  .pnl-row {
+    display: grid;
+    grid-template-columns: 30px 4.2rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "fav time station plat"
+      "fav train train delay"
+      ". msg msg msg";
+    align-items: center;
+    gap: 2px 8px;
+    padding: 8px 10px 8px 6px;
+    border: 1px solid var(--p-line);
+    border-radius: 10px;
+    background: var(--p-row);
+    box-shadow: inset 4px 0 0 var(--lvl);
+  }
+  .pnl-row td,
+  .pnl-row:nth-child(even) td,
+  .pnl-row:hover td,
+  .pnl-row.is-recent td {
+    display: block;
+    padding: 0;
+    border: 0 !important;
+    background: none;
+    box-shadow: none !important;
+    border-radius: 0;
+  }
+  .pnl-row.is-recent { background: color-mix(in srgb, var(--p-info) 10%, var(--p-row)); }
+  .pnl-row.is-selected { border-color: var(--p-amber); }
+  .pnl-row:focus-visible { border-color: var(--focus); }
+  .c-fav { grid-area: fav; width: auto; }
+  .pnl-rowbtns { flex-direction: column; gap: 4px; }
+  .c-time { grid-area: time; width: auto; }
+  .c-station { grid-area: station; }
+  .c-plat { grid-area: plat; width: auto; }
+  .c-train { grid-area: train; font-size: 0.85em; }
+  .c-delay { grid-area: delay; text-align: right; }
+  .c-msg { grid-area: msg; }
+  .c-op, .c-changed { display: none !important; }
+}
+
+/* tabletă: ascundem automat mesajul (rămâne în detaliu) ca să nu apară scroll orizontal */
+@media (min-width: 760px) and (max-width: 1099px) {
+  .c-msg { display: none; }
+}
+
+@media (min-width: 1024px) {
+  .pnl { padding: 18px 20px; min-height: calc(100vh - 190px); }
+  .pnl-detail {
+    left: auto;
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: 380px;
+    max-height: none;
+  }
+}
+
+/* „Toate": două secțiuni, una sub alta; alăturate pe monitoare late */
+@media (min-width: 1600px) {
+  .pnl[data-board="all"] .pnl-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+  .pnl[data-board="all"] .pnl-board { min-width: 0; }
+  .pnl[data-board="all"] .c-msg { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pnl-btn[aria-busy="true"] .pnl-ico { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .pnl-delay, .pnl-plat, .pnl-chip { border: 1px solid CanvasText; }
+  .pnl-row td:first-child { border-left: 4px solid CanvasText; }
+}
+
+/* creditul din Panou dublează footerul paginii: se vede doar în ecran complet
+   (unde footerul paginii nu mai e vizibil) — exact un footer vizibil oricând */
+.pnl:not(.is-fs) .pnl-credit { display: none; }
+
+/* un singur panou cu date vechi (citiri respinse): doar el e marcat */
+.pnl-board[data-stale="true"] .pnl-row,
+.pnl-board[data-stale="true"] .pnl-detail-delay { --lvl: var(--p-unknown); }
+.pnl-board[data-stale="true"] .pnl-row { color: var(--p-text-2); }
+.pnl-board[data-stale="true"] .pnl-board-title::after {
+  content: "DATE VECHI";
+  margin-left: 10px;
+  padding: 0 6px;
+  border: 1px dashed currentColor;
+  font-size: 0.75em;
+  opacity: 0.85;
+}

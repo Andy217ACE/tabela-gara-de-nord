@@ -1,0 +1,241 @@
+/* © 2026 Andy217Ace */
+/* Tabela Gara de Nord — ceasul din antet + widgetul meteo (web/weather.js).
+   Culori doar din tokenii temei (style.css: --text, --surface…), deci urmează Auto/Luminoasă/
+   Întunecată. Fără stiluri inline (CSP). */
+
+/* ---------- ceas în antet ---------- */
+
+/* telefon/tabletă: rândul 2, înaintea indicatorului „actualizat" (rândul 1 rămâne sigla +
+   tema); desktop: lângă siglă */
+.hdr-clockwx {
+  order: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Panoul are ceasul și vremea lui în bara de titlu: în antet nu le dublăm */
+html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { display: none; }
+
+.hdr-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.hdr-clock-time {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.hdr-clock-date {
+  display: none;
+  font-size: 0.6875rem;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ---------- widget ---------- */
+
+.wx-slot { display: flex; flex: none; max-width: 100%; }
+.wx-slot[hidden] { display: none; }
+
+.wx { position: relative; display: flex; max-width: 100%; }
+
+.wx-btn {
+  appearance: none;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 5px;
+  min-height: 44px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.wx-btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.wx-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wx-btn:disabled { cursor: default; }
+
+.wx-ico { grid-row: 1 / span 2; display: grid; place-items: center; color: var(--accent); }
+.wx-svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.wx-temp {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.wx-sub {
+  grid-column: 2;
+  display: flex;
+  gap: 6px;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.wx-feels { display: none; }
+.wx-wind { display: inline-flex; align-items: center; gap: 2px; }
+.wx-arrow {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.wx-old {
+  grid-column: 1 / -1;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.wx-na { font-size: 0.75rem; color: var(--text-2); white-space: nowrap; }
+
+/* stări */
+.wx[data-state="stale"] .wx-btn { border-style: dashed; background: var(--surface-2); }
+.wx[data-state="stale"] .wx-ico,
+.wx[data-state="stale"] .wx-temp { color: var(--text-2); }
+.wx[data-state="unavailable"] .wx-btn { min-height: 32px; border-style: dashed; }
+.wx[data-state="loading"] .wx-btn { border-color: transparent; background: transparent; }
+.wx-sk {
+  display: block;
+  width: 64px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  animation: wx-pulse 1.4s ease-in-out infinite;
+}
+@keyframes wx-pulse { 50% { opacity: 0.45; } }
+
+/* ---------- popover ---------- */
+
+.wx-pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.5);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.wx-pop::before { /* punte peste spațiul de 6 px, ca hover-ul să nu se rupă */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 8px;
+}
+.wx.wx-left .wx-pop { right: auto; left: 0; }
+.wx.is-open .wx-pop { display: block; }
+@media (hover: hover) and (pointer: fine) {
+  .wx:hover .wx-pop { display: block; }
+}
+
+.wx-pop p { margin: 0; }
+.wx-pop-title { font-weight: 700; }
+.wx-pop-cond { color: var(--text-2); margin-top: 2px; }
+.wx-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 10px 0;
+}
+.wx-dl dt { color: var(--text-2); }
+.wx-dl dd { margin: 0; font-weight: 600; }
+.wx-pop-warn {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+.wx-pop-note { color: var(--text-2); font-size: 0.75rem; }
+.wx-pop-src { margin-top: 6px; font-size: 0.75rem; color: var(--text-2); }
+.wx-pop-src a { color: var(--text); text-underline-offset: 2px; }
+.wx-pop-src a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ---------- atribuire (footer + credit Panou) ---------- */
+
+.footer-meteo { color: var(--text-2); }
+.footer-meteo[hidden], .wx-credit[hidden] { display: none; }
+
+/* ---------- Panou: vremea lângă ceasul mare ---------- */
+
+.pnl-clockwx { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.wx[data-place="panel"] .wx-btn { padding: 4px 10px; }
+.wx[data-place="panel"] .wx-svg { width: 30px; height: 30px; }
+.wx[data-place="panel"] .wx-temp { font-family: var(--mono); font-size: clamp(1.1rem, 0.75rem + 1.2vw, 1.9rem); }
+.wx[data-place="panel"] .wx-feels { display: inline; }
+.pnl.is-fs .wx[data-place="panel"] .wx-svg { width: 40px; height: 40px; }
+
+/* ---------- telefon: compact (pictogramă + temperatură + vânt mic) ---------- */
+
+@media (max-width: 599px) {
+  /* popover pe toată lățimea, sub widget, fără scroll orizontal */
+  .wx-pop,
+  .wx.wx-left .wx-pop {
+    position: fixed;
+    top: auto;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    margin-top: 6px;
+  }
+  .wx[data-place="panel"] .wx-feels { display: none; }
+}
+
+@media (min-width: 600px) {
+  .wx-feels { display: inline; }
+}
+
+@media (min-width: 1024px) {
+  .hdr-clockwx { order: 1; margin-left: 8px; gap: 10px; }
+  .hdr-clock-time { font-size: 1.25rem; }
+  .hdr-clock-date { display: block; }
+}
+
+/* ---------- mișcare / contrast forțat ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-sk { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .wx-btn, .wx-pop { border: 1px solid CanvasText; }
+}
