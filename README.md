@@ -6,6 +6,10 @@ Aplicație web (PWA) care citește prin OCR clasic (OpenCV + Tesseract, fără A
 
 Live: https://tabelacfr.ddns.net
 
+Stare: **Beta** — versiuni și note în [Releases](https://github.com/Andy217ACE/tabela-gara-de-nord/releases)
+și în `CHANGELOG.md`. Datele sunt citite prin OCR de pe imaginea camerei web CFR și pot conține erori;
+valorile necitite apar ca „—”, nu ca 0.
+
 ## Ce face
 
 - **Tabelă (Carduri)** — sosiri și plecări cu ora programată, întârzierea citită, linia,
@@ -18,6 +22,8 @@ Live: https://tabelacfr.ddns.net
 - **Istoric** — ce a afișat tabela într-o zi (filtre: zi, tren, stație, interval, panou),
   cu detaliul evenimentelor și graficul întârzierii observate. Link direct:
   `#istoric?train=1636&date=2026-10-21`.
+- **Statistici** — punctualitate, întârzieri, clasamente și hărți de căldură pe perioadă, cu numărul de
+  călătorii (N) și eșantion minim afișate; export CSV. Istoricul poate fi văzut pe toate zilele.
 - **Urmărite** — notificări Web Push la schimbări de întârziere/linie sau la dispariția
   trenului de pe tabelă (necesită HTTPS; pe iPhone, aplicația adăugată pe ecranul principal).
 - **PWA** — instalabilă, funcționează offline cu ultima tabelă (marcată „date vechi”) și o
