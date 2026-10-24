@@ -76,7 +76,8 @@ html {
   --ref-yellow-300: #fde047;
   --ref-yellow-800: #8a5300;
   --ref-orange-400: #fb923c;
-  --ref-orange-800: #9a3412;
+  --ref-orange-750: #ad3f0a;
+  --ref-olive-800: #7a5d00;
   --ref-green-100: #dcfce7;
   --ref-green-400: #4ade80;
   --ref-green-800: #166534;
@@ -204,8 +205,8 @@ html {
     --board-line: var(--ref-slate-200);
     --board-line-strong: var(--ref-slate-300);
     --lvl-ok: var(--ref-green-800);
-    --lvl-low: var(--ref-yellow-800);
-    --lvl-mid: var(--ref-orange-800);
+    --lvl-low: var(--ref-olive-800);
+    --lvl-mid: var(--ref-orange-750);
     --lvl-high: var(--ref-red-700);
     --lvl-tint: 14%;
     --t-ir: var(--ref-blue-700);
@@ -261,8 +262,8 @@ html {
   --board-line: var(--ref-slate-200);
   --board-line-strong: var(--ref-slate-300);
   --lvl-ok: var(--ref-green-800);
-  --lvl-low: var(--ref-yellow-800);
-  --lvl-mid: var(--ref-orange-800);
+  --lvl-low: var(--ref-olive-800);
+  --lvl-mid: var(--ref-orange-750);
   --lvl-high: var(--ref-red-700);
   --lvl-tint: 14%;
   --t-ir: var(--ref-blue-700);

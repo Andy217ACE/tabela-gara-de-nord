@@ -59,8 +59,8 @@ primitiv și în `theme-init.js` pentru `<meta name="theme-color">`).
 | `--text` / `-2` / `-3` | `#F1F5F9` / `#CBD5E1` / `#94A3B8` | `#0F172A` / `#475569` / `#5B6779` | text |
 | `--accent` = `--time` | ambră `#FFB547` | ambră închisă `#92400E` | ore, linie, titlu panou, selecție |
 | `--ok` | `#4ADE80` | `#166534` | la timp (citit) |
-| `--warn` / `--lvl-low` | `#FDE047` | `#8A5300` | întârziere mică |
-| `--lvl-mid` | `#FB923C` | `#9A3412` | întârziere medie |
+| `--warn` / `--lvl-low` | `#FDE047` | `#8A5300` / `#7A5D00` | întârziere mică |
+| `--lvl-mid` | `#FB923C` | `#AD3F0A` | întârziere medie |
 | `--bad` / `--lvl-high` | `#F87171` | `#B91C1C` | întârziere mare |
 | `--unknown` | `#94A3B8` | `#5B6779` | necitit / necunoscut / vechi |
 | `--info` | `#60A5FA` | `#1D4ED8` | modificat recent, în desfășurare |
@@ -132,7 +132,7 @@ detaliu), iconițe SVG inline cu `aria-hidden` lângă text.
 CSP strict (`style-src 'self'`, `font-src 'self' …`): fără `<style>`, `style=`, scripturi inline;
 DOM doar cu `createElement`/`textContent`. Fonturile sunt locale (fără cereri externe).
 PWA: `sw.js` precache-uiește shell-ul + cele două fonturi critice (Fira Sans 400, Fira Code);
-celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 525 KB necomprimat (testat).
+celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 560 KB necomprimat (testat).
 
 ## 9. Verificare
 
