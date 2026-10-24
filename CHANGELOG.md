@@ -5,6 +5,26 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.20 — 2026-10-24
+
+### Nou
+- **Primul release** (până acum doar pre-release-uri): grafica întregii aplicații, regândită ca un afișaj de gară modern.
+- **Aspect nou, pe toate ecranele:** fundal slate (albastru-gri închis) și o temă luminoasă la fel de lucrată; ambra panoului de gară pentru ore, linie și selecție; verde, galben, portocaliu și roșu doar pentru stări citite, mereu cu iconiță și text; gri pentru necitit, necunoscut și date vechi (niciodată „la timp” fără o întârziere citită).
+- **Fonturi noi, găzduite pe site:** Fira Code pentru ore, numere de tren și cifre, Fira Sans pentru text, cu diacritice românești. Nu mai există nicio cerere către Google Fonts.
+- **LIVE mai ușor de citit:** linia apare ca o plăcuță de peron (chenar și cifre ambră); la trenurile întârziate ora estimată rămâne mare, iar starea o spun bara colorată și eticheta „+N min”; filtrele Panoului încap pe un rând pe desktop.
+- **Pe telefon:** antetul ocupă două rânduri (ceasul, vremea și „actualizat” pe același rând), meniul are linia ambră sub pagina curentă, butoanele Panoului sunt iconițe de 44 px pe un singur rând, iar legenda culorilor coboară sub tabel, ca trenurile să apară mai sus.
+- Butoane, câmpuri, carduri, insigne și foi de detaliu au aceeași formă și aceleași stări pe toate paginile (Istoric, Urmărite, Trenuri, Tren, Stații, Stație, Statistici, Clasamente, Versiuni, Capturi OCR).
+
+### Reparat
+- Contrast insuficient în tema luminoasă a Panoului („la timp” 4,48:1 și „+30 min” 3,9:1): toate textele au acum cel puțin 4,5:1, verificat automat pe toate ecranele, în ambele teme.
+- Textul nu mai coboară sub 12 px (etichetele de 11 px au fost mărite), iar câmpurile au contur vizibil (3:1).
+- Butonul de temă nu mai apare de două ori pe Tabelă (în Panou rămâne doar în ecran complet).
+
+### Tehnic
+- Sistem de design în trei straturi (primitive → semantice → componente), descris în `design-system/tabela-gara-de-nord/MASTER.md`; culorile brute există doar în stratul primitiv.
+- Audit automat de contrast: `scripts/contrast_audit.py` și `tests/test_contrast_browser.py` (1280 și 390 px, dark + light).
+- Fonturi woff2 în `web/fonts/` (subset latin + latin-ext, `font-display: swap`, licență OFL inclusă); cele două critice sunt preîncărcate și în cache-ul offline. Service worker v24. Schema DB neschimbată (v7). Logica, API-ul și datele nu s-au schimbat.
+
 ## Beta 1.19 — 2026-10-24
 
 ### Nou
