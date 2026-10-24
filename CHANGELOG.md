@@ -5,6 +5,24 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.19 — 2026-10-24
+
+### Nou
+- **Statisticile încep cu „Probleme”.** Pe baza primelor 4 zile (1157 de călătorii, 103 708 citiri ale tabelei), pagina Statistici arată întâi ce iese în evidență, clasat după gravitate × câte călătorii afectează × încrederea în cifre. Fiecare problemă are N, cifrele brute, „de ce contează” și link spre tren, stație sau zi. Calculul e determinist, din date (fără AI).
+- Ce apare acum în date: sosirile sunt la timp doar în 48,5 % din cazuri (37 % fără navetele de Aeroport), plecările în 92,5 %; trenurile din Pitești (2 din 30 la timp, mediana 32,5 min) și Târgoviște (1 din 21); 59 de trenuri întârziate în fiecare zi în care au fost văzute; trenurile de noapte (IRN) — niciunul la timp la sosire (N = 25); ferestrele 06–09 și 15–18 la sosiri; prima întârziere anunțată crește la 43 % dintre sosiri.
+- **„Ce merge bine”** pe scurt, apoi **„Problemele în detaliu”**: trenuri întârziate zi de zi (cu întârzierea fiecărei zile), ferestre de 3 ore și episoade de o zi (de ex. 22.10, 06–09), sosiri și plecări față în față, întârzieri foarte mari, direcții, creșterea întârzierii după primul anunț, tendința pe zile.
+- **Indicator de acoperire:** zile parțiale (ziua în curs, ore excluse), pauze în citirea tabelei, rezultate neconfirmate/necunoscute și ce nu se poate concluziona încă (tendințe sub 7 zile, vremea, schimbările de linie, „cel mai bun operator”).
+
+### Reparat
+- **Statistici înșelătoare pe medie:** un singur tren cu 390 min (IR 16534, 23.10) făcea din 23:00 „ora cu cea mai mare întârziere” (mediana orei: 5 min) și din Cluj-Napoca „ruta cea mai întârziată”. Orele și rutele se clasează acum după mediană; o direcție trebuie să aibă cel puțin 2 trenuri diferite.
+- Propoziția „cel mai punctual operator” (12 călătorii = 4 trenuri × 3 zile) a fost scoasă: operatorii au rute diferite (corelație, nu cauzalitate).
+- Harta oră × zi a săptămânii avertizează că, sub 7 zile de istoric, fiecare zi a săptămânii e o singură dată.
+
+### Tehnic
+- `app/stats_problems.py` (nou, funcții pure, testat cu date sintetice, inclusiv sub eșantionul minim); secțiunea `problems` în `/api/stats/overview`, calculată pe aceeași conexiune read-only și același cache TTL.
+- Analiza datelor: `docs/superpowers/analysis/2026-10-24-date-4-zile.md`.
+- Service worker v23. Schema DB neschimbată (v7).
+
 ## Beta 1.18 — 2026-10-24
 
 ### Reparat
