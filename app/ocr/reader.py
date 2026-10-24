@@ -19,6 +19,7 @@ import dataclasses
 import logging
 import os
 import time
+from collections import deque
 from collections.abc import Iterable
 
 import cv2
@@ -417,16 +418,92 @@ def _delay(cell: np.ndarray, tess: tuple[str, float | None], matcher: DigitMatch
     return "+" + m_digits, t_conf if t_conf is not None else worst, None
 
 
+def _hundreds_candidate(cell: np.ndarray, t_text: str, matcher: DigitMatcher | None
+                        ) -> str | None:
+    """"+1xy" when a delay cell left unread as three digits has the shape of a 100-199
+    min delay with only its middle digit in doubt (glare over its top: the board showed
+    +100, the readers alternated 100/160/180): "+" and a "1" both trusted and not cut
+    out of a glare blob, a last digit trusted (a clear match if cut out of a blob), and
+    Tesseract also reading three digits starting with "1". A candidate is never a
+    reading: only ``DelayVotes`` (several frames in a row) can make it one. The glare
+    misreads of two-digit delays (465, 355, 240) give two glyphs, never a candidate."""
+    if matcher is None:
+        return None
+    try:
+        gl = matcher.glyphs(cell, _ALLOWED["delay"])
+    except ValueError:
+        return None
+    if len(gl) != 4:
+        return None
+    (c0, s0, m0, g0, _), (c1, s1, m1, _, f1), (_, s2, m2, _, _), (c3, s3, m3, _, f3) = gl
+    t = t_text.replace(" ", "").lstrip("+")
+    ok_last = digits.glyph_trusted(s3, m3) and (not f3 or (s3 >= FUSED_MIN_SCORE
+                                                          and m3 >= FUSED_MIN_MARGIN))
+    if (c0 == "+" and (digits.glyph_trusted(s0, m0) or digits.is_plus(g0))
+            and c1 == "1" and digits.glyph_trusted(s1, m1) and not f1 and ok_last
+            and len(t) == 3 and t.isdigit() and t[0] == "1"):
+        return "+" + "".join(ch for ch, *_ in gl[1:])
+    return None
+
+
+VOTE_WINDOW = 7  # last frames of the same train looked at
+VOTE_MIN = 4     # a candidate needs this many identical readings...
+# ...and a strict majority of the window
+
+
+class DelayVotes:
+    """Frame-to-frame vote on the 100-199 min delays a single frame cannot read safely.
+
+    Kept by the poller across frames. Per train (board, number, scheduled time), the
+    last VOTE_WINDOW frames' candidates (``_hundreds_candidate``; None when the frame
+    had none). The frame's candidate becomes the delay only when it is at least
+    VOTE_MIN of them AND a strict majority: on the real frames of IRN 401 (+100 on the
+    board, 23.10) the candidates were 100 x8, 160 x3, 150 x1 — 160 never wins.
+    """
+
+    def __init__(self, window: int = VOTE_WINDOW, need: int = VOTE_MIN):
+        self.window, self.need = window, need
+        self._hist: dict[tuple, deque] = {}
+
+    def apply(self, entries: list[dict]) -> None:
+        seen = set()
+        for e in entries:
+            r = e["row"]
+            if r is None or not r.train_no:
+                continue
+            key = (e["board"], r.train_no, r.sched_time)
+            seen.add(key)
+            f = e["fields"]["delay"]
+            cand = f.get("candidate") if f.get("check") else None
+            h = self._hist.setdefault(key, deque(maxlen=self.window))
+            h.append(cand)
+            if cand is None:
+                continue
+            n = sum(c == cand for c in h)
+            if n >= self.need and 2 * n > len(h):
+                value = parse_delay(cand)
+                if value is not None:
+                    _set_delay(e, cand, None, value,
+                               {"attempts": n, "variant": "vote"})
+                    f["vote"] = f"{n}/{len(h)}"
+        for key in list(self._hist):  # trains gone from the board
+            if key not in seen:
+                del self._hist[key]
+
+
 def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
-               stations: Iterable[str] = ()) -> list[Row]:
+               stations: Iterable[str] = (), votes: "DelayVotes | None" = None
+               ) -> list[Row]:
     """Rows of both boards. `engine` defaults to Tesseract; `stations` are the
-    station names learned from the history (added to the curated seed)."""
-    return read_board_debug(image_bytes, engine, stations=stations)[0]
+    station names learned from the history (added to the curated seed); `votes` the
+    poller's frame-to-frame vote on glared delays of 100+ min (``DelayVotes``)."""
+    return read_board_debug(image_bytes, engine, stations=stations, votes=votes)[0]
 
 
 def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
                      stations: Iterable[str] = (),
-                     budget_s: float | None = None) -> tuple[list[Row], list[dict]]:
+                     budget_s: float | None = None,
+                     votes: "DelayVotes | None" = None) -> tuple[list[Row], list[dict]]:
     """(rows, debug): the rows of `read_board` plus one debug dict per detected line,
     including lines that gave no row (``row`` None: type or time unreadable).
 
@@ -522,6 +599,11 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
             entries[i]["retry"]["attempts"] = n
     retry_s = time.perf_counter() - t_retry if attempts else 0.0
     _reread_delays(engine, slots, entries, ctx, t_start, budget)
+    if votes is not None:
+        try:
+            votes.apply(entries)
+        except Exception:  # optional: the delay stays unread
+            log.warning("OCR delay vote failed; delay left unread", exc_info=True)
 
     for e in entries:
         for f in e["fields"].values():
@@ -750,6 +832,10 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
     if d_why is not None:  # why the delay is unread, and what Tesseract alone saw
         entry["fields"]["delay"]["check"] = d_why
         entry["fields"]["delay"]["seen"] = tess["delay"][0]
+        if d_why == "three_digits":
+            cand = _hundreds_candidate(cells["delay"], tess["delay"][0], ctx.matcher)
+            if cand:
+                entry["fields"]["delay"]["candidate"] = cand
     if train_type is None or sched is None:
         return entry
     entry["row"] = Row(

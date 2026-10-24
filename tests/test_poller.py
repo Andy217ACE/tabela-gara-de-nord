@@ -129,7 +129,7 @@ def world(monkeypatch, tmp_path):
             raise FetchError("boom")
         return w.image()
 
-    def fake_read(data):
+    def fake_read(data, *, votes=None):
         w.read_calls.append(data)
         if data in w.ocr_fail_hashes:
             raise OcrError("bad")
@@ -202,10 +202,11 @@ async def test_run_survives_ocr_and_callback_errors(world):
 
 async def test_run_passes_learned_stations_to_reader(world, monkeypatch):
     w = world
-    got = []
+    got, voters = [], []
 
-    def fake_read(data, *, stations=()):
+    def fake_read(data, *, stations=(), votes=None):
         got.append(set(stations))
+        voters.append(votes)
         return ["row"]
 
     monkeypatch.setattr(poller, "read_board", fake_read)
@@ -219,13 +220,15 @@ async def test_run_passes_learned_stations_to_reader(world, monkeypatch):
         timeout=5,
     )
     assert got and all(s == {"BRASOV"} for s in got)
+    # one DelayVotes kept across frames (vote on glared 100+ min delays, Beta 1.16)
+    assert voters[0] is not None and all(v is voters[0] for v in voters)
 
 
 async def test_run_survives_known_stations_failure(world, monkeypatch, caplog):
     w = world
     got = []
 
-    def fake_read(data, *, stations=()):
+    def fake_read(data, *, stations=(), votes=None):
         got.append(tuple(stations))
         return ["row"]
 

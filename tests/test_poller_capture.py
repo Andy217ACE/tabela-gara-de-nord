@@ -34,7 +34,7 @@ def w(monkeypatch):
     async def fetch(client, url):
         return f"img-{int((w.now - 13) // 60)}".encode()
 
-    def read_debug(data, *, stations=()):
+    def read_debug(data, *, stations=(), votes=None):
         if data == b"img-17":
             raise OcrError("bad")
         return ["row"], [{"dbg": 1}]

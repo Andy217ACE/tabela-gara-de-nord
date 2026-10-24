@@ -263,7 +263,7 @@ def test_poller_saves_frames_on_rows_rejected(monkeypatch, tmp_path):
         return b"img-%d" % int(now[0] // 60)
 
     monkeypatch.setattr(poller, "fetch_board_image", fake_fetch)
-    monkeypatch.setattr(poller, "read_board", lambda data: ["row"])
+    monkeypatch.setattr(poller, "read_board", lambda data, **_: ["row"])
 
     async def sleep(d):
         now[0] += d

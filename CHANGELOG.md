@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.17 — 2026-10-23
+
+### Reparat
+- **Întârzierile de peste 100 de minute acoperite de reflexie rămâneau necitite.** Caz real: IRN 401 KIEV - CHIȘINĂU, la Sosiri, cu „+100” pe tabelă (confirmat vizual). Pata albă acoperă vârful cifrei din mijloc, așa că pe un singur cadru cele două citiri alternau între 100, 160 și 180, iar valoarea era refuzată (corect: un singur cadru nu e sigur).
+- Acum se votează între cadre: dacă „+” și „1”-ul de început sunt citite sigur, ultima cifră e clară și Tesseract vede și el trei cifre care încep cu „1”, valoarea candidată din fiecare cadru intră într-un vot pe ultimele 7 cadre ale aceluiași tren. Se acceptă doar o valoare văzută de cel puțin 4 ori și în majoritate. Pe cadrele reale: 100 citit în 5 din 12 cadre, celelalte rămân necitite; 160/180 nu sunt acceptate niciodată.
+- Erorile de tip „+65 → +465” / „+20 → +240” (pata lipită de „+”) rămân refuzate: acolo tabela are două cifre și votul nu are niciun candidat.
+
+### Calitate măsurată
+- Setul de adevăr (384 de rânduri): nicio întârziere greșită, nicio valoare de 100+ falsă. Pe eșantionul de 683 de cadre reale (21–22.10), nicio valoare de 100+ nouă.
+
+### Tehnic
+- Service worker v21. Întârzierea acceptată prin vot e marcată `+delay-retry:vote:<n>` în versiunea observației.
+
 ## Beta 1.16 — 2026-10-23
 
 ### Reparat
