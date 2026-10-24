@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.21 — 2026-10-24
+
+### Reparat
+- Pagina **Versiuni** afișa marcajele de evidențiere ca text brut (două steluțe înainte și după); acum fragmentele marcate apar îngroșat, ca în notele de pe GitHub.
+- Se aplică tuturor versiunilor din listă, inclusiv notelor vechi (Beta 1.09–1.20).
+- Textul notelor e pus în pagină tot ca text (fără HTML venit din date), deci politica de securitate a paginii rămâne la fel de strictă.
+
+### Tehnic
+- Doar `web/versions.js`; footerul și „Versiunea curentă” nu se schimbă.
+- Service worker v25. Schema DB neschimbată (v7).
+
 ## Beta 1.20 — 2026-10-24
 
 ### Nou

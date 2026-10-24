@@ -33,6 +33,16 @@
     return String(s).replace(/`/g, "");
   }
 
+  // „**text**" din CHANGELOG → <strong> (doar textContent, fără HTML din date)
+  function item(s) {
+    var li = el("li");
+    plain(s).split("**").forEach(function (part, i) {
+      if (!part) return;
+      li.appendChild(i % 2 ? el("strong", null, part) : document.createTextNode(part));
+    });
+    return li;
+  }
+
   function setFooter(data) {
     var a = $("app-version");
     if (a && data && typeof data.version === "string" && data.version) a.textContent = data.version;
@@ -58,7 +68,7 @@
       (e.groups || []).forEach(function (g) {
         if (g.title) art.appendChild(el("h3", "v-group", plain(g.title)));
         var ul = el("ul", "v-items");
-        (g.items || []).forEach(function (it) { ul.appendChild(el("li", null, plain(it))); });
+        (g.items || []).forEach(function (it) { ul.appendChild(item(it)); });
         art.appendChild(ul);
       });
       box.appendChild(art);
