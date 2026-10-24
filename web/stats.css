@@ -4,7 +4,7 @@
    charts scroll inside their own container, never the page. */
 
 .st-root { min-width: 0; }
-.st-root.is-loading .st-body { opacity: 0.55; transition: opacity 0.2s ease; }
+.st-root.is-loading .st-body { opacity: 0.55; transition: opacity var(--dur) var(--ease); }
 .st-body { min-width: 0; }
 
 /* ---------- filters ---------- */
@@ -56,7 +56,7 @@
   margin: 10px 0 0;
   padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--warn-bg);
   color: var(--warn);
   font-size: 0.8125rem;
@@ -102,7 +102,7 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-strong);
   text-align: left;
-  font-size: 0.6875rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -185,7 +185,7 @@ th[aria-sort] .st-sort { color: var(--accent); }
 .st-stat {
   min-width: 0;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
 }
 .st-stat:first-child { grid-column: 1 / -1; }
@@ -209,7 +209,7 @@ th[aria-sort] .st-sort { color: var(--accent); }
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 .st-tile-label { color: var(--text-3); font-size: 0.75rem; }
@@ -224,7 +224,7 @@ th[aria-sort] .st-sort { color: var(--accent); }
   display: block;
   max-width: none;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
 .st-grid-lines line { stroke: var(--border); stroke-width: 1; }
@@ -253,9 +253,9 @@ th[aria-sort] .st-sort { color: var(--accent); }
   margin-left: 6px;
   padding: 1px 6px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-3);
-  font-size: 0.6875rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   vertical-align: middle;
 }

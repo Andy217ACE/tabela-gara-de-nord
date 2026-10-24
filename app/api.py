@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 import re
 from contextlib import asynccontextmanager
@@ -51,6 +52,10 @@ BOARDS = ("arrival", "departure")
 
 _HHMM = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# self-hosted web fonts (web/fonts/*.woff2): not in every OS mime table (Windows, minimal
+# images); with "nosniff" a wrong type could block them
+mimetypes.add_type("font/woff2", ".woff2")
 
 CSP = "; ".join([
     "default-src 'self'",

@@ -9,7 +9,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v23";
+var VERSION = "v24";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -38,8 +38,12 @@ var SHELL = [
   "/icons/favicon-16.png",
   "/icons/favicon-32.png",
   "/icons/icon-192.png",
-  "/icons/apple-touch-icon.png"
+  "/icons/apple-touch-icon.png",
+  "/fonts/fira-sans-400.woff2",
+  "/fonts/fira-code.woff2"
 ];
+// the other Fira Sans weights (500/600/700) load on demand (HTTP cache); offline they fall
+// back to the 400 weight (synthetic bold) — keeps the precache inside its budget
 // icon-512 / maskable are fetched by the browser from the manifest; not precached.
 var DEFAULT_TITLE = "Gara de Nord";
 

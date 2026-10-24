@@ -30,13 +30,13 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   font-variant-numeric: tabular-nums;
   font-family: var(--mono);
   font-size: 1.0625rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text);
   letter-spacing: 0.02em;
 }
 .hdr-clock-date {
   display: none;
-  font-size: 0.6875rem;
+  font-size: var(--fs-xs);
   color: var(--text-2);
   white-space: nowrap;
 }
@@ -58,11 +58,12 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   min-height: 44px;
   padding: 3px 8px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
   font: inherit;
   text-align: left;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
@@ -81,8 +82,9 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   stroke-linejoin: round;
 }
 .wx-temp {
+  font-family: var(--mono);
   font-size: 1.0625rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.05;
   letter-spacing: -0.01em;
 }
@@ -90,7 +92,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   grid-column: 2;
   display: flex;
   gap: 6px;
-  font-size: 0.6875rem;
+  font-size: var(--fs-xs);
   line-height: 1.2;
   color: var(--text-2);
   white-space: nowrap;
@@ -108,7 +110,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 }
 .wx-old {
   grid-column: 1 / -1;
-  font-size: 0.6875rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-2);
   white-space: nowrap;
@@ -125,9 +127,9 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   display: block;
   width: 64px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
-  animation: wx-pulse 1.4s ease-in-out infinite;
+  animation: wx-pulse 1.4s var(--ease) infinite;
 }
 @keyframes wx-pulse { 50% { opacity: 0.45; } }
 
@@ -142,10 +144,10 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   width: min(300px, calc(100vw - 32px));
   padding: 12px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-overlay);
   font-family: var(--font);
   font-size: 0.8125rem;
   line-height: 1.4;
@@ -180,7 +182,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 .wx-pop-warn {
   margin: 0 0 8px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--warn-bg);
   color: var(--warn);
   font-weight: 600;
@@ -238,4 +240,12 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 
 @media (forced-colors: active) {
   .wx-btn, .wx-pop { border: 1px solid CanvasText; }
+}
+
+/* telefoane înguste: în antet doar iconița + temperatura (detaliile în popover), ca ceasul,
+   vremea și indicatorul „actualizat" să încapă pe un rând */
+@media (max-width: 429px) {
+  .hdr-clockwx .wx-sub { display: none; }
+  .hdr-clockwx .wx-btn { padding: 3px 10px 3px 8px; grid-template-rows: auto; }
+  .hdr-clockwx .wx-ico { grid-row: 1; }
 }

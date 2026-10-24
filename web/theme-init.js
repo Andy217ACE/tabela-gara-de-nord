@@ -9,7 +9,7 @@
 (function () {
   var KEY = "tabela.theme";
   var ORDER = ["auto", "light", "dark"];
-  var COLORS = { dark: "#0a0d12", light: "#f4f2ed" }; // = --bg din style.css
+  var COLORS = { dark: "#0f172a", light: "#f1f5f9" }; // = --bg din style.css
   var root = document.documentElement;
 
   function load() {
