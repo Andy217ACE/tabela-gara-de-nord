@@ -211,3 +211,84 @@ def test_reread_that_lost_a_glyph_of_the_first_pass_is_not_taken():
     assert _lost_ink(base, lost)
     assert not _lost_ink(base, base)
     assert not _lost_ink(lost, base)  # a re-read that sees more is fine
+
+
+# --- +100 under glare: vote across frames (IRN 401, arrivals line 0, 23.10.2026) ------
+# The board showed "+100" (checked by eye by the user, 07:47 RO). Glare hides the top
+# of the middle digit: per frame the readers alternate 100 / 160 / 180, so a single
+# frame stays unread ("three_digits"); several frames in a row vote.
+D100 = sorted((FIX / "ocr14_delay100").glob("*.jpg"))
+
+
+def _arr0(debug):
+    return next(d for d in debug if d["board"] == "arrival" and d["row_index"] == 0)
+
+
+def test_hundred_alone_in_one_frame_is_unread_never_a_guess():
+    for path in D100:
+        line = _arr0(read_board_debug(path.read_bytes(), budget_s=60.0)[1])
+        assert line["row"].train_no == 401
+        f = line["fields"]["delay"]
+        assert f["norm"] is None and f["check"] == "three_digits"
+        assert f["candidate"].startswith("+1") and len(f["candidate"]) == 4
+
+
+def test_hundred_read_by_the_vote_of_consecutive_frames():
+    from app.ocr.reader import DelayVotes
+    votes, got = DelayVotes(), []
+    for path in D100:
+        line = _arr0(read_board_debug(path.read_bytes(), budget_s=60.0, votes=votes)[1])
+        got.append(line["fields"]["delay"]["norm"])
+        if got[-1] is not None:
+            assert line["row"].delay_read and line["row"].delay_min == 100
+            assert line["fields"]["delay"]["retry"]["variant"] == "vote"
+    assert set(got) <= {100, None}  # never 160 / 180 / 150
+    assert got.count(100) >= 4
+    assert got[:3] == [None, None, None]  # never on the first frames
+
+
+def _entry(no, cand, board="arrival"):
+    from app.models import Row
+    row = Row(board=board, train_type="IRN", train_no=no, station="X", operator="Y",
+              sched_time="06:38", delay_min=0, delay_read=False, platform=None,
+              flagged=False, confidence=0.9)
+    f = {"raw": "+?", "norm": None, "check": "three_digits"} if cand else {"raw": "+?",
+                                                                            "norm": None}
+    if cand:
+        f["candidate"] = cand
+    return {"board": board, "row_index": 0, "row": row, "raw_text": "",
+            "fields": {n: {"raw": "", "norm": None} for n in truth.FIELDS} | {"delay": f}}
+
+
+def test_vote_needs_a_majority_of_at_least_four_frames():
+    from app.ocr.reader import DelayVotes
+    v = DelayVotes()
+    seq = ["+100", "+160", "+100", "+160", "+100", "+160", "+100"]
+    out = []
+    for c in seq:
+        e = _entry(401, c)
+        v.apply([e])
+        out.append(e["fields"]["delay"]["norm"])
+    assert out == [None] * 6 + [100]  # 4 of 7, majority; 160 (3 of 7) never
+    v2 = DelayVotes()
+    for c in ["+100", "+100", "+100", None, "+100"]:  # a frame without candidate counts
+        e = _entry(401, c)
+        v2.apply([e])
+    assert e["fields"]["delay"]["norm"] == 100
+    v3 = DelayVotes()
+    for c in ["+100"] * 3:
+        v3.apply([_entry(401, c)])
+    v3.apply([_entry(402, "+100")])  # train 401 gone from the board: its votes go
+    e = _entry(401, "+100")
+    v3.apply([e])
+    assert e["fields"]["delay"]["norm"] is None
+
+
+def test_glare_misreads_of_two_digit_delays_give_no_candidate():
+    """+65 -> "+465", +55 -> "+355" (tests/test_ocr13.py GLARED): two digits on the
+    board, never a 100+ candidate."""
+    from tests.test_ocr13 import FIX as F13, GLARED
+    for name, board, idx, _shown, _live in GLARED:
+        _, debug = read_board_debug((F13 / f"{name}.jpg").read_bytes(), budget_s=60.0)
+        line = next(d for d in debug if d["board"] == board and d["row_index"] == idx)
+        assert "candidate" not in line["fields"]["delay"]

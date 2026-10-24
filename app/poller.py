@@ -14,7 +14,7 @@ import httpx
 
 from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
-from app.ocr.reader import OcrError, read_board, read_board_debug
+from app.ocr.reader import DelayVotes, OcrError, read_board, read_board_debug
 from app.rejected import save_rejected
 
 log = logging.getLogger(__name__)
@@ -137,6 +137,7 @@ async def run_poller(
     (and frames OCR failed on) are saved to `rejected_dir` (None: not saved).
     """
     reader = read_board if on_capture is None else read_board_debug
+    votes = DelayVotes()  # frame-to-frame vote on glared 100+ min delays
 
     async def capture(data: bytes, rows, debug, ts: float, dur_ms: int, error) -> None:
         if on_capture is None:
@@ -193,7 +194,7 @@ async def run_poller(
             t0, debug = time.perf_counter(), None
             try:
                 if known_stations is None:
-                    rows = await asyncio.to_thread(reader, data)
+                    rows = await asyncio.to_thread(reader, data, votes=votes)
                 else:
                     try:
                         stations = await asyncio.to_thread(known_stations)
@@ -204,7 +205,8 @@ async def run_poller(
                             log.warning("known stations unavailable (repeats silenced for"
                                         " %d min)", KNOWN_STATIONS_WARN_S // 60, exc_info=True)
                         stations = ()
-                    rows = await asyncio.to_thread(reader, data, stations=stations)
+                    rows = await asyncio.to_thread(reader, data, stations=stations,
+                                                    votes=votes)
                 if on_capture is not None:
                     rows, debug = rows
             except (OcrError, ValueError) as e:
