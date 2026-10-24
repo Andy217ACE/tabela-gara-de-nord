@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.18 — 2026-10-24
+
+### Reparat
+- **Panoul LIVE arăta uneori 13 trenuri, deși tabela fizică are mereu 12 rânduri.** Un tren care dispare de pe tabelă e trecut „plecat” abia după 3 citiri în care lipsește (ca o citire greșită de un cadru să nu-l scoată și să-l readucă). În acest interval rămânea și pe LIVE, lângă trenul nou intrat.
+- Acum, după un cadru complet al panoului (toate cele 12 rânduri citite), LIVE arată doar trenurile din acel cadru. Trenul aflat în așteptare rămâne în baza de date și în istoric și devine „plecat” după aceleași reguli ca înainte; dacă reapare la următoarea citire, revine pe LIVE.
+- Dacă ultimul cadru al unui panou nu a fost complet, dacă panoul a fost respins sau dacă datele lui sunt vechi, nu se ascunde nimic (comportamentul de până acum).
+
+### Tehnic
+- Service worker v22. Schema DB neschimbată (v7).
+- Regulile pentru „plecat”, evenimentele, notificările, istoricul și statisticile nu s-au schimbat; se schimbă doar ce arată `/api/board`.
+- După o repornire a serviciului nu se ascunde nimic până la primul cadru complet citit.
+
 ## Beta 1.17 — 2026-10-23
 
 ### Reparat

@@ -40,6 +40,8 @@ RENAME_WINDOW = 10  # ...that are also RENAME_SHARE of the last RENAME_WINDOW re
 RENAME_SHARE = 0.7  # (a vote, not "3 in a row": 7917->7914->791->7914 ping-pong stops)
 BOARDS = ("arrival", "departure")
 GONE_AFTER_MISSES = 3  # OCR alternating between variants made 2 flap (data-quality report)
+PANEL_ROWS = 12  # the physical CFR panel always shows this many rows; a frame with all of
+# them read is complete, and LIVE then shows only the services read in it (see current_board)
 REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'appeared'
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
@@ -310,6 +312,9 @@ class Store:
         self._good_count: dict[str, int] = {}
         self._board_ok: dict[str, str] = {}
         self._partial_streak: dict[str, int] = {}
+        # panel -> was its last frame accepted with all PANEL_ROWS rows read? (in memory;
+        # empty after a restart: nothing is hidden until a complete frame is read again)
+        self._complete: dict[str, bool] = {}
         # (board, service_date, train_no, sched_time) -> first ts of a low-confidence
         # reading of a new service, awaiting a second consecutive reading.
         self._pending_new: dict[tuple, str] = {}
@@ -442,9 +447,12 @@ class Store:
         return accepted, rejected
 
     def _after_judge(self, accepted: dict[str, int], rejected: dict[str, str],
-                     ts_s: str) -> None:
+                     ts_s: str, read: dict[str, int] | None = None) -> None:
         """Panel bookkeeping, once the frame's transaction committed."""
         self.last_rejected = rejected
+        read = read or {}
+        for b in BOARDS:
+            self._complete[b] = b in accepted and read.get(b, 0) >= PANEL_ROWS
         for b, n in accepted.items():
             self._good_count[b] = n
             self._board_ok[b] = ts_s
@@ -470,11 +478,12 @@ class Store:
             try:
                 good, low = self._split(rows)
                 accepted, rejected = self._judge(good)
+                read = {b: sum(1 for r in good + low if r.board == b) for b in BOARDS}
                 if not accepted:
                     c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,0,?)",
                               (ts_s, image_hash, len(rows)))
                     c.execute("COMMIT")
-                    self._after_judge(accepted, rejected, ts_s)
+                    self._after_judge(accepted, rejected, ts_s, read)
                     return []
                 c.execute("INSERT INTO runs(ts, image_hash, ok, n_rows) VALUES (?,?,1,?)",
                           (ts_s, image_hash, len(rows)))
@@ -483,7 +492,7 @@ class Store:
                 low = [r for r in low if r.board in accepted]
                 events = self._diff(good, low, local, ts_s, tuple(accepted))
                 c.execute("COMMIT")
-                self._after_judge(accepted, rejected, ts_s)
+                self._after_judge(accepted, rejected, ts_s, read)
                 # pending new services of a rejected panel wait for its next reading
                 self._pending_new = {**{k: v for k, v in self._pending_new.items()
                                         if k[0] not in accepted}, **self._pending_new_next}
@@ -803,17 +812,31 @@ class Store:
         r = self._conn.execute("SELECT ts FROM runs WHERE ok=1 ORDER BY id DESC LIMIT 1").fetchone()
         return r[0] if r else None
 
-    def current_board(self) -> dict:
+    def _trimmed_boards(self, now: datetime | None, stale_s: float | None) -> set[str]:
+        """Panels whose LIVE list is cut to the services read in their last frame: that
+        frame was accepted with all PANEL_ROWS rows read and is still fresh (with `now`
+        and `stale_s`). A rejected, incomplete or stale panel keeps every listed service."""
+        ages = self.board_ages(now) if now is not None and stale_s is not None else {}
+        return {b for b in BOARDS if self._complete.get(b) and b not in self.last_rejected
+                and (not ages or (ages[b] is not None and ages[b] <= stale_s))}
+
+    def current_board(self, now: datetime | None = None, stale_s: float | None = None) -> dict:
+        """The LIVE board. A service no longer read waits GONE_AFTER_MISSES frames before
+        it is 'gone' (it stays listed in the database and the history meanwhile), but
+        after a complete frame of its panel (see _trimmed_boards) it is not shown: the
+        physical panel never has more than PANEL_ROWS rows."""
         with self._lock:
             out: dict = {"updated_at": self._last_ok_ts(), "arrivals": [], "departures": []}
+            trimmed = self._trimmed_boards(now, stale_s)
             rows = self._conn.execute(
                 "SELECT id, board, train_type, train_no, station, operator, sched_time,"
                 " last_delay, last_platform, flagged, status, service_date, uncertain,"
-                " station_raw, last_seen"
+                " station_raw, last_seen, miss_count"
                 " FROM services s"
                 " WHERE status='listed' AND NOT " + quality.GHOST_SQL +
                 " ORDER BY service_date, sched_time, train_no"
             ).fetchall()
+        rows = [s for s in rows if not (s["board"] in trimmed and s["miss_count"] > 0)]
         for s in _dedup(rows):
             out[_BOARD_KEYS[s["board"]]].append({
                 "train_type": s["train_type"], "train_no": s["train_no"],

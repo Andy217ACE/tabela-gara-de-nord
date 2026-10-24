@@ -321,7 +321,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     @app.get("/api/board")
     def board(request: Request):
         store = store_of(request)
-        out = store.current_board()
+        out = store.current_board(datetime.now(TZ), STALE_S)
         age = store.last_ok_age(datetime.now(TZ))
         out["age_s"] = age
         out["stale"] = age is None or age > STALE_S
