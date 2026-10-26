@@ -95,13 +95,18 @@ def _same_words(k: str, ck: str) -> bool:
     So: same number of words, and each word differs by at most one edit per 5 letters
     with the same length (one extra/missing letter only in words of 6+ letters).
     Rejects VATRA DORNEI/VATRA DORNEI BAI, CLUJ NAPOCA EST/CLUJ NAPOCA,
-    PITESTI SUD/PLOIESTI SUD and CRAIOVITA/CRAIOVA; keeps BRASOY->BRASOV."""
+    PITESTI SUD/PLOIESTI SUD and CRAIOVITA/CRAIOVA; keeps BRASOY->BRASOV and the last
+    word cut by one final letter (VATRA DORNEI BA -> VATRA DORNEI BAI)."""
     a, b = k.split(), ck.split()
     if len(a) != len(b):
         return False
-    for wa, wb in zip(a, b):
+    for pos, (wa, wb) in enumerate(zip(a, b)):
         if wa == wb:
             continue
+        if (pos == len(a) - 1 and len(a) >= 2 and len(wa) >= 2 and len(wb) == len(wa) + 1
+                and wb.startswith(wa)):
+            continue  # the last letter of the last word cut off at the cell edge:
+            # VATRA DORNEI BA -> VATRA DORNEI BAI (a one-word name is never completed)
         diff = abs(len(wa) - len(wb))
         if diff > 1 or (diff == 1 and min(len(wa), len(wb)) < 6):
             return False

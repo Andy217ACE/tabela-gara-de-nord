@@ -38,6 +38,10 @@ CONFIRM_CONFIDENCE = 0.7  # a NEW service read below this needs a second consecu
 RENAME_AFTER = 3  # a stored misread is renamed after at least this many readings of the other key
 RENAME_WINDOW = 10  # ...that are also RENAME_SHARE of the last RENAME_WINDOW readings of it
 RENAME_SHARE = 0.7  # (a vote, not "3 in a row": 7917->7914->791->7914 ping-pong stops)
+# ...to a number with FEWER digits (a glare-truncated read: 1571 -> 157) only on an
+# overwhelming vote; a longer stored number can itself be the misread (9209 -> 92011)
+RENAME_FEWER_AFTER = 8
+RENAME_FEWER_SHARE = 0.9
 BOARDS = ("arrival", "departure")
 GONE_AFTER_MISSES = 3  # OCR alternating between variants made 2 flap (data-quality report)
 PANEL_ROWS = 12  # the physical CFR panel always shows this many rows; a frame with all of
@@ -184,21 +188,46 @@ def _plat(p: int | None) -> str | None:
     return None if p is None else str(p)
 
 
+def _fold_station(s: str | None) -> str:
+    """Station name reduced to letters and digits: "KIEV - CHISINAU" == "KIEV -CHISINAU"."""
+    return re.sub(r"[^A-Z0-9]+", "", (s or "").upper())
+
+
+def _same_station(st_a: str, raw_a: str, st_b: str, raw_b: str) -> bool:
+    """Same station, canonical or as read, ignoring spaces/hyphens placement."""
+    return bool((st_a and st_a == st_b) or (raw_a and raw_a == raw_b)
+                or (_fold_station(st_a) and _fold_station(st_a) == _fold_station(st_b))
+                or (_fold_station(raw_a) and _fold_station(raw_a) == _fold_station(raw_b)))
+
+
 def _near_dup(a: tuple, b: tuple) -> bool:
     """Are (train_no, sched_time, station, station_raw) `a` and `b` one service read
-    twice, one of them with a single misread character?
+    twice, one of them with a misread number or time?
 
-    Same key, or: same station (canonical or as read) and either the train number
-    differs by one edit at the same time, or the same number at a time differing
-    by one character. Two or more differing digits, or another station: distinct.
+    Same key, or: same station (canonical or as read; spacing of spaces/hyphens
+    ignored) and either
+    - the same scheduled time and a train number one edit apart, or two edits apart
+      when the lengths differ (a lost or added glyph on top of another one: 9209 /
+      92011, 925 / 92511, 10157 / 157, 5019 / 19 — measured on the live history, always
+      one board row read twice); two substitutions of the same length stay distinct
+      (7914 / 7938 are two real trains), or
+    - the same train number and a scheduled time one or two characters apart
+      (06:52 / 05:52, 01:10 / 01:49): a train is listed once per panel and day.
+    More differences, or another station: distinct (two rows read in the same frame
+    are told apart by the callers anyway).
     """
     (no_a, t_a, st_a, raw_a), (no_b, t_b, st_b, raw_b) = a, b
     if no_a == no_b and t_a == t_b:
         return True
-    if not (st_a == st_b or (raw_a and raw_a == raw_b)):
+    if not _same_station(st_a, raw_a, st_b, raw_b):
         return False
-    d_no = _lev(str(no_a), str(no_b))
-    return (d_no == 1 and t_a == t_b) or (d_no == 0 and _lev(t_a, t_b) == 1)
+    sa, sb = str(no_a), str(no_b)
+    if no_a == no_b:
+        return 1 <= _lev(t_a, t_b) <= 2
+    if t_a != t_b:
+        return False
+    d_no = _lev(sa, sb)
+    return d_no == 1 or (d_no == 2 and len(sa) != len(sb))
 
 
 def _protect_learned(names: list[str]) -> list[str]:
@@ -570,14 +599,17 @@ class Store:
         (train_no, sched_time) once that key is the clear majority of its recent
         readings: at least RENAME_AFTER of them and RENAME_SHARE of the last
         RENAME_WINDOW. The FIRST reading of a train may itself have been the misread,
-        and follows/notifications go by the train number. Never to a number with fewer
-        digits (a truncated read: 1571 -> 157), never onto an existing key."""
+        and follows/notifications go by the train number. To a number with fewer
+        digits (a truncated read: 1571 -> 157) only on an overwhelming vote
+        (RENAME_FEWER_*), never onto an existing key."""
         var, cur = (r.train_no, r.sched_time), (s["train_no"], s["sched_time"])
         votes = self._votes.get(s["id"], ())
         n = sum(1 for v in votes if v == var)
+        fewer = len(str(var[0])) < len(str(cur[0]))
         if (var == cur or n < RENAME_AFTER or n < RENAME_SHARE * len(votes)
                 or r.confidence < CONFIRM_CONFIDENCE
-                or len(str(var[0])) < len(str(cur[0])) or self._conn.execute(
+                or (fewer and (n < RENAME_FEWER_AFTER or n < RENAME_FEWER_SHARE * len(votes)))
+                or self._conn.execute(
                     "SELECT 1 FROM services WHERE board=? AND service_date=? AND train_no=?"
                     " AND sched_time=?", (s["board"], s["service_date"], *var)).fetchone()):
             return s

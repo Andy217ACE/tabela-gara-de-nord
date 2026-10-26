@@ -17,7 +17,7 @@ Final result rules (never assumed):
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from app import quality
@@ -75,11 +75,21 @@ def _dt(stamp: str | None) -> datetime | None:
     return d.replace(tzinfo=TZ) if d.tzinfo is None else d.astimezone(TZ)
 
 
-def sched_at(service_date: str, sched_time: str) -> datetime:
-    """Scheduled moment (Europe/Bucharest) of a journey: its service date + HH:MM."""
+def sched_at(service_date: str, sched_time: str, ref: datetime | None = None) -> datetime:
+    """Scheduled moment (Europe/Bucharest) of a journey: its service date + HH:MM.
+
+    In the hour the clocks go back (03:00-03:59 on 25.10.2026) the local time happens
+    twice (+03:00, then +02:00). `ref`, a moment observed for the journey (when it
+    disappeared, else when its delay was read), picks the occurrence nearest to it; with
+    no `ref` the first one (the former behaviour). Beta 1.22: without it a train of 03:10
+    read at 03:20 (+02:00) got "disappeared before the estimated time" by an hour."""
     d = date.fromisoformat(service_date)
     hh, mm = (int(p) for p in sched_time.split(":"))
-    return datetime(d.year, d.month, d.day, hh, mm, tzinfo=TZ)
+    first = datetime(d.year, d.month, d.day, hh, mm, tzinfo=TZ)
+    second = first.replace(fold=1)
+    if ref is None or first.utcoffset() == second.utcoffset():
+        return first
+    return min((first, second), key=lambda c: abs(ref.timestamp() - c.timestamp()))
 
 
 def _hm(d: datetime) -> str:
@@ -92,11 +102,14 @@ def result(s, gap_min: int | None = None) -> dict:
     read_at = _dt(s["delay_read_at"])
     known = read_at is not None
     observed = s["last_delay"] if known else None
-    sched = sched_at(s["service_date"], s["sched_time"])
-    est = sched + timedelta(minutes=observed) if known else None
     gone, appeared = _dt(s["gone_at"]), _dt(s["appeared_at"])
+    sched = sched_at(s["service_date"], s["sched_time"], gone or read_at)
+    # arithmetic and comparisons in UTC: datetimes sharing one tzinfo are compared and
+    # subtracted as wall clocks, which is an hour wrong around the clocks going back
+    est = ((sched.astimezone(timezone.utc) + timedelta(minutes=observed)).astimezone(TZ)
+           if known else None)
     disappeared = gone if (s["status"] == "gone" and gone is not None
-                           and (appeared is None or gone >= appeared)) else None
+                           and (appeared is None or gone.timestamp() >= appeared.timestamp())) else None
     reason = None
     if s["status"] != "gone":
         state = "in_progress"
@@ -107,10 +120,10 @@ def result(s, gap_min: int | None = None) -> dict:
         state = "unconfirmed"
         reason = ("Dispariția de pe tabelă nu a fost observată "
                   "(citirea tabelei a fost întreruptă).")
-    elif disappeared < est:
+    elif disappeared.timestamp() < est.timestamp():
         state = "unconfirmed"
         reason = f"A dispărut de pe tabelă înainte de ora estimată ({_hm(est)})."
-    elif disappeared - read_at > gap:
+    elif timedelta(seconds=disappeared.timestamp() - read_at.timestamp()) > gap:
         state = "unconfirmed"
         reason = (f"Ultima întârziere citită ({_hm(read_at)}) este cu peste "
                   f"{int(gap.total_seconds() // 60)} min mai veche decât dispariția.")

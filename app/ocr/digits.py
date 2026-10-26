@@ -95,7 +95,7 @@ def segment_spans(cell: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int], b
     # Drop fragments that are tiny in both directions (noise, neighbour slivers) and
     # hair-thin vertical lines (a lit joint between two LED modules of the board).
     glyphs = []
-    for k, (x, y, w, h) in enumerate(merged):
+    for k, (x, y, w, h, *glued) in enumerate(merged):
         if h < 0.15 * line_h and w < 0.15 * line_h:
             continue
         if w <= SEAM_MAX_W * line_h and 0 < k < len(merged) - 1:
@@ -106,6 +106,11 @@ def segment_spans(cell: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int], b
         parts = _split_touching(ink[line_top:line_bot], x, w, line_h)
         for x0, x1 in parts:
             crop = ink[line_top:line_bot, x0:x1].astype(np.float32)
+            if glued and glued[0] and len(parts) == 1:
+                # the seam's dark gap cuts the strokes of the glyph: close it, or a "9"
+                # looks like a "0" (near tie) and is no longer trusted
+                crop = cv2.morphologyEx(crop, cv2.MORPH_CLOSE,
+                                        np.ones((1, glued[0] + 1), np.float32))
             glyphs.append((_normalise(crop), (int(x0), int(x1)), len(parts) > 1))
     return glyphs
 
@@ -117,6 +122,10 @@ FLAG_MAX_TOP = 0.35   # ...starting this close to the top of the line...
 FLAG_MAX_GAP = 0.10   # ...at most this far (x line height) left of a stem
 STEM_MIN_H = 0.75     # the stem: nearly the full line height...
 STEM_MAX_W = 0.40     # ...and thin
+SEAM_SPAN = 0.85      # ...and together at most this wide (x line height; one digit is ~0.75;
+                      # two real digits start >= PITCH apart and span well over 1)
+SEAM_GAP = 0.13       # pieces of one glyph cut by the joint: at most this far apart (x line
+                      # height, ~4 px at x3)
 
 
 def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list[list[int]]:
@@ -135,12 +144,18 @@ def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list
         x, y, w, h = boxes[i]
         if i + 1 < len(boxes):
             sx, sy, sw, sh = boxes[i + 1]
-            if sx - (x + w) <= 1 and sx + sw - x <= PITCH * line_h:
-                # two pieces at most 1 px apart and together one digit wide: one glyph
-                # cut by the joint ("9" -> "9" + "1": 7909 -> 79091). Neighbouring
-                # digits of the fixed-pitch font are >= 4 px apart.
+            gap = sx - (x + w)
+            if (sx + sw - x <= SEAM_SPAN * line_h and (gap <= 1 or (
+                    gap <= SEAM_GAP * line_h and min(h, sh) >= STEM_MIN_H * line_h))):
+                # two pieces a hair apart (the joint's dark seam: up to SEAM_GAP x line
+                # height, both nearly the full line height beyond 1 px) and together at most one digit wide: one glyph cut by the joint
+                # ("9" -> "9" + "1": 7909 -> 79091; Beta 1.22: the seam is 2-4 px wide at
+                # the last digit of 4-digit numbers, "9" -> "11": 9209 -> 92011, 7919 ->
+                # 79111). Two real digits never fit one pitch: neighbouring glyphs of the
+                # fixed-pitch font start PITCH x line height or more apart.
                 y0 = min(y, sy)
-                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0])
+                out.append([x, y0, sx + sw - x, max(y + h, sy + sh) - y0,
+                            max(0, gap)])
                 i += 2
                 continue
             if (h <= FLAG_MAX_H * line_h and w <= FLAG_MAX_H * line_h

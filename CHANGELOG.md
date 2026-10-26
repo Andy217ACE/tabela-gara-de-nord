@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.24 — 2026-10-26
+
+### Reparat
+- **Numere de tren cu cifre în plus sau în minus** (RE 9209 apărea și ca 92011, RM 7938 ca 79311, RE 10157 ca 157, R 5019 ca 19): cauza era rostul dintre modulele tabelei, care taie ultima cifră (un „9” devenea „11”) și strălucirile care ascund prima cifră. Cifra tăiată se lipește la loc, iar două citiri ale aceluiași rând (aceeași stație și aceeași oră, numere apropiate) sunt tratate ca **un singur tren**, nu ca două; dacă tabela arată cu adevărat două trenuri în același cadru, rămân două.
+- **Stații scrise diferit:** „KIEV -CHISINAU” și „KIEV - CHISINAU” sunt aceeași stație; „VATRA DORNEI BA” se completează la „VATRA DORNEI BAI”.
+- **Ore programate citite greșit** (01:10 și 01:49, 03:38 și 08:58): orele de pe un panou cresc mereu; o oră care iese din ordine primește încredere scăzută și, doar dacă o singură cifră confundabilă (5/6, 3/8, 0/8…) o pune la loc fără îndoială, este corectată și marcată incertă. Același tren, în aceeași stație și zi, cu ore apropiate ca scriere, este un singur tren.
+- **Întârzieri care nu sunt multiplu de 5** („+46”, „+26”, „+6”): tabela numără din 5 în 5 minute, deci o astfel de valoare e o cifră citită greșit și devine „necitită” (lipsă, niciodată 0 și niciodată o presupunere).
+- **Întârziere recuperată când „+” e acoperit de săgeata de peron:** dacă în cel puțin 8 din ultimele 12 cadre se vede aceeași valoare (multiplu de 5, nu mai mică decât ultima citire), aceea este întârzierea. Reduce trenurile „neconfirmate” din coada de la peron.
+- **Ora repetată din noaptea de 25.10 (trecerea la ora de iarnă):** pentru trenurile programate între 03:00 și 03:59 ora estimată și dispariția erau comparate cu o oră de diferență (apăreau „dispărut înainte de ora estimată” false). Comparațiile se fac acum în UTC.
+
+### Tehnic
+- `app/ocr/digits.py` (lipirea cifrei tăiate, rost până la ~4 px), `app/ocr/reader.py` (confirmare Tesseract când lipsește prima cifră, validare pas de 5 min, `DelayVotes` pe textul văzut), `app/ocr/order.py` (ordinea orelor), `app/store.py` (`_near_dup`, vot de redenumire spre mai puține cifre doar la 90%), `app/canonical.py` + `data/stations_seed.txt`, `app/journeys.py` (UTC).
+- Teste noi: `tests/test_q122.py`. Schema DB neschimbată (v7). Datele deja salvate nu se modifică; curățarea retroactivă se face separat.
+- Rămas: coloana peron citită tăiat/acoperită de reflexii (cadrul 7028) nu poate fi citită; numerele greșite stabile (IR 1584/1574 în loc de 1581/1571) cer vot pe caractere.
 ## Beta 1.23 — 2026-10-26
 
 ### Reparat
