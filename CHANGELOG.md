@@ -7,6 +7,8 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 ## Beta 1.24 — 2026-10-26
 
+Beta 1.22 nu a fost publicată separat: conținutul ei (calitatea datelor, runda 3) este în această versiune, peste Beta 1.23 (dreptunghiurile celulelor pe panou înclinat).
+
 ### Reparat
 - **Numere de tren cu cifre în plus sau în minus** (RE 9209 apărea și ca 92011, RM 7938 ca 79311, RE 10157 ca 157, R 5019 ca 19): cauza era rostul dintre modulele tabelei, care taie ultima cifră (un „9” devenea „11”) și strălucirile care ascund prima cifră. Cifra tăiată se lipește la loc, iar două citiri ale aceluiași rând (aceeași stație și aceeași oră, numere apropiate) sunt tratate ca **un singur tren**, nu ca două; dacă tabela arată cu adevărat două trenuri în același cadru, rămân două.
 - **Stații scrise diferit:** „KIEV -CHISINAU” și „KIEV - CHISINAU” sunt aceeași stație; „VATRA DORNEI BA” se completează la „VATRA DORNEI BAI”.
