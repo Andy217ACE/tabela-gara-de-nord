@@ -151,6 +151,7 @@ class _Composite:
         return out
 
 
+BOX_MARGIN = 1  # px of margin around a cell box (see _Panel.boxes)
 PLATFORM_UP = 0.35  # share of the line height a right-hand cell may grow upwards
 GROW_UP = ("platform",)  # read grown upwards (digit tops cut by the band: perspective)
 # read grown upwards only when the templates do not trust the cell as cut (measured on
@@ -227,13 +228,33 @@ class _Panel:
                                           int(PLATFORM_UP * (y1 - y0)))
         return out
 
-    def boxes(self, i: int) -> dict[str, tuple[int, int, int, int]]:
-        s = preprocess.SCALE
+    def cell_span(self, i: int, k: int) -> tuple[int, int]:
+        """Vertical extent (x3 mask rows) of cell `k` of line `i`: the line's band, grown
+        over the cell's own ink that runs past it (see ``preprocess.extend_span``). The
+        band is cut on the ink of the whole line; the camera tilts the board, so the
+        left-hand cells sit lower (and the right-hand ones higher) than that band and
+        their glyph bottoms (tops) would end up outside it."""
         y0, y1 = self.bands[i]
-        y, hgt = y0 // s, max(1, -(-(y1 - y0) // s))
         e = self.edges[i]
-        return {name: (x0 // s, y, max(1, (x1 - x0) // s), hgt)
-                for name, x0, x1 in zip(_ORDER, e[:-1], e[1:])}
+        ink = (self.mask[:, e[k]:e[k + 1]] == 0).sum(axis=1)
+        prev_end = self.bands[i - 1][1] if i and self.bands[i - 1][1] <= y0 else None
+        next_start = self.bands[i + 1][0] if i + 1 < len(self.bands)             and self.bands[i + 1][0] >= y1 else None
+        return preprocess.extend_span(ink, y0, y1, prev_end, next_start)
+
+    def boxes(self, i: int) -> dict[str, tuple[int, int, int, int]]:
+        """Box (x, y, w, h in board pixels) of every cell of line `i`: the cell's glyph
+        extent (``cell_span``) plus a 1 px margin, so the drawn rectangle frames the
+        glyphs instead of running through their edge pixels."""
+        s = preprocess.SCALE
+        height = self.img.shape[0]
+        e = self.edges[i]
+        out = {}
+        for k, (name, x0, x1) in enumerate(zip(_ORDER, e[:-1], e[1:])):
+            a, b = self.cell_span(i, k)
+            y = max(0, a // s - BOX_MARGIN)
+            bottom = min(height, -(-b // s) + BOX_MARGIN)
+            out[name] = (x0 // s, y, max(1, (x1 - x0) // s), max(1, bottom - y))
+        return out
 
     def has_ink(self, i: int) -> bool:
         return preprocess.band_has_ink(self.mask, self.bands[i])

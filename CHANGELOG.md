@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.23 — 2026-10-26
+
+### Reparat
+- **Capturi OCR, overlay:** dreptunghiurile celulelor „tip tren” și „număr tren” de pe Plecări (mai ales grupul 4, rândurile 9–11) erau prea sus și tăiau partea de jos a cifrelor și a literelor, iar „oră”/„operator” erau prea jos.
+- Cauza: camera vede panoul înclinat (textul coboară spre stânga și urcă spre dreapta, ~3 px pe Plecări), iar banda de rând era comună pentru toate coloanele.
+- Acum fiecare celulă își urmărește propria cerneală dincolo de bandă (limitat la 35% din înălțime și la jumătatea spațiului până la rândul vecin) și are 1 px margine.
+- Tăiere jos la tip/nr: de la 22–42% din celule la sub 1%.
+- **Citirea nu a fost afectată în mod măsurabil:** imaginile trimise la Tesseract rămân neschimbate (șabloanele de cifre sunt calibrate pe ele); acuratețea pe setul de adevăr e identică (384 rânduri).
+
+### Tehnic
+- `preprocess.extend_span`, `_Panel.cell_span`, `_Panel.boxes`; test `tests/test_band_boxes.py` cu captură reală (`tests/fixtures/band_group4.jpg`). Schema DB neschimbată (v7).
+
 ## Beta 1.21 — 2026-10-24
 
 ### Reparat
