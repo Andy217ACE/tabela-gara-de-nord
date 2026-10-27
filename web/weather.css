@@ -72,6 +72,8 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 .wx-btn:disabled { cursor: default; }
 
 .wx-ico { grid-row: 1 / span 2; display: grid; place-items: center; color: var(--accent); }
+.wx[data-daynight="night"] .wx-ico,
+.wx[data-daynight="night"] .wx-svg-lg { color: var(--info); }
 .wx-svg {
   width: 24px;
   height: 24px;
@@ -98,7 +100,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   white-space: nowrap;
 }
 .wx-feels { display: none; }
-.wx-wind { display: inline-flex; align-items: center; gap: 2px; }
+.wx-wind { display: inline-flex; align-items: center; gap: 3px; }
 .wx-arrow {
   width: 11px;
   height: 11px;
@@ -141,7 +143,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   top: calc(100% + 6px);
   right: 0;
   z-index: 40;
-  width: min(300px, calc(100vw - 32px));
+  width: min(320px, calc(100vw - 32px));
   padding: 12px 14px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -170,15 +172,72 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 
 .wx-pop p { margin: 0; }
 .wx-pop-title { font-weight: 700; }
-.wx-pop-cond { color: var(--text-2); margin-top: 2px; }
-.wx-dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
-  margin: 10px 0;
+.wx-pop-cond { color: var(--text-2); }
+.wx-hero { display: flex; align-items: center; gap: 12px; margin: 10px 0 12px; }
+.wx-svg-lg { width: 44px; height: 44px; flex: none; color: var(--accent); stroke-width: 1.5; }
+.wx-hero-t { min-width: 0; }
+.wx-hero-temp {
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
-.wx-dl dt { color: var(--text-2); }
-.wx-dl dd { margin: 0; font-weight: 600; }
+
+/* plăcuțe cu detalii (dl cu grupuri div > dt + dd) */
+.wx-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.wx-tile {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.wx-tile-wide { grid-column: 1 / -1; }
+.wx-tile-l { color: var(--text-2); font-size: var(--fs-xs); line-height: 1.2; }
+.wx-tile-v { margin: 0; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.wx-tile-h { display: block; color: var(--text-2); font-size: var(--fs-xs); font-weight: 400; }
+.wx-tile-v .wx-arrow { width: 14px; height: 14px; flex: none; }
+
+/* grafic 24 h */
+.wx-chart { margin: 0 0 8px; }
+.wx-chart[hidden] { display: none; }
+.wx-chart-cap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin-bottom: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.wx-chart-t { font-weight: 600; color: var(--text); }
+.wx-spark { display: block; width: 100%; height: auto; overflow: visible; }
+.wx-sp-base { stroke: var(--border-strong); stroke-width: 1; }
+.wx-sp-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.wx-sp-area { fill: var(--accent); fill-opacity: 0.14; stroke: none; }
+.wx-sp-dot { fill: var(--accent); }
+.wx-sp-pt { stroke: var(--surface); stroke-width: 1.5; }
+.wx-sp-pt.wx-sp-max { fill: var(--accent); }
+.wx-sp-pt.wx-sp-min { fill: var(--info); }
+.wx-sp-val { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.wx-sp-val.wx-sp-max { fill: var(--accent); }
+.wx-sp-val.wx-sp-min { fill: var(--info); }
+.wx-sp-ax { fill: var(--text-2); font-family: var(--mono); font-size: 10px; }
+.wx-sp-now { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.wx-sp-nowpt { fill: var(--text); stroke: var(--surface); stroke-width: 1.5; }
+.wx-sp-nowl { fill: var(--text); font-size: 10px; font-weight: 700; }
+
+/* date vechi: seria desenată în gri (textele își păstrează contrastul) */
+.wx-chart.is-stale .wx-sp-line { stroke: var(--text-2); stroke-dasharray: 4 3; }
+.wx-chart.is-stale .wx-sp-area { fill: var(--text-2); }
+.wx-chart.is-stale .wx-sp-pt.wx-sp-max, .wx-chart.is-stale .wx-sp-pt.wx-sp-min { fill: var(--text-2); }
+.wx-chart.is-stale .wx-sp-val { fill: var(--text-2); }
+
+.wx-pop-when { color: var(--text-2); font-size: var(--fs-xs); }
 .wx-pop-warn {
   margin: 0 0 8px;
   padding: 6px 8px;
@@ -187,7 +246,7 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
   color: var(--warn);
   font-weight: 600;
 }
-.wx-pop-note { color: var(--text-2); font-size: 0.75rem; }
+.wx-pop-note { margin-top: 4px; color: var(--text-2); font-size: 0.75rem; }
 .wx-pop-src { margin-top: 6px; font-size: 0.75rem; color: var(--text-2); }
 .wx-pop-src a { color: var(--text); text-underline-offset: 2px; }
 .wx-pop-src a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -209,7 +268,11 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
 /* ---------- telefon: compact (pictogramă + temperatură + vânt mic) ---------- */
 
 @media (max-width: 599px) {
-  /* popover pe toată lățimea, sub widget, fără scroll orizontal */
+  /* popover pe toată lățimea, sub widget, fără scroll orizontal. `top: auto` = poziția
+     statică, adică sub buton: de aceea .wx e bloc (într-un container flex ar începe în
+     colțul de sus și ar acoperi butonul) */
+  .wx { display: block; }
+  .wx-btn { vertical-align: top; }
   .wx-pop,
   .wx.wx-left .wx-pop {
     position: fixed;
@@ -218,11 +281,13 @@ html[data-view="panou"] body:has(#view-tabela:not([hidden])) .hdr-clockwx { disp
     right: 16px;
     width: auto;
     margin-top: 6px;
+    max-height: calc(100dvh - 96px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
-  .wx[data-place="panel"] .wx-feels { display: none; }
 }
 
-@media (min-width: 600px) {
+@media (min-width: 430px) {
   .wx-feels { display: inline; }
 }
 

@@ -320,12 +320,17 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
 ## Meteo
 
 Lângă ceas (în antetul vizualizării Carduri și în bara de titlu a Panoului) apare un widget
-mic cu vremea din București: pictogramă, temperatură, „se simte", vânt; la apăsare/hover un
-popover cu detalii (precipitații, ora observației, sursa).
+mic cu vremea din București: pictogramă după `weather_code` (variantă zi/noapte după `is_day`),
+temperatură și „se simte"; la apăsare/hover un popover cu detalii: umiditate, presiune (hPa),
+vânt (viteză + direcție în cuvinte, ex. „SV", + rafale), precipitații (totalul; ploaie / averse
+/ zăpadă doar când sunt > 0; 0,0 mm e o valoare reală), un grafic SVG al temperaturii din
+următoarele 24 h cu minim, maxim și marcajul „acum", ora observației și sursa.
 
-- Serverul (nu browserul — CSP rămâne `connect-src 'self'`) cere blocul `current` de la
-  Open-Meteo (`temperature_2m, precipitation, weather_code, wind_speed_10m,
-  wind_direction_10m, apparent_temperature`) la fiecare 15 minute, într-o sarcină proprie,
+- Serverul (nu browserul — CSP rămâne `connect-src 'self'`) face **o singură cerere** către
+  Open-Meteo: `current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,
+  precipitation,rain,showers,snowfall,weather_code,surface_pressure,wind_speed_10m,
+  wind_direction_10m,wind_gusts_10m` + `hourly=temperature_2m`, cu `timezone=UTC` (la fel ca
+  stocarea) și `forecast_days=2`, la fiecare 15 minute, într-o sarcină proprie,
   independentă de poller-ul CFR: o eroare meteo nu afectează tabela și nici `ok` din
   `/api/health` (care primește doar `weather_age_s`). Backoff la erori (5 → 30 min), niciodată
   mai mult de o cerere la 5 minute, nici după repornire.
@@ -333,9 +338,13 @@ popover cu detalii (precipitații, ora observației, sursa).
   coordonatelor, nu măsurătorile unei stații meteo. Se salvează cu `kind = model_current` și
   se afișează „Condiții curente (model Open-Meteo)". Valoare lipsă = `NULL`/„—", niciodată 0
   (0,0 mm precipitații e o valoare reală). Peste 45 de minute datele apar gri, „date vechi".
-- Stocare: tabelul `weather_observations` (schema v4, migrare aditivă), un rând per oră de
-  observație (UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi) pentru analiza
-  „Meteo și trenuri" din Etapa G. API: `GET /api/weather`; `GET /api/config` → `weather`.
+- Stocare: tabelul `weather_observations` (schema v4; **schema v8** adaugă, aditiv și nullable,
+  `relative_humidity_pct, is_day, rain_mm, showers_mm, snowfall_cm, surface_pressure_hpa,
+  wind_gusts_kmh, hourly_json`; rândurile vechi rămân neatinse, cu `NULL` în coloanele noi),
+  un rând per oră de observație (UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi)
+  pentru analiza „Meteo și trenuri". Seria orară (25 de puncte din ora observației, JSON
+  compact) se păstrează doar pe cea mai nouă observație: e o prognoză, nu istoric. API:
+  `GET /api/weather` (câmpurile noi + `hourly`); `GET /api/config` → `weather`.
 - Variabile (opționale) în `/etc/tabela.env`: `WEATHER_ENABLED` (implicit `1`; `0` oprește
   serviciul și ascunde widgetul), `WEATHER_INTERVAL_S` (implicit `900`, minim `300`),
   `WEATHER_LAT` / `WEATHER_LON` (implicit `44.4323` / `26.1063`), `WEATHER_URL` (implicit

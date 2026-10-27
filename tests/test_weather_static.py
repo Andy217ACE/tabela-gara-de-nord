@@ -61,6 +61,33 @@ def test_weather_js_behaviour_markers():
         assert re.search(rf"\b{kind}\b", js), kind
 
 
+def test_weather_js_v2_details_chart_and_fields():
+    js = read("weather.js")
+    for needle in ("Umiditate", "Presiune", "hPa", "Rafale", "Precipitații", "relative_humidity_pct",
+                   "surface_pressure_hpa", "wind_gusts_kmh", "rain_mm", "showers_mm", "snowfall_cm",
+                   "hourly", "temperature_c", "Următoarele 24 h", '"acum"', "observat", "is_day",
+                   "dataset.daynight", "wx-spark", 'role: "img"', "aria-label",
+                   "ploaie", "averse", "zăpadă", "Europe/Bucharest"):
+        assert needle in js, needle
+    # the sparkline is drawn only from real values: nulls break the line, never become 0
+    assert "isNum(v)" in js and "isNum(c[1]) && c[1] > 0" in js
+    # no chart without a series (never a flat line)
+    assert "box.hidden = true" in js
+
+
+def test_weather_css_v2_has_chart_tiles_and_stale_variants():
+    css = read("weather.css")
+    for sel in (".wx-spark", ".wx-tiles", ".wx-tile", ".wx-chart", ".wx-sp-line", ".wx-sp-area",
+                ".wx-sp-now", ".wx-sp-max", ".wx-sp-min", '[data-daynight="night"]',
+                ".wx-chart.is-stale"):
+        assert sel in css, sel
+    assert "max-width: 599px" in css and "100vw - 32px" in css       # phone popover, no overflow
+    assert "style=" not in read("weather.js")
+    # chart colours come from the theme tokens, never raw colours
+    block = css[css.index(".wx-spark"):css.index("/* ---------- atribuire")]
+    assert not re.search(r"#[0-9a-fA-F]{3,8}|rgba?\(", block)
+
+
 def test_weather_css_theme_motion_and_contrast():
     css = read("weather.css")
     assert "prefers-reduced-motion" in css
@@ -108,7 +135,7 @@ def test_service_worker_precaches_weather_files_and_bumped_version():
     shell = re.search(r"var SHELL = \[(.*?)\];", js, re.S).group(1)
     assert '"/weather.js"' in shell and '"/weather.css"' in shell
     v = re.search(r'var VERSION = "v(\d+)"', js).group(1)
-    assert int(v) >= 5
+    assert int(v) >= 26          # bumped with the weather v2 files (Beta 1.25)
     # /api/weather is never cached by the SW (the widget keeps the last value in memory
     # and marks it "date vechi" when a refresh fails)
     assert "/api/weather" not in js
@@ -120,6 +147,24 @@ def test_readme_documents_weather():
     for needle in ("WEATHER_ENABLED", "WEATHER_INTERVAL_S", "WEATHER_LAT", "WEATHER_LON",
                    "WEATHER_URL", "CC BY 4.0", "Open-Meteo", "model"):
         assert needle in md, needle
+
+
+def test_readme_documents_weather_v2_fields_and_schema_v8():
+    md = (ROOT / "README.md").read_text(encoding="utf-8")
+    for needle in ("umiditate", "presiune", "rafale", "schema v8", "hourly=temperature_2m",
+                   "timezone=UTC", "forecast_days=2", "relative_humidity_pct", "wind_gusts_kmh",
+                   "hourly_json", "NULL"):
+        assert needle in md, needle
+
+
+def test_changelog_and_version_for_weather_v2():
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "Beta 1.25"
+    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    first = log.index("## Beta 1.25")
+    assert first < log.index("## Beta 1.24")                   # newest on top
+    section = log[first:log.index("## Beta 1.24")]
+    for needle in ("schema DB v8", "umiditate", "grafic", "date vechi", "CC BY 4.0", "backup"):
+        assert needle.lower() in section.lower(), needle
 
 
 def test_every_clock_shows_seconds_with_tabular_digits():

@@ -1,8 +1,10 @@
 # © 2026 Andy217Ace
-"""Weather next to the clock: Open-Meteo `current` values for Bucharest.
+"""Weather next to the clock: Open-Meteo `current` values + next-24 h temperatures for Bucharest.
 
 The server (never the browser: CSP connect-src stays 'self') asks Open-Meteo for the
-`current` block every WEATHER_INTERVAL_S seconds (default 900 = Open-Meteo's 15-minute
+`current` block (temperature, feels-like, humidity, is_day, precipitation split rain/showers/
+snow, weather code, surface pressure, wind speed/direction/gusts) and the `hourly`
+temperature series (UTC, `forecast_days=2`) every WEATHER_INTERVAL_S seconds (default 900 = Open-Meteo's 15-minute
 resolution, minimum 300). Errors back off exponentially (5, 10, 20, 30 min cap); there is
 never more than one request per 5 minutes, also across restarts (the first request waits
 until 5 minutes after the last stored fetch).
@@ -11,6 +13,8 @@ Honest labelling: `current` is the latest *model* value for the grid cell around
 coordinates, not a measuring station. Every stored row has kind="model_current" and the UI
 says "Condiții curente (model Open-Meteo)". Missing values stay None (NULL) — never 0;
 precipitation 0.0 is a real value. Times are stored in UTC ("YYYY-MM-DDTHH:MM:SSZ").
+The hourly series is kept compactly (25 points from the observed hour, `hourly_json`) only on
+the newest observation: it is a forecast the UI needs now, not history.
 
 Data: Open-Meteo.com, CC BY 4.0 (attribution shown wherever the values are shown).
 
@@ -38,8 +42,12 @@ TZ = ZoneInfo("Europe/Bucharest")
 DEFAULT_URL = "https://api.open-meteo.com/v1/forecast"
 DEFAULT_LAT = 44.4323
 DEFAULT_LON = 26.1063
-CURRENT_VARS = ("temperature_2m,precipitation,weather_code,wind_speed_10m,"
-                "wind_direction_10m,apparent_temperature")
+CURRENT_VARS = ("temperature_2m,relative_humidity_2m,apparent_temperature,is_day,"
+                "precipitation,rain,showers,snowfall,weather_code,surface_pressure,"
+                "wind_speed_10m,wind_direction_10m,wind_gusts_10m")
+HOURLY_VARS = "temperature_2m"
+FORECAST_DAYS = 2             # `hourly` then covers the next 24-48 h from any hour of today
+HOURLY_POINTS = 25            # stored: the observed hour + the next 24 hours
 SOURCE = "open-meteo"
 KIND = "model_current"
 LABEL_RO = "Condiții curente (model Open-Meteo)"
@@ -50,7 +58,7 @@ DEFAULT_INTERVAL_S = 900
 MIN_INTERVAL_S = 300          # never more than one request per 5 minutes
 MAX_BACKOFF_S = 1800          # errors: 5, 10, 20, 30, 30 ... minutes
 TIMEOUT_S = 10.0
-MAX_BYTES = 64 * 1024         # a `current` answer is < 1 KB
+MAX_BYTES = 64 * 1024         # `current` + 48 hourly values is ~2 KB
 STALE_AFTER_S = 2700          # an observation older than 45 min is shown as "date vechi"
 UI_REFRESH_S = 300            # web/weather.js polls /api/weather this often
 RESTART_BACKOFF_S = 5.0       # supervisor: first delay before restarting a crashed loop
@@ -126,8 +134,13 @@ _SPEED = {"km/h": lambda x: x, "m/s": lambda x: x * 3.6, "mph": lambda x: x * 1.
           "kn": lambda x: x * 1.852}
 _PRECIP = {"mm": lambda x: x, "inch": lambda x: x * 25.4}
 _DEG = {"°": lambda x: x}
+_PCT = {"%": lambda x: x}
+_HPA = {"hPa": lambda x: x}
+_SNOW = {"cm": lambda x: x, "inch": lambda x: x * 2.54}
 _DEFAULT_UNITS = {"temperature_2m": "°C", "apparent_temperature": "°C",
-                  "wind_speed_10m": "km/h", "precipitation": "mm", "wind_direction_10m": "°"}
+                  "wind_speed_10m": "km/h", "wind_gusts_10m": "km/h", "precipitation": "mm",
+                  "rain": "mm", "showers": "mm", "snowfall": "cm", "wind_direction_10m": "°",
+                  "relative_humidity_2m": "%", "surface_pressure": "hPa"}
 
 
 def _value(current: dict, units: dict, key: str, table: dict) -> float | None:
@@ -160,6 +173,54 @@ def _observed_at(payload: dict, current: dict) -> str:
     return utc_iso(dt)
 
 
+def _is_day(v) -> int | None:
+    """Open-Meteo's is_day flag: 0 or 1 only (anything else is unknown, never a guess)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return int(v) if v in (0, 1) else None
+
+
+def _hourly_series(payload: dict, observed: str) -> str | None:
+    """The next-24 h temperature series as compact JSON, or None when unusable:
+    {"start": "<observed hour, UTC>", "step_s": 3600, "t": [<=25 values, None = missing]}.
+    Aligned by time (a missing hour is a null, never a shifted value); trailing nulls are cut.
+    A bad `hourly` block never fails the observation."""
+    h = payload.get("hourly")
+    if not isinstance(h, dict):
+        return None
+    times, temps = h.get("time"), h.get("temperature_2m")
+    if not isinstance(times, list) or not isinstance(temps, list):
+        return None
+    units = payload.get("hourly_units")
+    unit = units.get("temperature_2m", "°C") if isinstance(units, dict) else "°C"
+    conv = _TEMP.get(unit)
+    if conv is None:
+        log.warning("weather: unknown hourly unit %r; series dropped", unit)
+        return None
+    off = payload.get("utc_offset_seconds")
+    off = off if isinstance(off, int) and not isinstance(off, bool) else 0
+    by_time: dict[datetime, float] = {}
+    for ts, raw in zip(times, temps):
+        x = _num(raw)
+        if x is None or not isinstance(ts, str):
+            continue
+        try:
+            dt = datetime.fromisoformat(ts)
+        except ValueError:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC) - timedelta(seconds=off)
+        by_time[dt.astimezone(UTC)] = x if conv is _TEMP["°C"] else round(conv(x), 2)
+    start = parse_utc(observed).replace(minute=0, second=0, microsecond=0)
+    series = [by_time.get(start + timedelta(hours=i)) for i in range(HOURLY_POINTS)]
+    while series and series[-1] is None:
+        series.pop()
+    if not any(v is not None for v in series):
+        return None
+    return json.dumps({"start": utc_iso(start), "step_s": 3600, "t": series},
+                      separators=(",", ":"))
+
+
 def parse_observation(payload, fetched_at: datetime) -> dict:
     """Open-Meteo forecast JSON -> one row for `weather_observations`."""
     if not isinstance(payload, dict) or not isinstance(payload.get("current"), dict):
@@ -170,6 +231,13 @@ def parse_observation(payload, fetched_at: datetime) -> dict:
     units_ok = isinstance(units, dict)
     units = units if units_ok else {}
     code = _num(current.get("weather_code"))
+    humidity = _value(current, units, "relative_humidity_2m", _PCT)
+    try:
+        hourly_json = _hourly_series(payload, observed)
+    except Exception:  # defensive: the hourly block is optional
+        log.exception("weather: hourly series dropped")
+        hourly_json = None
+    raw = {k: v for k, v in payload.items() if k != "hourly"}
     return {
         "observed_at": observed,
         "fetched_at": utc_iso(fetched_at),
@@ -183,8 +251,17 @@ def parse_observation(payload, fetched_at: datetime) -> dict:
         "weather_code": int(code) if code is not None and code.is_integer() else None,
         "wind_speed_kmh": _value(current, units, "wind_speed_10m", _SPEED),
         "wind_direction_deg": _value(current, units, "wind_direction_10m", _DEG),
+        # schema v8
+        "relative_humidity_pct": humidity if humidity is not None and 0 <= humidity <= 100 else None,
+        "is_day": _is_day(current.get("is_day")),
+        "rain_mm": _value(current, units, "rain", _PRECIP),
+        "showers_mm": _value(current, units, "showers", _PRECIP),
+        "snowfall_cm": _value(current, units, "snowfall", _SNOW),
+        "surface_pressure_hpa": _value(current, units, "surface_pressure", _HPA),
+        "wind_gusts_kmh": _value(current, units, "wind_gusts_10m", _SPEED),
+        "hourly_json": hourly_json,
         "units_json": json.dumps(units, ensure_ascii=False) if units_ok else None,
-        "raw_json": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        "raw_json": json.dumps(raw, ensure_ascii=False, separators=(",", ":")),
     }
 
 
@@ -192,7 +269,8 @@ def parse_observation(payload, fetched_at: datetime) -> dict:
 
 def request_params(cfg: WeatherConfig) -> dict:
     return {"latitude": f"{cfg.latitude:.4f}", "longitude": f"{cfg.longitude:.4f}",
-            "current": CURRENT_VARS}
+            "hourly": HOURLY_VARS, "current": CURRENT_VARS,
+            "timezone": "UTC", "forecast_days": str(FORECAST_DAYS)}
 
 
 async def fetch_observation(client: httpx.AsyncClient, cfg: WeatherConfig,
@@ -412,6 +490,25 @@ def age_s(row: dict | None, now: datetime) -> float | None:
     return round(max(0.0, (now - parse_utc(row["observed_at"])).total_seconds()), 1)
 
 
+def present_hourly(row: dict) -> dict | None:
+    """The stored next-24 h series for the UI (None without a drawable series)."""
+    raw = row.get("hourly_json")
+    if not raw:
+        return None
+    try:
+        h = json.loads(raw)
+        start = utc_iso(parse_utc(h["start"]))
+        step = h["step_s"]
+        vals = [_num(v) for v in h["t"]]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+    real = [v for v in vals if v is not None]
+    if step != 3600 or not real:
+        return None
+    return {"start_utc": start, "step_s": step, "temperature_c": vals,
+            "min_c": min(real), "max_c": max(real)}
+
+
 def present(row: dict | None, now: datetime) -> dict:
     """Body of GET /api/weather."""
     if not row:
@@ -421,8 +518,9 @@ def present(row: dict | None, now: datetime) -> dict:
     age = age_s(row, now)
     lat = row.get("latitude")
     lon = row.get("longitude")
-    is_day = (is_daytime(lat if lat is not None else DEFAULT_LAT,
-                         lon if lon is not None else DEFAULT_LON, observed))
+    stored = _is_day(row.get("is_day"))   # the model's own flag; NULL (old rows): the sun
+    is_day = bool(stored) if stored is not None else is_daytime(
+        lat if lat is not None else DEFAULT_LAT, lon if lon is not None else DEFAULT_LON, observed)
     code = row.get("weather_code")
     return {
         "available": True,
@@ -443,5 +541,12 @@ def present(row: dict | None, now: datetime) -> dict:
         "wind_speed_kmh": row.get("wind_speed_kmh"),
         "wind_direction_deg": row.get("wind_direction_deg"),
         "wind_direction_ro": wind_direction_ro(row.get("wind_direction_deg")),
+        "wind_gusts_kmh": row.get("wind_gusts_kmh"),
+        "relative_humidity_pct": row.get("relative_humidity_pct"),
+        "surface_pressure_hpa": row.get("surface_pressure_hpa"),
+        "rain_mm": row.get("rain_mm"),
+        "showers_mm": row.get("showers_mm"),
+        "snowfall_cm": row.get("snowfall_cm"),
+        "hourly": present_hourly(row),
         "attribution": ATTRIBUTION,
     }
