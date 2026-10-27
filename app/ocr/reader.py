@@ -36,7 +36,7 @@ from app.normalize import (
     parse_time,
     strip_flag,
 )
-from app.ocr import digits, order, preprocess, stats
+from app.ocr import digits, glare, order, preprocess, stats
 from app.ocr.digits import DigitMatcher
 from app.ocr.engine import TESSERACT_TIMEOUT, OcrEngine, OcrError, TesseractEngine
 
@@ -377,8 +377,8 @@ DELAY_UNREAD = "+?"  # a delay cell with text that cannot be read safely (parse:
 DELAY_MAX_DIGITS = 3  # "+N" with 1..3 digits; anything longer is not a delay
 # a delay digit cut out of a blob fused with its neighbours is trusted only on a clear
 # match (glare: "+45" gave "1" at 0.78 / margin 0.041 under the adaptive threshold)
-FUSED_MIN_SCORE = 0.80
-FUSED_MIN_MARGIN = 0.10
+FUSED_MIN_SCORE = glare.FUSED_MIN_SCORE
+FUSED_MIN_MARGIN = glare.FUSED_MIN_MARGIN
 
 
 DELAY_STEP = 5  # the board counts delays in 5-minute steps (every delay of the truth set
@@ -495,6 +495,17 @@ SEEN_WINDOW = 12  # frames of the same train whose rejected delay text ("seen") 
 SEEN_MIN = 8      # ...a value read this often in them is the delay (arrow over the "+")
 SEEN_CHECKS = ("no_plus",)  # the cell was rejected because the "+" is not there (never
 # "glare": there both readers can agree on a wrong hidden digit, 6 -> 8)
+# A cell rejected for glare / a hidden "+" still shows the delay the train had before when the
+# units digit is clear and the frames before read one steady value (Beta 1.27: the blob
+# hides "+1", "5" stays: +15 read as +45 / +75 / +465, never from the digits under the blob)
+INFER_CHECKS = ("glare", "no_plus")
+INFER_STABLE = 3     # the train's last real readings that must be one value...
+INFER_MAX_RUN = 30   # ...and at most this many frames in a row are inferred from it
+INFER_CONF = 55.0    # field confidence (0-100) of an inferred delay: amber on the overlay
+INFERRED = "glare_inferred"  # provenance: fields.delay.check, "+delay:glare_inferred" in the version
+TIME_WINDOW = 6      # the train's last clean scheduled times kept for completing a hidden one
+TIME_MIN = 3         # ...a hint needs this many readings, all the same
+TIME_KEEP = 12       # frames a train's times are kept after it was last read
 
 
 def _seen_value(f: dict) -> int | None:
@@ -524,9 +535,32 @@ class DelayVotes:
         self._hist: dict[tuple, deque] = {}
         self._seen: dict[tuple, deque] = {}  # key -> last SEEN_WINDOW rejected-text values
         self._last: dict[tuple, int] = {}    # key -> last delay really read for the train
+        self._reads: dict[tuple, deque] = {}  # key -> last INFER_STABLE real readings
+        self._run: dict[tuple, int] = {}      # key -> frames in a row inferred (glare_inferred)
+        self._times: dict[tuple, deque] = {}  # (board, number) -> last clean scheduled times
+        self._times_seen: dict[tuple, int] = {}  # (board, number) -> frame of the last one
+        self._frame = 0
+
+    def time_hint(self, board: str, train_no: int) -> str | None:
+        """The scheduled time `train_no` showed in the last frames when it was the same one
+        in at least TIME_MIN of them (all of the kept ones), else None: a hidden digit or
+        colon of the same train's time is read back from it (``glare.pick_time``)."""
+        d = self._times.get((board, train_no))
+        if d and len(d) >= TIME_MIN and len(set(d)) == 1:
+            return d[-1]
+        return None
+
+    def _note_time(self, e: dict, r) -> None:
+        t = e["fields"]["time"]
+        if t.get("check") or not r.sched_time:  # an order-repaired / glare-filled time is no proof
+            return
+        k = (e["board"], r.train_no)
+        self._times.setdefault(k, deque(maxlen=TIME_WINDOW)).append(r.sched_time)
+        self._times_seen[k] = self._frame
 
     def apply(self, entries: list[dict]) -> None:
         seen = set()
+        self._frame += 1
         for e in entries:
             r = e["row"]
             if r is None or not r.train_no:
@@ -537,7 +571,9 @@ class DelayVotes:
             cand = f.get("candidate") if f.get("check") else None
             h = self._hist.setdefault(key, deque(maxlen=self.window))
             h.append(cand)
+            self._note_time(e, r)
             self._vote_seen(e, key, f)
+            self._infer(e, key, f)
             if cand is None:
                 continue
             n = sum(c == cand for c in h)
@@ -552,6 +588,32 @@ class DelayVotes:
                 del self._hist[key]
                 self._seen.pop(key, None)
                 self._last.pop(key, None)
+                self._reads.pop(key, None)
+                self._run.pop(key, None)
+        for k in list(self._times_seen):
+            if self._frame - self._times_seen[k] > TIME_KEEP:
+                del self._times_seen[k]
+                self._times.pop(k, None)
+
+    def _infer(self, e: dict, key: tuple, f: dict) -> None:
+        """A delay cell rejected for glare / a hidden "+" whose units digit both readers see
+        is the delay the train had in the frames before, when its last INFER_STABLE real
+        readings are one value ending in that digit. The tens digit under the blob is never
+        read (history: "+15" under it gave 45, 75, 465, 85). Delays on arrivals are never
+        negative (0 of 101 532 readings of the live history), so the hidden "+" is a plus.
+        Marked ``glare_inferred``, row uncertain, field confidence INFER_CONF."""
+        if f.get("check") not in INFER_CHECKS:
+            return
+        reads = self._reads.get(key)
+        tail = f.get("tail")
+        if not tail or not reads or len(reads) < INFER_STABLE or len(set(reads)) != 1:
+            return
+        value = reads[-1]
+        run = self._run.get(key, 0)
+        if value % 10 != int(tail) or value % DELAY_STEP or run >= INFER_MAX_RUN:
+            return
+        self._run[key] = run + 1
+        _infer_delay(e, value, len(reads))
 
     def _vote_seen(self, e: dict, key: tuple, f: dict) -> None:
         """Recover a delay whose "+" is hidden (the platform arrow drawn over it when the
@@ -565,6 +627,8 @@ class DelayVotes:
         if not f.get("check"):
             if f.get("norm"):
                 self._last[key] = f["norm"]
+                self._reads.setdefault(key, deque(maxlen=INFER_STABLE)).append(f["norm"])
+                self._run[key] = 0
             return
         if v is None or sum(c == v for c in h) < SEEN_MIN or v < self._last.get(key, 0):
             return
@@ -679,6 +743,10 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
         else:
             entries[i]["retry"]["attempts"] = n
     retry_s = time.perf_counter() - t_retry if attempts else 0.0
+    try:
+        _fill_times(slots, entries, base_cells, ctx, votes)
+    except Exception:  # optional: the line stays unread
+        log.warning("OCR time completion failed; line left unread", exc_info=True)
     _reread_delays(engine, slots, entries, ctx, t_start, budget)
     if votes is not None:
         try:
@@ -797,6 +865,69 @@ def _duplicate(new: dict, entries: list[dict], i: int) -> bool:
                and e["row"].train_no == no for k, e in enumerate(entries))
 
 
+def _neighbour_time(entries: list[dict], i: int, step: int) -> str | None:
+    """Scheduled time of the nearest line above (step -1) / below (+1) line `i` of its panel
+    that read a time of its own (not one the order check or a completion supplied)."""
+    board = entries[i]["board"]
+    line = [k for k, e in enumerate(entries) if e["board"] == board]
+    line.sort(key=lambda k: entries[k]["row_index"])
+    pos = line.index(i) + step
+    while 0 <= pos < len(line):
+        e = entries[line[pos]]
+        if e["row"] is not None and not e["fields"]["time"].get("check"):
+            return e["row"].sched_time
+        pos += step
+    return None
+
+
+def _fill_times(slots, entries: list[dict], base_cells: list[dict], ctx: "_Ctx",
+                votes: "DelayVotes | None") -> None:
+    """Complete the scheduled time of a line whose time cell did not read but whose type and
+    number did (a blob over the colon: "7:37" seen as "7[blob]37", 27.10 07:46: the train was
+    missing from the board). The glyph templates' trusted glyphs stay, the untrusted ones are
+    wildcards (``glare.time_candidates``) and ONE time must survive the chronological order of
+    the panel's other lines and, when the train showed one steadily in the last frames, agree
+    with it (``glare.pick_time``). Otherwise the line stays unread. The row is uncertain with
+    a confidence below a new service's bar; ``fields.time.check`` = "glare_filled"."""
+    if ctx.matcher is None:
+        return
+    for i, e in enumerate(entries):
+        f = e["fields"]
+        if (e["state"] == "empty" or e["row"] is not None or f["time"]["norm"] is not None
+                or f["type"]["norm"] is None or not f["no"]["norm"]):
+            continue
+        board, j, _, _ = slots[i]
+        cells = base_cells[i]
+        pick = None
+        for name in ("time", "time" + ALT):  # the cell as cut, then grown upwards
+            cell = cells.get(name)
+            if cell is None:
+                continue
+            try:
+                flags = glare.glyph_flags(ctx.matcher.glyphs(cell, _ALLOWED["time"]))
+            except ValueError:
+                continue
+            cands = glare.time_candidates(flags)
+            if not cands:
+                continue
+            hint = votes.time_hint(board, f["no"]["norm"]) if votes is not None else None
+            pick = glare.pick_time(cands, _neighbour_time(entries, i, -1),
+                                   _neighbour_time(entries, i, +1), hint)
+            if pick is not None:
+                break
+        if pick is None:
+            continue
+        tess = {n: (f[n]["_tess"], f[n]["_tess_conf"]) for n in _ORDER}
+        boxes = {n: tuple(f[n]["bbox"]) for n in _ORDER}
+        new = _assemble(board, j, tess, cells, boxes, ctx, time_fill=pick)
+        if new["row"] is None or _duplicate(new, entries, i):
+            continue
+        new["state"] = "ok"
+        if "retry" in e:
+            new["retry"] = e["retry"]
+        entries[i] = new
+
+
 DELAY_VARIANTS = ("lvl+", "vline", "lvl-", "adapt")  # binarisations tried on unread delays
 
 
@@ -844,6 +975,19 @@ def _reread_delays(engine: OcrEngine, slots, entries: list[dict], ctx: "_Ctx",
             entries[i]["fields"]["delay"]["retry"] = {"attempts": tries[i], "variant": None}
 
 
+def _infer_delay(entry: dict, value: int, reads: int) -> None:
+    """The delay of a glared cell taken from the train's earlier readings
+    (``DelayVotes._infer``): read (``delay_read``) but marked: fields.delay.check =
+    INFERRED, row uncertain."""
+    f = entry["fields"]["delay"]
+    f.update(raw=f"+{value}", norm=value, conf=INFER_CONF, check=INFERRED,
+             vote=f"inferred from {reads} readings")
+    f.pop("candidate", None)
+    entry["row"] = dataclasses.replace(entry["row"], delay_min=value, delay_read=True,
+                                       uncertain=True)
+    entry["raw_text"] = " ".join(t for t in (entry["fields"][n]["raw"] for n in _ORDER) if t)
+
+
 def _set_delay(entry: dict, text: str, conf: float | None, value: int, retry: dict) -> None:
     f = entry["fields"]["delay"]
     f.update(raw=text, norm=value, retry=retry,
@@ -877,14 +1021,19 @@ class _Ctx:
         self.known = set(stations) | self.seed
 
 
-def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ctx) -> dict:
+def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ctx,
+              time_fill: str | None = None) -> dict:
     """Debug entry of one line (``row`` set when type and time read), from the
-    Tesseract readings `tess` {column: (text, conf)} and the cell images `cells`."""
+    Tesseract readings `tess` {column: (text, conf)} and the cell images `cells`.
+    `time_fill`: a scheduled time completed by ``_fill_times`` (the cell did not read)."""
     cell = dict(tess)
     for name in _ALLOWED:
         if name != "delay":
             cell[name] = _numeric(name, cells[name], cell[name], ctx.matcher,
                                   cells.get(name + ALT))
+    time_seen = cell["time"][0]
+    if time_fill is not None:
+        cell["time"] = (time_fill, cell["time"][1])
     d_text, d_conf, d_why = _delay(cells["delay"], cell["delay"], ctx.matcher)
     cell["delay"] = (d_text, d_conf)
     type_text, flagged = strip_flag(cell["type"][0])
@@ -921,8 +1070,14 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
             cand = _hundreds_candidate(cells["delay"], tess["delay"][0], ctx.matcher)
             if cand:
                 entry["fields"]["delay"]["candidate"] = cand
+        elif d_why in INFER_CHECKS:
+            tail = _delay_tail(cells["delay"], tess["delay"][0], ctx.matcher)
+            if tail:
+                entry["fields"]["delay"]["tail"] = tail
     if train_type is None or sched is None:
         return entry
+    if time_fill is not None:
+        entry["fields"]["time"].update(check=glare.FILLED, seen=time_seen)
     entry["row"] = Row(
         board=board,
         train_type=train_type,
@@ -938,9 +1093,22 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
         operator_raw=operator_raw,
         station_raw=station_raw,
         # any corrected/unknown station (score < 1) or unmatched operator is uncertain
-        uncertain=s_score < 1.0 or o_score < canonical.DEFAULT_THRESHOLD,
+        uncertain=s_score < 1.0 or o_score < canonical.DEFAULT_THRESHOLD or time_fill is not None,
     )
+    if time_fill is not None:  # completed, not read: below a confident new service's bar
+        entry["row"] = dataclasses.replace(
+            entry["row"], confidence=min(entry["row"].confidence, order.REPAIRED_CONFIDENCE))
     return entry
+
+
+def _delay_tail(cell: np.ndarray, t_text: str, matcher: DigitMatcher | None) -> str | None:
+    """``glare.delay_tail`` of a delay cell: the units digit both readers see, or None."""
+    if matcher is None:
+        return None
+    try:
+        return glare.delay_tail(matcher.glyphs(cell, _ALLOWED["delay"]), t_text)
+    except ValueError:
+        return None
 
 
 def _summary(panels, entries: list[dict], retried: int, retry_s: float,

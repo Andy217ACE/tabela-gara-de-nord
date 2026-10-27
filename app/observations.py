@@ -217,7 +217,10 @@ def line_version(base: str, entry: dict) -> str:
     line), ``+unread`` (text, no train read) and ``+retry:<variant>:<attempts>`` (the
     line was re-read; variant ``none`` when no re-read succeeded), ``+delay:<reason>``
     (delay cell left unread by the delay rules, e.g. glare) and
-    ``+delay-retry:<variant>:<attempts>`` (delay cell re-read)."""
+    ``+delay-retry:<variant>:<attempts>`` (delay cell re-read), ``+time:glare_filled`` (the
+    scheduled time was completed from the line's surroundings).
+    A delay taken from the train's earlier readings under glare shows as
+    ``+delay:glare_inferred``."""
     v = base
     state = entry.get("state")
     if state in ("empty", "unread"):
@@ -232,6 +235,8 @@ def line_version(base: str, entry: dict) -> str:
     if d_retry:
         v += (f"+delay-retry:{d_retry.get('variant') or 'none'}"
               f":{int(d_retry.get('attempts') or 0)}")
+    if ((entry.get("fields") or {}).get("time") or {}).get("check") == "glare_filled":
+        v += "+time:glare_filled"  # the scheduled time was completed (hidden colon/digit)
     return v
 
 
