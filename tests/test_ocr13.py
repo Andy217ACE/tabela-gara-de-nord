@@ -216,7 +216,7 @@ def test_unread_delay_keeps_the_row_and_reports_why():
 
 def test_line_version_tags_delay_checks_and_retries():
     from app.observations import PROCESSING_VERSION, line_version, parse_line_version
-    assert PROCESSING_VERSION == "ocr-tess-grid-4"  # Beta 1.16 (test_ocr14)
+    assert PROCESSING_VERSION == "ocr-tess-grid-5"  # Beta 1.31 (test_ocr_platform_cut)
     e = {"state": "ok", "fields": {"delay": {"check": "glare"}}}
     assert line_version("v", e) == "v+delay:glare"
     e = {"state": "ok", "fields": {"delay": {"retry": {"variant": "lvl+", "attempts": 1}}}}

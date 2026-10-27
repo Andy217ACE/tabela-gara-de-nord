@@ -182,6 +182,44 @@ def grow_up(mask: np.ndarray, band: tuple[int, int], x0: int, x1: int, up: int
     return out
 
 
+PLATFORM_UP_MAX = 0.6  # ...and further while the digit still touches the grown top
+NEXT_LINE_TOP = 0.5    # ink starting this low in the band (share of its height) and
+                       # running into its bottom row is the next line's digit...
+DIGIT_MIN_H = 0.5      # ...dropped only under a component this tall (x band height)
+
+
+def platform_cell(mask: np.ndarray, band: tuple[int, int], x0: int, x1: int
+                  ) -> np.ndarray:
+    """The platform cell of a tilted board (right edge higher than the text line).
+
+    Measured (synthetic tilt, Task 2.2): the platform column 3 board px higher puts the
+    top of the NEXT line's digit into the bottom of this cell, where the segmentation
+    stacks it under the digit (8 read 6, 11 unread); 5 px higher the digit also rises
+    past PLATFORM_UP (5 -> 3, 6 -> 5, 8 -> 3, as in audit OCR13). So: grow by
+    PLATFORM_UP, then up to PLATFORM_UP_MAX while the digit still touches the top, and
+    drop the components that start in the lower half of the band and run into its
+    bottom row (a digit of this line starts near the band top)."""
+    y0, y1 = band
+    h = y1 - y0
+    cell = grow_up(mask, band, x0, x1, int(PLATFORM_UP * h))
+    if cell.shape[0] > h and (cell[0] == 0).any():
+        cell = grow_up(mask, band, x0, x1, int(PLATFORM_UP_MAX * h))
+    ink = (cell == 0).astype(np.uint8)
+    if not ink[-1].any():
+        return cell
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    start = cell.shape[0] - h + NEXT_LINE_TOP * h  # band row NEXT_LINE_TOP in the cell
+    drop = [i for i in range(1, n) if st[i, 1] >= start and st[i, 1] + st[i, 3] == cell.shape[0]]
+    # only under a digit of this line: a blank cell keeps its smear, else a speck left
+    # alone is scaled to a glyph and matched as a trusted digit (ocr13 150306: blank -> 8)
+    if not drop or not any(st[i, 3] >= DIGIT_MIN_H * h for i in range(1, n) if i not in drop):
+        return cell
+    out = cell.copy()
+    for i in drop:
+        out[lab == i] = 255
+    return out
+
+
 def _train_no(s: str) -> int:
     digits = "".join(c for c in (s or "") if c in _DIGITS)
     return int(digits) if digits else 0
@@ -220,8 +258,7 @@ class _Panel:
         if pad_y == 0 and grow:
             for name in GROW_UP:
                 k = _ORDER.index(name)
-                out[name] = grow_up(mask, (y0, y1), e[k], e[k + 1],
-                                    int(PLATFORM_UP * (y1 - y0)))
+                out[name] = platform_cell(mask, (y0, y1), e[k], e[k + 1])
             for name in GROW_ALT:
                 k = _ORDER.index(name)
                 out[name + ALT] = grow_up(mask, (y0, y1), e[k], e[k + 1],
@@ -333,10 +370,31 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     if not trusted:
         if _confirmed(matcher, cell, name, tess[0].replace(" ", "")):
             return m_text, t_conf if t_conf is not None else m_score * 100
+        if name == "platform" and t_text and not _near_tie(matcher, cell, name, t_text):
+            return "", None  # Tesseract's digit is one the templates reject: unread
         return t_text, t_conf
     if m_text == t_text and t_conf is not None:
         return m_text, t_conf
     return m_text, m_score * 100
+
+
+def _near_tie(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
+    """True when Tesseract only breaks near ties of the templates: same glyph count, and
+    every character it reads differently is a near-tie candidate of that (untrusted)
+    glyph (``DigitMatcher.near``). Real frame (ocr_truth 121707, platform): a clear 8
+    (templates 8 0.832 / 6 0.811, untrusted) read "3" by Tesseract, ranked 4th (0.746)
+    by the templates: not a tie, so not published. A 6/8 tie decided by Tesseract's "8"
+    (ocr_truth 010407, templates 6 0.778 / 8 0.769) stays."""
+    near = getattr(matcher, "near", None)
+    if near is None:
+        return False
+    try:
+        gl = matcher.glyphs(cell, _ALLOWED[name])
+        return len(gl) == len(t_text) and all(
+            t == c or (not digits.glyph_trusted(s, mg) and t in near(g, _ALLOWED[name]))
+            for t, (c, s, mg, g, *_) in zip(t_text, gl))
+    except ValueError:
+        return False
 
 
 def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:

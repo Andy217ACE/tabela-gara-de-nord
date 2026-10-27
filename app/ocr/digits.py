@@ -246,6 +246,17 @@ class DigitMatcher:
             trusted &= score >= MIN_SCORE and margin >= MIN_MARGIN
         return "".join(text), worst, trusted
 
+    def near(self, glyph: np.ndarray, allowed: str) -> str:
+        """Characters the templates cannot tell apart from the best match of a glyph:
+        score within MIN_MARGIN of the best (the near tie that leaves it untrusted)."""
+        padded = cv2.copyMakeBorder(glyph, _SHIFT, _SHIFT, _SHIFT, _SHIFT,
+                                    cv2.BORDER_CONSTANT, value=0)
+        scored = sorted(
+            ((float(cv2.matchTemplate(padded, tpl, cv2.TM_CCOEFF_NORMED).max()), ch)
+             for ch, tpl in zip(self.labels, self.templates) if ch in allowed),
+            reverse=True)
+        return "".join(ch for s, ch in scored if s >= scored[0][0] - MIN_MARGIN)
+
     def glyphs(self, cell: np.ndarray, allowed: str
                ) -> list[tuple[str, float, float, np.ndarray, bool]]:
         """Per glyph of the cell, left to right: (character, score, margin, glyph,
