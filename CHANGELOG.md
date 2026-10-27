@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.31 — 2026-10-27
+
+Reparație de deploy. Beta 1.29 (corecție manuală, schema v9) n-a putut porni pe server: actualizarea a fost anulată automat și a rămas în funcțiune Beta 1.28. **Beta 1.29 și Beta 1.30 intră pe server împreună, în această versiune.** Tabela, paginile publice și API-ul nu se schimbă față de 1.30.
+
+### Reparat
+- **Pornirea după o schimbare de schemă:** înainte de migrare aplicația caută un backup recent al bazei în directorul de backup-uri. Directorul era creat de scriptul de actualizare ca `root`, accesibil doar lui, iar serviciul rulează ca utilizatorul `tabela`: citirea directorului dădea „Permission denied” și aplicația nu pornea. Acum scriptul de actualizare dă directorul utilizatorului serviciului (mod 750), inclusiv pe serverele unde exista deja; fișierele de backup existente nu sunt modificate sau șterse, se păstrează ultimele 5.
+- **Aplicația nu mai cade dacă directorul de backup-uri nu poate fi citit:** scrie o eroare clară în jurnal (calea și cauza), face ea un backup (în directorul de backup-uri sau, dacă nu se poate, în `backups-fallback` lângă bază) și abia apoi migrează.
+- **Fără migrare fără backup:** dacă niciun backup nu poate fi făcut, aplicația migrează baza doar dacă scriptul de actualizare a confirmat un backup recent al aceleiași baze; altfel refuză pornirea cu un mesaj explicit și **nu atinge baza**.
+
+### Tehnic
+- `deploy/update.sh` scrie după backup fișierul `.pre-migration-backup` lângă bază (versiunea schemei, backup-ul, baza).
+- Teste noi: `test_dbbackup`; `test_update_sh` verifică proprietarul și modul directorului de backup-uri.
+- Service worker `v31` și `CHARTS_V` 1.31.
+
 ## Beta 1.30 — 2026-10-27
 
 Igienă de interfață. **Tabela** (Carduri, Panou, Ecran complet) rămâne neschimbată pixel cu pixel în afara celor două butoane de mai jos; datele și API-ul nu se schimbă.
