@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.27 — 2026-10-27
+
+Beta 1.26 (aspectul nou) e în versiunea dinaintea acesteia; aceasta schimbă doar citirea imaginii (OCR), nu interfața.
+
+### Reparat
+- **Reflexia ceasului din sticlă peste tabelă** (observată pe 27.10, ~07:30–07:50; capturile 8465–8467) acoperă două locuri fixe: „+” și prima cifră a întârzierii de pe **primul rând de Sosiri** (399 din 407 celule respinse pentru reflexie din istoric sunt pe rândul 0, zilnic, din 23.10) și **cele două puncte din ora programată de pe al doilea rând** („7:37” devenea „7▪37”). Sub pată pixelii nu mai există, deci nu se citește nimic de acolo; se completează doar ce lasă dovezile fără echivoc.
+- **Întârziere cu „+” acoperit:** dacă celula e respinsă pentru reflexie / „+” ascuns, iar cifra unităților (0 sau 5) se vede clar și o confirmă ambele cititoare (șabloane și Tesseract), întârzierea rămâne cea pe care trenul a avut-o în cadrele dinainte, dacă ultimele 3 citiri reale ale lui sunt aceeași valoare, care se termină în acea cifră. Cifra zecilor de sub pată nu se citește niciodată („+15” dădea 45, 75, 465, 85). Cel mult 30 de cadre la rând. Valoarea apare ca citită, marcată `+delay:glare_inferred` în versiunea de procesare și `uncertain` pe observație. Pe sosiri nu există întârzieri negative (0 din 101 532 citiri), deci „+” ascuns este un plus. Un tren fără istoric rămâne „necitit”.
+- **Ora programată cu punctele acoperite:** rândul avea tip și număr, dar fără oră rămânea necitit și trenul lipsea de pe tabelă (9202 Pitești 07:37, 11/12 rânduri). Acum se completează doar când o singură oră este compatibilă cu glifele de încredere, cu ordinea cronologică a rândurilor vecine și, dacă trenul a arătat aceeași oră în ultimele cadre, cu ea. O cifră ascunsă (nu doar punctele) cere ambii vecini sau istoricul. Altfel rămâne necitit. Rândul e `uncertain`, cu încredere 0,65 (sub pragul unui serviciu nou) și `+time:glare_filled` în versiune.
+
+### Tehnic
+- `app/ocr/glare.py` (nou): candidați de oră din glife (glif fără încredere = joker, cel mult unul), `fits`/`pick_time` (vecinii și istoricul), `delay_tail`. `app/ocr/reader.py`: `DelayVotes._infer` (citiri reale ținute per tren, serie limitată), memorie de ore curate per tren (`time_hint`), `_fill_times` înainte de recitirea întârzierilor. `app/observations.py`: sufixul `+time:glare_filled`.
+- Fără pre-procesare anti-reflexie: pixelii reflexiei au aceeași luminozitate ca textul (min(R,G,B) 200–240), nu se pot separa, iar sub ei nu e nimic de recuperat. Vot pe caractere pentru numărul trenului: nu s-a livrat; cadrele cu număr diferit de al serviciului sunt 9 din 69 030, iar numerele greșite stabile (IR 1584 în loc de 1581) sunt la fel în toate cadrele, deci votul nu le poate corecta.
+- Schema DB neschimbată (v8). Teste noi: `tests/test_glare.py`, cadre reale în `tests/fixtures/glare/`.
+
 ## Beta 1.26 — 2026-10-27
 
 Beta 1.25 (vremea din antet) e în versiunea dinaintea acesteia. Această versiune schimbă aspectul tuturor paginilor în afară de **Tabelă** (Carduri, Panou și Ecran complet rămân exact cum erau) și de Capturi OCR.
