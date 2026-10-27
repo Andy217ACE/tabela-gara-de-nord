@@ -283,12 +283,12 @@ def _as_v6(db):
     raw.close()
 
 
-def test_live_v2_fixture_migrates_to_v7(tmp_path):
+def test_live_v2_fixture_migrates_to_current(tmp_path):
     db = tmp_path / "v2.db"
     shutil.copy(FIX / "live_v2.db", db)
     s = Store(str(db))
-    s.migrate()  # v2 -> v3 -> v4 -> v5 -> v6 -> v7
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 7 == SCHEMA_VERSION
+    s.migrate()  # v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION >= 8
     assert {"service_quality", "event_quality"} <= _tables(s._conn)
     s.close()
 

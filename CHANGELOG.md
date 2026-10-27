@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.25 — 2026-10-27
+
+### Nou
+- **Widgetul de vreme, regândit.** În antet (lângă ceas) rămâne compact: pictogramă după codul meteo, cu variantă de zi sau de noapte (după `is_day` de la model), temperatura și „se simte". La apăsare (sau hover pe desktop) se deschide un panou cu: umiditate, presiune (hPa), vânt (viteză, direcție în cuvinte, de exemplu „SV”, și rafale), precipitații (totalul; ploaie / averse / zăpadă doar când sunt mai mari decât 0; 0,0 mm este o valoare reală) și un grafic mic al temperaturii din următoarele 24 de ore, cu minim, maxim și marcajul „acum”.
+- Stare „date vechi” peste 45 de minute: chenar punctat, seria desenată în gri, „observat” în loc de „acum”. Valorile lipsă apar „—”, niciodată 0.
+- Pe telefon (360 px) panoul se deschide sub buton, pe toată lățimea, fără derulare orizontală; se poate închide cu Esc.
+
+### Tehnic
+- O singură cerere către Open-Meteo, făcută de server: `current` cu temperatură, umiditate, temperatură resimțită, zi/noapte, precipitații (total, ploaie, averse, zăpadă), cod meteo, presiune, vânt, direcție și rafale, plus `hourly=temperature_2m`, cu `timezone=UTC` și `forecast_days=2`. Aceleași reguli ca înainte: browserul nu apelează Open-Meteo (CSP `connect-src 'self'`), cel mult o cerere la 5 minute, backoff 5 → 30 min, sarcină proprie supravegheată, atribuire CC BY 4.0, „model Open-Meteo”, nu stație meteo.
+- **Schema DB v8** (aditivă, un singur `ALTER TABLE ... ADD COLUMN` pe pas, atomic cu versiunea): `weather_observations` primește coloanele nullable `relative_humidity_pct`, `is_day`, `rain_mm`, `showers_mm`, `snowfall_cm`, `surface_pressure_hpa`, `wind_gusts_kmh`, `hourly_json`. Rândurile vechi rămân neatinse (valorile noi sunt `NULL`, nu 0); statisticile „Meteo și trenuri” citesc aceleași coloane ca până acum. Seria orară (25 de puncte) se păstrează doar pe cea mai nouă observație, ca baza de date să nu crească. `deploy/update.sh` face singur backup înainte de repornire, pentru că versiunea schemei crește.
+- `GET /api/weather`: câmpuri noi `relative_humidity_pct`, `surface_pressure_hpa`, `wind_gusts_kmh`, `rain_mm`, `showers_mm`, `snowfall_cm`, `hourly` (`start_utc`, `step_s`, `temperature_c`, `min_c`, `max_c`); `is_day` vine acum din model (rândurile vechi: calculat din poziția soarelui, ca până acum).
+- Service worker `v26`. Teste noi: parsare (câmpuri lipsă / null / unități), migrarea v7 → v8, forma API, și un test în browser real (`tests/test_weather_browser.py`: conținut, fără depășire la 360 px, contrast, tastatură, stare veche, fără apeluri externe).
+
 ## Beta 1.24 — 2026-10-26
 
 Beta 1.22 nu a fost publicată separat: conținutul ei (calitatea datelor, runda 3) este în această versiune, peste Beta 1.23 (dreptunghiurile celulelor pe panou înclinat).

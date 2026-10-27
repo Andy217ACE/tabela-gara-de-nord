@@ -2,7 +2,9 @@
 // Tabela Gara de Nord — ceasul din antet + widgetul meteo de lângă ceas.
 // - Ceas digital HH:MM (Europe/Bucharest) în antet, cu data pe ecrane late; bifează la 1 s.
 // - Widget meteo în fiecare element [data-weather-slot] (antet + bara de titlu a Panoului):
-//   pictogramă, temperatură, „se simte", vânt; la apăsare/hover un popover cu detalii.
+//   pictogramă (după weather_code, variantă zi/noapte după is_day), temperatură, „se simte";
+//   la apăsare/hover un popover: umiditate, presiune, vânt (+ rafale), precipitații (defalcate
+//   doar când > 0) și un grafic SVG al temperaturii din următoarele 24 h cu min/max și „acum".
 // - Datele vin DOAR de la serverul nostru (GET /api/weather; CSP connect-src 'self');
 //   serverul le ia de la Open-Meteo. Sunt valori de MODEL („Condiții curente (model
 //   Open-Meteo)"), nu o stație meteo. Lipsă ≠ 0: o valoare null se afișează „—".
@@ -141,7 +143,8 @@
     if (st === "loading") return "Vremea în București: se încarcă";
     if (st === "unavailable") return "Vremea în București: meteo indisponibilă";
     var parts = ["Vremea în București: " + (isNum(d.temperature_c) ? grade(round(d.temperature_c)) : "temperatură necunoscută")];
-    if (d.condition_ro) parts.push(d.condition_ro.toLowerCase());
+    if (d.condition_ro) parts.push(d.condition_ro.toLowerCase() + (d.is_day === false ? ", noapte" : ""));
+    if (isNum(d.apparent_temperature_c)) parts.push("se simte ca " + grade(round(d.apparent_temperature_c)));
     if (isNum(d.wind_speed_kmh)) {
       parts.push("vânt " + round(d.wind_speed_kmh) + " km/h" +
                  (DIR_NAMES[d.wind_direction_ro] ? " dinspre " + DIR_NAMES[d.wind_direction_ro] : ""));
@@ -200,10 +203,6 @@
     w.btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
-  function row(dl, label, value) {
-    dl.append(el("dt", null, label), el("dd", null, value));
-  }
-
   function credit() {
     var p = el("p", "wx-pop-src");
     var a = el("a", null, ATTR.source);
@@ -244,36 +243,158 @@
     var temp = el("span", "wx-temp", deg(d.temperature_c));
     var sub = el("span", "wx-sub");
     if (isNum(d.apparent_temperature_c)) sub.appendChild(el("span", "wx-feels", "se simte " + deg(d.apparent_temperature_c)));
-    var wind = el("span", "wx-wind");
-    if (isNum(d.wind_speed_kmh) && isNum(d.wind_direction_deg)) wind.appendChild(arrow(d.wind_direction_deg));
-    wind.appendChild(el("span", "wx-wind-t", windText(d)));
-    sub.appendChild(wind);
     w.btn.append(ico, temp, sub);
     if (st === "stale") w.btn.appendChild(el("span", "wx-old", "date vechi (" + agoText(ageS() || 0) + ")"));
+    w.root.dataset.daynight = d.is_day === false ? "night" : "day";
 
-    // popover
-    var head = el("p", "wx-pop-title", LABEL);
-    var cond = el("p", "wx-pop-cond", (d.condition_ro || "Condiții necunoscute") + " · București");
-    var dl = el("dl", "wx-dl");
-    row(dl, "Temperatura", deg(d.temperature_c) + (isNum(d.temperature_c) ? "C" : ""));
-    row(dl, "Se simte ca", deg(d.apparent_temperature_c) + (isNum(d.apparent_temperature_c) ? "C" : ""));
-    row(dl, "Vânt", isNum(d.wind_speed_kmh)
-      ? round(d.wind_speed_kmh) + " km/h" + (DIR_NAMES[d.wind_direction_ro]
-        ? " dinspre " + DIR_NAMES[d.wind_direction_ro] + " (" + d.wind_direction_ro + ")" : "")
-      : "—");
-    var pr = dec1(d.precipitation_mm);
-    row(dl, "Precipitații", pr == null ? "—" : pr + " mm");
-    row(dl, "Ora observației", (d.observed_local || "—") + " (ora României)");
+    // popover: titlu, temperatura mare, plăcuțe cu detalii, grafic 24 h, note, atribuire
+    var hero = el("div", "wx-hero");
+    hero.appendChild(svg(d.icon, "wx-svg wx-svg-lg"));
+    var ht = el("div", "wx-hero-t");
+    ht.append(el("p", "wx-hero-temp", isNum(d.temperature_c) ? dec1(d.temperature_c) + "°C" : "—"),
+              el("p", "wx-pop-cond", (d.condition_ro || "Condiții necunoscute") + " · București" +
+                 (d.is_day === false ? " · noapte" : "")));
+    if (isNum(d.apparent_temperature_c)) ht.appendChild(el("p", "wx-pop-cond", "Se simte ca " + dec1(d.apparent_temperature_c) + "°C"));
+    hero.appendChild(ht);
+
+    var tiles = el("dl", "wx-tiles");
+    tile(tiles, "Umiditate", isNum(d.relative_humidity_pct) ? round(d.relative_humidity_pct) + " %" : "—");
+    tile(tiles, "Presiune", isNum(d.surface_pressure_hpa) ? round(d.surface_pressure_hpa) + " hPa" : "—");
+    var wv = el("span", "wx-wind");
+    if (isNum(d.wind_speed_kmh) && isNum(d.wind_direction_deg)) wv.appendChild(arrow(d.wind_direction_deg));
+    wv.appendChild(el("span", null, windText(d)));
+    tile(tiles, "Vânt", wv, DIR_NAMES[d.wind_direction_ro] ? "dinspre " + DIR_NAMES[d.wind_direction_ro] : null);
+    tile(tiles, "Rafale", isNum(d.wind_gusts_kmh) ? "până la " + round(d.wind_gusts_kmh) + " km/h" : "—");
+    precipTiles(tiles, d);
+
     var a = ageS();
-    row(dl, "Vechime", a == null ? "—" : agoText(a));
-    w.pop.append(head, cond, dl);
+    var when = el("p", "wx-pop-when", "Observat la " + (d.observed_local || "—") + " (ora României)" +
+                  (a == null ? "" : " · " + agoText(a)));
+    w.pop.append(el("p", "wx-pop-title", LABEL), hero);
     if (st === "stale") {
       w.pop.appendChild(el("p", "wx-pop-warn", S.failed
         ? "Nu am putut reîmprospăta datele — afișăm ultima valoare primită, nu condițiile actuale."
         : "Datele sunt vechi — nu reprezintă condițiile actuale."));
     }
-    w.pop.append(el("p", "wx-pop-note", "Valoare de model pentru zona Bucureștiului, nu măsurătoarea unei stații meteo."),
+    w.pop.append(tiles, chart(d, st), when,
+                 el("p", "wx-pop-note", "Valoare de model pentru zona Bucureștiului, nu măsurătoarea unei stații meteo."),
                  credit());
+  }
+
+  // plăcuță: etichetă + valoare (text sau nod) + indiciu opțional
+  function tile(dl, label, value, hint, wide) {
+    var t = el("div", wide ? "wx-tile wx-tile-wide" : "wx-tile");
+    var dd = el("dd", "wx-tile-v");
+    dd.append(value);
+    if (hint) dd.appendChild(el("span", "wx-tile-h", hint));
+    t.append(el("dt", "wx-tile-l", label), dd);
+    dl.appendChild(t);
+  }
+
+  // Precipitații: totalul (0 real = „0 mm", lipsă = „—") și, doar pentru componentele > 0,
+  // defalcarea ploaie / averse / zăpadă; null nu devine niciodată 0
+  function precipTiles(dl, d) {
+    var tot = dec1(d.precipitation_mm);
+    var parts = [];
+    [["ploaie", d.rain_mm, "mm"], ["averse", d.showers_mm, "mm"], ["zăpadă", d.snowfall_cm, "cm"]].forEach(function (c) {
+      if (isNum(c[1]) && c[1] > 0) parts.push(c[0] + " " + dec1(c[1]) + " " + c[2]);
+    });
+    tile(dl, "Precipitații", tot == null ? "—" : tot + " mm", parts.length ? parts.join(" · ") : null, true);
+  }
+
+  // ---- grafic: temperatura în următoarele 24 h (SVG inline, fără stiluri inline) -----
+
+  var fmtHM = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  var CH = { W: 288, H: 108, L: 10, R: 278, TOP: 30, BOT: 72, AXIS: 100 };
+
+  function sv(tag, attrs, text) {
+    var n = document.createElementNS(SVG_NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function f1(x) { return (Math.round(x * 10) / 10).toString(); }
+
+  function anchorFor(x) { return x < 24 ? "start" : x > CH.W - 24 ? "end" : "middle"; }
+
+  function chart(d, st) {
+    var h = d.hourly;
+    var box = el("figure", "wx-chart");
+    if (!h || !Array.isArray(h.temperature_c) || h.temperature_c.length < 2 || !isNum(Date.parse(h.start_utc))) {
+      box.hidden = true; // fără serie: nu desenăm nimic (niciodată o linie plată la 0)
+      return box;
+    }
+    var vals = h.temperature_c, n = vals.length, start = Date.parse(h.start_utc), step = (h.step_s || 3600) * 1000;
+    var real = vals.filter(isNum);
+    if (!real.length) { box.hidden = true; return box; }
+    var lo = Math.min.apply(null, real), hi = Math.max.apply(null, real);
+    var cur = isNum(d.temperature_c) ? d.temperature_c : null;
+    var dlo = cur != null ? Math.min(lo, cur) : lo, dhi = cur != null ? Math.max(hi, cur) : hi;
+    if (dhi - dlo < 1) { dlo -= 0.5; dhi += 0.5; } // serie aproape plată
+    var X = function (i) { return CH.L + (CH.R - CH.L) * i / (n - 1); };
+    var Y = function (v) { return CH.BOT - (CH.BOT - CH.TOP) * (v - dlo) / (dhi - dlo); };
+
+    var iLo = vals.indexOf(lo), iHi = vals.indexOf(hi);
+    var obsMs = Date.parse(d.observed_at);
+    var iNow = isNum(obsMs) ? (obsMs - start) / step : null;
+    var showNow = iNow != null && iNow >= 0 && iNow <= n - 1;
+    var nowX = showNow ? X(iNow) : null;
+
+    var s = sv("svg", { viewBox: "0 0 " + CH.W + " " + CH.H, "class": "wx-spark", role: "img", focusable: "false",
+                        "aria-label": "Temperatura în următoarele 24 de ore, ora României: minim " + deg(lo) + " la " +
+                          fmtHM.format(new Date(start + iLo * step)) + ", maxim " + deg(hi) + " la " +
+                          fmtHM.format(new Date(start + iHi * step)) + "." });
+    s.appendChild(sv("line", { "class": "wx-sp-base", x1: CH.L, x2: CH.R, y1: CH.BOT + 4, y2: CH.BOT + 4 }));
+
+    // segmente continue (o oră lipsă rupe linia; un punct izolat devine un cerc)
+    var seg = [];
+    var flush = function () {
+      if (seg.length >= 2) {
+        var line = seg.map(function (p, k) { return (k ? "L" : "M") + f1(p[0]) + " " + f1(p[1]); }).join("");
+        s.appendChild(sv("path", { "class": "wx-sp-area", d: line + "L" + f1(seg[seg.length - 1][0]) + " " + (CH.BOT + 4) +
+                                                          "L" + f1(seg[0][0]) + " " + (CH.BOT + 4) + "Z" }));
+        s.appendChild(sv("path", { "class": "wx-sp-line", d: line }));
+      } else if (seg.length === 1) {
+        s.appendChild(sv("circle", { "class": "wx-sp-dot", cx: f1(seg[0][0]), cy: f1(seg[0][1]), r: 2 }));
+      }
+      seg = [];
+    };
+    vals.forEach(function (v, i) { if (isNum(v)) seg.push([X(i), Y(v)]); else flush(); });
+    flush();
+
+    // ore pe axă (din 6 în 6 h, ora României), fără suprapunere cu „acum"
+    for (var i = 0; i < n; i++) {
+      var hm = fmtHM.format(new Date(start + i * step));
+      if (Number(hm.slice(0, 2)) % 6 !== 0 || hm.slice(3) !== "00") continue;
+      var x = X(i);
+      if (nowX != null && Math.abs(x - nowX) < 26) continue;
+      s.appendChild(sv("text", { "class": "wx-sp-ax", x: f1(x), y: CH.AXIS, "text-anchor": anchorFor(x) }, hm));
+    }
+
+    // minim / maxim
+    var mark = function (idx, v, cls, dy) {
+      var x = X(idx), y = Y(v);
+      s.appendChild(sv("circle", { "class": "wx-sp-pt " + cls, cx: f1(x), cy: f1(y), r: 3 }));
+      s.appendChild(sv("text", { "class": "wx-sp-val " + cls, x: f1(x), y: f1(y + dy), "text-anchor": anchorFor(x) }, deg(v)));
+    };
+    mark(iHi, hi, "wx-sp-max", -7);
+    if (iHi !== iLo) mark(iLo, lo, "wx-sp-min", 15);
+
+    // „acum": linie punctată + punct pe temperatura observată (în date vechi: „observat")
+    if (showNow) {
+      s.appendChild(sv("line", { "class": "wx-sp-now", x1: f1(nowX), x2: f1(nowX), y1: CH.TOP - 12, y2: CH.BOT + 4 }));
+      if (cur != null) s.appendChild(sv("circle", { "class": "wx-sp-nowpt", cx: f1(nowX), cy: f1(Y(cur)), r: 3.6 }));
+      s.appendChild(sv("text", { "class": "wx-sp-nowl", x: f1(nowX), y: CH.AXIS, "text-anchor": anchorFor(nowX) },
+                       st === "stale" ? "observat" : "acum"));
+    }
+
+    var cap = el("figcaption", "wx-chart-cap");
+    cap.append(el("span", "wx-chart-t", "Următoarele 24 h"),
+               el("span", "wx-chart-mm", "min " + deg(lo) + " · max " + deg(hi)));
+    box.append(cap, s);
+    if (st === "stale") box.classList.add("is-stale");
+    return box;
   }
 
   function renderAll() { S.widgets.forEach(renderWidget); }

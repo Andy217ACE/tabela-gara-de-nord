@@ -13,19 +13,30 @@ from app import weather as wx
 UTC = timezone.utc
 NOW = datetime(2026, 10, 21, 3, 20, tzinfo=UTC)
 
-# Shape of a real response (fetched 2026-10-21, no `timezone` parameter -> GMT).
+# Shape of a real response (Open-Meteo, `timezone=UTC`, `forecast_days=2`, `hourly=
+# temperature_2m` + the rich `current` list). Hourly values are synthetic: 48 h from 00:00 UTC.
+HOURLY_TIMES = [f"2026-10-{21 + h // 24:02d}T{h % 24:02d}:00" for h in range(48)]
+HOURLY_TEMPS = [round(8 + 5 * math.sin((h - 9) / 24 * 2 * math.pi), 1) for h in range(48)]
 PAYLOAD = {
     "latitude": 44.424946, "longitude": 26.066908, "generationtime_ms": 0.108,
-    "utc_offset_seconds": 0, "timezone": "GMT", "timezone_abbreviation": "GMT",
+    "utc_offset_seconds": 0, "timezone": "UTC", "timezone_abbreviation": "UTC",
     "elevation": 85.0,
     "current_units": {"time": "iso8601", "interval": "seconds", "temperature_2m": "°C",
-                      "precipitation": "mm", "weather_code": "wmo code",
-                      "wind_speed_10m": "km/h", "wind_direction_10m": "°",
-                      "apparent_temperature": "°C"},
+                      "relative_humidity_2m": "%", "apparent_temperature": "°C",
+                      "is_day": "", "precipitation": "mm", "rain": "mm", "showers": "mm",
+                      "snowfall": "cm", "weather_code": "wmo code",
+                      "surface_pressure": "hPa", "wind_speed_10m": "km/h",
+                      "wind_direction_10m": "°", "wind_gusts_10m": "km/h"},
     "current": {"time": "2026-10-21T03:15", "interval": 900, "temperature_2m": 10.8,
-                "precipitation": 0.00, "weather_code": 45, "wind_speed_10m": 5.4,
-                "wind_direction_10m": 48, "apparent_temperature": 10.2},
+                "relative_humidity_2m": 93, "apparent_temperature": 10.2, "is_day": 0,
+                "precipitation": 0.00, "rain": 0.0, "showers": 0.0, "snowfall": 0.0,
+                "weather_code": 45, "surface_pressure": 1008.4, "wind_speed_10m": 5.4,
+                "wind_direction_10m": 48, "wind_gusts_10m": 11.2},
+    "hourly_units": {"time": "iso8601", "temperature_2m": "°C"},
+    "hourly": {"time": HOURLY_TIMES, "temperature_2m": HOURLY_TEMPS},
 }
+# the stored raw_json keeps everything except `hourly` (kept compactly in hourly_json)
+RAW_PAYLOAD = {k: v for k, v in PAYLOAD.items() if k != "hourly"}
 
 
 def cfg(**kw):
@@ -53,7 +64,143 @@ def test_parse_full_payload():
     assert o["wind_speed_kmh"] == 5.4 and o["wind_direction_deg"] == 48
     assert (o["latitude"], o["longitude"]) == (44.424946, 26.066908)
     assert json.loads(o["units_json"])["wind_speed_10m"] == "km/h"
-    assert json.loads(o["raw_json"]) == PAYLOAD
+    assert json.loads(o["raw_json"]) == RAW_PAYLOAD
+    # the rich `current` fields (schema v8)
+    assert o["relative_humidity_pct"] == 93 and o["is_day"] == 0
+    assert o["rain_mm"] == 0.0 and o["showers_mm"] == 0.0 and o["snowfall_cm"] == 0.0
+    assert o["rain_mm"] is not None and o["snowfall_cm"] is not None   # real zeros
+    assert o["surface_pressure_hpa"] == 1008.4 and o["wind_gusts_kmh"] == 11.2
+
+
+NEW_KEYS = ("relative_humidity_pct", "is_day", "rain_mm", "showers_mm", "snowfall_cm",
+            "surface_pressure_hpa", "wind_gusts_kmh")
+NEW_SRC = ("relative_humidity_2m", "is_day", "rain", "showers", "snowfall",
+           "surface_pressure", "wind_gusts_10m")
+
+
+def test_parse_missing_new_fields_are_none_not_zero():
+    p = payload()
+    for k in NEW_SRC:
+        del p["current"][k]
+    o = wx.parse_observation(p, NOW)
+    for k in NEW_KEYS:
+        assert o[k] is None, k
+    assert o["temperature_c"] == 10.8   # the old fields are unaffected
+
+
+@pytest.mark.parametrize("src", NEW_SRC)
+def test_parse_null_new_field_is_none(src):
+    o = wx.parse_observation(payload(**{src: None}), NOW)
+    assert o[NEW_KEYS[NEW_SRC.index(src)]] is None
+
+
+def test_parse_real_zero_precip_split_is_kept_as_zero():
+    o = wx.parse_observation(payload(precipitation=0.0, rain=0.0, showers=0.0, snowfall=0.0), NOW)
+    assert (o["precipitation_mm"], o["rain_mm"], o["showers_mm"], o["snowfall_cm"]) == (0.0,) * 4
+    assert all(v is not None for v in (o["rain_mm"], o["showers_mm"], o["snowfall_cm"]))
+
+
+def test_parse_precip_split_values():
+    o = wx.parse_observation(payload(precipitation=1.5, rain=1.0, showers=0.5, snowfall=0.7), NOW)
+    assert (o["precipitation_mm"], o["rain_mm"], o["showers_mm"], o["snowfall_cm"]) == \
+        (1.5, 1.0, 0.5, 0.7)
+
+
+@pytest.mark.parametrize("val,want", [(0, 0), (1, 1), (True, None), (2, None), (-1, None),
+                                      (0.5, None), ("1", None), (None, None)])
+def test_parse_is_day_only_0_or_1(val, want):
+    assert wx.parse_observation(payload(is_day=val), NOW)["is_day"] == want
+
+
+def test_parse_humidity_out_of_range_is_none():
+    assert wx.parse_observation(payload(relative_humidity_2m=140), NOW)["relative_humidity_pct"] is None
+    assert wx.parse_observation(payload(relative_humidity_2m=-3), NOW)["relative_humidity_pct"] is None
+    assert wx.parse_observation(payload(relative_humidity_2m=0), NOW)["relative_humidity_pct"] == 0
+
+
+def test_parse_new_units_converted_or_dropped():
+    p = payload(snowfall=1.0, wind_gusts_10m=10.0, rain=1.0, showers=2.0)
+    p["current_units"].update({"snowfall": "inch", "wind_gusts_10m": "m/s", "rain": "inch",
+                               "showers": "furlong"})
+    o = wx.parse_observation(p, NOW)
+    assert o["snowfall_cm"] == pytest.approx(2.54)
+    assert o["wind_gusts_kmh"] == pytest.approx(36.0)
+    assert o["rain_mm"] == pytest.approx(25.4)
+    assert o["showers_mm"] is None                    # unknown unit: never guess
+
+
+# -- hourly series ----------------------------------------------------------------------
+
+def test_hourly_is_25_points_from_the_observed_hour():
+    o = wx.parse_observation(PAYLOAD, NOW)               # observed 03:15 -> hour 03:00
+    h = json.loads(o["hourly_json"])
+    assert h["start"] == "2026-10-21T03:00:00Z" and h["step_s"] == 3600
+    assert h["t"] == HOURLY_TEMPS[3:28] and len(h["t"]) == 25
+    assert len(o["hourly_json"]) < 400                   # compact: only what the UI needs
+
+
+def test_hourly_shorter_series_is_kept_as_is():
+    p = payload()
+    p["hourly"] = {"time": HOURLY_TIMES[:10], "temperature_2m": HOURLY_TEMPS[:10]}
+    h = json.loads(wx.parse_observation(p, NOW)["hourly_json"])
+    assert h["t"] == HOURLY_TEMPS[3:10]
+
+
+@pytest.mark.parametrize("hourly", [None, {}, [], "x", {"time": []}, {"time": ["x"]},
+                                    {"time": HOURLY_TIMES, "temperature_2m": "abc"},
+                                    {"time": HOURLY_TIMES, "temperature_2m": []},
+                                    {"time": HOURLY_TIMES[:2], "temperature_2m": [1, 2]}])
+def test_hourly_unusable_is_none_and_never_fails_the_observation(hourly):
+    p = payload()
+    p["hourly"] = hourly
+    o = wx.parse_observation(p, NOW)
+    assert o["hourly_json"] is None and o["temperature_c"] == 10.8
+
+
+def test_hourly_absent_block_is_none():
+    p = payload()
+    del p["hourly"]
+    assert wx.parse_observation(p, NOW)["hourly_json"] is None
+
+
+def test_hourly_null_and_bad_entries_stay_null_not_zero():
+    p = payload()
+    temps = list(HOURLY_TEMPS)
+    temps[5] = None
+    temps[6] = "abc"
+    temps[7] = float("nan")
+    p["hourly"] = {"time": HOURLY_TIMES, "temperature_2m": temps}
+    t = json.loads(wx.parse_observation(p, NOW)["hourly_json"])["t"]
+    assert t[2:5] == [None, None, None] and t[0] == HOURLY_TEMPS[3] and t[5] == HOURLY_TEMPS[8]
+
+
+def test_hourly_gap_in_times_is_aligned_by_time():
+    p = payload()
+    times, temps = HOURLY_TIMES[:], HOURLY_TEMPS[:]
+    del times[5], temps[5]                           # the 05:00 hour is missing
+    p["hourly"] = {"time": times, "temperature_2m": temps}
+    t = json.loads(wx.parse_observation(p, NOW)["hourly_json"])["t"]
+    assert t[2] is None and t[1] == HOURLY_TEMPS[4] and t[3] == HOURLY_TEMPS[6]
+
+
+def test_hourly_follows_utc_offset_seconds():
+    p = payload(time="2026-10-21T06:15")
+    p["utc_offset_seconds"] = 10800                  # configured with timezone=Europe/Bucharest
+    h = json.loads(wx.parse_observation(p, NOW)["hourly_json"])   # hourly times are local clock
+    assert h["start"] == "2026-10-21T03:00:00Z" and h["t"][0] == HOURLY_TEMPS[6]
+
+
+def test_hourly_fahrenheit_is_converted_unknown_unit_dropped():
+    p = payload()
+    p["hourly"] = {"time": HOURLY_TIMES, "temperature_2m": [50.0] * 48}
+    p["hourly_units"]["temperature_2m"] = "°F"
+    assert json.loads(wx.parse_observation(p, NOW)["hourly_json"])["t"][0] == 10.0
+    p["hourly_units"]["temperature_2m"] = "K"
+    assert wx.parse_observation(p, NOW)["hourly_json"] is None
+
+
+def test_hourly_not_in_raw_json():
+    assert "hourly" not in json.loads(wx.parse_observation(PAYLOAD, NOW)["raw_json"])
 
 
 def test_parse_null_precipitation_stays_null_not_zero():
@@ -65,12 +212,13 @@ def test_parse_null_precipitation_stays_null_not_zero():
 def test_parse_missing_fields_are_none():
     p = payload()
     for k in ("temperature_2m", "apparent_temperature", "weather_code", "wind_speed_10m",
-              "wind_direction_10m", "precipitation"):
+              "wind_direction_10m", "precipitation") + NEW_SRC:
         del p["current"][k]
     del p["current_units"]
+    del p["hourly"]
     o = wx.parse_observation(p, NOW)
     for k in ("temperature_c", "apparent_temperature_c", "precipitation_mm", "weather_code",
-              "wind_speed_kmh", "wind_direction_deg"):
+              "wind_speed_kmh", "wind_direction_deg", "hourly_json") + NEW_KEYS:
         assert o[k] is None, k
     assert o["units_json"] is None
 
@@ -193,12 +341,16 @@ def test_fetch_sends_exact_parameters_and_user_agent():
     o = run(go())
     assert o["temperature_c"] == 10.8
     q = dict(seen["url"].params)
+    # the request the user specified (rich `current` list + `hourly`), UTC, two forecast days
     assert q == {"latitude": "44.4323", "longitude": "26.1063",
-                 "current": "temperature_2m,precipitation,weather_code,wind_speed_10m,"
-                            "wind_direction_10m,apparent_temperature"}
+                 "hourly": "temperature_2m",
+                 "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,"
+                            "precipitation,rain,showers,snowfall,weather_code,surface_pressure,"
+                            "wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+                 "timezone": "UTC", "forecast_days": "2"}
     assert str(seen["url"]).startswith("https://api.open-meteo.com/v1/forecast?")
     assert seen["ua"].isascii() and "tabela-gara-de-nord" in seen["ua"]
-    assert "timezone" not in q  # times come back in GMT
+    assert o["hourly_json"] is not None and o["relative_humidity_pct"] == 93
 
 
 @pytest.mark.parametrize("resp", [
@@ -403,6 +555,53 @@ def test_present_shape():
     assert p["attribution"] == {"source": "Open-Meteo.com", "url": "https://open-meteo.com/",
                                 "license": "CC BY 4.0"}
     assert "raw_json" not in p and "units_json" not in p
+
+
+def test_present_has_rich_fields_and_hourly():
+    p = wx.present(row(), NOW)
+    assert p["relative_humidity_pct"] == 93 and p["surface_pressure_hpa"] == 1008.4
+    assert p["wind_gusts_kmh"] == 11.2
+    assert (p["rain_mm"], p["showers_mm"], p["snowfall_cm"]) == (0.0, 0.0, 0.0)
+    h = p["hourly"]
+    assert h["start_utc"] == "2026-10-21T03:00:00Z" and h["step_s"] == 3600
+    assert h["temperature_c"] == HOURLY_TEMPS[3:28]
+    assert h["min_c"] == min(HOURLY_TEMPS[3:28]) and h["max_c"] == max(HOURLY_TEMPS[3:28])
+    assert "hourly_json" not in p and "raw_json" not in p
+
+
+def test_present_old_row_without_new_columns_gives_nulls():
+    old = {k: v for k, v in row().items() if k not in NEW_KEYS and k != "hourly_json"}
+    p = wx.present(old, NOW)
+    assert p["available"] is True and p["temperature_c"] == 10.8
+    for k in ("relative_humidity_pct", "surface_pressure_hpa", "wind_gusts_kmh", "rain_mm",
+              "showers_mm", "snowfall_cm", "hourly"):
+        assert p[k] is None, k
+    assert isinstance(p["is_day"], bool)              # computed from the sun, as before
+
+
+def test_present_uses_stored_is_day_and_falls_back_to_the_sun():
+    noon = dict(observed_at="2026-06-21T10:00:00Z", weather_code=0)
+    assert wx.present(row(is_day=0, **noon), datetime(2026, 6, 21, 10, 5, tzinfo=UTC)) \
+        ["icon"] == "moon"                              # the model says night: believe it
+    midnight = dict(observed_at="2026-06-21T00:00:00Z", weather_code=0)
+    p = wx.present(row(is_day=1, **midnight), datetime(2026, 6, 21, 0, 5, tzinfo=UTC))
+    assert p["is_day"] is True and p["icon"] == "sun"
+    p = wx.present(row(is_day=None, **midnight), datetime(2026, 6, 21, 0, 5, tzinfo=UTC))
+    assert p["is_day"] is False and p["icon"] == "moon"  # NULL: computed
+
+
+def test_present_hourly_edge_cases():
+    assert wx.present(row(hourly_json=None), NOW)["hourly"] is None
+    assert wx.present(row(hourly_json="{not json"), NOW)["hourly"] is None
+    assert wx.present(row(hourly_json='{"start":"x","step_s":3600,"t":[1]}'), NOW)["hourly"] is None
+    h = wx.present(row(hourly_json=json.dumps(
+        {"start": "2026-10-21T03:00:00Z", "step_s": 3600, "t": [None, 4.0, None, -2.5]})),
+        NOW)["hourly"]
+    assert h["temperature_c"] == [None, 4.0, None, -2.5]
+    assert h["min_c"] == -2.5 and h["max_c"] == 4.0
+    # nothing to draw -> no chart at all (never a flat line at 0)
+    assert wx.present(row(hourly_json=json.dumps(
+        {"start": "2026-10-21T03:00:00Z", "step_s": 3600, "t": [None, None]})), NOW)["hourly"] is None
 
 
 def test_present_null_precipitation_is_null():
