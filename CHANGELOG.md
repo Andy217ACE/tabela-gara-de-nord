@@ -7,7 +7,7 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 ## Beta 1.26 — 2026-10-27
 
-Beta 1.25 (vremea din antet) apare separat. Această versiune schimbă aspectul tuturor paginilor în afară de **Tabelă** (Carduri, Panou și Ecran complet rămân exact cum erau) și de Capturi OCR.
+Beta 1.25 (vremea din antet) e în versiunea dinaintea acesteia. Această versiune schimbă aspectul tuturor paginilor în afară de **Tabelă** (Carduri, Panou și Ecran complet rămân exact cum erau) și de Capturi OCR.
 
 ### Nou
 - **Statistici: felii (donut) acolo unde datele sunt părți dintr-un întreg.** Pe fiecare panou: câte călătorii au fost la timp, întârziate până la 30 min și peste 30 min (în centru, procentul la timp). O cifră nouă, „Cum se împart călătoriile?”: sosiri față de plecări, apoi pe tip de tren (IR, IRN, RE, R, RM, IC) și pe operator (primii cinci și „Altele”). Calitatea datelor (rezultat și citiri OCR) are tot felii.
@@ -20,8 +20,21 @@ Beta 1.25 (vremea din antet) apare separat. Această versiune schimbă aspectul 
 
 ### Tehnic
 - Fără bibliotecă nouă: grafice SVG + CSS proprii (CSP: `script-src 'self'`, fără stiluri inline), temabile și accesibile; `web/ui2.js` (donut, count-up, meter, sparkline, schelete, tranziții) și `web/ui2.css`. Culorile categoriale noi (`--ref-cat-*`) sunt validate cu verificatorul de palete (CVD, contrast) pe ambele suprafețe.
-- Service worker v26; bugetul de precache crește la 650 KB necomprimat (~+72 KB, ~20 KB gzip).
-- Teste noi: `tests/test_ui2_static.py`, `tests/test_ui2_browser.py` (pagini la 360/768/1280, ambele teme, donut, mișcare redusă, Tabela neatinsă). Backend și schema DB neschimbate (v7).
+- Service worker v27; bugetul de precache crește la 650 KB necomprimat (~+72 KB, ~20 KB gzip).
+- Teste noi: `tests/test_ui2_static.py`, `tests/test_ui2_browser.py` (pagini la 360/768/1280, ambele teme, donut, mișcare redusă, Tabela neatinsă). Backend și schema DB neschimbate (v8, din Beta 1.25).
+
+## Beta 1.25 — 2026-10-27
+
+### Nou
+- **Widgetul de vreme, regândit.** În antet (lângă ceas) rămâne compact: pictogramă după codul meteo, cu variantă de zi sau de noapte (după `is_day` de la model), temperatura și „se simte". La apăsare (sau hover pe desktop) se deschide un panou cu: umiditate, presiune (hPa), vânt (viteză, direcție în cuvinte, de exemplu „SV”, și rafale), precipitații (totalul; ploaie / averse / zăpadă doar când sunt mai mari decât 0; 0,0 mm este o valoare reală) și un grafic mic al temperaturii din următoarele 24 de ore, cu minim, maxim și marcajul „acum”.
+- Stare „date vechi” peste 45 de minute: chenar punctat, seria desenată în gri, „observat” în loc de „acum”. Valorile lipsă apar „—”, niciodată 0.
+- Pe telefon (360 px) panoul se deschide sub buton, pe toată lățimea, fără derulare orizontală; se poate închide cu Esc.
+
+### Tehnic
+- O singură cerere către Open-Meteo, făcută de server: `current` cu temperatură, umiditate, temperatură resimțită, zi/noapte, precipitații (total, ploaie, averse, zăpadă), cod meteo, presiune, vânt, direcție și rafale, plus `hourly=temperature_2m`, cu `timezone=UTC` și `forecast_days=2`. Aceleași reguli ca înainte: browserul nu apelează Open-Meteo (CSP `connect-src 'self'`), cel mult o cerere la 5 minute, backoff 5 → 30 min, sarcină proprie supravegheată, atribuire CC BY 4.0, „model Open-Meteo”, nu stație meteo.
+- **Schema DB v8** (aditivă, un singur `ALTER TABLE ... ADD COLUMN` pe pas, atomic cu versiunea): `weather_observations` primește coloanele nullable `relative_humidity_pct`, `is_day`, `rain_mm`, `showers_mm`, `snowfall_cm`, `surface_pressure_hpa`, `wind_gusts_kmh`, `hourly_json`. Rândurile vechi rămân neatinse (valorile noi sunt `NULL`, nu 0); statisticile „Meteo și trenuri” citesc aceleași coloane ca până acum. Seria orară (25 de puncte) se păstrează doar pe cea mai nouă observație, ca baza de date să nu crească. `deploy/update.sh` face singur backup înainte de repornire, pentru că versiunea schemei crește.
+- `GET /api/weather`: câmpuri noi `relative_humidity_pct`, `surface_pressure_hpa`, `wind_gusts_kmh`, `rain_mm`, `showers_mm`, `snowfall_cm`, `hourly` (`start_utc`, `step_s`, `temperature_c`, `min_c`, `max_c`); `is_day` vine acum din model (rândurile vechi: calculat din poziția soarelui, ca până acum).
+- Service worker `v26`. Teste noi: parsare (câmpuri lipsă / null / unități), migrarea v7 → v8, forma API, și un test în browser real (`tests/test_weather_browser.py`: conținut, fără depășire la 360 px, contrast, tastatură, stare veche, fără apeluri externe).
 
 ## Beta 1.24 — 2026-10-26
 

@@ -48,7 +48,7 @@ def test_wiring_index_and_service_worker():
     sw = read("sw.js")
     shell = re.search(r"var SHELL = \[(.*?)\];", sw, re.S).group(1)
     assert '"/ui2.css"' in shell and '"/ui2.js"' in shell
-    assert int(re.search(r'var VERSION = "v(\d+)"', sw).group(1)) >= 26
+    assert int(re.search(r'var VERSION = "v(\d+)"', sw).group(1)) >= 27
     # ui2.js loads right after app.js (App.el) and before the page scripts that use it
     assert html.index("ui2.js") < html.index("statistici.js")
     assert html.index("ui2.css") > html.index("statistici.css")  # later in the cascade

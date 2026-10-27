@@ -50,7 +50,7 @@ REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'a
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -149,9 +149,23 @@ CREATE TABLE IF NOT EXISTS weather_observations (
     raw_json TEXT
 );
 """
+# v8: the richer Open-Meteo request (additive ALTER TABLE ADD COLUMN, all nullable, no
+# defaults: old rows read NULL = "not recorded", never 0). `hourly_json` = the next-24 h
+# temperature series, kept only on the newest observation (see add_weather).
+_WEATHER_V8_COLUMNS = (
+    ("relative_humidity_pct", "REAL"),
+    ("is_day", "INTEGER"),
+    ("rain_mm", "REAL"),
+    ("showers_mm", "REAL"),
+    ("snowfall_cm", "REAL"),
+    ("surface_pressure_hpa", "REAL"),
+    ("wind_gusts_kmh", "REAL"),
+    ("hourly_json", "TEXT"),
+)
 _WEATHER_COLS = ("observed_at", "fetched_at", "source", "kind", "latitude", "longitude",
                  "temperature_c", "apparent_temperature_c", "precipitation_mm", "weather_code",
-                 "wind_speed_kmh", "wind_direction_deg", "units_json", "raw_json")
+                 "wind_speed_kmh", "wind_direction_deg", "units_json", "raw_json",
+                 ) + tuple(c for c, _ in _WEATHER_V8_COLUMNS)
 
 
 def _local(dt: datetime) -> datetime:
@@ -389,6 +403,8 @@ class Store:
                 self._migrate_to_6()
             if version < 7:  # v7: data-quality tables (app.quality)
                 quality.migrate_to_7(self._conn)
+            if version < 8:  # v8: rich weather columns
+                self._migrate_to_8()
 
     def _script(self, sql: str) -> None:
         try:
@@ -412,6 +428,23 @@ class Store:
     def _migrate_to_4(self) -> None:
         """v3 -> v4: weather_observations (additive)."""
         self._script("BEGIN;" + _WEATHER_SCHEMA + "PRAGMA user_version = 4;COMMIT;")
+
+    def _migrate_to_8(self) -> None:
+        """v7 -> v8: the rich Open-Meteo columns on weather_observations (additive, nullable;
+        existing rows keep every value and read NULL for the new ones), in one transaction
+        with the version bump (a failure leaves v7 in place). Re-runnable."""
+        c = self._conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            have = {r[1] for r in c.execute("PRAGMA table_info(weather_observations)")}
+            for name, decl in _WEATHER_V8_COLUMNS:
+                if name not in have:
+                    c.execute(f"ALTER TABLE weather_observations ADD COLUMN {name} {decl}")
+            c.execute("PRAGMA user_version = 8")
+            c.execute("COMMIT")
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
 
     def _migrate_to_6(self) -> None:
         """v5 -> v6: services.delay_read_at (proof that the delay cell was read), backfilled
@@ -940,6 +973,13 @@ class Store:
                 f"INSERT INTO weather_observations({', '.join(_WEATHER_COLS)})"
                 f" VALUES ({', '.join('?' * len(_WEATHER_COLS))})"
                 " ON CONFLICT(observed_at) DO NOTHING", vals)
+            if cur.rowcount == 1 and obs.get("hourly_json"):
+                # the next-24 h series is a forecast, not history: keep it on the newest
+                # observation only (the table keeps ~96 rows/day for the statistics)
+                self._conn.execute(
+                    "UPDATE weather_observations SET hourly_json = NULL WHERE hourly_json"
+                    " IS NOT NULL AND observed_at < (SELECT MAX(observed_at)"
+                    " FROM weather_observations)")
             return cur.rowcount == 1
 
     def latest_weather(self) -> dict | None:

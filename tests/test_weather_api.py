@@ -27,7 +27,10 @@ def seed(c, minutes_ago=5, **current):
     from tests.test_weather import payload
     now = datetime.now(UTC)
     t = (now - timedelta(minutes=minutes_ago)).replace(second=0, microsecond=0)
-    o = wx.parse_observation(payload(time=t.strftime("%Y-%m-%dT%H:%M"), **current), now)
+    p = payload(time=t.strftime("%Y-%m-%dT%H:%M"), **current)
+    h0 = t.replace(minute=0) - timedelta(hours=3)             # hourly series around "now"
+    p["hourly"]["time"] = [(h0 + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M") for i in range(48)]
+    o = wx.parse_observation(p, now)
     c.app.state.store.add_weather(o)
     return o
 
@@ -61,6 +64,42 @@ def test_weather_shape(client):
     assert len(j["observed_local"]) == 5 and j["observed_local"][2] == ":"
     assert j["condition_ro"] == "Ceață" and j["wind_direction_ro"] == "NE"
     assert j["precipitation_mm"] == 0.0
+
+
+def test_weather_rich_shape(client):
+    seed(client, 5, is_day=1, weather_code=61, precipitation=0.9, rain=0.9, showers=0.0,
+         snowfall=0.0, relative_humidity_2m=71, surface_pressure=1013.2, wind_gusts_10m=31.0)
+    j = client.get("/api/weather").json()
+    assert j["relative_humidity_pct"] == 71 and j["surface_pressure_hpa"] == 1013.2
+    assert j["wind_gusts_kmh"] == 31.0 and j["is_day"] is True and j["icon"] == "rain"
+    assert (j["rain_mm"], j["showers_mm"], j["snowfall_cm"]) == (0.9, 0.0, 0.0)
+    h = j["hourly"]
+    assert set(h) == {"start_utc", "step_s", "temperature_c", "min_c", "max_c"}
+    assert h["step_s"] == 3600 and h["start_utc"].endswith(":00:00Z")
+    assert 24 <= len(h["temperature_c"]) <= 25
+    assert h["min_c"] == min(h["temperature_c"]) and h["max_c"] == max(h["temperature_c"])
+    for k in ("raw_json", "units_json", "hourly_json"):
+        assert k not in j
+
+
+def test_weather_missing_rich_fields_are_null_not_zero(client):
+    seed(client, 5, relative_humidity_2m=None, surface_pressure=None, wind_gusts_10m=None,
+         rain=None, showers=None, snowfall=None, is_day=None)
+    j = client.get("/api/weather").json()
+    for k in ("relative_humidity_pct", "surface_pressure_hpa", "wind_gusts_kmh", "rain_mm",
+              "showers_mm", "snowfall_cm"):
+        assert j[k] is None, k
+    assert isinstance(j["is_day"], bool)               # NULL -> computed from the sun
+
+
+def test_weather_old_v7_row_is_served(client):
+    """A row stored before the v8 columns existed (all NULL) still serves a full answer."""
+    seed(client, 5)
+    st = client.app.state.store
+    st._conn.execute("UPDATE weather_observations SET relative_humidity_pct = NULL, rain_mm = NULL,"
+                     " hourly_json = NULL, is_day = NULL, surface_pressure_hpa = NULL")
+    j = client.get("/api/weather").json()
+    assert j["available"] is True and j["temperature_c"] == 10.8 and j["hourly"] is None
 
 
 def test_weather_stale_and_null_precipitation(client):
