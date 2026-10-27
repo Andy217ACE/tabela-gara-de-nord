@@ -88,3 +88,50 @@ def test_beta_103_lists_the_layout_fix():
     blob = " ".join(i for g in e["groups"] for i in g["items"]).lower()
     for word in ("panou", "lățimea coloanelor", "ecran complet", "carduri", "tooltip"):
         assert word in blob, word
+
+
+# Old gaps in the published numbering that CHANGELOG.md does not explain yet.
+# Beta 1.07 is pending a "nu a fost publicată separat" note, to be added by the release
+# controller; empty this set when that note lands.
+KNOWN_UNDOCUMENTED_GAPS = {7}
+
+_PUB_HEAD = re.compile(r"^## Beta 1\.(\d+) — \d{4}-\d{2}-\d{2}\s*$", re.M)
+_NOT_SEPARATE = re.compile(r"Beta 1\.(\d+) nu a fost publicată separat")
+
+
+def _gap_report(text: str) -> tuple[list[int], set[int], set[int]]:
+    """(published minors in file order, missing minors between them, documented ones)."""
+    pub = [int(m) for m in _PUB_HEAD.findall(text)]
+    missing: set[int] = set()
+    for a, b in zip(pub, pub[1:]):
+        missing.update(range(b + 1, a))
+    documented = {int(m) for m in _NOT_SEPARATE.findall(text)}
+    return pub, missing, documented
+
+
+def _check_gaps(text: str) -> list[str]:
+    pub, missing, documented = _gap_report(text)
+    errs = []
+    if any(a <= b for a, b in zip(pub, pub[1:])):
+        errs.append(f"versions not strictly descending: {pub}")
+    errs += [f"Beta 1.{n:02d} missing and not explained" for n in sorted(missing - documented - KNOWN_UNDOCUMENTED_GAPS)]
+    return errs
+
+
+def test_changelog_explains_gap_1_22():
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "Beta 1.22 nu a fost publicată separat" in text
+    pub, missing, documented = _gap_report(text)
+    assert 22 in missing and 22 in documented
+    assert _check_gaps(text) == []
+    # the allowlist cannot go stale: each entry must still be a real, undocumented gap
+    for n in KNOWN_UNDOCUMENTED_GAPS:
+        assert n in missing and n not in documented, f"Beta 1.{n:02d} allowlist entry is stale"
+
+
+def test_gap_check_catches_new_gap_and_disorder():
+    base = "## Beta 1.05 — 2026-01-01\n## Beta 1.04 — 2026-01-01\n"
+    assert _check_gaps(base) == []
+    assert _check_gaps("## Beta 1.05 — 2026-01-01\n## Beta 1.03 — 2026-01-01\n") == ["Beta 1.04 missing and not explained"]
+    assert _check_gaps("## Beta 1.05 — 2026-01-01\n## Beta 1.03 — 2026-01-01\nBeta 1.04 nu a fost publicată separat\n") == []
+    assert _check_gaps("## Beta 1.04 — 2026-01-01\n## Beta 1.05 — 2026-01-01\n")
