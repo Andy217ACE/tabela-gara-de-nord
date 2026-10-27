@@ -8,6 +8,7 @@
 //   meter(pct, o)      thin proportion bar (SVG), spark(values, o)  inline line (SVG)
 //   skeleton(kind)     shimmer placeholders; enterView(section)  page-enter animation
 //   decorate()         icon chip in every page header; stagger(list)  staggered rise
+// Beta 1.28: gauge(pct, o), empty(o), transition(fn) (View Transitions), charts() (lazy charts3.js/css)
 // Rules kept: N next to every figure, missing is „—” never 0, colour is never the only carrier
 // (labels in the legend, a pattern per slice), prefers-reduced-motion switches motion off.
 "use strict";
@@ -77,18 +78,18 @@
   function patternDefs(id) {
     var defs = s("defs");
     [["l", "M-1,5 L5,-1 M3,5 L5,3 M-1,1 L1,-1"], ["x", "M0,2 L4,2 M2,0 L2,4"]].forEach(function (p) {
-      var pat = s("pattern", { id: id + "-" + p[0], width: 4, height: 4, patternUnits: "userSpaceOnUse", class: "ui-pat" });
+      var pat = s("pattern", { id: id + "-p" + p[0], width: 4, height: 4, patternUnits: "userSpaceOnUse", class: "ui-pat" });
       pat.append(s("path", { d: p[1] }));
       defs.append(pat);
     });
-    var dots = s("pattern", { id: id + "-d", width: 4, height: 4, patternUnits: "userSpaceOnUse", class: "ui-pat ui-pat-dot" });
+    var dots = s("pattern", { id: id + "-pd", width: 4, height: 4, patternUnits: "userSpaceOnUse", class: "ui-pat ui-pat-dot" });
     dots.append(s("circle", { cx: 2, cy: 2, r: 0.9 }));
     defs.append(dots);
     return defs;
   }
   function patternRef(id, i) {
     var k = i % PAT_COUNT;
-    return k === 0 ? null : "url(#" + id + "-" + (k === 1 ? "l" : k === 2 ? "d" : "x") + ")";
+    return k === 0 ? null : "url(#" + id + "-p" + (k === 1 ? "l" : k === 2 ? "d" : "x") + ")";
   }
 
   function fmtPct(v) { return nf1.format(v) + " %"; }
@@ -139,6 +140,21 @@
       acc += len;
     });
     svg.append(g);
+    // share printed on slices that are wide enough
+    if (showPct) {
+      var lab = s("g", { class: "ui-seg-labs", "aria-hidden": "true" });
+      var from = 0;
+      segs.forEach(function (x) {
+        var len = x.pct || 0;
+        if (len >= 9) {
+          var ang = ((from + len / 2) / 100) * 2 * Math.PI - Math.PI / 2;
+          lab.append(s("text", { class: "ui-seg-lab", x: (CX + R * Math.cos(ang)).toFixed(1), y: (CY + R * Math.sin(ang)).toFixed(1) },
+                       nf0.format(len) + "%"));
+        }
+        from += len;
+      });
+      if (lab.childNodes.length) svg.append(lab);
+    }
     plot.append(svg);
 
     var centre = h("div", "ui-dc");
@@ -245,12 +261,13 @@
     var root = s("svg", { viewBox: "0 0 " + W + " " + H, class: "ui-spark", role: "img",
                           "aria-label": op.label || "evoluție" });
     if (!nums.length) { root.classList.add("is-none"); return root; }
-    var lo = Math.min.apply(null, nums.concat([0]));
-    var hi = Math.max.apply(null, nums.concat([lo + 1]));
+    var lo = op.min != null ? op.min : Math.min.apply(null, nums.concat([0]));
+    var hi = op.max != null ? Math.max(op.max, lo + 1) : Math.max.apply(null, nums.concat([lo + 1]));
     var n = values.length;
     var x = function (i) { return n === 1 ? W / 2 : P + (i * (W - 2 * P)) / (n - 1); };
-    var y = function (v) { return H - P - ((v - lo) / (hi - lo)) * (H - 2 * P); };
+    var y = function (v) { return H - P - ((Math.min(v, hi) - lo) / (hi - lo)) * (H - 2 * P); };
     var d = "", pen = false, area = "", first = null, last = null;
+    if (op.compact) root.classList.add("ui-spark-sm");
     values.forEach(function (v, i) {
       if (v == null) { pen = false; return; }
       d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1);
@@ -283,6 +300,40 @@
     return root;
   }
 
+
+  // radial punctuality ring (270°): pct | null
+  function gauge(pct, o) {
+    var op = o || {};
+    var root = s("svg", { viewBox: "0 0 56 56", class: "ui-gauge" + (pct == null ? " is-none" : ""), role: "img",
+                          "aria-label": op.label || (pct == null ? "fără valoare" : nf1.format(pct) + " %") });
+    var arc = { cx: 28, cy: 28, r: 22, pathLength: 100, transform: "rotate(135 28 28)" };
+    root.append(s("circle", Object.assign({ class: "ui-gauge-track", "stroke-dasharray": "75 25" }, arc)));
+    if (pct != null && pct > 0) {
+      var v = Math.max(1.2, Math.min(100, pct)) * 0.75;
+      var fill = s("circle", Object.assign({ class: "ui-gauge-fill ui-t-" + (op.tone || "arr"), "stroke-dasharray": v.toFixed(2) + " 100" }, arc));
+      root.append(fill);
+      if (!reduced() && fill.animate) {
+        fill.animate([{ strokeDashoffset: v }, { strokeDashoffset: 0 }], { duration: 900, easing: "cubic-bezier(0.2, 0.7, 0.2, 1)" });
+      }
+    }
+    return root;
+  }
+
+  // empty state: o {art, title, text, action:{label, run}}
+  function empty(o) {
+    var box = h("div", "empty ui-empty");
+    box.append(art(o.art || "search"));
+    box.append(h("p", "ui-empty-t", o.title));
+    if (o.text) box.append(h("p", "ui-empty-s", o.text));
+    if (o.action) {
+      var b = h("button", "btn btn-ghost btn-sm ui-empty-a", o.action.label);
+      b.type = "button";
+      b.addEventListener("click", o.action.run);
+      box.append(b);
+    }
+    return box;
+  }
+
   // ---- hero strip: [{label, value (number|null), fmt, unit, sub, tone, meter (pct|undefined), text}] ----
 
   function hero(items) {
@@ -298,7 +349,11 @@
       else countUp(num, it.value, shown);
       box.append(num);
       if (it.sub) box.append(h("p", "ui-stat-s", it.sub));
-      if (it.meter !== undefined) box.append(meter(it.meter, { tone: it.tone === "dep" ? "dep" : it.tone === "ok" ? "ok" : "arr",
+      var tone = it.tone === "dep" ? "dep" : it.tone === "ok" ? "ok" : "arr";
+      if (it.meter !== undefined && it.gauge) {
+        box.classList.add("has-gauge");
+        box.append(gauge(it.meter, { tone: tone, label: it.label + ": " + (it.meter == null ? "fără valoare" : nf1.format(it.meter) + " %") }));
+      } else if (it.meter !== undefined) box.append(meter(it.meter, { tone: it.tone === "dep" ? "dep" : it.tone === "ok" ? "ok" : "arr",
                                                                label: it.label + ": " + (it.meter == null ? "fără valoare" : nf1.format(it.meter) + " %") }));
       grid.append(box);
     });
@@ -340,6 +395,11 @@
     var count = n || (kind === "table" ? 6 : kind === "hero" ? 3 : 3);
     for (var i = 0; i < count; i++) {
       var b = h("div", "ui-skel-block");
+      if (kind === "chart") {
+        for (var k = 1; k <= 8; k++) b.append(h("span", "ui-skel-bar"));
+        box.append(b);
+        continue;
+      }
       b.append(h("span", "ui-skel-line ui-skel-w1"), h("span", "ui-skel-line ui-skel-w2"), h("span", "ui-skel-line ui-skel-w3"));
       box.append(b);
     }
@@ -348,8 +408,9 @@
 
   // ---- motion --------------------------------------------------------------------------
 
+  var vt = false;
   function enterView(section) {
-    if (!section || reduced()) return;
+    if (!section || reduced() || vt) return;   // a running View Transition already animates the page
     section.classList.remove("view-enter");
     void section.offsetWidth; // restart the animation
     section.classList.add("view-enter");
@@ -377,12 +438,46 @@
       }, { rootMargin: "0px 0px -6% 0px", threshold: 0.04 });
     }
     var vh = window.innerHeight || 800;
+    var below = [];
     root.querySelectorAll(REVEAL).forEach(function (n) {
       if (n.classList.contains("ui-rv")) return;
-      if (n.getBoundingClientRect().top < vh * 0.96) return;   // already in view: leave it alone
-      n.classList.add("ui-rv");
-      revealIO.observe(n);
+      if (n.getBoundingClientRect().top >= vh * 0.96) below.push(n);   // already in view: leave it alone
     });
+    below.forEach(function (n) { n.classList.add("ui-rv"); revealIO.observe(n); });
+  }
+
+  // route change inside a View Transition when available; else the plain call (+ the CSS page-enter)
+  function transition(fn) {
+    if (reduced() || typeof document.startViewTransition !== "function") { fn(); return; }
+    var t;
+    try {
+      vt = true;
+      t = document.startViewTransition(function () { fn(); });
+    } catch (e) { vt = false; fn(); return; }
+    var done = function () { vt = false; };
+    t.finished.then(done, done);
+  }
+
+  // lazy chart layer (charts3.js/css): pages with charts only, never in the SW shell; resolves null if it can't load
+  var CHARTS_V = "1.28";
+  var chartsP = null;
+  function charts() {
+    if (App.charts3) return Promise.resolve(App.charts3);
+    if (chartsP) return chartsP;
+    chartsP = new Promise(function (resolve) {
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "charts3.css?v=" + CHARTS_V;
+      var script = document.createElement("script");
+      script.src = "charts3.js?v=" + CHARTS_V;
+      var left = 2, failed = false;
+      var one = function () { left -= 1; if (left === 0) resolve(failed ? null : (App.charts3 || null)); };
+      link.onload = one;
+      script.onload = one;
+      link.onerror = script.onerror = function () { failed = true; chartsP = null; one(); };
+      document.head.append(link, script);
+    });
+    return chartsP;
   }
 
   function stagger(list) {
@@ -418,7 +513,8 @@
     });
   }
 
-  App.ui2 = { donut: donut, countUp: countUp, meter: meter, split: split, art: art, hero: hero, delayDonut: delayDonut, spark: spark, skeleton: skeleton,
+  App.ui2 = { donut: donut, countUp: countUp, meter: meter, split: split, art: art, hero: hero, gauge: gauge, empty: empty,
+              transition: transition, charts: charts, delayDonut: delayDonut, spark: spark, skeleton: skeleton,
               enterView: enterView, stagger: stagger, reveal: reveal, decorate: decorate, reduced: reduced,
               fmtPct: fmtPct, h: h, s: s };
 

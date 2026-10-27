@@ -88,11 +88,10 @@ def test_versions_page_is_a_timeline():
 
 
 def test_version_and_changelog_1_26():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "Beta 1.26"
+    ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert int(ver.split(".")[1]) >= 26          # 1.26 introduced UI v2; later versions sit above it
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    first = re.search(r"^## (Beta \S+) — ", text, re.M).group(1)
-    assert first == "Beta 1.26"
-    top = text.split("## Beta 1.24")[0]
+    top = text.split("## Beta 1.26")[1].split("## Beta 1.25")[0]
     for word in ("donut", "Statistici", "Mișcare", "prefers-reduced-motion", "Tabela"):
         assert word in top, word
 

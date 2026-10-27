@@ -14,6 +14,7 @@
   var S = App.stats;
   var el = App.el;
   var U = function () { return App.ui2; };   // Beta 1.26 visual helpers (ui2.js): donut, count-up, meter, spark
+  var C3 = function () { return App.charts3; };   // Beta 1.28 interactive chart layer (charts3.js, lazy): tooltips, curves, calendar…
   var SVG_NS = "http://www.w3.org/2000/svg";
   var API = "/api/stats/overview";
   var BOARDS = ["arrival", "departure"];
@@ -55,6 +56,15 @@
   }
 
   function tip(node, text) { node.append(svg("title", {}, text)); return node; }
+
+  function slug(t) {
+    return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 34);
+  }
+  function chartUrl(key) {
+    var q = query(v.p, { grafic: key });
+    return location.origin + location.pathname + "#statistici?" + q;
+  }
 
   // ---- params (URL hash) -----------------------------------------------------------------
 
@@ -201,15 +211,20 @@
     if (!v.data) {
       var wait = el("p", "sr-only", "Se încarcă statisticile…");
       v.ui.body.replaceChildren(wait);
-      if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("cards", 2));
+      if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
+    var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
     S.getJSON(url, ctrl)
+      .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
         if (v.ctrl !== ctrl) return;
+        var snap = v.data && C3() ? C3().snapshot(v.ui.body) : null;   // old chart geometry, to ease into the new data
         v.data = d;
         v.at = Date.now();
         setForm(v.p);
         render(d);
+        if (snap && C3()) C3().morph(v.ui.body, snap);
+        focusChart();
       })
       .catch(function (e) {
         if (v.ctrl !== ctrl || e.aborted) return;
@@ -226,11 +241,18 @@
       });
   }
 
+  function focusChart() {
+    if (v.focus && C3()) C3().focusKey(v.ui.body, v.focus);
+    v.focus = null;
+  }
+
   function show(params) {
     ensure();
+    v.focus = params && params.get ? (params.get("grafic") || "").slice(0, 40) : "";
     v.p = readParams(params);
     setForm(v.p);
     load();
+    if (v.data && !v.ctrl) focusChart();
   }
 
   // ---- building blocks ---------------------------------------------------------------
@@ -266,6 +288,7 @@
     var sec = el("section", "ss-fig" + (o.wide ? " ss-fig-wide" : ""));
     var hid = nid("h");
     sec.setAttribute("aria-labelledby", hid);
+    sec.setAttribute("data-key", o.key || slug(o.title));
     var head = el("div", "ss-fig-head");
     var h = el("h2", "ss-fig-title", o.title);
     h.id = hid;
@@ -349,6 +372,9 @@
     return { max: Math.ceil(v / (10 * mag)) * 10 * mag, step: 10 * mag };
   }
 
+  // chart builder that can draw itself again with other options (full-screen dialog: wider and taller)
+  function again(fn, o) { return function (h2, x) { return fn(h2, Object.assign({}, o, x)); }; }
+
   function chartWidth(host) {
     var w = host.clientWidth || (v.ui.body.clientWidth - 32) || 320;
     v.width = v.ui.body.clientWidth;
@@ -392,7 +418,8 @@
 
   // Grouped columns: cats = labels, series = [{board, values:[n|null], tips:[text], labels:[text|null]}]
   function columns(host, o) {
-    var W = chartWidth(host);
+    var c3 = C3();
+    var W = o.width || chartWidth(host);
     var H = o.height || 220;
     var L = 40, R = 8, T = 24, B = 28;
     var all = [];
@@ -404,21 +431,33 @@
     var k = o.series.length;
     var bw = Math.max(2, Math.min(24, (band * 0.78 - 2 * (k - 1)) / k));
     var root = svgRoot(W, H, o.title, o.desc);
+    root.setAttribute("data-kind", "col");
+    root.setAttribute("data-plot", [L, T, W - R, H - B].join(","));
+    root.setAttribute("data-n", n);
     yGrid(root, L, R, W, y, ys, o.yFmt || function (t) { return nf.format(t); });
     if (o.unit) root.append(svg("text", { x: 4, y: 10, class: "ss-tick ss-unit" }, o.unit));
+    if (c3 && o.refs) {
+      o.refs.forEach(function (r) {
+        if (r.value != null && r.value >= 0 && r.value <= ys.max) c3.refLine(root, { y: y(r.value), x1: L, x2: W - R, label: r.label, cls: r.cls, side: r.side });
+      });
+    }
     var every = Math.ceil(28 / band);
+    var top = null;    // the highest bar: annotated when its own value label is not drawn
     o.cats.forEach(function (c, i) {
       var cx = L + band * i + band / 2;
       var group = k * bw + (k - 1) * 2;
       o.series.forEach(function (s, j) {
         var val = s.values[i];
         var x = cx - group / 2 + j * (bw + 2);
-        var g = svg("g", { class: "ss-mark" });
+        var g = svg("g", { class: "ss-mark", "data-i": i, "data-s": j, "data-b": BOARD_CLS[s.board] });
         if (val != null && val > 0) {
           var b = vbar(x, y(val), bw, (H - B) - y(val), BOARD_CLS[s.board] + (s.low && s.low[i] ? " ss-low" : ""));
-          if (b) g.append(b);
-          if (s.labels && s.labels[i] != null && band / k >= 22) {
+          if (b) { b.setAttribute("data-m", j + ":" + i); g.append(b); }
+          var drawn = s.labels && s.labels[i] != null && band / k >= 22;
+          if (drawn) {
             g.append(svg("text", { x: (x + bw / 2).toFixed(1), y: (y(val) - 4).toFixed(1), class: "ss-vlabel" }, s.labels[i]));
+          } else if (!top || val > top.v) {
+            top = { v: val, x: x + bw / 2, y: y(val), s: s, i: i };
           }
         }
         // hit area bigger than the mark
@@ -432,15 +471,21 @@
       }
     });
     root.append(svg("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, class: "ss-axis" }));
+    if (c3 && top && n > 3 && all.length > 2) c3.colMax(root, top, { L: L, W: W, R: R, label: top.s.labels && top.s.labels[top.i] != null ? top.s.labels[top.i] : nf.format(top.v), cls: BOARD_CLS[top.s.board] });
+    root.__build = again(columns, o);
     host.append(root);
+    return root;
   }
 
   // Lines over 24 hours / days: series = [{board, values:[n|null], low:[bool], tips:[...]}];
-  // a line joins consecutive sufficient points only; small samples = hollow markers.
+  // a line joins consecutive sufficient points only; small samples = hollow markers; with charts3.js: curves, area, extremes, o.refs
   function lines(host, o) {
-    var W = chartWidth(host);
+    var c3 = C3();
+    var W = o.width || chartWidth(host);
     var H = o.height || 220;
     var L = 40, R = 12, T = 24, B = 28;
+    var refMargin = !!(c3 && o.refs && o.refs.length && W >= 520);
+    if (refMargin) R = o.refR || 68;
     var all = [];
     o.series.forEach(function (s) { s.values.forEach(function (x) { if (x != null) all.push(x); }); });
     var ys = o.yMax ? { max: o.yMax, step: o.yStep || o.yMax / 4 } : niceMax(Math.max.apply(null, all.concat([1])));
@@ -449,6 +494,9 @@
     var x = function (i) { return L + band * i + band / 2; };
     var y = function (val) { return T + (1 - val / ys.max) * (H - T - B); };
     var root = svgRoot(W, H, o.title, o.desc);
+    root.setAttribute("data-kind", "line");
+    root.setAttribute("data-plot", [L, T, W - R, H - B].join(","));
+    root.setAttribute("data-n", n);
     yGrid(root, L, R, W, y, ys, o.yFmt || function (t) { return nf.format(t); });
     if (o.unit) root.append(svg("text", { x: 4, y: 10, class: "ss-tick ss-unit" }, o.unit));
     var every = Math.ceil(30 / band);
@@ -456,33 +504,54 @@
       if (i % every === 0) root.append(svg("text", { x: x(i).toFixed(1), y: H - B + 16, class: "ss-tick ss-tick-x" }, c));
     });
     root.append(svg("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, class: "ss-axis" }));
-    o.series.forEach(function (s) {
-      var d = "", pen = false;
+    if (c3 && o.refs) c3.lineRefs(root, o.refs, { y: y, x: x, L: L, T: T, W: W, R: R, margin: refMargin, series: o.series });
+    var taken = [];
+    o.series.forEach(function (s, si) {
+      var runs = [], cur = null, pts = [];
       s.values.forEach(function (val, i) {
         var ok = val != null && !(s.low && s.low[i]);
-        if (ok) { d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(val).toFixed(1); pen = true; }
-        else pen = false;
+        if (ok) {
+          var pt = [x(i), y(val)];
+          if (!cur) { cur = []; runs.push(cur); }
+          cur.push(pt);
+          pts.push({ x: pt[0], y: pt[1], v: val });
+        } else cur = null;
       });
-      if (d) root.append(svg("path", { d: d, pathLength: 1, class: "ss-line " + BOARD_CLS[s.board] }));
+      var d = runs.map(function (r) {
+        if (c3) return c3.smooth(r);
+        return r.map(function (p, q) { return (q ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1); }).join("");
+      }).join("");
+      if (c3) {
+        var ad = runs.filter(function (r) { return r.length > 2; }).map(function (r) { return c3.areaPath(c3.smooth(r), r, y(0).toFixed(1)); }).join("");
+        if (ad) root.append(svg("path", { d: ad, class: "c3-area " + BOARD_CLS[s.board], "data-m": "a" + si }));
+      }
+      if (d) root.append(svg("path", { d: d, pathLength: 1, class: "ss-line " + BOARD_CLS[s.board], "data-m": "l" + si }));
+      if (c3 && pts.length > 2 && o.extremes !== false) {
+        c3.extremes(root, pts, o.extFmt || function (q) { return nf.format(q) + (o.unit === "%" ? "%" : ""); },
+                    { taken: taken, top: T - 4, bottom: H - B - 6, right: W - R, cls: BOARD_CLS[s.board] });
+      }
     });
-    o.series.forEach(function (s) {
+    o.series.forEach(function (s, si) {
       s.values.forEach(function (val, i) {
         if (val == null) return;
-        var g = svg("g", { class: "ss-mark" });
-        g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 4,
+        var g = svg("g", { class: "ss-mark", "data-i": i, "data-s": si, "data-b": BOARD_CLS[s.board] });
+        g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 4, "data-m": "d" + si + ":" + i,
                                  class: "ss-dot " + BOARD_CLS[s.board] + (s.low && s.low[i] ? " ss-dot-low" : "") }));
         g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 12, class: "ss-hit" }));
         tip(g, s.tips[i]);
         root.append(g);
       });
     });
+    root.__build = again(lines, o);
     host.append(root);
+    return root;
   }
 
   // N per category, a slim strip under a chart (its own scale, never a second axis).
   function nStrip(host, o) {
-    var W = chartWidth(host);
-    var H = 64, L = 40, R = o.right || 12, T = 6, B = 18;
+    var W = o.width || chartWidth(host);
+    var H = 64, L = 40, T = 6, B = 18;
+    var R = typeof o.right === "function" ? o.right(W) : 12;   // same right margin as the line chart above it
     var all = [];
     o.series.forEach(function (s) { all = all.concat(s.values); });
     var mx = Math.max.apply(null, all.concat([1]));
@@ -491,6 +560,9 @@
     var k = o.series.length;
     var bw = Math.max(2, Math.min(12, (band * 0.7 - (k - 1)) / k));
     var root = svgRoot(W, H, o.title, o.desc);
+    root.setAttribute("data-kind", "col");
+    root.setAttribute("data-plot", [L, T, W - R, H - B].join(","));
+    root.setAttribute("data-n", n);
     root.append(svg("text", { x: L - 6, y: T + 9, class: "ss-tick ss-tick-y" }, nf.format(mx)));
     root.append(svg("text", { x: 4, y: H - B + 4, class: "ss-tick ss-nhead" }, "N"));
     o.cats.forEach(function (c, i) {
@@ -499,16 +571,18 @@
       o.series.forEach(function (s, j) {
         var val = s.values[i] || 0;
         var h = (val / mx) * (H - T - B);
-        var g = svg("g", { class: "ss-mark" });
+        var g = svg("g", { class: "ss-mark", "data-i": i, "data-s": j, "data-b": BOARD_CLS[s.board] });
         var b = vbar(cx - group / 2 + j * (bw + 1), H - B - h, bw, h, BOARD_CLS[s.board] + " ss-nbar");
-        if (b) g.append(b);
+        if (b) { b.setAttribute("data-m", "n" + j + ":" + i); g.append(b); }
         g.append(svg("rect", { x: (cx - band / 2).toFixed(1), y: T, width: band.toFixed(1), height: H - T - B, class: "ss-hit" }));
-        tip(g, c + " · " + BOARD_PL[s.board] + ": N = " + val);
+        tip(g, BOARD_PL[s.board] + ", " + c + ": N = " + val);
         root.append(g);
       });
     });
     root.append(svg("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, class: "ss-axis" }));
+    root.__build = again(nStrip, o);
     host.append(root);
+    return root;
   }
 
   // Horizontal bars: rows = [{label, value|null, valueText, sub, low, href}], max
@@ -530,7 +604,7 @@
       if (r.value != null && r.value > 0) {
         var b = hbar(labW, y0 + 4, Math.max(2, plotW * Math.min(1, r.value / o.max)), 16,
                      (r.cls || BOARD_CLS[o.board]) + (r.low ? " ss-low" : ""));
-        if (b) g.append(b);
+        if (b) { b.setAttribute("data-m", String(i)); g.append(b); }
       }
       g.append(svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText));
       g.append(svg("rect", { x: 0, y: y0, width: W, height: rowH, class: "ss-hit" }));
@@ -538,6 +612,7 @@
       root.append(g);
     });
     host.append(root);
+    return root;
   }
 
   // ---- sections ------------------------------------------------------------------------
@@ -612,7 +687,7 @@
         value: ok ? s.on_time_pct : null, unit: ok ? " %" : "", fmt: function (x) { return nf.format(Math.round(x * 10) / 10); },
         sub: ok ? s.on_time + " din " + s.n + " călătorii cu întârziere citită (≤ " + p.on_time_max_min + " min)"
           : (s.n ? "N = " + s.n + " < " + p.min_sample + ": fără procent" : "N = 0: nicio întârziere citită"),
-        meter: ok ? s.on_time_pct : null };
+        meter: ok ? s.on_time_pct : null, gauge: true };
     });
     items.push({ label: "Călătorii analizate", cls: "ss-hero-v", value: c.journeys || 0,
       sub: plural(c.trains || 0, "tren", "trenuri") + " · " + plural(c.observations || 0, "observație OCR", "observații OCR") });
@@ -786,7 +861,8 @@
         "din acea oră — jumătate dintre ele au întârziat mai puțin, jumătate mai mult. Cercurile goale au prea puține " +
         "călătorii: cifra e reală, dar nesigură, și nu e legată în linie. Banda de dedesubt arată câte călătorii (N) " +
         "stau în spatele fiecărei ore." });
-    lines(f.host, { cats: cats, unit: "min",
+    lines(f.host, { cats: cats, unit: "min", extFmt: function (q) { return nf.format(q) + " min"; },
+      refR: 78, refs: [{ value: p.on_time_max_min, label: "la timp ≤ " + p.on_time_max_min + " min", short: "≤ " + p.on_time_max_min + " min = la timp" }],
       title: "Mediana întârzierii pe ora programată", desc: "Mediana întârzierii citite pe fiecare oră din zi, pe panou.",
       series: boards.map(function (b) {
         var hs = d.hourly[b];
@@ -797,7 +873,7 @@
               ", N = " + x.n + (x.n && !x.sufficient ? " (eșantion mic)" : "");
           }) };
       }) });
-    nStrip(f.host, { cats: cats, title: "N pe oră", desc: "Numărul de călătorii cu întârziere citită pe fiecare oră.",
+    nStrip(f.host, { right: function (w) { return w >= 520 ? 78 : 12; }, cats: cats, title: "N pe oră", desc: "Numărul de călătorii cu întârziere citită pe fiecare oră.",
       series: boards.map(function (b) { return { board: b, values: d.hourly[b].map(function (x) { return x.n; }) }; }) });
     var rows = [];
     for (var i = 0; i < 24; i++) {
@@ -820,8 +896,7 @@
     return "ss-q4";
   }
 
-  function heatmapSection(d, boards) {
-    var p = d.params;
+  function heatLegend(p) {
     var lg = el("div", "ss-legend ss-legend-scale");
     HEAT_BINS.forEach(function (b, i) {
       var it = el("span", "ss-legend-item");
@@ -834,6 +909,20 @@
       it.append(el("span", "ss-key ss-key-sq " + x[0]), document.createTextNode(x[1]));
       lg.append(it);
     });
+    return lg;
+  }
+
+  // Calendar (Beta 1.28, drawn by charts3.js): one square per service day; nothing without the chart layer.
+  function calendarSection(d, boards) {
+    if (!C3()) return;
+    C3().calendarFigure({ d: d, boards: boards, figure: figure, multiples: multiples, legend: heatLegend(d.params),
+      heatClass: heatClass, width: chartWidth, dataTable: dataTable, nLine: nLine, dayText: S.dayText, plural: plural,
+      minutes: minutes, pct: pct, BOARD_PL: BOARD_PL, el: el });
+  }
+
+  function heatmapSection(d, boards) {
+    var p = d.params;
+    var lg = heatLegend(p);
     var f = figure({ title: "Ce zile și ore sunt cele mai problematice?", set: "heatmap", wide: true, legend: lg,
       how: "fiecare pătrat este o oră (pe orizontală) dintr-o zi a săptămânii (pe verticală); cu cât culoarea e mai " +
         "închisă, cu atât întârzierea medie citită e mai mare. Pătratele gri au sub " + p.min_sample +
@@ -865,7 +954,7 @@
           var g = svg("g", { class: "ss-mark" });
           g.append(svg("rect", { x: (L + hr * cw + 1).toFixed(1), y: (T + dd * ch + 1).toFixed(1),
                                  width: Math.max(1, cw - 2).toFixed(1), height: Math.max(1, ch - 2).toFixed(1), rx: 2,
-                                 class: "ss-cell " + heatClass(c) }));
+                                 class: "ss-cell " + heatClass(c), "data-m": dd + "-" + hr }));
           tip(g, WEEKDAYS[dd] + ", " + hourRange(hr) + ": " + (!c ? "nicio călătorie" : !c.n ?
             plural(c.journeys, "călătorie", "călătorii") + ", nicio întârziere citită (N = 0)" :
             "medie " + minutes(c.mean) + ", mediana " + minutes(c.median) + ", N = " + c.n +
@@ -897,7 +986,7 @@
     var f = figure({ title: "Cum a evoluat punctualitatea de la o zi la alta?", set: "daily",
       legend: legend(boards),
       how: "fiecare punct este procentul călătoriilor la timp (≤ " + p.on_time_max_min + " min) dintr-o zi de serviciu. " +
-        "Zilele cu prea puține călătorii (N < " + p.min_sample + ") nu au procent și lipsesc din linie. Banda arată N pe zi." });
+        "Zilele cu prea puține călătorii (N < " + p.min_sample + ") nu au procent și lipsesc din linie. Banda arată N pe zi. Linia punctată: media perioadei." });
     if (days.length < 2) {
       f.foot.append(el("p", "ss-empty", days.length ? "O singură zi cu date — evoluția apare de la a doua zi." :
         "Nicio zi cu date pentru filtrele alese."));
@@ -907,13 +996,16 @@
       boards.forEach(function (b) { byKey[b] = {}; (d.daily[b] || []).forEach(function (x) { byKey[b][x.key] = x; }); });
       lines(f.host, { cats: days.map(shortDay), unit: "%", yMax: 100, yStep: 25,
         yFmt: function (t) { return t + "%"; },
+        refs: boards.filter(function (b) { return d.boards[b].sufficient && d.boards[b].on_time_pct != null; }).map(function (b) {
+          return { value: d.boards[b].on_time_pct, cls: BOARD_CLS[b], label: BOARD_PL[b] + ": medie " + pct(d.boards[b].on_time_pct), short: BOARD_PL[b] + " " + Math.round(d.boards[b].on_time_pct) + "%" };
+        }),
         title: "Procentul la timp pe zile", desc: "Procentul călătoriilor la timp pe fiecare zi de serviciu.",
         series: boards.map(function (b) {
           return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.on_time_pct : null; }),
             tips: days.map(function (k) { var x = byKey[b][k];
               return BOARD_PL[b] + ", " + S.dayText(k) + ": " + (x ? "la timp " + pct(x.on_time_pct) + ", mediana " + minutes(x.median) + ", N = " + x.n : "nicio călătorie"); }) };
         }) });
-      nStrip(f.host, { cats: days.map(shortDay), title: "N pe zi", desc: "Călătorii cu întârziere citită pe zi.",
+      nStrip(f.host, { right: function (w) { return w >= 520 && C3() && boards.some(function (b) { return d.boards[b].sufficient && d.boards[b].on_time_pct != null; }) ? 68 : 12; }, cats: days.map(shortDay), title: "N pe zi", desc: "Călătorii cu întârziere citită pe zi.",
         series: boards.map(function (b) { return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.n : 0; }) }; }) });
       var rows = days.map(function (k) {
         var r = [S.dayText(k)];
@@ -1547,6 +1639,13 @@
     f.foot.append(nLine("Sub " + p.min_sample + " călătorii pe zi: fără procent."));
   }
 
+  function resetFilters() {
+    v.p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    setForm(v.p);
+    syncHash(v.p);
+    load();
+  }
+
   function render(d) {
     seq = 0;
     v.ui.body.replaceChildren();
@@ -1554,7 +1653,12 @@
     var boards = boardsOf(d);
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
-      v.ui.body.append(el("p", "empty ss-empty", "Nu există încă date pentru filtrele alese. Încearcă „Tot istoricul” sau alt operator."));
+      var msg = "Nu există încă date pentru filtrele alese. Încearcă „Tot istoricul” sau alt operator.";
+      var filtered = !!(v.p && (v.p.perioada !== "all" || v.p.board || v.p.operator || v.p.tip || v.p.doar_confirmate));
+      if (U() && U().empty) {
+        v.ui.body.append(U().empty({ art: "search", title: "Nicio călătorie de arătat", text: msg,
+          action: filtered ? { label: "Șterge filtrele", run: resetFilters } : null }));
+      } else v.ui.body.append(el("p", "empty ss-empty", msg));
       glossary(d);
       return;
     }
@@ -1579,6 +1683,7 @@
     distributionSection(d, boards);
     shareSection(d, boards);
     dailySection(d, boards);
+    calendarSection(d, boards);
     hourlySection(d, boards);
     heatmapSection(d, boards);
     rankedSection(d, boards, "operators", "Care operatori sunt cei mai punctuali?",
@@ -1597,6 +1702,10 @@
     if (U()) {
       U().stagger(v.ui.body.querySelector(".ss-prob-list"));
       U().reveal(v.ui.body);
+    }
+    if (C3()) {
+      C3().enhance(v.ui.body, { url: chartUrl });
+      C3().toc(v.ui.body);
     }
   }
 
