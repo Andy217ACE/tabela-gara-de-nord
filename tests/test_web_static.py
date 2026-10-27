@@ -65,11 +65,18 @@ def test_index_is_csp_compatible():
     assert not re.search(r"\son[a-z]+\s*=", html, re.I)  # inline handlers
     for m in re.finditer(r"<script\b([^>]*)>(.*?)</script>", html, re.I | re.S):
         assert "src=" in m.group(1) and m.group(2).strip() == ""
-    # fonts only from Google Fonts, scripts/styles same-origin
+    # no external fonts; scripts/styles same-origin
     for m in re.finditer(r'(?:href|src)="(https?://[^"]+)"', html):
         url = m.group(1)
-        assert url.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com",
-                               "https://cfr.ro", "https://open-meteo.com/")), url
+        assert url.startswith(("https://cfr.ro", "https://open-meteo.com/")), url
+
+
+def test_no_external_font_hosts():
+    for pattern in ("*.html", "*.css", "*.js"):
+        for f in WEB.glob(pattern):
+            txt = f.read_text(encoding="utf-8")
+            assert "fonts.googleapis.com" not in txt, f.name
+            assert "fonts.gstatic.com" not in txt, f.name
 
 
 FOOTER = ('<p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro)'

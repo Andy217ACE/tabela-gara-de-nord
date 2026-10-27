@@ -251,7 +251,7 @@ def test_security_headers_and_static(client):
         assert h["x-frame-options"] == "DENY"
         csp = h["content-security-policy"]
         assert "default-src 'self'" in csp and "script-src 'self'" in csp
-        assert "https://fonts.googleapis.com" in csp and "https://fonts.gstatic.com" in csp
+        assert "fonts.googleapis.com" not in csp and "fonts.gstatic.com" not in csp
         assert "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
     assert "access-control-allow-origin" not in r.headers
 
