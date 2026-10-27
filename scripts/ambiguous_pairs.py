@@ -18,7 +18,8 @@ Definitions
     longer (8093/93, 5019/19, 10055/55, 503/5031, 800/8001);
   - shape ``one_digit``: same length, exactly one differing character (1584/1581);
   - ``coexist``: the two numbers were read (observations.train_no) in the SAME capture
-    on the SAME board at least once in ALL history (not only the window: it is the
+    on the SAME board at least once in ALL history (app.quality.coexisting_numbers,
+    shared with merge_number_dups and the ghost judge; not only the window: it is the
     proof that they are distinct trains; same_day_overlap is NOT evidence) -> distinct trains, never merge, whatever
     their shape (5011/5014). Only shape-related pairs are listed as coexist (every two
     rows of a frame coexist; listing them all would be noise).
@@ -39,7 +40,12 @@ import sqlite3
 import sys
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import NamedTuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.quality import coexisting_numbers  # noqa: E402  (one coexist rule, shared)
 
 
 class Pair(NamedTuple):
@@ -116,10 +122,7 @@ def find_pairs(conn: sqlite3.Connection, days: int = 30,
     related = _shape_pairs(nums)
 
     def coexists(a: int, b: int) -> bool:  # ALL history, only for candidate pairs
-        return has_obs and conn.execute(
-            "SELECT 1 FROM observations x JOIN observations y"
-            " ON y.capture_id = x.capture_id AND y.board = x.board"
-            " WHERE x.train_no = ? AND y.train_no = ? LIMIT 1", (a, b)).fetchone() is not None
+        return has_obs and b in coexisting_numbers(conn, a, [b])
     out: list[Pair] = []
     for a, b in sorted(related):
         kind = "coexist" if coexists(a, b) else _shape(a, b)

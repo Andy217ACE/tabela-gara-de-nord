@@ -302,6 +302,70 @@ def test_winner_prefers_the_established_number(tmp_path, capsys):
     assert rep["merge"]["winner_seen_on_less_than_2_days"] == 0
 
 
+def _shared_frame(c, day, hh, *pairs, board="departure"):
+    """One capture in which every (service id, train number) of `pairs` was read."""
+    cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
+                    (_t(day, hh), f"frame-{day}-{hh}")).lastrowid
+    for sid, no in pairs:
+        _obs(c, sid, board, 1, day, hh, capture=cap, no=no)
+
+
+def test_coexisting_pair_is_never_merged(tmp_path, capsys):
+    """Two numbers once read in the same frame (any day) are two real trains: never merged,
+    listed for a human decision, even when today they look like "1" noise in one slot."""
+    D0 = "2026-10-20"
+    db = tmp_path / "c.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    # R 5011 / R 5014: the same slot on D2 (disjoint frames), two rows of one frame on D0
+    ids["r5011_d0"] = _svc(c, "departure", D0, 5011, "BUZAU", "04:47", _t(D0, 4), _t(D0, 5),
+                           ttype="R")
+    ids["r5014_d0"] = _svc(c, "departure", D0, 5014, "BUZAU", "05:10", _t(D0, 4), _t(D0, 5),
+                           ttype="R")
+    _shared_frame(c, D0, 4, (ids["r5011_d0"], 5011), (ids["r5014_d0"], 5014))
+    ids["r5011"] = _svc(c, "departure", D2, 5011, "BUZAU", "04:47", _t(D2, 4), _t(D2, 5),
+                        ttype="R")
+    ids["r5014"] = _svc(c, "departure", D2, 5014, "BUZAU", "04:47", _t(D2, 4), _t(D2, 5),
+                        ttype="R")
+    _obs(c, ids["r5011"], "departure", 4, D2, 4, no=5011, station="BUZAU")
+    _obs(c, ids["r5014"], "departure", 1, D2, 4, no=5014, station="BUZAU")
+    # RE 9209 / 92011: "1" noise in one slot on D2 (merged today), but both numbers were
+    # read in the same frame on D0 -> two real trains
+    ids["re9209_d1"] = _svc(c, "departure", D1, 9209, "PITESTI", "14:36", _t(D1, 13),
+                            _t(D1, 14, 40))
+    _obs(c, ids["re9209_d1"], "departure", 3, D1, 13, no=9209)
+    ids["re9209"] = _svc(c, "departure", D2, 9209, "PITESTI", "14:36", _t(D2, 13, 5),
+                         _t(D2, 14, 30))
+    _obs(c, ids["re9209"], "departure", 6, D2, 13, no=9209)
+    ids["re92011"] = _svc(c, "departure", D2, 92011, "PITESTI", "14:36", _t(D2, 14, 35),
+                          _t(D2, 14, 55))
+    _obs(c, ids["re92011"], "departure", 2, D2, 14, no=92011)
+    ids["re9209_d0"] = _svc(c, "departure", D0, 9209, "PITESTI", "14:36", _t(D0, 13),
+                            _t(D0, 15))
+    ids["re92011_d0"] = _svc(c, "departure", D0, 92011, "CURTEA DE ARGES", "18:40",
+                             _t(D0, 13), _t(D0, 15))
+    _shared_frame(c, D0, 13, (ids["re9209_d0"], 9209), (ids["re92011_d0"], 92011))
+    s.close()
+    before = _dump(db)
+
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert rep["merge"]["list"] == []
+    why = {frozenset((x["winner"]["id"], x["loser"]["id"])): x["why_not_merged"]
+           for x in rep["listed_not_merged"]}
+    for a, b in (("r5011", "r5014"), ("re9209", "re92011")):
+        w = why[frozenset((ids[a], ids[b]))]
+        assert w.startswith("coexist") and D0 in w, w
+
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["applied"]["services_merged"] == 0
+    after = _dump(db)
+    for t in ("services", "events", "service_quality", "observations", "trains"):
+        assert after[t] == before[t], t
+
+
 def test_old_db_without_quality_or_observations(tmp_path, capsys):
     """A pre-quality database (no service_quality) still dry-runs."""
     db = tmp_path / "o.db"

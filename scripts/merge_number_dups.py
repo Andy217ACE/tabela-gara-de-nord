@@ -21,7 +21,10 @@ What it does (the dry run prints all three; ``--apply`` does 1 and 2 only):
      "1" substitution, 4011 vs 4017, is only LISTED, and so is a number that is the
      tail of the other, R 19 / R 5019: the left digits were cut);
    - never seen in the same capture on the same board (two rows in one frame are two
-     real trains);
+     real trains): neither the two services in this slot, nor the two NUMBERS anywhere
+     in the history (``coexist``, app.quality.coexisting_numbers: RE 9209 and 92011 read
+     as two rows of one frame on another day are two trains). Such pairs are listed
+     with ``why_not_merged`` "coexist: ..." for the user, never merged;
    - the winner (number seen on more days, then more observations, then lower id) is
      the survivor, the other number is the loser. Not transitive: every loser is compared with the winner directly.
    - ghost services (app.quality) are ignored: purge_ghosts.py owns them.
@@ -172,7 +175,18 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
 
     A pair is deferred (listed) while either service is on the board or was seen less
     than ``min_age_min`` minutes ago: it can still change."""
+    from app.quality import coexisting_numbers
+
     cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=min_age_min)
+    co_cache: dict[tuple[int, int], str | None] = {}
+
+    def coexist(a: int, b: int) -> str | None:
+        """First moment both NUMBERS were read in one frame on one board (all history)."""
+        k = (min(a, b), max(a, b))
+        if k not in co_cache:
+            co_cache[k] = coexisting_numbers(conn, k[0], [k[1]]).get(k[1])
+        return co_cache[k]
+
     svc = [s for s in _services(conn) if not s["ghost"]]
     sup = _support(conn)
     for s in svc:
@@ -206,19 +220,23 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
                 if rel is None:
                     continue
                 shared = _shared_capture(conn, w["id"], l["id"])
+                co = coexist(w["train_no"], l["train_no"])
                 item = {"slot": {"board": key[0], "date": key[1], "station": key[2],
                                  "sched": key[3]},
                         "winner": _brief(w), "loser": _brief(l), "relation": rel,
-                        "shared_captures": shared}
+                        "shared_captures": shared, "coexist_seen_at": co}
                 item["winner_established"] = w["support"] >= 2
                 recent = any(x["status"] != "gone" or _key(x["last_seen"]) >= cutoff
                              for x in (w, l))
-                if rel == "noise" and shared == 0 and not recent:
+                if rel == "noise" and shared == 0 and co is None and not recent:
                     merges.append(item)
                     taken.add(l["id"])
                 else:
                     item["why_not_merged"] = (
                         "both read in the same frame (two real rows)" if shared else
+                        "coexist: the two numbers were read in the same frame on %s"
+                        " (two real trains): never merged, decision is the user's"
+                        % co[:10] if co else
                         "truncated number (left digits cut): ambiguous, listed only"
                         if rel == "truncated_number" else
                         "equal-length substitution: ambiguous" if rel != "noise" else

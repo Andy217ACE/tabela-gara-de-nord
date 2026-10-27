@@ -164,6 +164,67 @@ def test_ghost_other_station_is_a_different_train():
     assert q.ghost_verdict(other, [real, other], 0) is None
 
 
+def test_ghost_partner_whose_number_coexists_is_never_the_real_one():
+    # R 5011 / 5014 read in the same frame (two rows) are two real trains: 5014 is not a
+    # misread of 5011, whatever their shape
+    real = _svc(1, 5011, "04:47", "00:40", "05:01")
+    var = _svc(2, 5014, "04:47", "01:00", "01:30")
+    assert q.ghost_verdict(var, [real, var], 0) == ("near_dup", 1)
+    assert q.ghost_verdict(var, [real, var], 0, coexist={5011}) is None
+    assert q.ghost_verdict(var, [real, var], 40, {1: 160, 2: 40}) == ("minority_dup", 1)
+    assert q.ghost_verdict(var, [real, var], 40, {1: 160, 2: 40}, coexist={5011}) is None
+    # "short" is unaffected: a one-frame sighting stays a ghost
+    blip = _svc(3, 5014, "04:47", "01:00", "01:00")
+    assert q.ghost_verdict(blip, [real, blip], 1, coexist={5011}) == ("short", None)
+
+
+def _db_svc(c, day, no, sched, fs, ls, station="BUZAU"):
+    return c.execute(
+        "INSERT INTO services(board, service_date, train_type, train_no, station, operator,"
+        " sched_time, first_seen, last_seen, status, station_raw, operator_raw)"
+        " VALUES ('departure',?,?,?,?,?,?,?,?, 'gone', ?, '')",
+        (day, "R", no, station, "CFR", sched, fs, ls, station)).lastrowid
+
+
+def _db_obs(c, sid, no, at, cap=None):
+    if cap is None:
+        cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
+                        (at, f"h-{sid}-{at}")).lastrowid
+    c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
+              " train_no, station, validation_state, processing_version)"
+              " VALUES (?,?, 'departure', 0, ?, ?, 'BUZAU', 'ok', 't')", (cap, sid, at, no))
+    return cap
+
+
+@pytest.mark.parametrize("coexist", [False, True])
+def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, coexist):
+    from app.store import Store
+
+    s = Store(str(tmp_path / "q.db"))
+    s.migrate()
+    c = s._conn
+    d0, d2 = "2026-10-20", "2026-10-22"
+    real = _db_svc(c, d2, 5011, "04:47", f"{d2}T00:40:00+03:00", f"{d2}T05:01:00+03:00")
+    var = _db_svc(c, d2, 5014, "04:47", f"{d2}T01:00:00+03:00", f"{d2}T01:30:00+03:00")
+    for k in range(4):
+        _db_obs(c, real, 5011, f"{d2}T01:0{k}:00+03:00")
+    _db_obs(c, var, 5014, f"{d2}T01:10:00+03:00")
+    if coexist:  # two rows of one frame on another day
+        a = _db_svc(c, d0, 5011, "04:47", f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
+        b = _db_svc(c, d0, 5014, "06:10", f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
+        cap = _db_obs(c, a, 5011, f"{d0}T04:30:00+03:00")
+        _db_obs(c, b, 5014, f"{d0}T04:30:00+03:00", cap)
+    want = None if coexist else ("near_dup", real)
+    assert q.judge_ghost(c, var) == want
+    # a stale ghost flag (judged before the rule) is cleared by the backfill
+    q.upsert_service(c, var, ghost=1, ghost_reason="near_dup", ghost_of=real)
+    q.backfill(c)
+    row = c.execute("SELECT ghost, ghost_reason, ghost_of FROM service_quality"
+                    " WHERE service_id=?", (var,)).fetchone()
+    assert tuple(row) == ((0, None, None) if coexist else (1, "near_dup", real))
+    s.close()
+
+
 def test_public_services_where_env(monkeypatch):
     monkeypatch.delenv("STATS_INCLUDE_LOW_QUALITY", raising=False)
     assert "low_quality" in q.public_services_where()
