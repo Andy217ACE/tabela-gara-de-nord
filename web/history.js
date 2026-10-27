@@ -257,12 +257,33 @@
     return p;
   }
 
+  // Beta 1.26: the headline figures as a hero strip (count-up numbers), above the exact lines
+  function summaryHero(data, sum, params) {
+    var U = window.TabelaApp.ui2;
+    if (!U) return null;
+    var per = data.period || {};
+    var items = [{ label: "Călătorii în listă", value: data.total,
+                   sub: per.days ? plural(per.days, "zi cu date", "zile cu date") : "o zi" }];
+    ["arrival", "departure"].forEach(function (b) {
+      var s = sum[b];
+      var ok = s && s.n && s.sufficient && s.on_time_pct != null;
+      items.push({ label: (b === "arrival" ? "Sosiri" : "Plecări") + " · la timp", tone: b === "arrival" ? "arr" : "dep",
+        value: ok ? s.on_time_pct : null, unit: ok ? " %" : "",
+        fmt: function (x) { return numFmt.format(Math.round(x * 10) / 10); },
+        sub: s && s.n ? (ok ? "N = " + s.n + " cu întârziere citită" : "N = " + s.n + " < " + params.min_sample + ": fără procent") : "N = 0",
+        meter: ok ? s.on_time_pct : null });
+    });
+    return U.hero(items);
+  }
+
   function renderSummary(data) {
     var box = $("h-summary");
     box.replaceChildren();
     if (!data.total) { box.hidden = true; return; }
     var params = data.params || {};
     var sum = data.summary || {};
+    var hero = summaryHero(data, sum, params);
+    if (hero) box.append(hero);
     ["arrival", "departure"].forEach(function (b) {
       if (sum[b]) box.append(summaryLine(b, sum[b], params));
     });
@@ -405,6 +426,12 @@
     }
     renderSummary(data);
     appendJourneys(list);
+    var U = window.TabelaApp.ui2;
+    if (U) {
+      var firstBody = $("h-results").querySelector("tbody");
+      if (firstBody) U.stagger(firstBody);
+      U.reveal($("h-results"));
+    }
     allCount(q, data);
     $("h-more").hidden = !allState.next;
   }
@@ -446,6 +473,13 @@
   }
 
   function setLoading(on) {
+    var res = $("h-results");
+    var U = window.TabelaApp.ui2;
+    if (U) {
+      var old = res.querySelector(".ui-skel");
+      if (on && !res.firstChild) res.append(U.skeleton("table", 6));
+      else if (!on && old) old.remove();
+    }
     $("h-results").setAttribute("aria-busy", on ? "true" : "false");
     $("view-istoric").classList.toggle("is-loading", on);
   }

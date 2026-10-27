@@ -117,9 +117,10 @@ def test_statistici_page(browser, base_url, w, h, theme):
         assert "7 zile cu date" in summary and "Date insuficiente" not in summary
         assert page.locator(".ss-kpi").count() == 2
         assert page.locator("svg.ss-svg").count() >= 10
-        # 11 detail charts + 7 „Problemele în detaliu” cards; + the „Probleme” intro
-        assert page.locator(".ss-fig").count() == 18
-        assert page.locator(".ss-how").count() == 19
+        # 11 detail charts + „Cum se împart călătoriile?” (donuts, Beta 1.26) + 7 „Problemele în
+        # detaliu” cards; + the „Probleme” intro
+        assert page.locator(".ss-fig").count() == 19
+        assert page.locator(".ss-how").count() == 20
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")
@@ -243,7 +244,7 @@ def test_problems_first(browser, problems_url, w, h, theme):
     try:
         page.wait_for_selector(".ss-problems .ss-prob")
         # the page starts with „Probleme”, then „Ce merge bine”, then the details
-        first = page.evaluate("document.querySelector('.ss-body').firstElementChild.className")
+        first = page.evaluate("document.querySelector('.ss-body').firstElementChild.className.split(' ')[0]")
         assert first == "ss-problems"
         order = page.evaluate("""() => [...document.querySelector('.ss-body').children]
             .map(e => e.className.split(' ')[0])""")

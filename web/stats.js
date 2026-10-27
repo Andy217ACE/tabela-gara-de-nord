@@ -26,6 +26,24 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var H = function () { return App.history || {}; };
+  var U = function () { return App.ui2; };   // Beta 1.26 visual helpers (ui2.js)
+
+  // pooled on-time figure → hero tile (honest: N next to it; „—” below the minimum sample)
+  function onTimeTile(label, tone, st, params) {
+    var ok = st && st.n && st.sufficient;
+    return { label: label, tone: tone, value: ok ? st.on_time_pct : null, unit: ok ? " %" : "",
+      fmt: function (x) { return numFmt.format(Math.round(x * 10) / 10); },
+      sub: ok ? st.on_time + " din " + st.n + " (≤ " + params.on_time_max_min + " min)"
+        : (st && st.n ? "N = " + st.n + " < " + params.min_sample + ": fără procent" : "N = 0"),
+      meter: ok ? st.on_time_pct : null };
+  }
+  function heroBlock(v, items) {
+    if (!U()) return;
+    var sec = el("section", "st-hero");
+    sec.setAttribute("aria-label", "Cifre principale");
+    sec.append(U().hero(items));
+    v.body.prepend(sec);
+  }
 
   // ---- formatting --------------------------------------------------------------------
 
@@ -426,13 +444,17 @@
       var ctrl = new AbortController();
       v.ctrl = ctrl;
       $(cfg.root).classList.add("is-loading");
-      if (!v.data) v.body.replaceChildren(el("p", "detail-note", "Se încarcă…"));
+      if (!v.data) {
+        v.body.replaceChildren(el("p", "sr-only", "Se încarcă…"));
+        if (U()) v.body.append(U().skeleton("hero", 3), U().skeleton("table", 6));
+      }
       getJSON(url, ctrl)
         .then(function (data) {
           if (v.ctrl !== ctrl) return;
           v.data = data;
           v.body.replaceChildren();
           cfg.render(v, data);
+          if (U()) U().reveal(v.body);
         })
         .catch(function (e) {
           if (v.ctrl !== ctrl || e.aborted) return;
@@ -456,7 +478,7 @@
       if (cfg.title) cfg.title(v);
       load(false);
     };
-    v.rerender = function () { if (v.data) { v.body.replaceChildren(); cfg.render(v, v.data); } };
+    v.rerender = function () { if (v.data) { v.body.replaceChildren(); cfg.render(v, v.data); if (U()) U().reveal(v.body); } };
     return v;
   }
 
@@ -508,7 +530,15 @@
     { key: "n", label: "N cu întârziere citită", num: true, get: function (e) { return e.stats.n; },
       cell: function (e) { return String(e.stats.n); } },
     { key: "on_time_pct", label: "% la timp", num: true, get: function (e) { return e.stats.on_time_pct; },
-      cell: function (e) { return pct(e.stats.on_time_pct); } },
+      cell: function (e) {
+        var p = e.stats.on_time_pct;
+        if (p == null || !U()) return pct(p);
+        var c = el("span", "st-cell-meter", pct(p));
+        var m = U().meter(p, { tone: p >= 90 ? "ok" : p >= 70 ? "mid" : "bad", label: pct(p) + " la timp" });
+        m.classList.add("st-meter");
+        c.append(m);
+        return c;
+      } },
     { key: "mean", label: "Medie", num: true, get: function (e) { return e.stats.mean; },
       cell: function (e) { return minutes(e.stats.mean); } },
     { key: "median", label: "Mediană", num: true, get: function (e) { return e.stats.median; },
@@ -532,6 +562,16 @@
         return s;
       } }
   ];
+
+  // a percentage with a thin bar under it (list rows); „—” stays „—”
+  function pctMeter(p) {
+    if (p == null || !U()) return pct(p);
+    var c = el("span", "st-cell-meter", pct(p));
+    var m = U().meter(p, { tone: p >= 90 ? "ok" : p >= 70 ? "mid" : "bad", label: pct(p) + " la timp" });
+    m.classList.add("st-meter");
+    c.append(m);
+    return c;
+  }
 
   function sortEntries(list) {
     var col = TR_COLS.filter(function (c) { return c.key === trSort.key; })[0] || TR_COLS[3];
@@ -564,6 +604,22 @@
     head.append(exp);
     v.body.append(head);
 
+    var pooled = list.reduce(function (a, e) {
+      a.n += (e.stats && e.stats.n) || 0;
+      a.on_time += (e.stats && e.stats.on_time) || 0;
+      a.over_30 += (e.stats && e.stats.over_30) || 0;
+      return a;
+    }, { n: 0, on_time: 0, over_30: 0 });
+    pooled.sufficient = pooled.n >= (params.min_sample || 5);
+    pooled.on_time_pct = pooled.n ? Math.round(1000 * pooled.on_time / pooled.n) / 10 : null;
+    if (list.length) {
+      heroBlock(v, [
+        { label: "Rânduri tren × panou", value: list.length, sub: plural(totalJ, "călătorie", "călătorii") },
+        onTimeTile("La timp · toate trenurile", "arr", pooled, params),
+        { label: "Cu eșantion suficient", value: list.length - small, sub: "din " + list.length + " rânduri (N ≥ " + params.min_sample + ")" },
+        { label: "Peste 30 min", value: pooled.n ? pooled.over_30 : null, tone: "bad",
+          sub: pooled.n ? "din " + pooled.n + " cu întârziere citită" : "N = 0" }]);
+    }
     v.body.append(el("p", "st-note",
       "Călătorie = o apariție a trenului pe un panou într-o zi de serviciu; un număr de tren poate avea " +
       "mai multe călătorii. N = călătoriile încheiate cu întârzierea citită (doar ele intră în statistici)."));
@@ -667,6 +723,12 @@
 
     var cards = el("div", "st-cards");
     v.body.append(cards);
+    var jAll = Array.isArray(d.journeys) ? d.journeys : [];
+    heroBlock(v, [{ label: "Călătorii observate", value: entries.reduce(function (a, e) { return a + (e.journeys || 0); }, 0),
+                      sub: plural(entries.length, "panou", "panouri") + " · " + period(first, last) }]
+      .concat(entries.map(function (e) {
+        return onTimeTile((BOARD_PL[e.board] || e.board) + " · la timp", e.board === "arrival" ? "arr" : "dep", e.stats, params);
+      })));
     entries.forEach(function (e) {
       var card = el("section", "st-card");
       var h = el("h2", "st-card-h");
@@ -675,6 +737,24 @@
       card.append(h);
       card.append(el("p", "st-card-sub", plural(e.journeys, "călătorie", "călătorii") + " · " +
         period(e.first_date, e.last_date)));
+      if (U() && e.stats && e.stats.n) {
+        var dn = el("div", "st-card-donut");
+        U().delayDonut(dn, e.stats, params, BOARD_PL[e.board] || e.board, "tr-" + e.board);
+        card.append(dn);
+        // delay of each journey in time order (a gap = delay not read, never 0)
+        var series = jAll.filter(function (j) { return j.board === e.board; }).slice().reverse().map(function (j) {
+          var r = j.result;
+          if (!r || !r.delay_known) return null;
+          return r.state === "confirmed" ? r.final_delay : r.observed_delay;
+        });
+        if (series.filter(function (x) { return x != null; }).length > 1) {
+          var sp = el("div", "st-card-spark");
+          sp.append(el("p", "detail-note", "Întârzierea pe călătorii, de la cele mai vechi la cele mai noi (min)"));
+          sp.append(U().spark(series, { w: 240, h: 44, tone: "bad", label: "Întârzierea citită pe călătorii: " +
+            series.map(function (x) { return x == null ? "necitită" : x + " min"; }).join(", ") }));
+          card.append(sp);
+        }
+      }
       card.append(statsGrid(e.stats, params));
       var w = sampleWarn(e.stats, params);
       if (w) card.append(w);
@@ -805,6 +885,42 @@
   var CL_FIELDS = ["board", "from", "to", "doar_confirmate", "prag", "min"];
   var RANK_LIMIT = 10;
 
+  // top three as podium cards (rank, train, station, the figure the list is ordered by, N)
+  function podium(host, title, list, by) {
+    if (!U() || !list.length) return;
+    var sec = el("section", "st-section st-podium-sec");
+    sec.append(el("h2", "st-h2", title + " — primele " + Math.min(3, list.length)));
+    var row = el("ol", "st-podium");
+    list.slice(0, 3).forEach(function (e, i) {
+      var li = el("li", "st-podium-card st-pod-" + (i + 1));
+      var rank = el("span", "st-pod-rank", String(i + 1));
+      rank.setAttribute("aria-label", "Locul " + (i + 1));
+      var link = trainLink(e);
+      link.classList.add("st-pod-train");
+      var fig = el("p", "st-pod-fig");
+      if (by === "pct" && e.stats.on_time_pct != null) {
+        U().countUp(fig, e.stats.on_time_pct, function (x) { return numFmt.format(Math.round(x * 10) / 10) + " %"; });
+      } else if (e.stats.mean != null) {
+        U().countUp(fig, e.stats.mean, function (x) { return numFmt.format(Math.round(x * 10) / 10) + " min"; });
+      } else fig.textContent = "—";
+      var top = el("div", "st-pod-top");
+      top.append(rank, link);
+      li.append(top, fig, el("p", "st-pod-lab", by === "pct" ? "la timp" : "întârziere medie"));
+      var meta = el("p", "st-pod-meta");
+      meta.append((BOARD_ONE[e.board] || e.board) + " · ", stationLink(e.station), " · N = " + e.stats.n);
+      li.append(meta);
+      if (by === "pct" && e.stats.on_time_pct != null) {
+        li.append(U().meter(e.stats.on_time_pct, { tone: "ok", label: pct(e.stats.on_time_pct) + " la timp" }));
+      }
+      li.addEventListener("click", function (ev) {
+        if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
+      });
+      row.append(li);
+    });
+    sec.append(row);
+    host.append(sec);
+  }
+
   function rankTable(title, list) {
     var sec = el("section", "st-section");
     sec.append(el("h2", "st-h2", title));
@@ -832,7 +948,7 @@
       td(tr, String(e.stats.n), "st-num");
       td(tr, minutes(e.stats.mean), "st-num");
       td(tr, minutes(e.stats.median), "st-num");
-      td(tr, pct(e.stats.on_time_pct), "st-num");
+      td(tr, pctMeter(e.stats.on_time_pct), "st-num");
       tr.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
       });
@@ -862,6 +978,10 @@
         plural(d.below_min || 0, "tren are", "trenuri au") + " date, dar sub prag — nu le clasăm, " +
         "pentru că un eșantion atât de mic nu spune nimic sigur."));
     } else {
+      heroBlock(v, [{ label: "Trenuri eligibile", value: d.eligible || 0, sub: "N ≥ " + params.min_sample + " călătorii cu întârziere citită" },
+                    { label: "Sub prag", value: d.below_min || 0, sub: "nu sunt clasate" }]);
+      podium(v.body, "Cele mai punctuale", d.most_punctual || [], "pct");
+      podium(v.body, "Cele mai întârziate", d.most_delayed || [], "mean");
       v.body.append(rankTable("Cele mai întârziate", d.most_delayed || []));
       v.body.append(rankTable("Cele mai punctuale", d.most_punctual || []));
       v.body.append(el("p", "st-note", "Ordine: „cele mai întârziate” după întârzierea medie citită (apoi " +
@@ -900,7 +1020,7 @@
       td(tr, e.trains == null ? "—" : String(e.trains), "st-num");
       td(tr, minutes(s.mean), "st-num");
       td(tr, minutes(s.median), "st-num");
-      td(tr, pct(s.on_time_pct), "st-num");
+      td(tr, pctMeter(s.on_time_pct), "st-num");
       tr.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#statie?nume=" + encodeURIComponent(e.station);
       });
@@ -975,6 +1095,24 @@
       v.body.append(el("p", "empty", v.p.q ? "Nicio stație nu se potrivește căutării." : "Încă nu există stații observate."));
       return;
     }
+    var arr = list.reduce(function (a, x) { return a + (x.arrivals || 0); }, 0);
+    var dep = list.reduce(function (a, x) { return a + (x.departures || 0); }, 0);
+    var busiest = list.slice().sort(function (a, b) { return (b.journeys || 0) - (a.journeys || 0); })[0];
+    heroBlock(v, [
+      { label: "Stații observate", value: list.length, sub: v.p.q ? "pentru „" + v.p.q + "”" : "pe tabela din Gara de Nord" },
+      { label: "Călătorii", value: total, sub: plural(arr, "sosire", "sosiri") + " · " + plural(dep, "plecare", "plecări") },
+      { label: "Cea mai aglomerată", cls: "ui-stat-name", text: titleCase(busiest.name),
+        sub: plural(busiest.journeys || 0, "călătorie", "călătorii") + " · " + plural(busiest.trains || 0, "tren", "trenuri") }]);
+    if (U() && arr + dep > 0) {
+      var card = el("section", "st-card st-share-card");
+      card.append(el("h2", "st-card-h", "Sosiri și plecări"));
+      card.append(el("p", "st-card-sub", "partea fiecărui panou din toate călătoriile din listă"));
+      U().donut(card, { title: "Sosiri și plecări, toate stațiile", valueUnit: "călătorii", showPct: arr + dep >= 5,
+        desc: "Sosiri " + arr + ", plecări " + dep + " (N = " + (arr + dep) + ").",
+        centerValue: numFmt.format(arr + dep), centerLabel: "călătorii (N)",
+        segments: [{ label: "Sosiri", value: arr, slot: "arr" }, { label: "Plecări", value: dep, slot: "dep" }] });
+      v.body.append(card);
+    }
     var t = scrollTable("Stații observate pe tabelă");
     var thead = el("thead");
     var hr = el("tr");
@@ -992,7 +1130,13 @@
       c.append(stationLink(s.name, s.uncertain_only));
       if (s.uncertain_only) c.append(el("span", "st-tag", "nume nesigur"));
       td(tr, c);
-      td(tr, String(s.journeys == null ? "—" : s.journeys), "st-num");
+      var jc = el("span", "st-cell-meter", String(s.journeys == null ? "—" : s.journeys));
+      if (U() && s.arrivals != null && s.departures != null) {
+        var sm = U().split(s.arrivals, s.departures, { label: plural(s.arrivals, "sosire", "sosiri") + ", " + plural(s.departures, "plecare", "plecări") });
+        sm.classList.add("st-meter");
+        jc.append(sm);
+      }
+      td(tr, jc, "st-num");
       td(tr, s.arrivals == null ? "—" : String(s.arrivals), "st-num");
       td(tr, s.departures == null ? "—" : String(s.departures), "st-num");
       td(tr, s.trains == null ? "—" : String(s.trains), "st-num");
@@ -1213,6 +1357,12 @@
       " · prima observație: " + stamp(d.first_seen) + " · ultima: " + stamp(d.last_seen));
     document.title = "Stația " + nice + " · Tabela Gara de Nord";
 
+    var bd = BOARDS.filter(function (b) { return d.boards && d.boards[b]; });
+    heroBlock(v, [{ label: "Călătorii", value: d.journeys || 0, sub: plural(d.trains || 0, "tren", "trenuri") },
+      { label: "Zile cu date", value: d.period && d.period.days ? d.period.days : 0, sub: d.period ? period(d.period.first, d.period.last) : "—" }]
+      .concat(bd.map(function (b) {
+        return onTimeTile((b === "arrival" ? "Sosiri" : "Plecări") + " · la timp", b === "arrival" ? "arr" : "dep", d.boards[b].stats, params);
+      })));
     var warn = el("p", "st-warn st-station-note");
     warn.setAttribute("role", "note");
     warn.append(el("strong", null, "Atenție: "), document.createTextNode(d.note ||
@@ -1253,6 +1403,11 @@
       card.append(el("h2", "st-card-h st-card-board", BOARD_TOWARD[b]));
       card.append(el("p", "st-card-sub", plural(x.journeys || 0, "călătorie", "călătorii") + " · " +
         (b === "arrival" ? "trenuri care vin din " : "trenuri care pleacă spre ") + nice));
+      if (U() && s.n) {
+        var dn = el("div", "st-card-donut");
+        U().delayDonut(dn, s, params, BOARD_TOWARD[b], "st-" + b);
+        card.append(dn);
+      }
       card.append(statsGrid(s, params));
       var w = sampleWarn(s, params);
       if (w) card.append(w);

@@ -310,7 +310,10 @@ def test_icon_weights_and_precache_budget(client):
     # +~38 KB (Beta 1.20, UI2): the two critical self-hosted fonts (Fira Sans 400 + Fira Code,
     # preloaded) replace Google Fonts, which were fetched from the network and never offline;
     # +~10 KB for the three-layer design tokens (primitive/semantic/component) in style.css
-    assert total <= 560_000, total
+    # Beta 1.26 (UI v2): +~72 KB uncompressed (~20 KB gzip) first-party code for the non-live pages
+    # (ui2.css/ui2.js, donuts, count-up, timeline, podium); no third-party library, nothing heavy
+    # to lazy-load — every chart is SVG + CSS drawn by our own code
+    assert total <= 650_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

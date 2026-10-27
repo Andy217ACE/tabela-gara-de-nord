@@ -133,7 +133,7 @@ detaliu), iconițe SVG inline cu `aria-hidden` lângă text.
 CSP strict (`style-src 'self'`, `font-src 'self' …`): fără `<style>`, `style=`, scripturi inline;
 DOM doar cu `createElement`/`textContent`. Fonturile sunt locale (fără cereri externe).
 PWA: `sw.js` precache-uiește shell-ul + cele două fonturi critice (Fira Sans 400, Fira Code);
-celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 560 KB necomprimat (testat).
+celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 650 KB necomprimat (testat; 560 KB până la Beta 1.25).
 
 ## 9. Verificare
 
@@ -153,3 +153,26 @@ celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 560 KB nec
 - [x] ținte ≥ 44 px pe mobil (excepția de mai sus documentată)
 - [x] safe-area (antet, footer) respectate
 - [x] testat la 390 și 1440, reduced-motion respectat
+
+## 11. UI v2 — paginile din afara Tabelei (Beta 1.26)
+
+Se aplică la Istoric, Urmărite, Trenuri, Tren, Statistici, Clasamente, Stații, Stație, Versiuni.
+**Nu** se aplică Tabelei (Carduri / Panou / Ecran complet, `panel.*`, antetul cu vremea) și nici
+paginii Capturi OCR (`.view-ocr` e exclusă explicit în `ui2.css`). Implementare: `web/ui2.css` +
+`web/ui2.js` (`App.ui2`), fără bibliotecă (SVG + CSS proprii; CSP `script-src 'self'`, fără `.style`).
+
+| Element | Regulă |
+|---|---|
+| Fundal | luminiță radială ambră + albastră pe `body[data-route]` ≠ tabela (`--page-glow`) |
+| Antet de pagină | chip cu pictograma meniului (48 px, ambră), titlu `clamp(1.75rem…2.5rem)` 700 |
+| Carduri | `--card-grad` + `--card-edge` (reflex de 1 px) + `--elev-1`, raza `--radius-xl`; hover (liste): −2 px + contur |
+| Bandă de cifre | `ui-hero` → `ui-stat`: etichetă MAJUSCULE, cifră Fira Code 600 care numără (900 ms, o dată, doar dacă e pe ecran), subtitlu cu N, bară `ui-meter` |
+| Donut / pie | doar pentru **părți dintr-un întreg cu puține categorii** (≤ 6 + „Altele”); inel 15/100, spațiu 0,8 %, centru = total sau felia activă, legendă cu cifre + %, un model per felie (linii, puncte, hașură), o singură oprire de tab și săgeți în legendă; sub N minim fără procente; 0 nu se desenează dar se listează |
+| Culori categoriale | `--cat-1…6` (`--ref-cat-d/l-*`), validate cu `validate_palette.js` (CVD ΔE ≥ 9, contrast ≥ 3:1) pe suprafața cardului; stări: `--ok` / `--lvl-mid` / `--bad` doar cu text; sosiri/plecări = `--c-arr` / `--c-dep` |
+| Rămân bare / linii / pătrate | clasamente și comparații (bare orizontale), serii în timp (linii), ora × ziua (hartă de căldură), distribuția pe intervale ordonate (coloane) |
+| Mișcare | tranziție de pagină 320 ms, ridicare eșalonată (≤ 12 elemente, 45 ms), reveal la derulare o singură dată (doar `transform`), desenare bare / linii / donut; **tot dispare** cu `prefers-reduced-motion`; nimic nu e ascuns la repaus (nicio opacitate 0 persistentă) |
+| Încărcare / gol / eroare | `ui-skel` (shimmer prin `transform`), `.empty` cu chenar punctat și pictogramă, `.notice-error` |
+| Versiuni | axă a timpului, ultima versiune evidențiată, insigne Nou / Reparat / Tehnic, primele 3 deschise |
+
+Verificare: `tests/test_ui2_static.py`, `tests/test_ui2_browser.py` (360 / 768 / 1280 px, ambele teme),
+`tests/test_contrast_browser.py` (așteaptă finalul animațiilor înainte de audit).

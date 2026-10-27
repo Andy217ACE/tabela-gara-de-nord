@@ -38,6 +38,7 @@
   <link rel="preload" href="fonts/fira-code.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
+  <script src="ui2.js" defer></script>
   <script src="history.js" defer></script>
   <script src="follows.js" defer></script>
   <link rel="stylesheet" href="panel.css">
@@ -49,6 +50,8 @@
   <script src="stats.js" defer></script>
   <link rel="stylesheet" href="statistici.css">
   <script src="statistici.js" defer></script>
+  <!-- Beta 1.26: stratul vizual al paginilor non-live (nu atinge Tabela) -->
+  <link rel="stylesheet" href="ui2.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Sari la tabelă</a>
@@ -245,6 +248,8 @@
         <h1 id="urmarite-heading">Trenuri urmărite</h1>
         <p class="page-sub">Primești o notificare când unui tren urmărit i se schimbă întârzierea sau linia, ori dispare de pe tabelă.</p>
       </div>
+
+      <div class="f-hero" id="f-hero"></div>
 
       <div class="panel">
         <label class="switch">

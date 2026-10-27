@@ -537,12 +537,18 @@
       else a.removeAttribute("aria-current");
     });
     revealActiveNav();
+    document.body.setAttribute("data-route", name);   // Beta 1.26: page canvas (ui2.css)
     // a view may refine the title later (stats.js: „Tren 1636 · …”)
     document.title = name === "tabela" ? "Tabela Gara de Nord"
       : (TITLES[name] || "Tabela Gara de Nord") + " · Tabela Gara de Nord";
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);
-    if (changed) window.scrollTo(0, 0);
+    if (changed) {
+      window.scrollTo(0, 0);
+      // page transition for every page except the live board (which is left exactly as it was)
+      var ui2 = window.TabelaApp.ui2;
+      if (ui2 && name !== "tabela" && name !== "ocr") ui2.enterView($("view-" + name));
+    }
   }
 
   // ---- toast -----------------------------------------------------------------------

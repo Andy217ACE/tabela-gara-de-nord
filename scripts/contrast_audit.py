@@ -100,11 +100,20 @@ AUDIT_JS = r"""() => {
   return out;
 }"""
 
+# Wait for every finite animation (page transition, count-up is JS, stagger, reveal) to end, so
+# the audit sees the settled page, not a frame of an entrance.
+SETTLE_JS = r"""async () => {
+  const fin = () => document.getAnimations().filter(a => a.effect && a.effect.getTiming().iterations !== Infinity);
+  await Promise.race([Promise.all(fin().map(a => a.finished.catch(() => 0))), new Promise(r => setTimeout(r, 4000))]);
+  await new Promise(r => setTimeout(r, 1100));   // count-up numbers (JS) finish
+}"""
+
 ROUTES = ["#", "#istoric", "#urmarite", "#trenuri", "#tren?nr=8122", "#statii", "#statistici",
           "#clasamente", "#versiuni"]
 
 
 def audit(page):
+    page.evaluate(SETTLE_JS)
     return page.evaluate(AUDIT_JS)
 
 

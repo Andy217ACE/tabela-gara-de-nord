@@ -228,6 +228,21 @@
     return App.boardTrains().filter(function (t) { return t.train_no === no && trainDate(t) === date; });
   }
 
+  // Beta 1.26: summary tiles (rebuilt only when a figure changes, so the count-up does not replay)
+  var heroKey = "";
+  function renderHero(count) {
+    var box = $("f-hero");
+    var U = App.ui2;
+    if (!box || !U) return;
+    var key = count + "|" + (state.endpoint ? 1 : 0);
+    if (key === heroKey) return;
+    heroKey = key;
+    box.replaceChildren(U.hero([
+      { label: "Trenuri urmărite", value: count, sub: count ? "pe acest dispozitiv" : "niciunul încă" },
+      { label: "Notificări", text: state.endpoint ? "Active" : "Oprite", tone: state.endpoint ? "ok" : "",
+        cls: "ui-stat-name", sub: state.endpoint ? "primești alerte la schimbări" : "pornește comutatorul de mai jos" }]));
+  }
+
   function renderList() {
     var list = $("f-list");
     if (!list) return;
@@ -242,6 +257,8 @@
     $("f-empty").textContent = state.endpoint
       ? "Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă."
       : "Nicio urmărire pe acest dispozitiv. Apasă „urmărește” pe un tren din tabelă pentru a activa notificările.";
+    if (App.ui2) $("f-empty").prepend(App.ui2.art("bell"));
+    renderHero(items.length);
     items.forEach(function (f) {
       var li = el("li", "f-item");
       var info = el("div", "f-info");
@@ -295,6 +312,7 @@
       li.append(info, actions);
       list.append(li);
     });
+    if (App.ui2) App.ui2.stagger(list);
   }
 
   function renderSwitch() {

@@ -5,6 +5,24 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.26 — 2026-10-27
+
+Beta 1.25 (vremea din antet) e în versiunea dinaintea acesteia. Această versiune schimbă aspectul tuturor paginilor în afară de **Tabelă** (Carduri, Panou și Ecran complet rămân exact cum erau) și de Capturi OCR.
+
+### Nou
+- **Statistici: felii (donut) acolo unde datele sunt părți dintr-un întreg.** Pe fiecare panou: câte călătorii au fost la timp, întârziate până la 30 min și peste 30 min (în centru, procentul la timp). O cifră nouă, „Cum se împart călătoriile?”: sosiri față de plecări, apoi pe tip de tren (IR, IRN, RE, R, RM, IC) și pe operator (primii cinci și „Altele”). Calitatea datelor (rezultat și citiri OCR) are tot felii.
+- Fiecare donut are legendă cu cifre și procente, N afișat, centrul care arată felia peste care treci cu mouse-ul sau pe care ajungi cu tastatura, un model pe fiecare felie (linii, puncte, hașură) ca să nu conteze doar culoarea, „Vezi datele” (tabel) și export CSV. Sub 5 călătorii se arată doar cifrele brute, fără procente. Clasamentele, seriile în timp (ore, zile) și hărțile de căldură rămân bare, linii și pătrate.
+- **Prima privire în fiecare pagină:** bandă de cifre mari care numără până la valoare (la timp pe panou, călătorii, zile cu date; la Trenuri, Stații, Stație, Tren, Clasamente, Istoric, Urmărite, Versiuni), cu bare subțiri de proporție.
+- **Clasamente:** podium cu primele trei trenuri (cele mai punctuale și cele mai întârziate); tabelele au bare de proporție la „% la timp”. **Stații:** sosiri față de plecări ca donut și ca bară în fiecare rând. **Tren / Stație:** donut de întârzieri și linia întârzierii pe călătorii. **Statistici → trenuri care întârzie zi de zi:** minigrafic pe zile.
+- **Versiuni:** axă a timpului, versiunea curentă evidențiată, insigne pentru Nou / Reparat / Tehnic; versiunile mai vechi de a patra se deschid la cerere.
+- **Mișcare:** tranziție la schimbarea paginii, apariția cardurilor la derulare (o singură dată), graficele se desenează (bare, linii, donut), schelete de încărcare în locul textului „Se încarcă…”, stări goale cu pictogramă. Se oprește complet cu prefers-reduced-motion; se animă doar transform, opacitate și contur.
+- Design: fundal cu lumină discretă, carduri cu adâncime, titluri mai mari, pictograma paginii în antet; temă luminoasă și întunecată, mobil de la 360 px, fără scroll orizontal.
+
+### Tehnic
+- Fără bibliotecă nouă: grafice SVG + CSS proprii (CSP: `script-src 'self'`, fără stiluri inline), temabile și accesibile; `web/ui2.js` (donut, count-up, meter, sparkline, schelete, tranziții) și `web/ui2.css`. Culorile categoriale noi (`--ref-cat-*`) sunt validate cu verificatorul de palete (CVD, contrast) pe ambele suprafețe.
+- Service worker v27; bugetul de precache crește la 650 KB necomprimat (~+72 KB, ~20 KB gzip).
+- Teste noi: `tests/test_ui2_static.py`, `tests/test_ui2_browser.py` (pagini la 360/768/1280, ambele teme, donut, mișcare redusă, Tabela neatinsă). Backend și schema DB neschimbate (v8, din Beta 1.25).
+
 ## Beta 1.25 — 2026-10-27
 
 ### Nou
