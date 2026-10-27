@@ -107,10 +107,14 @@ def read_root(name):
 
 
 def test_live_board_files_untouched():
-    """panel.js/panel.css (Panou, Carduri, Ecran complet) are not part of this change."""
+    """panel.js/panel.css (Panou, Carduri, Ecran complet) and the weather widget are not part of
+    this change: no diff against the point where this branch left main."""
     import subprocess
-    out = subprocess.run(["git", "diff", "--name-only", "origin/main", "--", "web/panel.js",
-                          "web/panel.css", "web/weather.js", "web/weather.css", "app/weather.py"],
-                         cwd=ROOT, capture_output=True, text=True)
-    if out.returncode == 0:
-        assert out.stdout.strip() == "", out.stdout
+    base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"], cwd=ROOT,
+                          capture_output=True, text=True)
+    if base.returncode != 0:  # no git / no origin in this checkout: nothing to compare
+        return
+    out = subprocess.run(["git", "diff", "--name-only", base.stdout.strip(), "HEAD", "--",
+                          "web/panel.js", "web/panel.css", "web/weather.js", "web/weather.css",
+                          "app/weather.py"], cwd=ROOT, capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout.strip() == "", out.stdout
