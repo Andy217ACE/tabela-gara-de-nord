@@ -316,7 +316,8 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.28 (UI v3): the interactive chart layer (tooltips, calendar, fullscreen…) is charts3.js/.css,
     # lazy-loaded on the chart pages and NOT in the shell; only ~19 KB of glue grew (ui2/statistici/stats/app)
     # and ~1.5 KB were won back by moving the rest into the lazy files: the 650 KB budget stays
-    assert total <= 650_000, total
+    # Beta 1.30: +~1.5 KB (empty/error states on Trenuri/Stații, 44 px touch targets) -> 652 KB
+    assert total <= 652_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

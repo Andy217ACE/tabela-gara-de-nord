@@ -581,3 +581,9 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 .st-pod-lab2 { margin-top: 12px; }
 .st-pod-spark { display: block; margin-top: 4px; }
 .st-pod-spark .ui-spark { width: 7.5rem; height: 1.75rem; }
+
+/* Panou on a phone: star and bell are ≥ 44 px touch targets; the extra size is taken back with
+   negative margins so the row layout stays as it was (panel.css itself is not touched) */
+@media (max-width: 759px) {
+  .pnl-row .pnl-star { width: 44px; height: 44px; margin: -2px; }
+}
