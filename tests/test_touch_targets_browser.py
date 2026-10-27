@@ -55,6 +55,7 @@ def test_follow_buttons_min_44px_on_phone(browser, base_url):  # noqa: F811
 LAYOUT = """emulate => [...document.querySelectorAll('.train')].filter(c => c.offsetWidth > 0)
   .slice(0, 6).map(c => {
   const f = c.querySelector('.follow');
+  if (!f) throw new Error('card without .follow: ' + c.textContent.slice(0, 40));
   if (emulate) { f.style.minHeight = '32px'; f.style.minWidth = '0'; f.style.marginBlock = '0'; }
   else { f.style.minHeight = ''; f.style.minWidth = ''; f.style.marginBlock = ''; }
   const pick = sel => { const e = c.querySelector(sel); if (!e) return null;
@@ -69,6 +70,9 @@ LAYOUT = """emulate => [...document.querySelectorAll('.train')].filter(c => c.of
 def test_card_layout_unchanged_by_touch_target(browser, base_url):  # noqa: F811
     ctx, page = _open(browser, base_url, "carduri")
     try:
+        missing = page.evaluate("() => [...document.querySelectorAll('.train')]"
+                                ".filter(c => c.offsetWidth > 0 && !c.querySelector('.follow')).length")
+        assert missing == 0, f"{missing} visible card(s) without a .follow button"
         before = page.evaluate(LAYOUT, True)    # as on BASE
         after = page.evaluate(LAYOUT, False)    # as now
         assert len(before) >= 2
@@ -78,7 +82,7 @@ def test_card_layout_unchanged_by_touch_target(browser, base_url):  # noqa: F811
                     assert x == y
                     continue
                 for u, v in zip(x, y):
-                    # the button itself grows 44 px wide only when it was narrower (it is not)
+                    # position and size, width included, must not change
                     assert abs(u - v) <= 0.5, (b, a)
     finally:
         ctx.close()
