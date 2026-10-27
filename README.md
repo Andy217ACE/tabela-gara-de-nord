@@ -33,6 +33,18 @@ valorile necitite apar ca „—”, nu ca 0.
 - **Nume canonice** — operatorul și stația citite prin OCR sunt aduse la forma cunoscută;
   o potrivire nesigură e subliniată punctat, cu titlul „citire nesigură”.
 
+### Grafica paginilor (Beta 1.26)
+
+Paginile din afara Tabelei (Istoric, Urmărite, Trenuri, Tren, Statistici, Clasamente, Stații,
+Stație, Versiuni) folosesc un strat vizual comun: `web/ui2.css` + `web/ui2.js` (donut/pie, cifre
+care numără, bare de proporție, minigrafice, schelete de încărcare, tranziții). **Fără biblioteci
+externe**: graficele sunt SVG + CSS desenate de cod propriu, ca să respecte politica de securitate
+(`script-src 'self'`, fără stiluri inline), să urmeze temele luminoasă/întunecată, să aibă
+alternativă accesibilă (legendă, tabel, CSV) și să nu mărească precache-ul cu o bibliotecă.
+Dacă pe viitor se adaugă una, se pune sub `web/vendor/<nume>-<versiune>/` cu fișierul de licență,
+se încarcă la cerere (doar pe paginile care o folosesc) și **nu** intră în `SHELL` din `sw.js`.
+Tabela (Carduri / Panou / Ecran complet) nu folosește acest strat.
+
 ### Sigla
 
 Originalul e în `docs/brand/logo-source.png`. Toate variantele (antet, favicon 16/32/48,

@@ -99,6 +99,20 @@ html {
   --ref-chart-arr-l: #1f5fb8;
   --ref-chart-dep-l: #965200;
   --ref-chart-seq-l: #5b3bb8;
+  /* Beta 1.26: categorical slots for donut / pie charts (web/ui2.js), validated with the dataviz
+     palette checker (CVD + contrast) against each surface; fixed order, never cycled */
+  --ref-cat-d-1: #3987e5;
+  --ref-cat-d-2: #d95926;
+  --ref-cat-d-3: #199e70;
+  --ref-cat-d-4: #9085e9;
+  --ref-cat-d-5: #c98500;
+  --ref-cat-d-6: #d96a96;
+  --ref-cat-l-1: #2a78d6;
+  --ref-cat-l-2: #c4501f;
+  --ref-cat-l-3: #14876a;
+  --ref-cat-l-4: #6250d6;
+  --ref-cat-l-5: #b87800;
+  --ref-cat-l-6: #c8507f;
   --ref-black: #000000;
   --ref-black-a40: rgba(2, 6, 23, 0.4);
   --ref-black-a60: rgba(2, 6, 23, 0.6);
