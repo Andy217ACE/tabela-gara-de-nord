@@ -10,11 +10,11 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 Igienă de interfață. **Tabela** (Carduri, Panou, Ecran complet) rămâne neschimbată pixel cu pixel în afara celor două butoane de mai jos; datele și API-ul nu se schimbă.
 
 ### Nou
-- **Stări goale la Trenuri și Stații:** când nu există încă nicio dată, pagina spune „Nu există încă date pentru trenuri.” / „… pentru stații.”, în loc de antet și tabel goale. O căutare fără rezultate păstrează mesajul „Niciun tren / Nicio stație nu se potrivește căutării.”.
+- **Stări goale la Trenuri și Stații:** când nu există încă nicio dată, pagina spune „Nu există încă date pentru trenuri.” / „… pentru stații.”, în loc de antetul cu 0 rânduri și nota explicativă; mesajul stă singur, fără export și fără tabel. O căutare fără rezultate păstrează mesajul „Niciun tren / Nicio stație nu se potrivește căutării.”.
 - **Stare de eroare cu „Reîncearcă”:** dacă serverul nu răspunde, pagina spune „Nu am putut încărca trenurile / stațiile.” cu motivul și un buton „Reîncearcă” care cere din nou datele.
 
 ### Schimbat
-- **Stea și clopoțel pe telefon:** zona de atingere ajunge la cel puțin 44 × 44 px (pe Carduri butonul „urmărește”, pe Panou steaua și clopoțelul). Mărirea este compensată cu margini negative, deci rândurile și cardurile nu se mută. Pe ecrane late nimic nu se schimbă.
+- **Stea și clopoțel pe telefon:** butoanele au cel puțin 44 × 44 px. Pe Carduri pastila „urmărește” are bordură vizibilă, deci arată mai înaltă pe telefon (32 → 44 px), nu doar zona de atingere; extra înălțimea este compensată cu margini negative (−6 px), deci cardul nu se mută. Pe Panou steaua și clopoțelul ajung la 44 px, dar spațiul ocupat în rând rămâne 40 px (margine −2 px). Pe ecrane late (de la 760 px în sus) nimic nu se schimbă.
 
 ### Reparat
 - **CSP fără Google Fonts:** fonturile sunt deja auto-găzduite (`web/fonts`), dar antetul `Content-Security-Policy` încă permitea `fonts.googleapis.com` și `fonts.gstatic.com`. Gazdele sunt scoase (`style-src 'self'`, `font-src 'self'`); un test verifică să nu mai apară în fișierele web, iar un test în browser real verifică lipsa încălcărilor CSP și încărcarea Fira Sans.
