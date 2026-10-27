@@ -27,11 +27,44 @@
   var $ = function (id) { return document.getElementById(id); };
   var H = function () { return App.history || {}; };
   var U = function () { return App.ui2; };   // Beta 1.26 visual helpers (ui2.js)
+  var C3 = function () { return App.charts3; };   // Beta 1.28 interactive chart layer (charts3.js, lazy)
+
+  // 14-day sparkline of a row (`trend`: mean read delay per day, null = not read); one scale per table; < 2 read days = „—”
+  function trendMax(list) {
+    var all = [];
+    (list || []).forEach(function (e) {
+      ((e.trend && e.trend.values) || []).forEach(function (x) { if (x != null) all.push(x); });
+    });
+    if (!all.length) return 5;
+    all.sort(function (a, b) { return a - b; });
+    // 90th percentile (min 5): one extreme day must not flatten the rows; higher values are clipped
+    return Math.max(5, all[Math.min(all.length - 1, Math.floor(all.length * 0.9))]);
+  }
+  function dayShort(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? parseInt(m[3], 10) + "." + m[2] : String(iso || "");
+  }
+  function trendText(t) {
+    return "Întârzierea medie pe zi, ultimele " + t.days + " zile (până la " + dayShort(t.last) + "): " +
+      t.values.map(function (x) { return x == null ? "necitită" : numFmt.format(x) + " min"; }).join(", ");
+  }
+  function trendCell(trend, hi, o) {
+    var c = el("span", "st-spark-cell");
+    var read = trend && trend.values ? trend.values.filter(function (x) { return x != null; }).length : 0;
+    if (!U() || read < 2) {
+      c.textContent = "—";
+      c.classList.add("ui-spark-none");
+      c.title = "Sub 2 zile cu întârziere citită";
+      return c;
+    }
+    c.append(U().spark(trend.values, Object.assign({ w: 84, h: 24, compact: true, tone: "bad", min: 0, max: hi, label: trendText(trend) }, o || {})));
+    return c;
+  }
 
   // pooled on-time figure → hero tile (honest: N next to it; „—” below the minimum sample)
   function onTimeTile(label, tone, st, params) {
     var ok = st && st.n && st.sufficient;
-    return { label: label, tone: tone, value: ok ? st.on_time_pct : null, unit: ok ? " %" : "",
+    return { label: label, tone: tone, gauge: true, value: ok ? st.on_time_pct : null, unit: ok ? " %" : "",
       fmt: function (x) { return numFmt.format(Math.round(x * 10) / 10); },
       sub: ok ? st.on_time + " din " + st.n + " (≤ " + params.on_time_max_min + " min)"
         : (st && st.n ? "N = " + st.n + " < " + params.min_sample + ": fără procent" : "N = 0"),
@@ -207,7 +240,8 @@
     var id = "st-chart-" + (++chartSeq);
 
     var root = svg("svg", { viewBox: "0 0 " + W + " " + Hh, width: W, height: Hh, class: "st-chart",
-                            role: "img", "aria-labelledby": id + "-t " + id + "-d" });
+                            role: "img", "aria-labelledby": id + "-t " + id + "-d", "data-kind": "col",
+                            "data-plot": [L, T, W - R, Hh - B].join(","), "data-n": items.length });
     root.append(svg("title", { id: id + "-t" }, o.title));
     root.append(svg("desc", { id: id + "-d" }, o.desc));
     var grid = svg("g", { class: "st-grid-lines" });
@@ -220,7 +254,7 @@
 
     var every = band < 22 ? Math.ceil(22 / band) : 1;
     items.forEach(function (it, i) {
-      var g = svg("g", { class: "st-bar-g" });
+      var g = svg("g", { class: "st-bar-g", "data-i": i, "data-s": 0 });
       var cx = x(i);
       if (it.value != null) {
         var top = y(it.value);
@@ -423,6 +457,7 @@
   // Generic view: a persistent filter form + a body re-rendered from one API call.
   function makeView(cfg) {
     var v = { p: null, ctrl: null, ui: null, body: null, key: null, data: null };
+    var paint = function () { if (cfg.charts && C3()) C3().enhance(v.body); };
     function ensure() {
       if (v.ui) return;
       var root = $(cfg.root);
@@ -448,12 +483,15 @@
         v.body.replaceChildren(el("p", "sr-only", "Se încarcă…"));
         if (U()) v.body.append(U().skeleton("hero", 3), U().skeleton("table", 6));
       }
+      var ready = cfg.charts && U() && U().charts ? U().charts() : Promise.resolve(null);   // charts3.js only where there are charts
       getJSON(url, ctrl)
+        .then(function (data) { return ready.then(function () { return data; }); })
         .then(function (data) {
           if (v.ctrl !== ctrl) return;
           v.data = data;
           v.body.replaceChildren();
           cfg.render(v, data);
+          paint();
           if (U()) U().reveal(v.body);
         })
         .catch(function (e) {
@@ -478,7 +516,7 @@
       if (cfg.title) cfg.title(v);
       load(false);
     };
-    v.rerender = function () { if (v.data) { v.body.replaceChildren(); cfg.render(v, v.data); if (U()) U().reveal(v.body); } };
+    v.rerender = function () { if (v.data) { v.body.replaceChildren(); cfg.render(v, v.data); paint(); if (U()) U().reveal(v.body); } };
     return v;
   }
 
@@ -508,6 +546,7 @@
 
   var TR_FIELDS = ["query", "prag", "min", "doar_confirmate"];
   var trSort = { key: "journeys", dir: -1 };
+  var trHi = 5;    // common scale of the 14-day sparklines of the table being drawn
 
   var TR_COLS = [
     { key: "train_no", label: "Tren", get: function (e) { return e.train_no; },
@@ -539,6 +578,8 @@
         c.append(m);
         return c;
       } },
+    { key: "trend", label: "Ultimele 14 zile", nosort: true, get: function () { return null; },
+      cell: function (e) { return trendCell(e.trend, trHi); } },
     { key: "mean", label: "Medie", num: true, get: function (e) { return e.stats.mean; },
       cell: function (e) { return minutes(e.stats.mean); } },
     { key: "median", label: "Mediană", num: true, get: function (e) { return e.stats.median; },
@@ -632,12 +673,14 @@
       return;
     }
 
+    trHi = trendMax(list);
     var t = scrollTable("Trenuri observate, cu statistici de întârziere");
     var thead = el("thead");
     var hr = el("tr");
     TR_COLS.forEach(function (c) {
       var th = el("th", c.num ? "st-num" : null);
       th.scope = "col";
+      if (c.nosort) { th.textContent = c.label; th.title = "Aceeași scară pe tot tabelul"; hr.append(th); return; }
       var b = el("button", "st-sort", c.label);
       b.type = "button";
       if (trSort.key === c.key) {
@@ -810,7 +853,7 @@
   }
 
   var tren = makeView({
-    root: "st-tren", route: "tren", fields: TN_FIELDS,
+    charts: true, root: "st-tren", route: "tren", fields: TN_FIELDS,
     onParams: function (v, params) { v.nr = (params.get("nr") || "").trim(); },
     hashExtra: function (v) { return v.nr ? { nr: v.nr } : null; },
     title: function (v) {
@@ -912,6 +955,11 @@
       if (by === "pct" && e.stats.on_time_pct != null) {
         li.append(U().meter(e.stats.on_time_pct, { tone: "ok", label: pct(e.stats.on_time_pct) + " la timp" }));
       }
+      var sp = trendCell(e.trend, trendMax(list), { w: 120, h: 28, compact: false });
+      if (!sp.classList.contains("ui-spark-none")) {
+        sp.classList.add("st-pod-spark");
+        li.append(el("p", "st-pod-lab st-pod-lab2", "ultimele 14 zile (min)"), sp);
+      }
       li.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
       });
@@ -931,8 +979,9 @@
     var t = scrollTable(title);
     var thead = el("thead");
     var hr = el("tr");
+    var hi = trendMax(list);
     [["#", true], ["Tren", false], ["Panou", false], ["Stație", false], ["N", true], ["Medie", true],
-     ["Mediană", true], ["% la timp", true]].forEach(function (h) {
+     ["Mediană", true], ["% la timp", true], ["Ultimele 14 zile", false]].forEach(function (h) {
       var th = el("th", h[1] ? "st-num" : null, h[0]);
       th.scope = "col";
       hr.append(th);
@@ -949,6 +998,7 @@
       td(tr, minutes(e.stats.mean), "st-num");
       td(tr, minutes(e.stats.median), "st-num");
       td(tr, pctMeter(e.stats.on_time_pct), "st-num");
+      td(tr, trendCell(e.trend, hi));
       tr.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
       });
@@ -1001,8 +1051,9 @@
     var t = scrollTable("Stații — " + title.toLowerCase());
     var thead = el("thead");
     var hr = el("tr");
+    var hi = trendMax(list);
     [["#", true], ["Stație", false], ["Panou", false], ["N", true], ["Călătorii", true], ["Trenuri", true],
-     ["Medie", true], ["Mediană", true], ["% la timp", true]].forEach(function (h) {
+     ["Medie", true], ["Mediană", true], ["% la timp", true], ["Ultimele 14 zile", false]].forEach(function (h) {
       var th = el("th", h[1] ? "st-num" : null, h[0]);
       th.scope = "col";
       hr.append(th);
@@ -1021,6 +1072,7 @@
       td(tr, minutes(s.mean), "st-num");
       td(tr, minutes(s.median), "st-num");
       td(tr, pctMeter(s.on_time_pct), "st-num");
+      td(tr, trendCell(e.trend, hi));
       tr.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#statie?nume=" + encodeURIComponent(e.station);
       });
@@ -1057,7 +1109,7 @@
   }
 
   var clasamente = makeView({
-    root: "st-clasamente", route: "clasamente", fields: CL_FIELDS,
+    charts: true, root: "st-clasamente", route: "clasamente", fields: CL_FIELDS,
     url: function (v) {
       var q = toSearch(v.p, CL_FIELDS);
       q.set("limit", String(RANK_LIMIT));
@@ -1198,8 +1250,9 @@
     var t = scrollTable(cap);
     var thead = el("thead");
     var hr = el("tr");
+    var hi = trendMax(list);
     [["Tren", false], ["Operator", false], ["Călătorii", true], ["N", true], ["Medie", true],
-     ["Mediană", true], ["p90", true], ["Max", true], ["% la timp", true], ["Ultima zi", false]].forEach(function (h) {
+     ["Mediană", true], ["p90", true], ["Max", true], ["% la timp", true], ["Ultimele 14 zile", false], ["Ultima zi", false]].forEach(function (h) {
       var th = el("th", h[1] ? "st-num" : null, h[0]);
       th.scope = "col";
       hr.append(th);
@@ -1219,6 +1272,7 @@
       td(tr, minutes(s.p90), "st-num");
       td(tr, minutes(s.max), "st-num");
       td(tr, pct(s.on_time_pct), "st-num");
+      td(tr, trendCell(e.trend, hi));
       td(tr, dayText(e.last_date));
       tr.addEventListener("click", function (ev) {
         if (!ev.target.closest("a, button")) location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
@@ -1443,7 +1497,7 @@
   }
 
   var statie = makeView({
-    root: "st-statie", route: "statie", fields: SN_FIELDS,
+    charts: true, root: "st-statie", route: "statie", fields: SN_FIELDS,
     onParams: function (v, params) { v.nume = (params.get("nume") || "").trim().slice(0, 40); },
     hashExtra: function (v) { return v.nume ? { nume: v.nume } : null; },
     title: function (v) {

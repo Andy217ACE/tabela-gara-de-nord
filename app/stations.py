@@ -65,12 +65,14 @@ def station_entries(js: list[dict], p: stats.Params) -> list[dict]:
     groups: dict = defaultdict(list)
     for j in js:
         groups[(j["station"], j["board"])].append(j)
+    last_day = max((j["service_date"] for j in js), default=None)
     out = []
     for (name, board), g in groups.items():
         out.append({"station": name, "board": board, "journeys": len(g),
                     "trains": len({j["train_no"] for j in g}),
                     "quality": stats.quality(g),
-                    "stats": stats.summarize(stats.delays(g, p), p.on_time, p.min_sample)})
+                    "stats": stats.summarize(stats.delays(g, p), p.on_time, p.min_sample),
+                    "trend": stats.daily_trend(g, p, last_day)})
     out.sort(key=lambda e: (e["station"], e["board"]))
     return out
 

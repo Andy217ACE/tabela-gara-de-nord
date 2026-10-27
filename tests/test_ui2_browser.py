@@ -191,13 +191,16 @@ def test_page_transition_and_live_board_untouched(browser, base_url):
     ctx, page, errors = _open(browser, base_url, 1280, 800, "dark", "#statistici")
     try:
         page.wait_for_selector("#st-statistici .ss-fig")
-        page.evaluate("""() => { window.__enter = []; new MutationObserver(ms => ms.forEach(m => {
+        page.evaluate("""() => { window.__enter = []; window.__vt = 0; new MutationObserver(ms => ms.forEach(m => {
             if (m.target.classList.contains('view-enter')) window.__enter.push(m.target.id); }))
-            .observe(document.querySelector('main'), { subtree: true, attributes: true, attributeFilter: ['class'] }); }""")
+            .observe(document.querySelector('main'), { subtree: true, attributes: true, attributeFilter: ['class'] });
+            if (document.startViewTransition) { const o = document.startViewTransition.bind(document);
+              document.startViewTransition = f => { window.__vt += 1; return o(f); }; } }""")
         page.locator(".nav-item[data-route='istoric']").click()
         page.wait_for_selector("#view-istoric:not([hidden])")
         page.wait_for_timeout(100)
-        assert "view-istoric" in page.evaluate("window.__enter")
+        # Beta 1.28: a View Transition when the browser has them, the CSS page-enter animation otherwise
+        assert page.evaluate("window.__vt") >= 1 or "view-istoric" in page.evaluate("window.__enter")
         # the live board: no UI v2 class inside it, no page canvas, no enter animation
         page.locator(".nav-item[data-route='tabela']").click()
         page.wait_for_selector("#view-tabela:not([hidden])")

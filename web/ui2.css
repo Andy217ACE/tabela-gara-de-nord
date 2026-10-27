@@ -378,7 +378,7 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 @media (prefers-reduced-motion: no-preference) {
   .view-enter { animation: ui-view-in 320ms var(--ease) both; }
   .ui-sweep { animation: ui-sweep 1000ms var(--ease) both; }
-  .ui-skel-line::after { animation: ui-shimmer 1.4s ease-in-out infinite; }
+  .ui-skel-line::after { animation: ui-shimmer 1.3s ease-in-out 3; }   /* three sweeps, then still: no endless loop */
   .ui-rise { animation: ui-rise 420ms var(--ease) both; }
   .ui-d0 { animation-delay: 0ms; } .ui-d1 { animation-delay: 45ms; } .ui-d2 { animation-delay: 90ms; }
   .ui-d3 { animation-delay: 135ms; } .ui-d4 { animation-delay: 180ms; } .ui-d5 { animation-delay: 225ms; }
@@ -533,3 +533,51 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 }
 .h-summary > .ui-hero { margin-bottom: 12px; }
 .h-summary .ui-stat { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); box-shadow: none; }
+
+/* ---------- 16. UI v3 (Beta 1.28) ---------- */
+
+.ui-stat.has-gauge .ui-stat-l { padding-right: 56px; }
+.ui-gauge { position: absolute; right: 10px; top: 10px; width: 48px; height: 48px; overflow: visible; }
+.ui-gauge circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+.ui-gauge-track { stroke: color-mix(in srgb, var(--text) 17%, transparent); }
+.ui-gauge-fill { stroke: var(--c-arr); }
+.ui-gauge-fill.ui-t-dep { stroke: var(--c-dep); }
+.ui-gauge-fill.ui-t-ok { stroke: var(--ok); }
+.ui-gauge.is-none .ui-gauge-track { stroke: var(--border-strong); stroke-width: 2; stroke-dasharray: 3 4; }
+
+.ui-seg-lab { font-size: 6.3px; font-weight: 700; text-anchor: middle; dominant-baseline: central; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 1.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.ui-spark-sm { width: 5.25rem; height: 1.5rem; display: block; overflow: visible; }
+.ui-spark-sm .ui-spark-line { stroke-width: 1.6; animation: none; stroke-dasharray: none; }
+.ui-spark-sm .ui-spark-area { animation: none; }
+.ui-spark-sm .ui-spark-dot { r: 2; }
+.st-spark-cell { min-width: 5.5rem; }
+
+.ui-empty { display: grid; justify-items: center; gap: 6px; }
+.ui-empty-t { margin: 0; color: var(--text); font-size: 1.0625rem; font-weight: 700; }
+.ui-empty-s { margin: 0; max-width: 46ch; }
+.ui-empty-a { margin-top: 10px; }
+
+.ui-skel-chart .ui-skel-block { min-height: 12rem; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: end; gap: 8px; }
+.ui-skel-bar { display: block; border-radius: 6px 6px 0 0; background: var(--surface-2); height: 40%; }
+.ui-skel-bar:nth-child(2n) { height: 66%; } .ui-skel-bar:nth-child(3n) { height: 54%; } .ui-skel-bar:nth-child(4n) { height: 84%; }
+
+/* hover lift: small cards only (not the chart cards), transform only */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .ui-stat, .ss-kpi, .st-card, .f-item, .v-entry { transition: transform var(--dur) var(--ease); }
+  .ui-stat:hover, .ss-kpi:hover, .st-card:hover, .f-item:hover, .v-entry:hover { transform: translateY(-2px); }
+}
+
+/* page change = short cross-fade (View Transitions); the header stays */
+@media (prefers-reduced-motion: no-preference) {
+  .navbar { view-transition-name: c3-nav; }
+  .topbar { view-transition-name: c3-top; }
+  ::view-transition-group(c3-nav), ::view-transition-group(c3-top) { animation-duration: 0s; }
+  ::view-transition-old(root) { animation: 140ms ease both ui-vt-out; }
+  ::view-transition-new(root) { animation: 220ms var(--ease) both ui-vt-in; }
+  @keyframes ui-vt-out { to { opacity: 0; } }
+  @keyframes ui-vt-in { from { opacity: 0; } }
+}
+.st-pod-lab2 { margin-top: 12px; }
+.st-pod-spark { display: block; margin-top: 4px; }
+.st-pod-spark .ui-spark { width: 7.5rem; height: 1.75rem; }

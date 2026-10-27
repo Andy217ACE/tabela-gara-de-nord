@@ -96,10 +96,10 @@ def _open(browser, base_url, w, h, theme, hash_):
 
 
 NO_HSCROLL = "() => document.documentElement.scrollWidth <= window.innerWidth"
-# (wide data tables scroll inside their own .st-scroll / .ss-cmp-wrap box: the box must fit,
-# its rows may not)
+# (wide data tables scroll inside their own .st-scroll / .ss-cmp-wrap box, the section chips inside their strip:
+# the box must fit, its rows may not)
 INSIDE = """() => [...document.querySelectorAll('#view-statistici *')].filter(e => {
-  const box = e.parentElement && e.parentElement.closest('.st-scroll, .ss-cmp-wrap');
+  const box = e.parentElement && e.parentElement.closest('.st-scroll, .ss-cmp-wrap, .c3-toc-list');
   if (box) return false;
   const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > innerWidth + 0.5 || r.left < -0.5);
 }).map(e => e.tagName + '.' + (e.getAttribute('class') || '') + ':' + (e.textContent || '').slice(0, 30))"""
@@ -118,9 +118,10 @@ def test_statistici_page(browser, base_url, w, h, theme):
         assert page.locator(".ss-kpi").count() == 2
         assert page.locator("svg.ss-svg").count() >= 10
         # 11 detail charts + „Cum se împart călătoriile?” (donuts, Beta 1.26) + 7 „Problemele în
-        # detaliu” cards; + the „Probleme” intro
-        assert page.locator(".ss-fig").count() == 19
-        assert page.locator(".ss-how").count() == 20
+        # detaliu” cards + „Cum arată fiecare zi?” (the calendar, Beta 1.28: a week of data);
+        # + the „Probleme” intro
+        assert page.locator(".ss-fig").count() == 20
+        assert page.locator(".ss-how").count() == 21
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")

@@ -313,6 +313,9 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.26 (UI v2): +~72 KB uncompressed (~20 KB gzip) first-party code for the non-live pages
     # (ui2.css/ui2.js, donuts, count-up, timeline, podium); no third-party library, nothing heavy
     # to lazy-load — every chart is SVG + CSS drawn by our own code
+    # Beta 1.28 (UI v3): the interactive chart layer (tooltips, calendar, fullscreen…) is charts3.js/.css,
+    # lazy-loaded on the chart pages and NOT in the shell; only ~19 KB of glue grew (ui2/statistici/stats/app)
+    # and ~1.5 KB were won back by moving the rest into the lazy files: the 650 KB budget stays
     assert total <= 650_000, total
 
 

@@ -176,3 +176,23 @@ paginii Capturi OCR (`.view-ocr` e exclusă explicit în `ui2.css`). Implementar
 
 Verificare: `tests/test_ui2_static.py`, `tests/test_ui2_browser.py` (360 / 768 / 1280 px, ambele teme),
 `tests/test_contrast_browser.py` (așteaptă finalul animațiilor înainte de audit).
+
+## 12. UI v3 — grafice interactive (Beta 1.28)
+
+Strat lazy (`web/charts3.js` + `charts3.css`, `App.charts3`), doar pe Statistici, Tren, Clasamente, Stație.
+
+| Element | Regulă |
+|---|---|
+| Tooltip | un singur card plutitor (`.c3-tip`, `aria-hidden`) pentru toate graficele; mouse = imediat, atingere = apasă și trage (cardul urcă deasupra degetului, niciodată peste valoarea atinsă), tastatură = Tab pe grafic (o singură oprire), săgeți, Home / End, Esc; rămâne în viewport; textul e citit dintr-o regiune `aria-live=polite` (doar la tastatură), titlul nativ SVG dispare |
+| Ghidaj | linia punctată verticală (linii) sau banda (coloane) + punct mărit; banda „N” de dedesubt urmărește aceeași categorie |
+| Legendă | hover = evidențiază seria, estompează celelalte; click / Enter = arată / ascunde (ultima nu se ascunde); `aria-pressed` |
+| Linii | curbă monotonă (fără depășiri), umplere în degrade (≥ 3 puncte consecutive), etichete max / min, linii de referință cu etichetă în margine (prag „la timp”, media perioadei), cerc gol = eșantion mic, gol = necitit (niciodată 0) |
+| Bare | degrade 100 → 58 %, capăt rotunjit 4 px, etichetă „max” pe cea mai înaltă coloană fără valoare proprie |
+| Indicator circular | arc 270°, doar lângă cifră (`ui-stat.has-gauge`), `aria-label` cu valoarea |
+| Calendar | un pătrat pe zi, scară ca la harta oră × zi (`ss-q0…4`), de la 7 zile; tabel „Vezi datele” |
+| Minigrafic în tabel | 84 × 24, una și aceeași scară pe tot tabelul (percentila 90, minim 5 min), gol unde nu s-a citit, „—” sub 2 zile |
+| Ecran complet | `<dialog>` modal, focus blocat (Tab / Shift+Tab), Esc, click pe fundal, focus înapoi pe buton, tabelul alături |
+| Chips | `nav.c3-toc` lipit sub meniu, scroll-spy cu `IntersectionObserver`, `aria-current="location"` |
+| Mișcare | doar transform / opacitate / contur; filtrul schimbat = alunecare (WAAPI); grafice în afara ecranului stau pe pauză; fără bucle continue (shimmer 3 treceri); `prefers-reduced-motion` oprește totul |
+
+Verificare: `tests/test_ui3_static.py`, `tests/test_ui3_browser.py`, `tests/test_trend.py`.

@@ -631,7 +631,10 @@
     initTheme();
     initTabs();
     route();
-    window.addEventListener("hashchange", route);
+    window.addEventListener("hashchange", function () {
+      var u = window.TabelaApp.ui2;   // Beta 1.28: the page change runs inside a View Transition when the browser has them
+      if (u && u.transition) u.transition(route); else route();
+    });
     var navT = null;
     window.addEventListener("resize", function () {
       clearTimeout(navT);

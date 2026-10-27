@@ -5,6 +5,27 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.28 — 2026-10-27
+
+Runda a doua a redesign-ului (după Beta 1.26): graficele din **Statistici**, **Tren**, **Stație** și **Clasamente** devin interactive și mai clare. **Tabela** (Carduri, Panou, Ecran complet), vremea, Capturile OCR și datele nu se schimbă (Beta 1.27 este rezervată lucrărilor de OCR, care nu ating pagina web).
+
+### Nou
+- **Tooltip pentru toate graficele** (bare, coloane, linii, hărți de căldură): același card plutitor pentru toate; cu mouse-ul apare imediat (înlocuiește tooltip-ul nativ, lent), pe telefon apeși și tragi degetul ca să treci de la o valoare la alta (cardul stă deasupra degetului, niciodată peste valoarea atinsă), cu tastatura intri în grafic cu Tab, mergi cu săgețile, Esc îl închide. Rămâne în ecran, iar textul fiecărei valori este citit de cititorul de ecran. La liniile de timp apare și o linie de ghidaj cu punctele evidențiate; banda „N” de dedesubt urmărește aceeași oră sau zi.
+- **Legenda este interactivă:** treci peste „Sosiri” sau „Plecări” și cealaltă serie se estompează; apeși ca să ascunzi sau să arăți o serie (ultima serie vizibilă nu se poate ascunde).
+- **Grafice mai clare, la fel de oneste:** linii netede cu umplere în degrade, bare cu degrade, etichete pentru cea mai mare și cea mai mică valoare, linii de referință cu etichetă (pragul „la timp ≤ 5 min” pe ore; media perioadei, pe panou, la evoluția pe zile), procentul scris direct pe feliile donut-urilor care au loc, un **indicator circular** de punctualitate în cifrele mari, iar în **Statistici** un **calendar** nou: câte un pătrat pe zi, colorat după întârzierea medie (apare de la 7 zile cu date). Valorile lipsă rămân „—”, nu 0; sub 5 călătorii arătăm doar cifre brute.
+- **La schimbarea unui filtru** barele, punctele și liniile alunecă de la valorile vechi la cele noi, în loc să se redeseneze brusc.
+- **Ultimele 14 zile, în tabele:** minigrafic cu întârzierea medie pe zi în Trenuri, Clasamente (trenuri, stații și podium) și în trenurile unei stații; aceeași scară pentru tot tabelul, goluri unde întârzierea nu a fost citită. Câmpul nou `trend` din API este doar adăugat (`/api/trains/stats`, `/api/stats/rankings`, `/api/trains/{nr}/journeys`, `/api/stations/{nume}`), fără schimbări pentru ce exista.
+- **Ecran complet pentru fiecare grafic** (fereastră cu focus blocat și Esc, tabelul cu datele alături) și **„Copiază linkul către grafic”**: linkul păstrează filtrele și te duce direct la grafic.
+- **Chips de secțiuni, lipite sub meniu, în Statistici:** Probleme, Cifre, Distribuție, Zile, Ore, Hartă etc., cu urmărirea secțiunii pe care o citești.
+- **Alte rafinări:** schimbarea paginii se face ca o tranziție de pagină (View Transitions, unde browserul o are; altfel animația de până acum), carduri mici care se ridică la hover, schelete de încărcare în forma graficelor (trei treceri, apoi stau), stare goală cu acțiune („Șterge filtrele”), apariția la derulare fără recalcularea paginii. Totul se oprește cu prefers-reduced-motion; se animă doar transform, opacitate și contur; nimic nu rulează continuu.
+
+### Reparat
+- Donut-urile aveau două elemente cu același `id` (descrierea și modelul cu puncte); modelele au acum id-uri proprii.
+
+### Tehnic
+- Cod nou încărcat **la cerere**, doar pe Statistici, Tren, Clasamente și Stație: `web/charts3.js` + `web/charts3.css` (~58 KB necomprimat, ~18 KB gzip). Nu intră în service worker (precache-ul rămâne sub 650 KB; v28 doar pentru schimbările din `ui2.js`, `ui2.css`, `app.js`, `statistici.js` și `stats.js`). Fără bibliotecă nouă: SVG propriu, fără stiluri inline (CSP).
+- API: `trend` (ultimele 14 zile, medie pe zi, `null` = necitit) în intrările de tren și de stație; teste în `tests/test_trend.py`. Teste noi: `tests/test_ui3_static.py`, `tests/test_ui3_browser.py` (tooltip, atingere, tastatură, legendă, ecran complet, link, chips, calendar, mișcare redusă, Tabela identică pixel cu pixel cu și fără stratul vizual).
+
 ## Beta 1.27 — 2026-10-27
 
 Beta 1.26 (aspectul nou) e în versiunea dinaintea acesteia; aceasta schimbă doar citirea imaginii (OCR), nu interfața.

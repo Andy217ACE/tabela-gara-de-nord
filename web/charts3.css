@@ -1,0 +1,212 @@
+/* © 2026 Andy217Ace */
+/* Tabela Gara de Nord — „UI v3” (Beta 1.28): styles of the lazy chart layer (charts3.js). Loaded with
+   it on #statistici, #tren, #clasamente and #statie only; theme tokens only (no raw colours); the
+   motion here is transform / opacity and is switched off with prefers-reduced-motion. */
+
+/* ---------- gradients (one hidden SVG with the defs) ---------- */
+
+.c3-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.c3-s-arr { stop-color: var(--c-arr); }
+.c3-s-dep { stop-color: var(--c-dep); }
+
+.ss-bar.ss-vb.ss-arr { fill: url(#c3-v-arr) var(--c-arr); }
+.ss-bar.ss-vb.ss-dep { fill: url(#c3-v-dep) var(--c-dep); }
+.ss-bar.ss-hb.ss-arr { fill: url(#c3-h-arr) var(--c-arr); }
+.ss-bar.ss-hb.ss-dep { fill: url(#c3-h-dep) var(--c-dep); }
+.c3-area { stroke: none; pointer-events: none; }
+.c3-area.ss-arr { fill: url(#c3-a-arr) var(--c-arr); fill-opacity: 1; }
+.c3-area.ss-dep { fill: url(#c3-a-dep) var(--c-dep); fill-opacity: 1; }
+
+/* ---------- the floating tooltip ---------- */
+
+.c3-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 9px 12px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--elev-2), var(--card-edge);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  --c3-caret: 50%;
+}
+.c3-tip.is-on { opacity: 1; visibility: visible; }
+.c3-tip::after {
+  content: "";
+  position: absolute;
+  left: var(--c3-caret);
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+.c3-tip[data-side="above"]::after { bottom: -6px; border-top: 0; border-left: 0; }
+.c3-tip[data-side="below"]::after { top: -6px; border-bottom: 0; border-right: 0; }
+.c3-tip[data-side="beside"]::after { display: none; }
+.c3-tip-h { margin: 0 0 4px; font-weight: 700; font-size: 0.875rem; letter-spacing: -0.005em; }
+.c3-tip-r { display: flex; gap: 8px; align-items: flex-start; margin-top: 3px; }
+.c3-tip-r .ss-key { margin-top: 3px; }
+.c3-tip-t { min-width: 0; color: var(--text-2); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.c3-tip-n { margin-right: 6px; color: var(--text); font-weight: 700; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .c3-tip { transition: opacity 90ms ease, visibility 90ms, transform 80ms var(--ease); }
+  .c3-tip.is-touch { transition: opacity 90ms ease, visibility 90ms; }
+}
+
+/* ---------- marks: crosshair, band, active state ---------- */
+
+.c3-bound { touch-action: pan-y; -webkit-tap-highlight-color: transparent; cursor: crosshair; border-radius: 6px; }
+.st-chart.c3-bound { touch-action: auto; }
+.c3-bound:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.c3-cross { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
+.c3-cross.is-on { opacity: 0.85; }
+.c3-band { fill: var(--text); opacity: 0; pointer-events: none; }
+.c3-band.is-on { opacity: 0.07; }
+.c3-has-act .ss-mark:not(.c3-act) .ss-bar { opacity: 0.5; }
+.c3-act .ss-dot { transform-box: fill-box; transform-origin: center; transform: scale(1.6); }
+.c3-act .ss-cell { stroke: var(--text); stroke-width: 2; }
+.c3-act .ss-track { fill: var(--surface-hover); }
+.c3-act .st-bar { fill-opacity: 0.8; }
+@media (prefers-reduced-motion: no-preference) {
+  .ss-bar { transition: opacity 120ms ease; }
+  .c3-act .ss-dot { transition: transform 120ms var(--ease); }
+}
+.c3-bound .ss-hit { cursor: crosshair; }
+
+/* off-screen charts wait (no animation work for what nobody sees); never in print */
+.c3-idle, .c3-idle * { animation-play-state: paused !important; }
+@media print { .c3-idle, .c3-idle * { animation: none !important; } }
+
+/* a morph (filter change) replaces the draw-in */
+.c3-morph .ss-bar, .c3-morph .ss-dot, .c3-morph .ss-cell, .c3-morph .c3-area { animation: none !important; }
+.c3-morph .ss-line { animation: none !important; stroke-dasharray: none; }
+
+/* ---------- line chart extras: curve is the line itself; extremes and reference lines ---------- */
+
+.ss-svg .c3-ext { font-size: 10.5px; font-weight: 700; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; font-variant-numeric: tabular-nums; pointer-events: none; }
+.ss-svg .c3-ext-min { font-weight: 600; fill: var(--text-2); }
+.c3-ref line { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 5 4; shape-rendering: crispEdges; }
+.c3-ref.ss-arr line { stroke: var(--c-arr); }
+.c3-ref.ss-dep line { stroke: var(--c-dep); }
+.ss-svg .c3-ref-t { text-anchor: end; font-size: 10.5px; fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.ss-svg .c3-ref-l { text-anchor: start; }
+.ss-svg .c3-month { text-anchor: start; font-size: 10px; }
+
+/* ---------- legend as toggles ---------- */
+
+.c3-leg { cursor: pointer; border-radius: var(--radius-md); padding: 3px 8px; margin: -3px -8px; min-height: 28px; user-select: none; }
+.c3-leg:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.c3-leg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.c3-leg[aria-pressed="false"] { color: var(--text-2); text-decoration: line-through; text-decoration-thickness: 1px; }
+.c3-leg[aria-pressed="false"] .ss-key { opacity: 0.35; }
+.c3-hl-arr .ss-svg .ss-dep, .c3-hl-dep .ss-svg .ss-arr { opacity: 0.16; }
+.c3-off-arr .ss-svg .ss-arr, .c3-off-dep .ss-svg .ss-dep { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .ss-svg .ss-arr, .ss-svg .ss-dep { transition: opacity 140ms ease; }
+}
+@media (pointer: coarse) { .c3-leg { min-height: 40px; display: inline-flex; align-items: center; } }
+
+/* ---------- figure tools ---------- */
+
+.c3-acts { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+.c3-tools { display: inline-flex; gap: 6px; align-items: center; }
+.c3-tool { min-width: 36px; min-height: 36px; padding: 0 8px; }
+.c3-ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+@media (pointer: coarse) { .c3-tool { min-width: 44px; min-height: 44px; } }
+
+/* ---------- full-screen dialog ---------- */
+
+.c3-dlg {
+  width: min(1280px, 96vw);
+  max-width: 96vw;
+  max-height: 92vh;
+  padding: 0;
+  border: 1px solid var(--card-line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--elev-2);
+  overflow: hidden;
+}
+.c3-dlg::backdrop { background: color-mix(in srgb, var(--ref-black) 66%, transparent); }
+.c3-dlg-box { display: flex; flex-direction: column; max-height: 92vh; min-width: 0; }
+.c3-dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 12px 20px; border-bottom: 1px solid var(--card-line); }
+.c3-dlg-title { margin: 0; font-size: 1.1875rem; letter-spacing: -0.015em; text-wrap: balance; }
+.c3-dlg-close { flex: none; gap: 6px; min-height: 40px; }
+.c3-dlg-close .c3-ic { display: inline-block; vertical-align: middle; }
+.c3-dlg-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 14px 20px 20px; overflow: auto; min-height: 0; }
+.c3-dlg-chart, .c3-dlg-side { min-width: 0; }
+.c3-dlg .ss-svg { width: 100%; height: auto; max-height: 72vh; }
+.c3-dlg .ss-multiples { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.c3-dlg-h3 { margin: 14px 0 8px; font-size: 0.9375rem; }
+.c3-dlg-side .ss-how { margin-top: 0; }
+.c3-dlg-side .st-scroll { max-height: 52vh; }
+@media (min-width: 900px) {
+  .c3-dlg-body { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); }
+  .c3-dlg-side .st-scroll { max-height: 64vh; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .c3-dlg[open] { animation: c3-dlg-in 200ms var(--ease) both; }
+  .c3-dlg[open]::backdrop { animation: c3-fade 200ms ease both; }
+  @keyframes c3-dlg-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+  @keyframes c3-fade { from { opacity: 0; } }
+}
+
+/* ---------- section chips with scroll-spy ---------- */
+
+.c3-toc {
+  position: sticky;
+  top: var(--c3-nav-h, 48px);
+  z-index: 15;
+  margin: 0 0 14px;
+  padding: 8px 0;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--card-line);
+}
+.c3-toc-list { display: flex; gap: 6px; margin: 0; padding: 0 2px; list-style: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.c3-toc-list::-webkit-scrollbar { display: none; }
+.c3-toc-list li { flex: none; }
+.c3-chip {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.c3-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.c3-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c3-chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+@media (pointer: coarse) { .c3-chip { min-height: 44px; } }
+.ss-fig, .ss-problems, .ss-good, .ss-part, .ss-hero-strip, .ss-kpis { scroll-margin-top: calc(var(--c3-nav-h, 48px) + 64px); }
+.ss-fig.is-target { animation: none; outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- calendar ---------- */
+
+.c3-cal { max-width: 100%; }
+.c3-cal .ss-cell { stroke-width: 1; }
+
+/* ---------- forced colours ---------- */
+
+@media (forced-colors: active) {
+  .c3-tip, .c3-dlg { border: 1px solid CanvasText; }
+  .c3-chip[aria-current] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+}
