@@ -256,7 +256,10 @@ def coexisting_numbers(conn: sqlite3.Connection, train_no: int,
     """{number: earliest observed_at} for the numbers of `among` that were read in the
     SAME capture on the SAME board as `train_no`, in all history: two rows of one frame
     are two real trains, so such numbers are never one train read twice (5011/5014).
-    One indexed query (observations by train_no, then by capture_id)."""
+    Observations in EVERY validation_state count (incomplete / low-confidence rows too):
+    on purpose, it errs on the safe side (a doubtful co-reading blocks a merge or a ghost
+    verdict, never causes one). One indexed query (observations by train_no, then by
+    capture_id); the table check keeps databases without observations working."""
     nums = sorted({int(n) for n in among if n is not None and int(n) != int(train_no)})
     if not nums or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
                                     " AND name='observations'").fetchone():

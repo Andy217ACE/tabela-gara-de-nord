@@ -258,7 +258,8 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
                         " (two real trains): never merged, decision is the user's"
                         % co[:10] if co else
                         "truncated number: the short number lives alone (%s %s %s %s,"
-                        " without the long one), listed only" % alone[0] if alone else
+                        " without the long one), listed only"
+                        % tuple("-" if v is None else v for v in alone[0]) if alone else
                         "truncated number: the long number is seen on %d day(s) (< 2),"
                         " listed only" % w["support"]
                         if rel == "truncated_number" and not trunc_ok else

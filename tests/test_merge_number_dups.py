@@ -431,6 +431,85 @@ def test_prefix_dup_is_merged_and_restorable(tmp_path, capsys):
     assert _dump_all(db) == before
 
 
+def _trunc_db(tmp_path, long_no, short_no, long_days):
+    """long_no on `long_days` (the last one shared with short_no, same slot, never in
+    one frame); short_no never alone."""
+    db = tmp_path / "t.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    for k, d in enumerate(long_days):
+        ids["long"] = _svc(c, "departure", d, long_no, "ARAD", "12:20", _t(d, 11),
+                           _t(d, 12), ttype="R")
+        _obs(c, ids["long"], "departure", 3 + k, d, 11, station="ARAD", no=long_no)
+    d = long_days[-1]
+    ids["short"] = _svc(c, "departure", d, short_no, "ARAD", "12:20", _t(d, 11, 30),
+                        _t(d, 12, 10), ttype="R", platform=1)
+    _obs(c, ids["short"], "departure", 1, d, 12, station="ARAD", no=short_no)
+    ids["ev"] = _ev(c, ids["short"], d, 12, "delay", "0", "3")
+    c.execute("INSERT INTO service_quality(service_id, station_canonical, updated_at)"
+              " VALUES (?, 'ARAD', 'x')", (ids["short"],))
+    for no in (long_no, short_no):
+        c.execute("INSERT OR IGNORE INTO trains(train_no, journeys, observations)"
+                  " VALUES (?, 1, 1)", (no,))
+    s.close()
+    return db, ids
+
+
+def test_start_truncation_is_merged_and_restorable(tmp_path, capsys):
+    """R 64 is the START of R 6478 (right digits cut): every strict condition holds ->
+    merged by --apply; --restore puts back every row."""
+    assert md._is_truncation(6478, 64) and not md.is_noise_pair(6478, 64)
+    db, ids = _trunc_db(tmp_path, 6478, 64, [D1, D2])
+    before = _dump_all(db)
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert [(m["loser"]["id"], m["winner"]["id"], m["relation"]) for m in rep["merge"]["list"]
+            ] == [(ids["short"], ids["long"], "truncated_number")]
+    assert rep["applied"]["services_merged"] == 1
+    c = sqlite3.connect(db)
+    assert not c.execute("SELECT 1 FROM services WHERE id=?", (ids["short"],)).fetchone()
+    c.close()
+    _run(["--db", str(db), "--restore"], capsys)
+    assert _dump_all(db) == before
+
+
+def test_truncation_with_long_number_on_one_day_is_listed(tmp_path, capsys):
+    db, ids = _trunc_db(tmp_path, 8093, 93, [D2])
+    before = _dump_all(db)
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["merge"]["list"] == [] and rep["applied"]["services_merged"] == 0
+    [item] = rep["listed_not_merged"]
+    assert (item["winner"]["id"], item["loser"]["id"]) == (ids["long"], ids["short"])
+    assert "truncated" in item["why_not_merged"] and "< 2" in item["why_not_merged"]
+    assert _dump_all(db) == before
+
+
+def test_lives_alone_reason_renders_missing_values_as_dash(tmp_path, capsys):
+    """A NULL station of the lone slot is shown as "-", never as "None"."""
+    db = tmp_path / "a.db"
+    c = sqlite3.connect(db)
+    c.executescript("""
+        CREATE TABLE services (id INTEGER PRIMARY KEY, board TEXT, service_date TEXT,
+          train_type TEXT, train_no INTEGER, station TEXT, operator TEXT, sched_time TEXT,
+          first_seen TEXT, last_seen TEXT, last_delay INTEGER, last_platform INTEGER,
+          flagged INTEGER DEFAULT 0, status TEXT, last_read TEXT, delay_read_at TEXT);""")
+    for d, no, st in ((D1, 5019, "BUZAU"), (D2, 5019, "BUZAU"), (D2, 19, "BUZAU"),
+                      (D3, 19, None)):
+        c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+                  " sched_time, first_seen, last_seen, status) VALUES"
+                  " ('departure', ?, 'R', ?, ?, '17:08', ?, ?, 'gone')",
+                  (d, no, st, _t(d, 16), _t(d, 17)))
+    c.commit()
+    c.close()
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    [item] = rep["listed_not_merged"]
+    assert "lives alone (departure %s - 17:08," % D3 in item["why_not_merged"]
+    assert "None" not in item["why_not_merged"]
+
+
 def test_old_db_without_quality_or_observations(tmp_path, capsys):
     """A pre-quality database (no service_quality) still dry-runs."""
     db = tmp_path / "o.db"
