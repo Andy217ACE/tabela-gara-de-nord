@@ -18,7 +18,8 @@ Definitions
     longer (8093/93, 5019/19, 10055/55, 503/5031, 800/8001);
   - shape ``one_digit``: same length, exactly one differing character (1584/1581);
   - ``coexist``: the two numbers were read (observations.train_no) in the SAME capture
-    on the SAME board at least once in the window -> distinct trains, never merge, whatever
+    on the SAME board at least once in ALL history (not only the window: it is the
+    proof that they are distinct trains; same_day_overlap is NOT evidence) -> distinct trains, never merge, whatever
     their shape (5011/5014). Only shape-related pairs are listed as coexist (every two
     rows of a frame coexist; listing them all would be noise).
 * ``no_a < no_b`` numerically.
@@ -100,16 +101,11 @@ def find_pairs(conn: sqlite3.Connection, days: int = 30,
         "SELECT train_no, board, service_date, station, first_seen, last_seen FROM services"
         " WHERE service_date >= ?", (cutoff,)).fetchall()
     reads: Counter = Counter()
-    coexist: set[tuple[int, int]] = set()
     if has_obs:
         for no, n in conn.execute(
                 "SELECT train_no, COUNT(*) FROM observations WHERE observed_at >= ?"
                 " AND train_no IS NOT NULL GROUP BY train_no", (cutoff,)):
             reads[no] = n
-        coexist = {(a, b) for a, b in conn.execute(
-            "SELECT DISTINCT x.train_no, y.train_no FROM observations x"
-            " JOIN observations y ON y.capture_id = x.capture_id AND y.board = x.board"
-            " WHERE x.train_no < y.train_no AND x.observed_at >= ?", (cutoff,))}
     else:
         for r in svcs:
             reads[r[0]] += 1
@@ -118,9 +114,15 @@ def find_pairs(conn: sqlite3.Connection, days: int = 30,
         by_no[r[0]].append(r)
     nums = {n for n in set(by_no) | set(reads) if n >= 10}
     related = _shape_pairs(nums)
+
+    def coexists(a: int, b: int) -> bool:  # ALL history, only for candidate pairs
+        return has_obs and conn.execute(
+            "SELECT 1 FROM observations x JOIN observations y"
+            " ON y.capture_id = x.capture_id AND y.board = x.board"
+            " WHERE x.train_no = ? AND y.train_no = ? LIMIT 1", (a, b)).fetchone() is not None
     out: list[Pair] = []
     for a, b in sorted(related):
-        kind = "coexist" if (a, b) in coexist else _shape(a, b)
+        kind = "coexist" if coexists(a, b) else _shape(a, b)
         sa, sb = by_no.get(a, []), by_no.get(b, [])
         common = Counter(r[3] for r in sa) & Counter(r[3] for r in sb)
         both = Counter(r[3] for r in sa + sb)

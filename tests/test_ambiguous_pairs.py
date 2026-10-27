@@ -109,3 +109,23 @@ def test_main_writes_nothing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "prefix_dup" in out and "coexist" in out and "one_digit" in out
     assert db.read_bytes() == before
+
+
+def test_coexist_evidence_outside_window(tmp_path):
+    db = tmp_path / "o.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    old = (date.today() - timedelta(days=200)).isoformat()
+    a = _svc(c, 5011, "PITESTI", "09:10", _t(8), _t(9))
+    b = _svc(c, 5014, "PITESTI", "09:10", _t(10), _t(11))
+    _obs(c, _cap(c, _t(8)), a, 5011, _t(8))
+    _obs(c, _cap(c, _t(10)), b, 5014, _t(10))
+    cap = _cap(c, _t(8, 0, old))  # shared frame, long before the window
+    _obs(c, cap, None, 5011, _t(8, 0, old))
+    _obs(c, cap, None, 5014, _t(8, 0, old))
+    c.commit()
+    s.close()
+    conn = sqlite3.connect(db)
+    ps = _find(ap.find_pairs(conn, days=30, today=date.today()), 5011, 5014)
+    assert len(ps) == 1 and ps[0].kind == "coexist"
