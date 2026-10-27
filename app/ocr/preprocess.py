@@ -333,6 +333,34 @@ def grid_bands(groups: list[tuple[int, int]], layout: np.ndarray
     return out
 
 
+_EXTEND_MAX = 0.35  # a cell's span may grow by at most this share of its band height
+
+
+def extend_span(ink: np.ndarray, y0: int, y1: int, prev_end: int | None = None,
+                next_start: int | None = None, min_ink: int = 2) -> tuple[int, int]:
+    """Grow the rows [y0, y1) over the ink of ONE cell (`ink`: dark pixels per mask row
+    of the cell's columns) that touches the band edge and runs past it.
+
+    The row bands are cut on the ink of the whole text line; with the board tilted
+    in the picture the glyphs of the left-hand cells sit lower than the band (and the
+    right-hand ones higher), so their bottoms (tops) were cut off. Growth stops at the
+    first row with less than `min_ink`, after _EXTEND_MAX of the band height, and
+    halfway into the gap to the neighbouring line (`prev_end`/`next_start`), so it never
+    reaches the glyphs of another line."""
+    n = len(ink)
+    cap = max(1, int(_EXTEND_MAX * (y1 - y0)))
+    top_lim = y0 - cap if prev_end is None else max(y0 - cap, (prev_end + y0) // 2)
+    bot_lim = y1 + cap if next_start is None else min(y1 + cap, (y1 + next_start + 1) // 2)
+    top_lim, bot_lim = max(0, top_lim), min(n, bot_lim)
+    if 0 < y1 <= n and ink[y1 - 1] >= min_ink:
+        while y1 < bot_lim and ink[y1] >= min_ink:
+            y1 += 1
+    if 0 <= y0 < n and ink[y0] >= min_ink:
+        while y0 > top_lim and ink[y0 - 1] >= min_ink:
+            y0 -= 1
+    return y0, y1
+
+
 def structured_bands(layout: np.ndarray, rows: np.ndarray
                      ) -> tuple[list[tuple[int, int]], int]:
     """(bands, groups repaired): the text-line bands of `row_bands`, checked against the

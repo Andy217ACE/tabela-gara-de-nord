@@ -99,7 +99,7 @@ def test_manifest_icons_and_colours():
     for src, i in srcs.items():
         with Image.open(WEB / src) as im:
             assert f"{im.width}x{im.height}" == i["sizes"]
-    assert m["theme_color"] == "#0a0d12" and m["background_color"] == "#0a0d12"
+    assert m["theme_color"] == "#0f172a" and m["background_color"] == "#0f172a"
 
 
 def test_og_and_twitter_tags():
@@ -306,7 +306,11 @@ def test_icon_weights_and_precache_budget(client):
     # 400 KB until Beta 1.05 (~396 KB); +~14 KB of JS/CSS for the all-days Istoric
     # +~60 KB (uncompressed; ~15 KB gzip) for Statistici v2 (statistici.js/.css): the page
     # stays usable offline as a shell with an explicit „offline” message
-    assert total <= 480_000, total
+    # +~25 KB (uncompressed; ~6 KB gzip) for „Probleme” on #statistici (Beta 1.19)
+    # +~38 KB (Beta 1.20, UI2): the two critical self-hosted fonts (Fira Sans 400 + Fira Code,
+    # preloaded) replace Google Fonts, which were fetched from the network and never offline;
+    # +~10 KB for the three-layer design tokens (primitive/semantic/component) in style.css
+    assert total <= 560_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

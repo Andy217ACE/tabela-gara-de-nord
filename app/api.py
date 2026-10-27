@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 import re
 from contextlib import asynccontextmanager
@@ -51,6 +52,10 @@ BOARDS = ("arrival", "departure")
 
 _HHMM = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# self-hosted web fonts (web/fonts/*.woff2): not in every OS mime table (Windows, minimal
+# images); with "nosniff" a wrong type could block them
+mimetypes.add_type("font/woff2", ".woff2")
 
 CSP = "; ".join([
     "default-src 'self'",
@@ -321,7 +326,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     @app.get("/api/board")
     def board(request: Request):
         store = store_of(request)
-        out = store.current_board()
+        out = store.current_board(datetime.now(TZ), STALE_S)
         age = store.last_ok_age(datetime.now(TZ))
         out["age_s"] = age
         out["stale"] = age is None or age > STALE_S

@@ -96,9 +96,10 @@ def _open(browser, base_url, w, h, theme, hash_):
 
 
 NO_HSCROLL = "() => document.documentElement.scrollWidth <= window.innerWidth"
-# (wide data tables scroll inside their own .st-scroll box: the box must fit, its rows may not)
+# (wide data tables scroll inside their own .st-scroll / .ss-cmp-wrap box: the box must fit,
+# its rows may not)
 INSIDE = """() => [...document.querySelectorAll('#view-statistici *')].filter(e => {
-  const box = e.parentElement && e.parentElement.closest('.st-scroll');
+  const box = e.parentElement && e.parentElement.closest('.st-scroll, .ss-cmp-wrap');
   if (box) return false;
   const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > innerWidth + 0.5 || r.left < -0.5);
 }).map(e => e.tagName + '.' + (e.getAttribute('class') || '') + ':' + (e.textContent || '').slice(0, 30))"""
@@ -116,8 +117,9 @@ def test_statistici_page(browser, base_url, w, h, theme):
         assert "7 zile cu date" in summary and "Date insuficiente" not in summary
         assert page.locator(".ss-kpi").count() == 2
         assert page.locator("svg.ss-svg").count() >= 10
-        assert page.locator(".ss-fig").count() == 11
-        assert page.locator(".ss-how").count() == 11
+        # 11 detail charts + 7 „Problemele în detaliu” cards; + the „Probleme” intro
+        assert page.locator(".ss-fig").count() == 18
+        assert page.locator(".ss-how").count() == 19
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")
@@ -205,5 +207,84 @@ def test_weather_section_per_board(browser, weather_url, w):
         assert "Sosiri" in text and "Plecări" in text and "analizate separat" in text
         assert "Corelație, nu cauzalitate" in text
         assert page.evaluate(NO_HSCROLL) and page.evaluate(INSIDE) == [] and errors == []
+    finally:
+        ctx.close()
+
+
+# ---- „Probleme” (Beta 1.19) -------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def problems_url(tmp_path_factory):
+    from tests.test_stats_overview import add
+    db = tmp_path_factory.mktemp("stats3p") / "p.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    for day in range(14, 21):  # 7 days
+        for k, base in enumerate((30, 40, 45, 60)):  # Pitești: late every day
+            add(c, "arrival", 9250 + 2 * k, day, f"1{5 + k}:0{k}", base + (day % 3) * 5,
+                station="PITESTI", ttype="RE")
+        for k in range(6):  # Brașov: punctual
+            add(c, "arrival", 1600 + k, day, f"0{6 + k % 3}:1{k}", 0 if k % 2 else 5)
+            add(c, "departure", 1700 + k, day, f"1{k}:20", 0, station="CONSTANTA")
+    s.close()
+    stats_overview.clear_cache()
+    server, t, url = _serve(db)
+    yield url
+    server.should_exit = True
+    t.join(5)
+
+
+@pytest.mark.parametrize("w,h", [(1280, 800), (390, 844)])
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_problems_first(browser, problems_url, w, h, theme):
+    stats_overview.clear_cache()
+    ctx, page, errors = _open(browser, problems_url, w, h, theme, "#statistici")
+    try:
+        page.wait_for_selector(".ss-problems .ss-prob")
+        # the page starts with „Probleme”, then „Ce merge bine”, then the details
+        first = page.evaluate("document.querySelector('.ss-body').firstElementChild.className")
+        assert first == "ss-problems"
+        order = page.evaluate("""() => [...document.querySelector('.ss-body').children]
+            .map(e => e.className.split(' ')[0])""")
+        assert order.index("ss-problems") < order.index("ss-good") < order.index("ss-summary")
+        prob = page.locator(".ss-problems")
+        text = prob.text_content()
+        assert "Acoperirea datelor: bună" in text and "7 zile de istoric" in text
+        items = prob.locator(".ss-prob")
+        assert 1 <= items.count() <= 10
+        top = items.first.text_content()
+        assert "Gravitate:" in top and "Încredere:" in top and "N = " in top
+        assert "De ce contează:" in top
+        assert prob.locator("a[href^='#statie?nume=PITESTI']").count() >= 1
+        assert prob.locator("a[href^='#tren?nr=925']").count() >= 1
+        rec = page.locator(".ss-fig", has_text="Ce trenuri întârzie zi de zi")
+        assert rec.locator(".ss-ptrain").count() == 4
+        assert "7 din 7 zile întârziat" in rec.text_content()
+        assert "%" not in rec.locator(".ss-ptrain").first.text_content()
+        trend = page.locator(".ss-fig", has_text="Se îmbunătățește")
+        assert "Istoric insuficient" not in trend.text_content()
+        assert page.locator(".ss-good li").count() >= 1
+        # sample links of the problems are in-app routes
+        hrefs = page.evaluate("[...document.querySelectorAll('.ss-problems a')].map(a => a.getAttribute('href'))")
+        assert hrefs and all(x.startswith("#") for x in hrefs)
+        assert page.evaluate(NO_HSCROLL)
+        assert page.evaluate(INSIDE) == []
+        assert page.evaluate(COUNT_JS) == 1
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_problems_below_minimum_sample(browser, base_url):
+    stats_overview.clear_cache()
+    ctx, page, errors = _open(browser, base_url, 390, 844, "dark",
+                              "#statistici?operator=Transferoviar")
+    try:
+        page.wait_for_selector(".ss-problems")
+        text = page.text_content(".ss-problems")
+        assert "Date insuficiente" in text and page.locator(".ss-prob").count() == 0
+        assert page.locator(".ss-part", has_text="Problemele în detaliu").count() == 0
+        assert page.evaluate(NO_HSCROLL) and errors == []
     finally:
         ctx.close()

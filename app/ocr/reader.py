@@ -36,7 +36,7 @@ from app.normalize import (
     parse_time,
     strip_flag,
 )
-from app.ocr import digits, preprocess, stats
+from app.ocr import digits, order, preprocess, stats
 from app.ocr.digits import DigitMatcher
 from app.ocr.engine import TESSERACT_TIMEOUT, OcrEngine, OcrError, TesseractEngine
 
@@ -151,6 +151,7 @@ class _Composite:
         return out
 
 
+BOX_MARGIN = 1  # px of margin around a cell box (see _Panel.boxes)
 PLATFORM_UP = 0.35  # share of the line height a right-hand cell may grow upwards
 GROW_UP = ("platform",)  # read grown upwards (digit tops cut by the band: perspective)
 # read grown upwards only when the templates do not trust the cell as cut (measured on
@@ -227,13 +228,33 @@ class _Panel:
                                           int(PLATFORM_UP * (y1 - y0)))
         return out
 
-    def boxes(self, i: int) -> dict[str, tuple[int, int, int, int]]:
-        s = preprocess.SCALE
+    def cell_span(self, i: int, k: int) -> tuple[int, int]:
+        """Vertical extent (x3 mask rows) of cell `k` of line `i`: the line's band, grown
+        over the cell's own ink that runs past it (see ``preprocess.extend_span``). The
+        band is cut on the ink of the whole line; the camera tilts the board, so the
+        left-hand cells sit lower (and the right-hand ones higher) than that band and
+        their glyph bottoms (tops) would end up outside it."""
         y0, y1 = self.bands[i]
-        y, hgt = y0 // s, max(1, -(-(y1 - y0) // s))
         e = self.edges[i]
-        return {name: (x0 // s, y, max(1, (x1 - x0) // s), hgt)
-                for name, x0, x1 in zip(_ORDER, e[:-1], e[1:])}
+        ink = (self.mask[:, e[k]:e[k + 1]] == 0).sum(axis=1)
+        prev_end = self.bands[i - 1][1] if i and self.bands[i - 1][1] <= y0 else None
+        next_start = self.bands[i + 1][0] if i + 1 < len(self.bands)             and self.bands[i + 1][0] >= y1 else None
+        return preprocess.extend_span(ink, y0, y1, prev_end, next_start)
+
+    def boxes(self, i: int) -> dict[str, tuple[int, int, int, int]]:
+        """Box (x, y, w, h in board pixels) of every cell of line `i`: the cell's glyph
+        extent (``cell_span``) plus a 1 px margin, so the drawn rectangle frames the
+        glyphs instead of running through their edge pixels."""
+        s = preprocess.SCALE
+        height = self.img.shape[0]
+        e = self.edges[i]
+        out = {}
+        for k, (name, x0, x1) in enumerate(zip(_ORDER, e[:-1], e[1:])):
+            a, b = self.cell_span(i, k)
+            y = max(0, a // s - BOX_MARGIN)
+            bottom = min(height, -(-b // s) + BOX_MARGIN)
+            out[name] = (x0 // s, y, max(1, (x1 - x0) // s), max(1, bottom - y))
+        return out
 
     def has_ink(self, i: int) -> bool:
         return preprocess.band_has_ink(self.mask, self.bands[i])
@@ -342,8 +363,11 @@ def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
     n, t = len(m), t_text
     if len(t) == n:  # same length: every doubtful glyph read the same by Tesseract
         return all(not w or t[k] == m[k] for k, w in enumerate(weak))
-    if len(t) == n - 1:  # Tesseract dropped the trusted last "1" (seam), all else equal
-        return n > 1 and m[-1] == "1" and not weak[-1] and m[:-1] == t
+    if len(t) == n - 1:  # Tesseract dropped a trusted glyph, all else equal: the last "1"
+        # (cut by the seam) or the FIRST glyph (Beta 1.22: "9209" -> "209"); any other
+        # dropped glyph is not taken for granted (79095 vs "7909")
+        return n > 1 and any(not weak[j] and t == m[:j] + m[j + 1:]
+                             and (j == 0 or (j == n - 1 and m[j] == "1")) for j in range(n))
     if len(t) == n + 1:  # one spurious character in Tesseract's reading, all else equal
         return any(t[:j] + t[j + 1:] == m for j in range(n + 1))
     return False
@@ -357,8 +381,25 @@ FUSED_MIN_SCORE = 0.80
 FUSED_MIN_MARGIN = 0.10
 
 
+DELAY_STEP = 5  # the board counts delays in 5-minute steps (every delay of the truth set
+                # and 99.8% of the live readings); another number is a misread digit
+
+
 def _delay(cell: np.ndarray, tess: tuple[str, float | None], matcher: DigitMatcher | None
            ) -> tuple[str, float | None, str | None]:
+    """`_delay_cell`, plus: a delay that is not a multiple of DELAY_STEP is a misread
+    (live audit 21-26.10: "+46" x27 for 5 trains, "+26", "+6"; the 5/6 split by a grid
+    line), so the cell is unread (missing, never a guess)."""
+    text, conf, why = _delay_cell(cell, tess, matcher)
+    if why is None:
+        n = parse_delay(text)
+        if n is not None and n % DELAY_STEP:
+            return DELAY_UNREAD, None, "not_step"
+    return text, conf, why
+
+
+def _delay_cell(cell: np.ndarray, tess: tuple[str, float | None], matcher: DigitMatcher | None
+                ) -> tuple[str, float | None, str | None]:
     """(text, confidence 0-100, reason the cell is unread or None) of a delay cell.
 
     The board prints a delay as "+" and 1-3 digits. Measured misreads (audit Beta 1.13):
@@ -442,13 +483,30 @@ def _hundreds_candidate(cell: np.ndarray, t_text: str, matcher: DigitMatcher | N
     if (c0 == "+" and (digits.glyph_trusted(s0, m0) or digits.is_plus(g0))
             and c1 == "1" and digits.glyph_trusted(s1, m1) and not f1 and ok_last
             and len(t) == 3 and t.isdigit() and t[0] == "1"):
-        return "+" + "".join(ch for ch, *_ in gl[1:])
+        cand = "+" + "".join(ch for ch, *_ in gl[1:])
+        return cand if int(cand[1:]) % DELAY_STEP == 0 else None
     return None
 
 
 VOTE_WINDOW = 7  # last frames of the same train looked at
 VOTE_MIN = 4     # a candidate needs this many identical readings...
 # ...and a strict majority of the window
+SEEN_WINDOW = 12  # frames of the same train whose rejected delay text ("seen") is voted...
+SEEN_MIN = 8      # ...a value read this often in them is the delay (arrow over the "+")
+SEEN_CHECKS = ("no_plus",)  # the cell was rejected because the "+" is not there (never
+# "glare": there both readers can agree on a wrong hidden digit, 6 -> 8)
+
+
+def _seen_value(f: dict) -> int | None:
+    """The delay Tesseract saw in a cell rejected because the "+" was not there: 1-2
+    digits, a multiple of DELAY_STEP, never 0 (a hidden "+" is a delay, not "on time")."""
+    if f.get("check") not in SEEN_CHECKS:
+        return None
+    t = (f.get("seen") or "").replace(" ", "").lstrip("+")
+    if not t.isdigit() or len(t) > 2:
+        return None
+    n = int(t)
+    return n if n > 0 and n % DELAY_STEP == 0 else None
 
 
 class DelayVotes:
@@ -464,6 +522,8 @@ class DelayVotes:
     def __init__(self, window: int = VOTE_WINDOW, need: int = VOTE_MIN):
         self.window, self.need = window, need
         self._hist: dict[tuple, deque] = {}
+        self._seen: dict[tuple, deque] = {}  # key -> last SEEN_WINDOW rejected-text values
+        self._last: dict[tuple, int] = {}    # key -> last delay really read for the train
 
     def apply(self, entries: list[dict]) -> None:
         seen = set()
@@ -477,6 +537,7 @@ class DelayVotes:
             cand = f.get("candidate") if f.get("check") else None
             h = self._hist.setdefault(key, deque(maxlen=self.window))
             h.append(cand)
+            self._vote_seen(e, key, f)
             if cand is None:
                 continue
             n = sum(c == cand for c in h)
@@ -489,6 +550,26 @@ class DelayVotes:
         for key in list(self._hist):  # trains gone from the board
             if key not in seen:
                 del self._hist[key]
+                self._seen.pop(key, None)
+                self._last.pop(key, None)
+
+    def _vote_seen(self, e: dict, key: tuple, f: dict) -> None:
+        """Recover a delay whose "+" is hidden (the platform arrow drawn over it when the
+        train gets its platform: "+15" seen as "+◄5"): the digits Tesseract saw, voted over
+        the last SEEN_WINDOW frames, are the delay when SEEN_MIN of them agree and it is
+        not below the last delay really read (a delay never shrinks to a recovered value
+        under it). Live audit 21-26.10: 20 of 23 "unconfirmed" tails."""
+        v = _seen_value(f)
+        h = self._seen.setdefault(key, deque(maxlen=SEEN_WINDOW))
+        h.append(v)
+        if not f.get("check"):
+            if f.get("norm"):
+                self._last[key] = f["norm"]
+            return
+        if v is None or sum(c == v for c in h) < SEEN_MIN or v < self._last.get(key, 0):
+            return
+        _set_delay(e, f"+{v}", None, v, {"attempts": len(h), "variant": "vote-seen"})
+        f["vote"] = f"seen {sum(c == v for c in h)}/{len(h)}"
 
 
 def read_board(image_bytes: bytes, engine: OcrEngine | None = None, *,
@@ -604,6 +685,10 @@ def read_board_debug(image_bytes: bytes, engine: OcrEngine | None = None, *,
             votes.apply(entries)
         except Exception:  # optional: the delay stays unread
             log.warning("OCR delay vote failed; delay left unread", exc_info=True)
+    try:
+        order.check_time_order(entries)  # a time out of the panel's order is a misread
+    except Exception:  # optional: the times stay as read
+        log.warning("OCR time-order check failed; times kept as read", exc_info=True)
 
     for e in entries:
         for f in e["fields"].values():

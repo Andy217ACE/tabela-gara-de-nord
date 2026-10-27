@@ -5,6 +5,95 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.24 — 2026-10-26
+
+Beta 1.22 nu a fost publicată separat: conținutul ei (calitatea datelor, runda 3) este în această versiune, peste Beta 1.23 (dreptunghiurile celulelor pe panou înclinat).
+
+### Reparat
+- **Numere de tren cu cifre în plus sau în minus** (RE 9209 apărea și ca 92011, RM 7938 ca 79311, RE 10157 ca 157, R 5019 ca 19): cauza era rostul dintre modulele tabelei, care taie ultima cifră (un „9” devenea „11”) și strălucirile care ascund prima cifră. Cifra tăiată se lipește la loc, iar două citiri ale aceluiași rând (aceeași stație și aceeași oră, numere apropiate) sunt tratate ca **un singur tren**, nu ca două; dacă tabela arată cu adevărat două trenuri în același cadru, rămân două.
+- **Stații scrise diferit:** „KIEV -CHISINAU” și „KIEV - CHISINAU” sunt aceeași stație; „VATRA DORNEI BA” se completează la „VATRA DORNEI BAI”.
+- **Ore programate citite greșit** (01:10 și 01:49, 03:38 și 08:58): orele de pe un panou cresc mereu; o oră care iese din ordine primește încredere scăzută și, doar dacă o singură cifră confundabilă (5/6, 3/8, 0/8…) o pune la loc fără îndoială, este corectată și marcată incertă. Același tren, în aceeași stație și zi, cu ore apropiate ca scriere, este un singur tren.
+- **Întârzieri care nu sunt multiplu de 5** („+46”, „+26”, „+6”): tabela numără din 5 în 5 minute, deci o astfel de valoare e o cifră citită greșit și devine „necitită” (lipsă, niciodată 0 și niciodată o presupunere).
+- **Întârziere recuperată când „+” e acoperit de săgeata de peron:** dacă în cel puțin 8 din ultimele 12 cadre se vede aceeași valoare (multiplu de 5, nu mai mică decât ultima citire), aceea este întârzierea. Reduce trenurile „neconfirmate” din coada de la peron.
+- **Ora repetată din noaptea de 25.10 (trecerea la ora de iarnă):** pentru trenurile programate între 03:00 și 03:59 ora estimată și dispariția erau comparate cu o oră de diferență (apăreau „dispărut înainte de ora estimată” false). Comparațiile se fac acum în UTC.
+
+### Tehnic
+- `app/ocr/digits.py` (lipirea cifrei tăiate, rost până la ~4 px), `app/ocr/reader.py` (confirmare Tesseract când lipsește prima cifră, validare pas de 5 min, `DelayVotes` pe textul văzut), `app/ocr/order.py` (ordinea orelor), `app/store.py` (`_near_dup`, vot de redenumire spre mai puține cifre doar la 90%), `app/canonical.py` + `data/stations_seed.txt`, `app/journeys.py` (UTC).
+- Teste noi: `tests/test_q122.py`. Schema DB neschimbată (v7). Datele deja salvate nu se modifică; curățarea retroactivă se face separat.
+- Rămas: coloana peron citită tăiat/acoperită de reflexii (cadrul 7028) nu poate fi citită; numerele greșite stabile (IR 1584/1574 în loc de 1581/1571) cer vot pe caractere.
+## Beta 1.23 — 2026-10-26
+
+### Reparat
+- **Capturi OCR, overlay:** dreptunghiurile celulelor „tip tren” și „număr tren” de pe Plecări (mai ales grupul 4, rândurile 9–11) erau prea sus și tăiau partea de jos a cifrelor și a literelor, iar „oră”/„operator” erau prea jos.
+- Cauza: camera vede panoul înclinat (textul coboară spre stânga și urcă spre dreapta, ~3 px pe Plecări), iar banda de rând era comună pentru toate coloanele.
+- Acum fiecare celulă își urmărește propria cerneală dincolo de bandă (limitat la 35% din înălțime și la jumătatea spațiului până la rândul vecin) și are 1 px margine.
+- Tăiere jos la tip/nr: de la 22–42% din celule la sub 1%.
+- **Citirea nu a fost afectată în mod măsurabil:** imaginile trimise la Tesseract rămân neschimbate (șabloanele de cifre sunt calibrate pe ele); acuratețea pe setul de adevăr e identică (384 rânduri).
+
+### Tehnic
+- `preprocess.extend_span`, `_Panel.cell_span`, `_Panel.boxes`; test `tests/test_band_boxes.py` cu captură reală (`tests/fixtures/band_group4.jpg`). Schema DB neschimbată (v7).
+
+## Beta 1.21 — 2026-10-24
+
+### Reparat
+- Pagina **Versiuni** afișa marcajele de evidențiere ca text brut (două steluțe înainte și după); acum fragmentele marcate apar îngroșat, ca în notele de pe GitHub.
+- Se aplică tuturor versiunilor din listă, inclusiv notelor vechi (Beta 1.09–1.20).
+- Textul notelor e pus în pagină tot ca text (fără HTML venit din date), deci politica de securitate a paginii rămâne la fel de strictă.
+
+### Tehnic
+- Doar `web/versions.js`; footerul și „Versiunea curentă” nu se schimbă.
+- Service worker v25. Schema DB neschimbată (v7).
+
+## Beta 1.20 — 2026-10-24
+
+### Nou
+- **Primul release** (până acum doar pre-release-uri): grafica întregii aplicații, regândită ca un afișaj de gară modern.
+- **Aspect nou, pe toate ecranele:** fundal slate (albastru-gri închis) și o temă luminoasă la fel de lucrată; ambra panoului de gară pentru ore, linie și selecție; verde, galben, portocaliu și roșu doar pentru stări citite, mereu cu iconiță și text; gri pentru necitit, necunoscut și date vechi (niciodată „la timp” fără o întârziere citită).
+- **Fonturi noi, găzduite pe site:** Fira Code pentru ore, numere de tren și cifre, Fira Sans pentru text, cu diacritice românești. Nu mai există nicio cerere către Google Fonts.
+- **LIVE mai ușor de citit:** linia apare ca o plăcuță de peron (chenar și cifre ambră); la trenurile întârziate ora estimată rămâne mare, iar starea o spun bara colorată și eticheta „+N min”; filtrele Panoului încap pe un rând pe desktop.
+- **Pe telefon:** antetul ocupă două rânduri (ceasul, vremea și „actualizat” pe același rând), meniul are linia ambră sub pagina curentă, butoanele Panoului sunt iconițe de 44 px pe un singur rând, iar legenda culorilor coboară sub tabel, ca trenurile să apară mai sus.
+- Butoane, câmpuri, carduri, insigne și foi de detaliu au aceeași formă și aceleași stări pe toate paginile (Istoric, Urmărite, Trenuri, Tren, Stații, Stație, Statistici, Clasamente, Versiuni, Capturi OCR).
+
+### Reparat
+- Contrast insuficient în tema luminoasă a Panoului („la timp” 4,48:1 și „+30 min” 3,9:1): toate textele au acum cel puțin 4,5:1, verificat automat pe toate ecranele, în ambele teme.
+- Textul nu mai coboară sub 12 px (etichetele de 11 px au fost mărite), iar câmpurile au contur vizibil (3:1).
+- Butonul de temă nu mai apare de două ori pe Tabelă (în Panou rămâne doar în ecran complet).
+
+### Tehnic
+- Sistem de design în trei straturi (primitive → semantice → componente), descris în `design-system/tabela-gara-de-nord/MASTER.md`; culorile brute există doar în stratul primitiv.
+- Audit automat de contrast: `scripts/contrast_audit.py` și `tests/test_contrast_browser.py` (1280 și 390 px, dark + light).
+- Fonturi woff2 în `web/fonts/` (subset latin + latin-ext, `font-display: swap`, licență OFL inclusă); cele două critice sunt preîncărcate și în cache-ul offline. Service worker v24. Schema DB neschimbată (v7). Logica, API-ul și datele nu s-au schimbat.
+
+## Beta 1.19 — 2026-10-24
+
+### Nou
+- **Statisticile încep cu „Probleme”.** Pe baza primelor 4 zile (1157 de călătorii, 103 708 citiri ale tabelei), pagina Statistici arată întâi ce iese în evidență, clasat după gravitate × câte călătorii afectează × încrederea în cifre. Fiecare problemă are N, cifrele brute, „de ce contează” și link spre tren, stație sau zi. Calculul e determinist, din date (fără AI).
+- Ce apare acum în date: sosirile sunt la timp doar în 48,5 % din cazuri (37 % fără navetele de Aeroport), plecările în 92,5 %; trenurile din Pitești (2 din 30 la timp, mediana 32,5 min) și Târgoviște (1 din 21); 59 de trenuri întârziate în fiecare zi în care au fost văzute; trenurile de noapte (IRN) — niciunul la timp la sosire (N = 25); ferestrele 06–09 și 15–18 la sosiri; prima întârziere anunțată crește la 43 % dintre sosiri.
+- **„Ce merge bine”** pe scurt, apoi **„Problemele în detaliu”**: trenuri întârziate zi de zi (cu întârzierea fiecărei zile), ferestre de 3 ore și episoade de o zi (de ex. 22.10, 06–09), sosiri și plecări față în față, întârzieri foarte mari, direcții, creșterea întârzierii după primul anunț, tendința pe zile.
+- **Indicator de acoperire:** zile parțiale (ziua în curs, ore excluse), pauze în citirea tabelei, rezultate neconfirmate/necunoscute și ce nu se poate concluziona încă (tendințe sub 7 zile, vremea, schimbările de linie, „cel mai bun operator”).
+
+### Reparat
+- **Statistici înșelătoare pe medie:** un singur tren cu 390 min (IR 16534, 23.10) făcea din 23:00 „ora cu cea mai mare întârziere” (mediana orei: 5 min) și din Cluj-Napoca „ruta cea mai întârziată”. Orele și rutele se clasează acum după mediană; o direcție trebuie să aibă cel puțin 2 trenuri diferite.
+- Propoziția „cel mai punctual operator” (12 călătorii = 4 trenuri × 3 zile) a fost scoasă: operatorii au rute diferite (corelație, nu cauzalitate).
+- Harta oră × zi a săptămânii avertizează că, sub 7 zile de istoric, fiecare zi a săptămânii e o singură dată.
+
+### Tehnic
+- `app/stats_problems.py` (nou, funcții pure, testat cu date sintetice, inclusiv sub eșantionul minim); secțiunea `problems` în `/api/stats/overview`, calculată pe aceeași conexiune read-only și același cache TTL.
+- Analiza datelor: `docs/superpowers/analysis/2026-10-24-date-4-zile.md`.
+- Service worker v23. Schema DB neschimbată (v7).
+
+## Beta 1.18 — 2026-10-24
+
+### Reparat
+- **Panoul LIVE arăta uneori 13 trenuri, deși tabela fizică are mereu 12 rânduri.** Un tren care dispare de pe tabelă e trecut „plecat” abia după 3 citiri în care lipsește (ca o citire greșită de un cadru să nu-l scoată și să-l readucă). În acest interval rămânea și pe LIVE, lângă trenul nou intrat.
+- Acum, după un cadru complet al panoului (toate cele 12 rânduri citite), LIVE arată doar trenurile din acel cadru. Trenul aflat în așteptare rămâne în baza de date și în istoric și devine „plecat” după aceleași reguli ca înainte; dacă reapare la următoarea citire, revine pe LIVE.
+- Dacă ultimul cadru al unui panou nu a fost complet, dacă panoul a fost respins sau dacă datele lui sunt vechi, nu se ascunde nimic (comportamentul de până acum).
+
+### Tehnic
+- Service worker v22. Schema DB neschimbată (v7).
+- Regulile pentru „plecat”, evenimentele, notificările, istoricul și statisticile nu s-au schimbat; se schimbă doar ce arată `/api/board`.
+- După o repornire a serviciului nu se ascunde nimic până la primul cadru complet citit.
+
 ## Beta 1.17 — 2026-10-23
 
 ### Reparat

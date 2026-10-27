@@ -29,6 +29,7 @@ from pathlib import Path
 
 from app import journeys, stations, stats
 from app import quality as dq
+from app import stats_problems as sp
 
 TZ = journeys.TZ
 log = logging.getLogger(__name__)
@@ -94,7 +95,8 @@ def _ttl() -> int:
 def empty_extra() -> dict:
     return {"excluded": {"ghost": 0, "low_quality": 0},
             "observations": {"ok": 0, "uncertain": 0, "rejected_low_conf": 0, "incomplete": 0},
-            "history": {"first": None, "last": None, "days": 0}}
+            "history": {"first": None, "last": None, "days": 0},
+            "low_quality_dates": {}, "delay_events": {}, "gaps": []}
 
 
 # ---- reading (read-only connection) ----------------------------------------------------
@@ -135,6 +137,16 @@ def _has(conn, table: str) -> bool:
                         (table,)).fetchone() is not None
 
 
+def _local(stamp: str) -> str:
+    """A stored timestamp as local (Europe/Bucharest) ISO, minutes precision."""
+    try:
+        t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return str(stamp)
+    t = t.replace(tzinfo=TZ) if t.tzinfo is None else t.astimezone(TZ)
+    return t.isoformat(timespec="minutes")
+
+
 def _utc(d: date) -> str:
     """Local midnight of `d` as the UTC string the observation tables store."""
     return datetime(d.year, d.month, d.day, tzinfo=TZ).astimezone(timezone.utc).isoformat()
@@ -163,6 +175,38 @@ def fetch(store, p: stats.Params) -> tuple[list[dict], list[dict], dict]:
                        + (" WHERE " + " AND ".join(fw) if fw else ""), fa).fetchone()
         extra["excluded"] = {"ghost": ex[0],
                              "low_quality": 0 if dq.include_low_quality() else ex[1]}
+        if not dq.include_low_quality():
+            extra["low_quality_dates"] = dict(c.execute(
+                "SELECT s.service_date, COUNT(*) FROM services s JOIN service_quality q"
+                " ON q.service_id = s.id WHERE q.ghost = 0 AND q.low_quality = 1"
+                + "".join(" AND " + x for x in fw) + " GROUP BY s.service_date", fa).fetchall())
+        # delay events of these journeys (readings only: suspect events left out) -> did the
+        # delay grow after it was first announced (app.stats_problems.growth)
+        sus = (" AND e.id NOT IN (SELECT event_id FROM event_quality WHERE suspect = 1)"
+               if _has(c, "event_quality") else "")
+        evs: dict = {}
+        for r in c.execute("SELECT e.service_id, e.old, e.new FROM events e JOIN services s"
+                           " ON s.id = e.service_id WHERE e.kind = 'delay'"
+                           + "".join(" AND " + x for x in fw) + sus
+                           + " ORDER BY e.service_id, e.ts, e.id", fa).fetchall():
+            evs.setdefault(r[0], []).append({"old": r[1], "new": r[2]})
+        extra["delay_events"] = evs
+        # pauses between two successful board readings (coverage); julianday() orders the
+        # local timestamps correctly across a DST change
+        rw, ra = ["ok = 1"], []
+        if p.date_from:
+            rw.append("julianday(ts) >= julianday(?)")
+            ra.append(_utc(p.date_from))
+        if p.date_to:
+            rw.append("julianday(ts) < julianday(?)")
+            ra.append(_utc(p.date_to + timedelta(days=1)))
+        extra["gaps"] = [
+            {"start": _local(g[0]), "end": _local(g[1]), "minutes": int(round(g[2]))}
+            for g in c.execute(
+                "SELECT prev, ts, (julianday(ts) - julianday(prev)) * 1440 FROM ("
+                " SELECT ts, LAG(ts) OVER (ORDER BY julianday(ts)) AS prev FROM runs WHERE "
+                + " AND ".join(rw) + ") WHERE prev IS NOT NULL AND"
+                " (julianday(ts) - julianday(prev)) * 1440 > ?", ra + [sp.GAP_MIN]).fetchall()]
         hist = c.execute("SELECT MIN(s.service_date), MAX(s.service_date),"
                          " COUNT(DISTINCT s.service_date) FROM services s WHERE "
                          + dq.public_services_where("s")).fetchone()
@@ -308,7 +352,7 @@ def _weather_board(js, wx, p) -> dict:
     return base
 
 
-def _insights(boards, by_board, hourly, routes, operators, traffic, platforms, quality, p):
+def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p):
     out = []
     if not any(by_board[b]["journeys"] for b in boards):
         return ["Încă nu există călătorii observate pentru filtrele alese."]
@@ -332,29 +376,32 @@ def _insights(boards, by_board, hourly, routes, operators, traffic, platforms, q
         ok = [h for h in hourly[b] if h["sufficient"]]
         if not ok:
             continue
-        # ranked by the mean (medians are often all 0 at departures), median shown too
-        worst = max(ok, key=lambda h: (h["mean"], h["median"], -h["key"]))
-        line = (f"{BOARD_PL[b]}: cea mai mare întârziere medie o au trenurile programate "
-                f"{_between(worst['key'])} — {_fmt(worst['mean'])} min, mediana "
-                f"{_fmt(worst['median'])} min (N = {worst['n']})")
-        best = min(ok, key=lambda h: (h["mean"], h["median"], h["key"]))
-        if len(ok) >= 2 and best["mean"] < worst["mean"]:
-            line += (f"; cea mai mică, {_between(best['key'])} — {_fmt(best['mean'])} min "
+        # ranked by the MEDIAN, then the count above 30 min: a mean is moved by one extreme
+        # case (Beta 1.17: one 390-min train made 23:00 the „worst hour”, median 5 min)
+        worst = max(ok, key=lambda h: (h["median"], h["over_30"], -h["key"]))
+        if worst["median"] <= p.on_time:
+            most = max(ok, key=lambda h: (h["over_30"], -h["key"]))
+            out.append(f"{BOARD_PL[b]}: la fiecare oră cu destule date mediana e la timp "
+                       f"(≤ {p.on_time} min)" + (
+                           f"; cele mai multe întârzieri peste 30 min: {_between(most['key'])} "
+                           f"({most['over_30']} din N = {most['n']})." if most["over_30"] else "."))
+            continue
+        line = (f"{BOARD_PL[b]}: cea mai mare întârziere mediană o au trenurile programate "
+                f"{_between(worst['key'])} — {_fmt(worst['median'])} min, cu "
+                f"{worst['over_30']} peste 30 min (N = {worst['n']})")
+        best = min(ok, key=lambda h: (h["median"], h["over_30"], h["key"]))
+        if len(ok) >= 2 and best["median"] < worst["median"]:
+            line += (f"; cea mai mică, {_between(best['key'])} — {_fmt(best['median'])} min "
                      f"(N = {best['n']})")
         out.append(line + ".")
     for b in boards:
-        r = routes[b]
-        if r["most_delayed"]:
-            e = r["most_delayed"][0]
+        r = (problems.get("routes") or {}).get(b) or {}
+        if r.get("worst") and (r["worst"][0]["median"] or 0) > p.on_time:
+            e = r["worst"][0]
             way = "din" if b == "arrival" else "spre"
-            out.append(f"Cea mai mare întârziere medie {BOARD_AT[b]}: trenurile {way} "
-                       f"{e['key'].title()} — {_fmt(e['mean'])} min (N = {e['n']}).")
-    for b in boards:
-        ok = [o for o in operators[b] if o["sufficient"]]
-        if len(ok) >= 2:
-            o = ok[0]
-            out.append(f"Cel mai punctual operator {BOARD_AT[b]}: {o['key']} — "
-                       f"{_fmt(o['on_time_pct'])} % la timp (N = {o['n']}).")
+            out.append(f"Cea mai mare întârziere mediană {BOARD_AT[b]}: trenurile {way} "
+                       f"{e['key'].title()} — {_fmt(e['median'])} min "
+                       f"(N = {e['n']}, {_pl(e['trains'], 'tren', 'trenuri')}).")
     per_hour = [sum(traffic[b][h] for b in boards) for h in range(24)]
     if any(per_hour) and traffic["days"]:
         h = max(range(24), key=lambda k: (per_hour[k], -k))
@@ -415,8 +462,11 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         operators[b] = _ranked(bj[b], p, lambda j: j["operator"])
         types[b] = _ranked(bj[b], p, lambda j: j["train_type"])
         r = stations.rank_stations(bj[b], p, ROUTES_LIMIT)
+        # most delayed by the MEDIAN (then the mean): one extreme case must not lead the list
+        delayed = sorted(r["_ranked"], key=lambda e: (-e["stats"]["median"], -e["stats"]["mean"],
+                                                      e["station"]))[:ROUTES_LIMIT]
         routes[b] = {"eligible": r["eligible"], "below_min": r["below_min"],
-                     "most_delayed": [_route(e) for e in r["most_delayed"]],
+                     "most_delayed": [_route(e) for e in delayed],
                      "most_punctual": [_route(e) for e in r["most_punctual"]]}
         pc = Counter(j["last_platform"] for j in bj[b])
         missing = pc.pop(None, 0)
@@ -435,6 +485,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
                "excluded": extra.get("excluded") or {},
                # observations / exclusions are counted per board and period only
                "counters_scope": "all" if (op or tip) else "filtered"}
+    problems = sp.build(js, boards, p, extra, today)
     dates = [j["service_date"] for j in js]
     hist = extra.get("history") or {}
     history = {"first": hist.get("first"), "last": hist.get("last"), "days": hist.get("days", 0),
@@ -452,8 +503,8 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "coverage": coverage,
         "history": history,
         "boards": by_board,
-        "insights": _insights(boards, by_board, hourly, routes, operators, traffic, platforms,
-                              q, p),
+        "insights": _insights(boards, by_board, hourly, problems, traffic, platforms, q, p),
+        "problems": problems,
         "distribution": distribution,
         "hourly": hourly,
         "heatmap": heatmap,
