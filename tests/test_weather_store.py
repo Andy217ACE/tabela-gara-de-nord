@@ -221,7 +221,7 @@ def test_migrate_v7_to_v8_adds_columns_keeps_rows_and_nulls(tmp_path):
     assert wcols(s) == V4_COLS
     s.migrate()
     s.migrate()  # idempotent
-    assert version(s) == SCHEMA_VERSION == 8 and wcols(s) == COLS
+    assert version(s) == SCHEMA_VERSION == 9 and wcols(s) == COLS
     rows = s.weather_between("2026-10-20T00:00:00Z", "2026-10-20T23:59:59Z")
     assert [r["temperature_c"] for r in rows] == [9.5, 9.7]
     assert rows[0]["precipitation_mm"] == 0.0 and rows[1]["precipitation_mm"] is None

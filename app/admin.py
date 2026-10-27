@@ -24,6 +24,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -134,6 +135,34 @@ async def require_admin(request: Request) -> None:
     raise _err(401, "Autentificare necesară.", {"WWW-Authenticate": "Bearer"})
 
 
+def csrf_token(token: str, session_value: str) -> str:
+    """CSRF token of one session cookie: an HMAC only the server (and the page that asked
+    for it with the cookie) can know; it changes with the session and with ADMIN_TOKEN."""
+    return hmac.new(token.encode(), f"csrf:{session_value}".encode(), hashlib.sha256).hexdigest()
+
+
+async def require_csrf(request: Request) -> None:
+    """For state-changing admin calls. A request authenticated by ``Authorization: Bearer``
+    carries no ambient credential a foreign page could ride on, so it needs nothing more.
+    A cookie session needs ``X-CSRF-Token`` (from ``GET /api/admin/csrf``) and, when the
+    browser sends an Origin, the same host as the request (SameSite=Strict is the first
+    line; this is the second)."""
+    token = admin_token()
+    if token is None:
+        raise _err(503, "Administrare dezactivată.")
+    if request.headers.get("authorization", "")[:7].lower() == "bearer ":
+        return
+    origin = request.headers.get("origin")
+    if origin:
+        host = (request.headers.get("host") or "").rsplit(":", 1)[0].lower()
+        if (urlsplit(origin).hostname or "").lower() != host.strip("[]"):
+            raise _err(403, "Origine nepermisă.")
+    sess = request.cookies.get(COOKIE) or ""
+    given = request.headers.get("x-csrf-token", "")
+    if not sess or not hmac.compare_digest(given.encode(), csrf_token(token, sess).encode()):
+        raise _err(403, "Token CSRF lipsă sau invalid.")
+
+
 def _json(data, status: int = 200) -> JSONResponse:
     return JSONResponse(data, status_code=status, headers=NO_STORE)
 
@@ -217,6 +246,13 @@ def session(request: Request):
     token = admin_token()
     ok = token is not None and check_session(token, request.cookies.get(COOKIE))
     return _json({"enabled": token is not None, "authenticated": bool(ok)})
+
+
+@guarded.get("/csrf")
+def csrf(request: Request):
+    """CSRF token for the current cookie session (empty for a bearer-token request)."""
+    sess = request.cookies.get(COOKIE) or ""
+    return _json({"token": csrf_token(admin_token(), sess) if sess else ""})
 
 
 @guarded.get("/captures")

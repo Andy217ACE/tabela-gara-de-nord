@@ -30,8 +30,8 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import (admin, captures, history_all, observations, poller, stats, stats_api, trains_api,
-                 weather)
+from app import (admin, captures, corrections, corrections_api, history_all, observations,
+                 poller, stats, stats_api, trains_api, weather)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
@@ -243,10 +243,11 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             when = datetime.fromtimestamp(ts, TZ)
 
             def _ingest():
-                return (store.ingest(rows, when, ""), dict(store.last_rejected),
-                        set(store.last_ghost_numbers))
+                fixed = corrections.correct_rows(store, rows, when)  # manual rules (v9)
+                return (store.ingest(fixed, when, ""), dict(store.last_rejected),
+                        set(store.last_ghost_numbers), fixed)
 
-            events, rejected, ghosts = await asyncio.to_thread(_ingest)
+            events, rejected, ghosts, rows = await asyncio.to_thread(_ingest)
             try:  # public catalog follows the board even when captures are off/failing
                 await asyncio.to_thread(observations.refresh_catalog, store, rows, ghosts)
             except Exception:
@@ -497,6 +498,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         return {"ok": True}
 
     app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
+    app.include_router(corrections_api.router)  # /api/admin/corrections* (admin only, v9)
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(trains_api.router)  # /api/trains (public catalog)
 

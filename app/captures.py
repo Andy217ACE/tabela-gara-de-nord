@@ -24,6 +24,7 @@ import cv2
 import numpy as np
 
 from app.observations import parse_line_version
+from app.store import TZ
 
 log = logging.getLogger(__name__)
 
@@ -357,6 +358,11 @@ def make_on_capture(store, settings: CaptureSettings):
         if not settings.enabled:
             return
         try:
+            if rows or debug:  # manual correction rules (v9), same result as at ingest
+                from app import corrections
+                when = datetime.fromtimestamp(ts, TZ)
+                rows, debug = await asyncio.to_thread(corrections.correct_frame, store,
+                                                      rows, debug, when)
             await asyncio.to_thread(
                 observations.record_capture, store, image, rows, debug, ts,
                 capture_dir=settings.dir, retention_days=settings.retention_days,
