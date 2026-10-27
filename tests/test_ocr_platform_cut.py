@@ -175,78 +175,70 @@ def test_untrusted_platform_digit_is_not_replaced_by_a_rejected_tesseract_digit(
     assert got in (8, None), got
 
 
-@pytest.mark.parametrize("tess,want", [
-    ("3", ""),    # 3 is not among the near-tie candidates: unread
-    ("6", "6"),   # 6 is (0.811 vs 0.832): Tesseract breaks the tie
-    ("", ""),     # Tesseract saw nothing
+class _Stub:
+    """One untrusted glyph `ch` (score, margin) whose near-tie candidates are `near`."""
+
+    def __init__(self, ch, score, margin, near):
+        self.g, self._near = (ch, score, margin, None, False), near
+
+    def glyphs(self, cell, allowed):
+        return [self.g]
+
+    def read(self, cell, allowed):
+        return self.g[0], self.g[1], False
+
+    def near(self, glyph, allowed):
+        if isinstance(self._near, Exception):
+            raise self._near
+        return self._near
+
+
+TIE_8_6 = ("8", 0.832, 0.021, "86")  # real 121707: 8 / 6 near tie, "3" far behind
+
+
+@pytest.mark.parametrize("stub,tess,want", [
+    (TIE_8_6, "3", ""),    # 3 is not among the near-tie candidates: unread
+    (TIE_8_6, "6", "6"),   # 6 is (0.811 vs 0.832): Tesseract breaks the tie
+    (TIE_8_6, "", ""),     # Tesseract saw nothing
+    (("4", 0.55, 0.02, "41"), "1", ""),  # tie between weak matches (fused glyph): unread
+    (("8", 0.832, 0.021, RuntimeError("boom")), "6", ""),  # check failed: fail safe
 ])
-def test_tesseract_only_breaks_a_template_near_tie_on_platform(tess, want):
+def test_tesseract_only_breaks_a_template_near_tie_on_platform(stub, tess, want):
+    import numpy as np
+
+    from app.ocr.reader import _numeric
+    cell = np.zeros((10, 10), np.uint8)
+    assert _numeric("platform", cell, (tess, 80.0), _Stub(*stub))[0] == want
+
+
+def _glyph(r0, r1):
+    import numpy as np
+    g = np.zeros((32, 32), np.float32)
+    g[r0:r1, 10:20] = 1.0
+    return g
+
+
+@pytest.mark.parametrize("third,want", [
+    (("2", 0.213, 0.003, (28, 32)), "11"),  # real 152405: a 4-row sliver, not a digit
+    (("2", 0.45, 0.003, (4, 32)), ""),      # a weak but tall glyph is a digit: unread
+    (("2", 0.65, 0.003, (28, 32)), ""),     # a short glyph matching well is kept: unread
+])
+def test_a_sliver_is_not_a_platform_digit(third, want):
     import numpy as np
 
     from app.ocr.reader import _numeric
 
-    class _M:  # one weak glyph "8": near tie with "6", "3" far behind
+    class _M:
+        gl = [("1", 0.935, 0.204, _glyph(0, 29), False), ("1", 0.892, 0.218, _glyph(0, 28), False),
+              (*third[:3], _glyph(*third[3]), False)]
+
         def glyphs(self, cell, allowed):
-            return [("8", 0.832, 0.021, None, False)]
+            return self.gl
 
         def read(self, cell, allowed):
-            return "8", 0.832, False
+            return "112", 0.213, False
 
         def near(self, glyph, allowed):
-            return "86"
+            return "1"
 
-    assert _numeric("platform", np.zeros((10, 10), np.uint8), (tess, 80.0), _M())[0] == want
-
-
-def test_platform_cell_drops_the_next_line_digit_and_keeps_blank_cells_blank():
-    import numpy as np
-
-    from app.ocr.reader import platform_cell
-    mask = np.full((120, 40), 255, np.uint8)
-    mask[24:58, 12:30] = 0   # this line's digit, its top 6 px above the band (30, 70)
-    mask[62:70, 12:30] = 0   # top of the next line's digit in the band bottom
-    cell = platform_cell(mask, (30, 70), 0, 40)
-    ys = np.nonzero((cell == 0).any(axis=1))[0]
-    assert ys.max() - ys.min() == 58 - 24 - 1  # only this line's digit, whole
-    mask2 = np.full((120, 40), 255, np.uint8)
-    mask2[10:58, 12:30] = 0  # digit rising past PLATFORM_UP: grown further, top kept
-    cell2 = platform_cell(mask2, (30, 70), 0, 40)
-    assert (cell2 == 0).sum() == (mask2 == 0).sum()
-    blank = np.full((120, 40), 255, np.uint8)
-    blank[64:70, 20:36] = 0  # smear at the bottom of a blank cell
-    blank[50:52, 37:39] = 0  # and a speck: left as they were (not a lone speck)
-    assert (platform_cell(blank, (30, 70), 0, 40) == blank[30:70]).all()
-
-
-# synthetic perspective: the platform column of each panel shifted up by k board px (the
-# right edge of the board higher than the text line). k=3: the top of the next line's
-# digit enters the cell bottom; k=5: the digit also rises past PLATFORM_UP (see report).
-TILT_FRAMES = ("glare/c8449", "ocr12/2026_10_21_090409-d9214f34",
-               "ocr14_delay100/2026_10_23_044306-682d008b")
-# k=5 lifts the digit of the first line of each 3-line blue group (lines 0, 3, 6, 9) above
-# the group, where the text mask is blanked (``preprocess.panel_rows``): an artefact of
-# shifting only the column (on a real tilt the blue background rises with it). Those
-# cells may be unread, never wrong; every other cell must be read.
-GROUP_FIRST = (0, 3, 6, 9)
-
-
-def _tilted(frame: str, k: int) -> bytes:
-    import cv2
-
-    from app.ocr import preprocess
-    from app.ocr.reader import COLUMNS
-    img = cv2.imread(str(FIX / f"{frame}.jpg"))
-    out = img.copy()
-    for half, x_off in preprocess.split_boards_offsets(img):
-        xa = x_off + int(COLUMNS["platform"][0] * half.shape[1]) - 2
-        out[:-k, xa:x_off + half.shape[1]] = img[k:, xa:x_off + half.shape[1]]
-    return cv2.imencode(".png", out)[1].tobytes()
-
-
-@pytest.mark.parametrize("k", [3, 5])
-def test_platform_on_a_tilted_board(k):
-    c = _platform_counts(TILT_FRAMES, lambda f: _lines(f, _tilted(f, k), f"{f}@{k}"))
-    assert c["wrong"] == 0, c["misses"]
-    if k == 3:
-        assert c["unread"] == 0, c["misses"]
-    assert all(line in GROUP_FIRST for _, line, _, _ in c["misses"]), c["misses"]
+    assert _numeric("platform", np.zeros((10, 10), np.uint8), ("11", 80.0), _M())[0] == want

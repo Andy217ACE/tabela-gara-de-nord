@@ -220,14 +220,18 @@ class DigitMatcher:
             boards = tuple(str(b) for b in data["boards"]) if "boards" in data else ()
             return cls(str(data["labels"]), data["templates"], boards)
 
-    def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
-        """(best character, its score 0..1, margin over the runner-up)."""
+    def _scores(self, glyph: np.ndarray, allowed: str) -> list[tuple[float, str]]:
+        """(score 0..1, character) per allowed template, best first."""
         padded = cv2.copyMakeBorder(glyph, _SHIFT, _SHIFT, _SHIFT, _SHIFT,
                                     cv2.BORDER_CONSTANT, value=0)
-        scored = sorted(
+        return sorted(
             ((float(cv2.matchTemplate(padded, tpl, cv2.TM_CCOEFF_NORMED).max()), ch)
              for ch, tpl in zip(self.labels, self.templates) if ch in allowed),
             reverse=True)
+
+    def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
+        """(best character, its score 0..1, margin over the runner-up)."""
+        scored = self._scores(glyph, allowed)
         if not scored:
             return "", 0.0, 0.0
         runner_up = scored[1][0] if len(scored) > 1 else 0.0
@@ -249,12 +253,9 @@ class DigitMatcher:
     def near(self, glyph: np.ndarray, allowed: str) -> str:
         """Characters the templates cannot tell apart from the best match of a glyph:
         score within MIN_MARGIN of the best (the near tie that leaves it untrusted)."""
-        padded = cv2.copyMakeBorder(glyph, _SHIFT, _SHIFT, _SHIFT, _SHIFT,
-                                    cv2.BORDER_CONSTANT, value=0)
-        scored = sorted(
-            ((float(cv2.matchTemplate(padded, tpl, cv2.TM_CCOEFF_NORMED).max()), ch)
-             for ch, tpl in zip(self.labels, self.templates) if ch in allowed),
-            reverse=True)
+        scored = self._scores(glyph, allowed)
+        if not scored:
+            return ""
         return "".join(ch for s, ch in scored if s >= scored[0][0] - MIN_MARGIN)
 
     def glyphs(self, cell: np.ndarray, allowed: str
