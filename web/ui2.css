@@ -346,8 +346,6 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 
 /* ---------- 10. Versiuni: timeline ---------- */
 
-.v-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 18px; }
-.v-hero-num { font-family: var(--mono); font-size: clamp(1.5rem, 1rem + 2.4vw, 2.25rem); font-weight: 600; letter-spacing: -0.03em; }
 .v-timeline { position: relative; display: grid; gap: 16px; padding-left: 30px; }
 .v-timeline::before { content: ""; position: absolute; left: 9px; top: 8px; bottom: 8px; width: 2px; border-radius: 2px; background: linear-gradient(180deg, var(--accent), var(--border) 22%, var(--border)); }
 .v-entry { position: relative; padding: 18px 20px; }
@@ -400,12 +398,18 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
   .ui-stat:nth-child(2) { animation-delay: 60ms; } .ui-stat:nth-child(3) { animation-delay: 120ms; } .ui-stat:nth-child(4) { animation-delay: 180ms; }
   .ss-kpi:nth-child(2) { animation-delay: 80ms; }
 
-  /* one-shot scroll reveal (ui2.js adds .ui-rv below the fold, .ui-rv-in on first sight) */
-  .ui-rv { opacity: 0; transform: translateY(20px); }
-  .ui-rv.ui-rv-in { opacity: 1; transform: none; transition: opacity 520ms var(--ease), transform 520ms var(--ease); }
+  /* one-shot scroll reveal (ui2.js adds .ui-rv below the fold, .ui-rv-in on first sight);
+     transform only: the content is fully visible and readable at rest, it just rises into place */
+  .ui-rv { transform: translateY(22px); }
+  .ui-rv.ui-rv-in { transform: none; transition: transform 560ms var(--ease); }
 }
 
 /* ---------- 12. wider screens ---------- */
+
+@media (max-width: 599px) {
+  .ui-hero > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
 
 @media (min-width: 600px) {
   .ui-hero { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
@@ -517,3 +521,15 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
   .st-podium-card:hover { transform: none; }
 }
 .st-share-card { max-width: 38rem; }
+
+/* Istoric summary box: same card language as everything else */
+.h-summary {
+  padding: 14px 16px;
+  border: 1px solid var(--card-line);
+  border-left: 1px solid var(--card-line);
+  border-radius: var(--radius-xl);
+  background: var(--card-grad);
+  box-shadow: var(--card-edge), var(--elev-1);
+}
+.h-summary > .ui-hero { margin-bottom: 12px; }
+.h-summary .ui-stat { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); box-shadow: none; }

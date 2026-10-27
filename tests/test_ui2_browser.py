@@ -10,8 +10,10 @@ sync_api = pytest.importorskip("playwright.sync_api")
 
 from app import stats_overview  # noqa: E402
 from tests.test_footer_browser import COUNT_JS  # noqa: E402
+from app.store import Store  # noqa: E402
 from tests.test_statistici_browser import (  # noqa: E402,F401
-    NO_HSCROLL, _open, base_url, browser)
+    NO_HSCROLL, _open, _serve, base_url, browser)
+from tests.test_stats_overview import add  # noqa: E402
 
 expect = sync_api.expect
 
@@ -79,10 +81,10 @@ def test_statistici_donuts_for_part_to_whole(browser, base_url):
           const dash = arcs.reduce((a, c) => a + parseFloat(c.getAttribute('stroke-dasharray')), 0);
           return { name: svg.querySelector('title').textContent, role: svg.getAttribute('role'),
                    legend: d.querySelectorAll('.ui-leg-item').length, arcs: arcs.length, dash,
-                   focusable: [...d.querySelectorAll('.ui-leg-item')].every(i => i.tabIndex === 0) };
+                   tabstops: [...d.querySelectorAll('.ui-leg-item')].filter(i => i.tabIndex === 0).length };
         })""")
         for r in res:
-            assert r["name"] and r["role"] == "img" and r["focusable"], r
+            assert r["name"] and r["role"] == "img" and r["tabstops"] == 1, r  # one tab stop per chart
             assert r["legend"] >= r["arcs"] >= 1, r
             assert 90 <= r["dash"] <= 100.5, r  # slices + small gaps = the whole ring
         assert errors == []
@@ -107,7 +109,12 @@ def test_donut_hover_and_focus_show_the_slice(browser, base_url):
         assert d.locator(".ui-dc").text_content() == rest
         d.locator(".ui-leg-item").first.focus()
         expect(d).to_have_class(__import__("re").compile(r"has-active"))
-        d.locator(".ui-leg-item").first.blur()
+        page.keyboard.press("ArrowDown")   # arrows move inside the legend; the tooltip follows
+        assert d.locator(".ui-dc-l").text_content() == d.locator(".ui-leg-item").nth(1).locator(".ui-leg-l").text_content()
+        page.keyboard.press("End")
+        last = d.locator(".ui-leg-item").last
+        assert d.locator(".ui-dc-l").text_content() == last.locator(".ui-leg-l").text_content()
+        d.locator(".ui-leg-item.is-active").blur()
         expect(d).not_to_have_class(__import__("re").compile(r"has-active"))
         # a slice is hit-testable too (not only the legend)
         d.locator("circle.ui-seg").nth(0).dispatch_event("pointerenter")
@@ -169,7 +176,7 @@ def test_motion_is_on_by_default_and_counts_up(browser, base_url):
         page.wait_for_timeout(1600)
         assert page.evaluate("""() => [...document.querySelectorAll('.ui-stat-v[data-final]')]
           .every(n => n.textContent === n.getAttribute('data-final'))""")
-        # below-the-fold cards are revealed on first sight, never left hidden
+        # below-the-fold cards rise into place on first sight (transform only: never invisible)
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         page.wait_for_timeout(900)
         page.evaluate("window.scrollTo(0, 0)")
@@ -231,5 +238,66 @@ def test_empty_database_keeps_explicit_message_without_hero(browser, base_url):
         page.wait_for_selector("#st-trenuri .empty")
         assert "Niciun tren" in page.text_content("#st-trenuri")
         assert page.evaluate(NO_HSCROLL) and errors == []
+    finally:
+        ctx.close()
+
+
+@pytest.fixture(scope="module")
+def late_url(tmp_path_factory):
+    """A train late on every day it ran: it appears under „Ce trenuri întârzie zi de zi?”."""
+    db = tmp_path_factory.mktemp("ui2late") / "l.db"
+    s = Store(str(db))
+    s.migrate()
+    for day in range(14, 21):
+        add(s._conn, "arrival", 5000, day, "10:10", 15 + 5 * (day % 3))
+        add(s._conn, "departure", 6000, day, "11:00", 0)
+    s.close()
+    server, t, url = _serve(db)
+    yield url
+    server.should_exit = True
+    t.join(5)
+
+
+def test_recurrent_train_has_a_sparkline_with_the_raw_days(browser, late_url):
+    stats_overview.clear_cache()
+    ctx, page, errors = _open(browser, late_url, 390, 844, "light", "#statistici")
+    try:
+        page.wait_for_selector(".ss-ptrain")
+        card = page.locator(".ss-ptrain").first
+        assert card.locator("svg.ui-spark").count() == 1
+        assert "min" in card.locator("svg.ui-spark").get_attribute("aria-label")
+        assert card.locator(".ss-ptrain-days").count() == 1   # the raw numbers stay as text too
+        assert page.evaluate(NO_HSCROLL) and errors == []
+    finally:
+        ctx.close()
+
+
+def test_donut_edge_cases(browser, base_url):
+    """zero is not drawn (but listed), a tiny real slice stays visible, one slice = full ring
+    without a gap, no percentages below the minimum sample, empty total draws no slice."""
+    ctx, page, errors = _open(browser, base_url, 1280, 800, "dark", "#statistici")
+    try:
+        _donuts_ready(page)
+        res = page.evaluate("""() => {
+          const U = window.TabelaApp.ui2; const host = document.createElement('div'); document.body.append(host);
+          const mk = (segs, extra) => { const h = document.createElement('div'); host.append(h);
+            U.donut(h, Object.assign({ title: 't', segments: segs }, extra || {})); return h; };
+          const a = mk([{label: 'A', value: 90, slot: 1}, {label: 'B', value: 0, slot: 2}, {label: 'C', value: 1, slot: 3}]);
+          const b = mk([{label: 'Only', value: 7, slot: 1}]);
+          const c = mk([{label: 'X', value: 3, slot: 1}, {label: 'Y', value: 1, slot: 2}], { showPct: false });
+          const d = mk([{label: 'Z', value: 0, slot: 1}]);
+          const dash = h => [...h.querySelectorAll('circle.ui-seg')].map(x => parseFloat(x.getAttribute('stroke-dasharray')));
+          return { a_arcs: dash(a).length, a_legend: a.querySelectorAll('.ui-leg-item').length, a_min: Math.min(...dash(a)),
+                   a_zero_pct: a.querySelectorAll('.ui-leg-item')[1].querySelector('.ui-leg-p').textContent,
+                   b_dash: dash(b)[0], c_pct: c.querySelectorAll('.ui-leg-p').length, c_val: c.querySelector('.ui-leg-v').textContent,
+                   d_arcs: dash(d).length, d_center: d.querySelector('.ui-dc-v').textContent };
+        }""")
+        assert res["a_arcs"] == 2 and res["a_legend"] == 3          # the zero slice is listed, not drawn
+        assert res["a_zero_pct"] == "—"                              # missing is not 0 %
+        assert res["a_min"] >= 0.5                                   # 1 of 91 stays visible
+        assert res["b_dash"] == 100                                  # a lone slice is the whole ring, no gap
+        assert res["c_pct"] == 0 and res["c_val"] == "3"             # small sample: raw counts only
+        assert res["d_arcs"] == 0 and res["d_center"] == "0"
+        assert errors == []
     finally:
         ctx.close()

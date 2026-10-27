@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from scripts.contrast_audit import AUDIT_JS  # noqa: E402
+from scripts.contrast_audit import AUDIT_JS, SETTLE_JS  # noqa: E402
 from tests.test_footer_browser import base_url, browser  # noqa: E402,F401  (shared fixtures)
 
 SCREENS = [("#", "panou"), ("#", "carduri"), ("#istoric", "panou"), ("#urmarite", "panou"),
@@ -29,6 +29,7 @@ def test_text_contrast(browser, base_url, theme, width):  # noqa: F811
             page.goto(base_url + "/" + route)
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(300)
+            page.evaluate(SETTLE_JS)  # entrance animations finished: audit the settled page
             for f in page.evaluate(AUDIT_JS):
                 failures.append((route, view, f))
             page.close()

@@ -39,8 +39,9 @@
 
   // ---- count-up ------------------------------------------------------------------------
 
-  // Writes the final text when motion is reduced / not needed; otherwise counts 0 → v once
-  // the node is on screen (a node in a hidden view waits until it is shown).
+  // The final text is always in the DOM first (screen readers, no-JS, print, a node below the
+  // fold). When motion is allowed and the node is on screen at its first paint, it counts
+  // 0 → value once; a node that is not on screen is simply left at its final value.
   function countUp(node, to, fmt, ms) {
     var f = fmt || function (x) { return nf0.format(x); };
     var final = f(to);
@@ -48,10 +49,9 @@
     node.setAttribute("data-final", final);
     if (reduced() || !(to > 0) || typeof IntersectionObserver === "undefined" ||
         typeof requestAnimationFrame === "undefined") return node;
-    node.textContent = f(0);
     var io = new IntersectionObserver(function (entries) {
-      if (!entries[0].isIntersecting) return;
       io.disconnect();
+      if (!entries[0].isIntersecting) return;
       var t0 = null;
       var dur = ms || 900;
       var step = function (ts) {
@@ -60,6 +60,7 @@
         node.textContent = k >= 1 ? final : f(to * (1 - Math.pow(1 - k, 3)));
         if (k < 1) requestAnimationFrame(step);
       };
+      node.textContent = f(0);
       requestAnimationFrame(step);
     }, { threshold: 0.25 });
     io.observe(node);
@@ -153,7 +154,7 @@
     var unit = o.valueUnit || "";
     segs.forEach(function (x, i) {
       var li = h("li", "ui-leg-item");
-      li.setAttribute("tabindex", "0");
+      li.setAttribute("tabindex", i === 0 ? "0" : "-1");   // one tab stop per chart, arrows move inside
       var txt = x.label + ": " + nf0.format(x.value || 0) + (unit ? " " + unit : "") +
         (showPct && x.value > 0 ? " (" + fmtPct(x.pct) + ")" : "");
       li.setAttribute("aria-label", txt);
@@ -188,6 +189,18 @@
       cs.textContent = (showPct ? nf0.format(x.value || 0) + (unit ? " " + unit : "") : unit) + (x.sub ? " · " + x.sub : "");
     }
     items.forEach(function (li, i) {
+      li.addEventListener("keydown", function (e) {
+        var n = items.length, j = -1;
+        if (e.key === "ArrowDown" || e.key === "ArrowRight") j = (i + 1) % n;
+        else if (e.key === "ArrowUp" || e.key === "ArrowLeft") j = (i - 1 + n) % n;
+        else if (e.key === "Home") j = 0;
+        else if (e.key === "End") j = n - 1;
+        if (j < 0) return;
+        e.preventDefault();
+        li.setAttribute("tabindex", "-1");
+        items[j].setAttribute("tabindex", "0");
+        items[j].focus();
+      });
       li.addEventListener("pointerenter", function () { setActive(i); });
       li.addEventListener("focus", function () { setActive(i); });
       li.addEventListener("pointerleave", rest);

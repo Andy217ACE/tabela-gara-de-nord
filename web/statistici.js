@@ -1552,7 +1552,6 @@
     v.ui.body.replaceChildren();
     v.ui.body.classList.toggle("ss-no-motion", !!reduceMotion);
     var boards = boardsOf(d);
-    if (d.coverage && d.coverage.journeys && U()) heroStrip(d, boards);
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
       v.ui.body.append(el("p", "empty ss-empty", "Nu există încă date pentru filtrele alese. Încearcă „Tot istoricul” sau alt operator."));
@@ -1574,6 +1573,7 @@
       }
       sectionHeading("Grafice de detaliu", "Toate cifrele, pe întrebări: distribuție, zile, ore, operatori, rute, linii, vreme și calitatea datelor.");
     }
+    if (d.coverage.journeys && U()) heroStrip(d, boards);
     summary(d);
     kpis(d, boards);
     distributionSection(d, boards);

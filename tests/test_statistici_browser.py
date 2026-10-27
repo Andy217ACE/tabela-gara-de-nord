@@ -244,7 +244,7 @@ def test_problems_first(browser, problems_url, w, h, theme):
     try:
         page.wait_for_selector(".ss-problems .ss-prob")
         # the page starts with „Probleme”, then „Ce merge bine”, then the details
-        first = page.evaluate("document.querySelector('.ss-body').firstElementChild.className")
+        first = page.evaluate("document.querySelector('.ss-body').firstElementChild.className.split(' ')[0]")
         assert first == "ss-problems"
         order = page.evaluate("""() => [...document.querySelector('.ss-body').children]
             .map(e => e.className.split(' ')[0])""")
