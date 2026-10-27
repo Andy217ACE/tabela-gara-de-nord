@@ -23,7 +23,7 @@ Runda a doua a redesign-ului (după Beta 1.26): graficele din **Statistici**, **
 - Donut-urile aveau două elemente cu același `id` (descrierea și modelul cu puncte); modelele au acum id-uri proprii.
 
 ### Tehnic
-- Cod nou încărcat **la cerere**, doar pe Statistici, Tren, Clasamente și Stație: `web/charts3.js` + `web/charts3.css` (~57 KB necomprimat, ~18 KB gzip). Nu intră în service worker (precache-ul rămâne sub 650 KB; v28 doar pentru schimbările din `ui2.js`, `ui2.css`, `app.js`, `statistici.js` și `stats.js`). Fără bibliotecă nouă: SVG propriu, fără stiluri inline (CSP).
+- Cod nou încărcat **la cerere**, doar pe Statistici, Tren, Clasamente și Stație: `web/charts3.js` + `web/charts3.css` (~58 KB necomprimat, ~18 KB gzip). Nu intră în service worker (precache-ul rămâne sub 650 KB; v28 doar pentru schimbările din `ui2.js`, `ui2.css`, `app.js`, `statistici.js` și `stats.js`). Fără bibliotecă nouă: SVG propriu, fără stiluri inline (CSP).
 - API: `trend` (ultimele 14 zile, medie pe zi, `null` = necitit) în intrările de tren și de stație; teste în `tests/test_trend.py`. Teste noi: `tests/test_ui3_static.py`, `tests/test_ui3_browser.py` (tooltip, atingere, tastatură, legendă, ecran complet, link, chips, calendar, mișcare redusă, Tabela identică pixel cu pixel cu și fără stratul vizual).
 
 ## Beta 1.26 — 2026-10-27
