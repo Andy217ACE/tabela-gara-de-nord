@@ -45,6 +45,13 @@ Dacă pe viitor se adaugă una, se pune sub `web/vendor/<nume>-<versiune>/` cu f
 se încarcă la cerere (doar pe paginile care o folosesc) și **nu** intră în `SHELL` din `sw.js`.
 Tabela (Carduri / Panou / Ecran complet) nu folosește acest strat.
 
+**Beta 1.28 (UI v3):** straturile interactive ale graficelor (tooltip comun pentru bare / linii / coloane / hărți,
+legendă cu hover și comutare, ecran complet cu tabelul alături, „Copiază linkul”, chips de secțiuni, calendar,
+alunecarea datelor la schimbarea unui filtru) sunt în `web/charts3.js` + `web/charts3.css`, **încărcate la cerere**
+(`App.ui2.charts()`) doar pe Statistici, Tren, Clasamente și Stație, deci în afara `SHELL`-ului din `sw.js`.
+Tot fără bibliotecă: o bibliotecă de tooltip sau de grafice ar cere stiluri inline / canvas (CSP, teme, accesibilitate
+pe fiecare valoare) și ar fi mai grea decât ~18 KB gzip cât are codul propriu.
+
 ### Sigla
 
 Originalul e în `docs/brand/logo-source.png`. Toate variantele (antet, favicon 16/32/48,
