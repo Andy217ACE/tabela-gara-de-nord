@@ -158,7 +158,9 @@ def test_readme_documents_weather_v2_fields_and_schema_v8():
 
 
 def test_changelog_and_version_for_weather_v2():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "Beta 1.25"
+    # Beta 1.25 introduced the weather v2 notes; later versions (1.26 UI v2 ...) sit above them
+    ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert re.fullmatch(r"Beta 1\.\d\d", ver) and int(ver[-2:]) >= 25, ver
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     first = log.index("## Beta 1.25")
     assert first < log.index("## Beta 1.24")                   # newest on top
