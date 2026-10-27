@@ -339,16 +339,27 @@ def test_backup_dir_symlink_aborts_before_chown(server):
     assert "systemctl restart tabela" not in log
 
 
-def test_failed_backup_leaves_no_partial_file(server):
-    # PYTHON wrapper: the online backup writes part of the file, then fails
-    real = posix(sys.executable)
-    script(server.tmp / "bin" / "halfpy",
-           'case "$*" in *s.backup*) printf "SQLite format 3 partial" > "${@: -1}"; exit 1;; esac\n'
-           f'exec "{real}" "$@"\n')
-    server.env["PYTHON"] = "halfpy"
+@pytest.mark.parametrize("tool", ["sqlite3_cli", "python"])
+def test_failed_backup_leaves_no_partial_file(server, tool):
+    """Both backup paths of update.sh, whatever is installed: exported bash functions
+    (inherited by the script's bash, they win over PATH) stand in for the sqlite3 CLI,
+    or hide it (`command -v sqlite3` fails) so the Python path is taken."""
+    if tool == "sqlite3_cli":  # the CLI writes part of the copy, then fails
+        server.env["BASH_FUNC_sqlite3%%"] = (
+            "() { local p; p=$(printf %s \"${3#.backup }\" | tr -d \"'\"); "
+            "printf 'SQLite format 3 partial' > \"$p\"; return 1; }")
+    else:  # no CLI; the Python online backup writes part of the copy, then fails
+        server.env["BASH_FUNC_command%%"] = (
+            '() { if [ "$1" = -v ] && [ "$2" = sqlite3 ]; then return 1; fi; '
+            'builtin command "$@"; }')
+        real = posix(sys.executable)
+        script(server.tmp / "bin" / "halfpy",
+               'case "$*" in *s.backup*) printf "SQLite format 3 partial" > "${@: -1}"; exit 1;; esac\n'
+               f'exec "{real}" "$@"\n')
+        server.env["PYTHON"] = "halfpy"
     commit(server.work, 3, '{"ok":true}', "v3")
     git(server.work, "push", "-q", "origin", "main")
     r = server.run()
-    assert r.returncode == 1 and "database backup failed" in r.stderr
+    assert r.returncode == 1 and "database backup failed" in r.stderr, r.stdout + r.stderr
     assert [p.name for p in (server.data / "backups").iterdir()] == []
     assert not (server.data / ".pre-migration-backup").exists()
