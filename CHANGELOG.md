@@ -5,6 +5,22 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.29 — 2026-10-27
+
+**Corecție manuală din administrare** (pagina interioară „Capturi OCR”, `#ocr`). Pentru numerele pe care OCR le citește mereu la fel de greșit (de exemplu IR 1584 în loc de IR 1581, sau 7911 în loc de 7914). **Tabela** și paginile publice rămân neschimbate pixel cu pixel; nimic din corecții nu apare în API-ul public.
+
+### Nou
+- **Corectează un rând direct din captură:** alegi captura, apeși „Corectează” pe rând, alegi câmpul (nr. tren, tip, stație, operator, oră, linie, întârziere), valoarea citită greșit (precompletată din rând), valoarea corectă și o notă obligatorie.
+- **Regulă îngustă:** (panou, câmp, valoare citită greșit) și, opțional, doar o stație, o oră programată sau un interval de zile. Regula se potrivește exact pe valoarea greșită, nu „aproximativ”.
+- **Pe cadrele noi:** corecția se aplică la citire, iar observația primește marcajul `+corr:<id>` (textul brut OCR rămâne neatins; rândul apare marcat „corectat #id” în detaliul capturii).
+- **Retroactiv, reversibil:** „Previzualizează retroactiv” (dry-run: câte servicii, observații și evenimente s-ar schimba, cu exemple și conflicte) și abia apoi „Aplică”; aplicarea cere previzualizarea exactă și se face într-o singură tranzacție, cu arhivă pe lot, la fel ca `scripts/merge_number_dups.py --restore`. „Restaurează lotul” pune valorile vechi la loc (rândurile modificate între timp rămân cum sunt). Conflictele (există deja serviciul cu numărul corect) sunt doar listate, nu se modifică.
+- **Valoare lipsă ≠ 0:** „necitit” se poate corecta doar la linie și întârziere; o întârziere 0 citită nu se confundă cu una necitită.
+- **Siguranță:** validarea intrării pe server, token CSRF (plus verificarea Origin) pentru apelurile cu cookie, ștergere moale (regula rămâne în evidență), jurnal de audit (cine/ce/când/IP) afișat în pagină. Cheia de administrare rămâne obligatorie.
+
+### Tehnic
+- Schema DB **v9**: tabelele `corrections`, `correction_batches`, `correction_archive`, `correction_audit` (aditive). Înainte de migrare se verifică/face o copie a bazei (modulul `dbbackup`; folosește copia recentă făcută de `update.sh`).
+- Cod nou: modulele `corrections` și `corrections_api` din `app` (rute sub `/api/admin/`: corrections, csrf), UI în `web/ocr.js` și `web/ocr.css` (încărcate la cerere, nu intră în service worker). Teste: `test_corrections` și `test_corrections_browser` din `tests`; capturi în `docs/superpowers/screenshots`.
+
 ## Beta 1.28 — 2026-10-27
 
 Runda a doua a redesign-ului (după Beta 1.26): graficele din **Statistici**, **Tren**, **Stație** și **Clasamente** devin interactive și mai clare. **Tabela** (Carduri, Panou, Ecran complet), vremea, Capturile OCR și datele nu se schimbă (Beta 1.27 este rezervată lucrărilor de OCR, care nu ating pagina web).

@@ -195,6 +195,10 @@
     var stats = el("dl", "ocr-stats");
     stats.id = "ocr-stats";
     body.appendChild(stats);
+    var rulesBox = el("section", "ocr-rules panel");
+    rulesBox.id = "ocr-rules";
+    rulesBox.setAttribute("aria-label", "Corecții manuale");
+    body.appendChild(rulesBox);
     var layout = el("div", "ocr-layout");
     var listBox = el("section", "ocr-list");
     listBox.setAttribute("aria-label", "Capturi recente");
@@ -229,6 +233,7 @@
     layout.appendChild(detail);
     body.appendChild(layout);
     state.before = null;
+    loadRules();
     loadStats();
     loadList(true);
   }
@@ -406,21 +411,27 @@
       box.appendChild(el("p", "notice", "Imaginea a expirat (retenție); datele structurate rămân."));
     }
 
+    var corrBox = el("section", "ocr-corr-form panel");
+    corrBox.id = "ocr-corr-form";
+    corrBox.hidden = true;
+    corrBox.setAttribute("aria-label", "Corecție manuală");
+    box.appendChild(corrBox);
+
     ["arrival", "departure"].forEach(function (board) {
       var obs = d.observations.filter(function (o) { return o.board === board; });
       if (!obs.length) return;
       box.appendChild(el("h3", "ocr-h3", BOARD_LABEL[board] + " (" + obs.length + ")"));
-      box.appendChild(obsTable(obs));
+      box.appendChild(obsTable(obs, d));
     });
     h.focus();
   }
 
-  function obsTable(list) {
+  function obsTable(list, cap) {
     var wrap = el("div", "ocr-scroll");
     var t = el("table", "ocr-table ocr-obs");
     var thead = el("thead");
     var tr = el("tr");
-    ["#", "Stare", "Text brut"].concat(FIELDS.map(function (f) { return f[1]; })).forEach(function (x) {
+    ["#", "Stare", "Text brut"].concat(FIELDS.map(function (f) { return f[1]; }), ["Corecție"]).forEach(function (x) {
       var th = el("th", null, x);
       th.scope = "col";
       tr.appendChild(th);
@@ -441,6 +452,11 @@
           : "recitit fără succes (" + line.retry.attempts + ")"));
       }
       if (o.row_conf != null) st.appendChild(el("span", "ocr-rowconf", Math.round(o.row_conf * 100) + "%"));
+      (line.corr || []).forEach(function (id) {
+        var b = el("span", "ocr-badge ocr-badge-corr", "corectat #" + id);
+        b.title = "Rândul a fost modificat de regula manuală #" + id + " (valoarea citită de OCR rămâne în text brut)";
+        st.appendChild(b);
+      });
       r.appendChild(st);
       r.appendChild(el("td", "mono ocr-raw", o.raw_text || "—"));
       FIELDS.forEach(function (f) {
@@ -468,11 +484,407 @@
         }
         r.appendChild(td);
       });
+      var act = el("td", "ocr-act");
+      var cbtn = el("button", "btn btn-ghost btn-sm", "Corectează");
+      cbtn.type = "button";
+      cbtn.setAttribute("aria-label", "Corectează rândul " + o.row_index + " (" + BOARD_LABEL[o.board] + ")");
+      cbtn.addEventListener("click", function () { openCorrectionForm(cap, o); });
+      act.appendChild(cbtn);
+      r.appendChild(act);
       tb.appendChild(r);
     });
     t.appendChild(tb);
     wrap.appendChild(t);
     return wrap;
+  }
+
+
+  // ---- corecții manuale (schema v9) -----------------------------------------------------
+  // Regulă îngustă (panou, câmp, valoare citită greșit, + stație / oră / interval de zile
+  // opționale) -> valoare corectă. Se aplică pe cadre noi (marcaj +corr:<id>) și, doar după
+  // o previzualizare (dry-run) și confirmare, retroactiv, într-un lot restaurabil.
+
+  var CORR_FIELDS = [["no", "Nr. tren"], ["type", "Tip"], ["station", "Stație"],
+    ["operator", "Operator"], ["time", "Ora"], ["platform", "Linie"], ["delay", "Întârziere"]];
+  var csrf = null;
+
+  function csrfToken(force) {
+    if (csrf && !force) return Promise.resolve(csrf);
+    return api("/api/admin/csrf").then(function (r) {
+      csrf = (r.data && r.data.token) || "";
+      return csrf;
+    });
+  }
+
+  // mutating admin call: JSON body + X-CSRF-Token (one retry with a fresh token on 403)
+  function post(path, body, method, retried) {
+    return csrfToken(retried).then(function (tok) {
+      var headers = { "X-CSRF-Token": tok };
+      var opts = { method: method || "POST", headers: headers };
+      if (body !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+      return api(path, opts);
+    }).then(function (r) {
+      if (r.status === 403 && !retried) return post(path, body, method, true);
+      return r;
+    });
+  }
+
+  function detailText(r) {
+    var d = r.data && r.data.detail;
+    if (typeof d === "string") return d;
+    if (d && d.message) return d.message;
+    return "Eroare (" + r.status + ").";
+  }
+
+  function rowValue(o, field) {
+    var f = (o.fields || {})[field] || {};
+    if (field === "type") return f.norm == null ? "" : String(f.norm);
+    if (field === "no") return o.train_no == null ? "" : String(o.train_no);
+    if (field === "station") return o.station || "";
+    if (field === "operator") return o.operator || "";
+    if (field === "time") return o.sched_time || "";
+    if (field === "platform") return o.platform == null ? "" : String(o.platform);
+    return o.delay_read && o.delay_min != null ? String(o.delay_min) : "";  // delay: unread stays empty, never 0
+  }
+
+  function labeled(text, inp, hint) {
+    var l = el("label", "field");
+    l.appendChild(el("span", "field-label", text));
+    l.appendChild(inp);
+    if (hint) l.appendChild(el("span", "field-hint", hint));
+    return l;
+  }
+
+  function input(type, id, max) {
+    var i = el("input");
+    i.type = type;
+    i.id = id;
+    i.autocomplete = "off";
+    if (max) i.maxLength = max;
+    return i;
+  }
+
+  function openCorrectionForm(cap, o) {
+    var box = document.getElementById("ocr-corr-form");
+    clear(box);
+    box.hidden = false;
+    var h = el("h3", "ocr-h3", "Corecție manuală · captura #" + cap.id + " · " + BOARD_LABEL[o.board] + " · rândul " + o.row_index);
+    h.tabIndex = -1;
+    box.appendChild(h);
+    box.appendChild(el("p", "ocr-meta", "Text brut: " + (o.raw_text || "—") +
+      ". Regula se aplică numai rândurilor care au exact valoarea citită greșit, pe acest panou, " +
+      "și nu modifică imaginea sau textul brut OCR."));
+    var msg = el("p", "notice", "");
+    msg.setAttribute("role", "status");
+    msg.hidden = true;
+    var form = el("form", "ocr-corr-grid");
+
+    var sel = el("select");
+    sel.id = "corr-field";
+    CORR_FIELDS.forEach(function (f) { var op = el("option", null, f[1]); op.value = f[0]; sel.appendChild(op); });
+    form.appendChild(labeled("Câmp", sel));
+    var wrong = input("text", "corr-wrong", 60);
+    form.appendChild(labeled("Valoarea citită (greșită)", wrong));
+    var wrongHint = el("span", "field-hint", "");
+    wrong.parentNode.appendChild(wrongHint);
+    var right = input("text", "corr-right", 60);
+    right.required = true;
+    form.appendChild(labeled("Valoarea corectă", right));
+
+    var lim = el("fieldset", "ocr-corr-limits");
+    lim.appendChild(el("legend", null, "Limitări (opțional; cu cât mai înguste, cu atât mai sigur)"));
+    var st = input("text", "corr-station", 60);
+    lim.appendChild(labeled("Doar stația", st));
+    var tm = input("text", "corr-time", 5);
+    tm.placeholder = "OO:MM";
+    lim.appendChild(labeled("Doar ora programată", tm));
+    var d1 = input("date", "corr-from");
+    lim.appendChild(labeled("Zile de la", d1));
+    var d2 = input("date", "corr-to");
+    lim.appendChild(labeled("Zile până la", d2));
+    var quick = el("button", "btn btn-ghost btn-sm", "Limitează la stația și ora acestui rând");
+    quick.type = "button";
+    quick.addEventListener("click", function () { st.value = o.station || ""; tm.value = o.sched_time || ""; invalidate(); });
+    lim.appendChild(quick);
+    form.appendChild(lim);
+
+    var note = el("textarea");
+    note.id = "corr-note";
+    note.rows = 2;
+    note.maxLength = 500;
+    note.required = true;
+    form.appendChild(labeled("Notă (obligatorie, 3–500 caractere)", note));
+
+    function prefill() {
+      var f = sel.value;
+      wrong.value = rowValue(o, f);
+      right.value = "";
+      var unreadOk = f === "platform" || f === "delay";
+      wrong.required = !unreadOk;
+      wrongHint.textContent = unreadOk ? "Gol = „necitit” (nu 0)." : "";
+    }
+    sel.addEventListener("change", function () { prefill(); invalidate(); });
+    prefill();
+
+    var out = el("div", "ocr-corr-result");
+    out.setAttribute("aria-live", "polite");
+    var bar = el("div", "ocr-corr-actions");
+    var prev = el("button", "btn", "Previzualizează");
+    prev.type = "submit";
+    var save = el("button", "btn", "Salvează regula");
+    save.type = "button";
+    save.disabled = true;
+    var cancel = el("button", "btn btn-ghost", "Închide");
+    cancel.type = "button";
+    cancel.addEventListener("click", function () { box.hidden = true; clear(box); });
+    bar.appendChild(prev); bar.appendChild(save); bar.appendChild(cancel);
+    form.appendChild(bar);
+    box.appendChild(msg);
+    box.appendChild(form);
+    box.appendChild(out);
+
+    function payload() {
+      return {
+        board: o.board, field: sel.value, wrong_value: wrong.value.trim(),
+        correct_value: right.value.trim(), station: st.value.trim() || null,
+        sched_time: tm.value.trim() || null, date_from: d1.value || null, date_to: d2.value || null,
+        note: note.value.trim(), source_capture_id: cap.id, source_row_index: o.row_index
+      };
+    }
+    function say(text, bad) { msg.textContent = text || ""; msg.className = "notice" + (bad ? " notice-error" : ""); msg.hidden = !text; }
+    function invalidate() { save.disabled = true; clear(out); }
+    [wrong, right, st, tm, d1, d2, note].forEach(function (i) { i.addEventListener("input", invalidate); });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      say("");
+      prev.disabled = true;
+      post("/api/admin/corrections/preview", payload()).then(function (r) {
+        prev.disabled = false;
+        if (r.status !== 200) { save.disabled = true; say(detailText(r), true); return; }
+        renderPreview(out, r.data.preview, "Previzualizare (nu s-a modificat nimic)");
+        save.disabled = false;
+      }).catch(function () { prev.disabled = false; say("Serverul nu răspunde.", true); });
+    });
+    save.addEventListener("click", function () {
+      say("");
+      save.disabled = true;
+      post("/api/admin/corrections", payload()).then(function (r) {
+        if (r.status !== 201) { save.disabled = false; say(detailText(r), true); return; }
+        box.hidden = true;
+        clear(box);
+        message("Regula #" + r.data.correction.id + " este activă pe cadrele noi. Previzualizează și aplică retroactiv din „Corecții manuale”.");
+        loadRules();
+      }).catch(function () { save.disabled = false; say("Serverul nu răspunde.", true); });
+    });
+    h.focus();
+    if (box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
+  }
+
+  function cnt(label, n) {
+    var d = el("div", "ocr-stat");
+    d.appendChild(el("dt", null, label));
+    d.appendChild(el("dd", null, String(n)));
+    return d;
+  }
+
+  function previewTable(out, list, extra) {
+    if (!list.length) return;
+    var w = el("div", "ocr-scroll");
+    var t = el("table", "ocr-table");
+    var tr = el("tr");
+    ["Serviciu", "Ziua", "Tren", "Ora", "Stația", "Din → în"].concat(extra ? ["Motiv"] : []).forEach(function (x) {
+      var th = el("th", null, x); th.scope = "col"; tr.appendChild(th);
+    });
+    var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
+    var tb = el("tbody");
+    list.forEach(function (s) {
+      var r = el("tr");
+      [s.id, s.date, s.train, s.sched_time, s.station, (s.from || "necitit") + " → " + s.to].forEach(function (v) { r.appendChild(el("td", null, String(v))); });
+      if (extra) r.appendChild(el("td", "ocr-raw", s.conflict || ""));
+      tb.appendChild(r);
+    });
+    t.appendChild(tb); w.appendChild(t); out.appendChild(w);
+  }
+
+  function renderPreview(out, pv, title) {
+    clear(out);
+    out.appendChild(el("h4", "ocr-h3", title));
+    var dl = el("dl", "ocr-stats");
+    dl.appendChild(cnt("Servicii", pv.services.count));
+    dl.appendChild(cnt("Observații (capturi)", pv.observations.count + " (" + pv.observations.captures + ")"));
+    dl.appendChild(cnt("Evenimente", pv.events.count));
+    dl.appendChild(cnt("Conflicte (sărite)", pv.conflicts.count));
+    out.appendChild(dl);
+    if (pv.empty) out.appendChild(el("p", "notice", "Nicio înregistrare existentă nu se potrivește: regula va acționa doar pe cadrele noi."));
+    if (pv.services.sample.length) {
+      out.appendChild(el("p", "ocr-meta", "Servicii care s-ar modifica (primele " + pv.services.sample.length + " din " + pv.services.count + "):"));
+      previewTable(out, pv.services.sample, false);
+    }
+    if (pv.conflicts.sample.length) {
+      out.appendChild(el("p", "ocr-meta", "Conflicte (nu se modifică):"));
+      previewTable(out, pv.conflicts.sample, true);
+    }
+  }
+
+  // ---- lista regulilor ------------------------------------------------------------------
+
+  function scopeText(r) {
+    var p = [];
+    if (r.station) p.push("stația " + r.station);
+    if (r.sched_time) p.push("ora " + r.sched_time);
+    if (r.date_from || r.date_to) p.push("zilele " + (r.date_from || "…") + " – " + (r.date_to || "…"));
+    return p.length ? p.join(", ") : "fără limitări";
+  }
+
+  function fieldLabel(f) {
+    for (var i = 0; i < CORR_FIELDS.length; i++) if (CORR_FIELDS[i][0] === f) return CORR_FIELDS[i][1];
+    return f;
+  }
+
+  function loadRules() {
+    var box = document.getElementById("ocr-rules");
+    if (!box) return;
+    api("/api/admin/corrections?status=all").then(function (r) {
+      if (r.status !== 200) { handleAuth(r); return; }
+      clear(box);
+      var head = el("div", "ocr-rules-head");
+      head.appendChild(el("h2", "ocr-h2", "Corecții manuale"));
+      var aud = el("button", "btn btn-ghost btn-sm", "Jurnal de audit");
+      aud.type = "button";
+      aud.addEventListener("click", showAudit);
+      head.appendChild(aud);
+      box.appendChild(head);
+      box.appendChild(el("p", "ocr-meta",
+        "Se creează din detaliul unei capturi (butonul „Corectează” de pe fiecare rând). O regulă corectează cadrele noi imediat; " +
+        "datele vechi se schimbă numai după previzualizare și confirmare, într-un lot care se poate restaura. Nimic de aici nu apare în API-ul public."));
+      var list = r.data.corrections;
+      if (!list.length) {
+        box.appendChild(el("p", "empty", "Nicio regulă încă."));
+      } else {
+        var w = el("div", "ocr-scroll");
+        var t = el("table", "ocr-table ocr-rule-table");
+        var tr = el("tr");
+        ["#", "Panou", "Câmp", "Citit → corect", "Limitări", "Notă", "Stare", "Acțiuni"].forEach(function (x) {
+          var th = el("th", null, x); th.scope = "col"; tr.appendChild(th);
+        });
+        var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
+        var tb = el("tbody");
+        list.forEach(function (c) { tb.appendChild(ruleRow(c)); });
+        t.appendChild(tb); w.appendChild(t); box.appendChild(w);
+      }
+      var res = el("div", "ocr-corr-result");
+      res.id = "ocr-rule-result";
+      res.setAttribute("aria-live", "polite");
+      box.appendChild(res);
+    });
+  }
+
+  function liveBatches(c) { return (c.batches || []).filter(function (b) { return !b.restored_at; }); }
+
+  function ruleRow(c) {
+    var tr = el("tr", c.status === "deleted" ? "is-deleted" : "");
+    tr.appendChild(el("td", "num", String(c.id)));
+    tr.appendChild(el("td", null, BOARD_LABEL[c.board]));
+    tr.appendChild(el("td", null, fieldLabel(c.field)));
+    tr.appendChild(el("td", "mono", (c.wrong_value || "necitit") + " → " + c.correct_value));
+    tr.appendChild(el("td", "ocr-raw", scopeText(c)));
+    tr.appendChild(el("td", "ocr-raw", c.note));
+    var live = liveBatches(c);
+    tr.appendChild(el("td", null, c.status === "deleted" ? "ștearsă" :
+      "activă" + (live.length ? " · aplicată retroactiv (" + live.length + " lot)" : "")));
+    var td = el("td", "ocr-act");
+    if (c.status === "active") {
+      var pv = el("button", "btn btn-ghost btn-sm", "Previzualizează retroactiv");
+      pv.type = "button";
+      pv.addEventListener("click", function () { previewRule(c); });
+      td.appendChild(pv);
+      live.forEach(function (b) {
+        var rs = el("button", "btn btn-ghost btn-sm", "Restaurează lotul " + b.id);
+        rs.type = "button";
+        rs.addEventListener("click", function () { restoreBatch(b.id); });
+        td.appendChild(rs);
+      });
+      var del = el("button", "btn btn-ghost btn-sm", "Șterge");
+      del.type = "button";
+      del.setAttribute("aria-label", "Șterge regula " + c.id);
+      del.addEventListener("click", function () { deleteRule(c, live.length > 0); });
+      td.appendChild(del);
+    }
+    tr.appendChild(td);
+    return tr;
+  }
+
+  function ruleResult() { return document.getElementById("ocr-rule-result"); }
+
+  function previewRule(c) {
+    var out = ruleResult();
+    post("/api/admin/corrections/" + c.id + "/preview").then(function (r) {
+      if (r.status !== 200) { message(detailText(r), true); return; }
+      message("");
+      renderPreview(out, r.data.preview, "Regula #" + c.id + " · previzualizare retroactivă (nu s-a modificat nimic)");
+      var pv = r.data.preview;
+      var bar = el("div", "ocr-corr-actions");
+      var go = el("button", "btn", "Aplică retroactiv (" + pv.services.count + " servicii, " + pv.observations.count + " observații)");
+      go.type = "button";
+      go.disabled = !!pv.empty;
+      go.addEventListener("click", function () {
+        go.disabled = true;
+        post("/api/admin/corrections/" + c.id + "/apply", { plan_hash: pv.plan_hash }).then(function (a) {
+          if (a.status !== 200) { go.disabled = false; message(detailText(a), true); return; }
+          message("Aplicat: lotul " + a.data.batch + " (" + a.data.services + " servicii, " + a.data.observations + " observații). Poate fi restaurat.");
+          loadRules();
+        });
+      });
+      bar.appendChild(go);
+      out.appendChild(bar);
+      if (out.scrollIntoView) out.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function restoreBatch(id) {
+    if (!window.confirm("Restaurezi lotul " + id + "? Valorile vechi revin acolo unde nu s-au schimbat între timp.")) return;
+    post("/api/admin/corrections/batches/" + encodeURIComponent(id) + "/restore").then(function (r) {
+      if (r.status !== 200) { message(detailText(r), true); return; }
+      message("Lot restaurat: " + r.data.services + " servicii, " + r.data.observations + " observații (sărite: " + r.data.skipped + ").");
+      loadRules();
+    });
+  }
+
+  function deleteRule(c, hasBatches) {
+    var q = hasBatches
+      ? "Ștergi regula #" + c.id + " ȘI restaurezi lotul aplicat retroactiv?"
+      : "Ștergi regula #" + c.id + "? Nu va mai acționa pe cadrele noi (rămâne în jurnal).";
+    if (!window.confirm(q)) return;
+    post("/api/admin/corrections/" + c.id + (hasBatches ? "?restore=1" : ""), undefined, "DELETE").then(function (r) {
+      if (r.status !== 200) { message(detailText(r), true); return; }
+      message("Regula #" + c.id + " a fost ștearsă.");
+      loadRules();
+    });
+  }
+
+  var ACTION_LABEL = { create: "creată", apply: "aplicată retroactiv", restore: "restaurat lot", delete: "ștearsă" };
+
+  function showAudit() {
+    var out = ruleResult();
+    api("/api/admin/corrections/audit?limit=100").then(function (r) {
+      if (r.status !== 200) { handleAuth(r); return; }
+      clear(out);
+      out.appendChild(el("h4", "ocr-h3", "Jurnal de audit (ultimele " + r.data.audit.length + ")"));
+      var w = el("div", "ocr-scroll");
+      var t = el("table", "ocr-table");
+      var tr = el("tr");
+      ["Ora", "Acțiune", "Regula", "Lot", "IP"].forEach(function (x) { var th = el("th", null, x); th.scope = "col"; tr.appendChild(th); });
+      var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
+      var tb = el("tbody");
+      r.data.audit.forEach(function (a) {
+        var row = el("tr");
+        [when(a.ts), ACTION_LABEL[a.action] || a.action, a.correction_id == null ? "—" : "#" + a.correction_id, a.batch || "—", a.ip || "—"]
+          .forEach(function (v) { row.appendChild(el("td", null, v)); });
+        tb.appendChild(row);
+      });
+      t.appendChild(tb); w.appendChild(t); out.appendChild(w);
+    });
   }
 
   // ---- view registration ----------------------------------------------------------------

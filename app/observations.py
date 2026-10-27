@@ -220,7 +220,8 @@ def line_version(base: str, entry: dict) -> str:
     ``+delay-retry:<variant>:<attempts>`` (delay cell re-read), ``+time:glare_filled`` (the
     scheduled time was completed from the line's surroundings).
     A delay taken from the train's earlier readings under glare shows as
-    ``+delay:glare_inferred``."""
+    ``+delay:glare_inferred``. ``+corr:<id>`` marks a line changed by a manual correction
+    rule (app.corrections), on new frames and on retroactively corrected observations."""
     v = base
     state = entry.get("state")
     if state in ("empty", "unread"):
@@ -237,6 +238,8 @@ def line_version(base: str, entry: dict) -> str:
               f":{int(d_retry.get('attempts') or 0)}")
     if ((entry.get("fields") or {}).get("time") or {}).get("check") == "glare_filled":
         v += "+time:glare_filled"  # the scheduled time was completed (hidden colon/digit)
+    for rid in entry.get("corr") or ():  # a manual correction rule changed this line (v9)
+        v += f"+corr:{int(rid)}"
     return v
 
 
@@ -252,6 +255,8 @@ def parse_line_version(v: str | None) -> dict:
             _, variant, n = (p.split(":") + ["", "0"])[:3]
             out["retry"] = {"variant": None if variant == "none" else variant,
                             "attempts": int(n) if n.isdigit() else 0}
+        elif p.startswith("corr:") and p[5:].isdigit():
+            out.setdefault("corr", []).append(int(p[5:]))  # only present when corrected
     return out
 
 

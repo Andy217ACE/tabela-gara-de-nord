@@ -50,7 +50,7 @@ REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'a
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # listed services unseen this long are retired silently
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
@@ -392,6 +392,9 @@ class Store:
         Never renumber a step."""
         with self._lock:
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+            if 0 < version < SCHEMA_VERSION:  # backup-aware: a copy exists before any change
+                from app import dbbackup
+                dbbackup.ensure(self.path, version)
             if version < 3:
                 self._migrate_to_3(version)
             if version < 4:
@@ -405,6 +408,9 @@ class Store:
                 quality.migrate_to_7(self._conn)
             if version < 8:  # v8: rich weather columns
                 self._migrate_to_8()
+            if version < 9:  # v9: manual corrections (app.corrections)
+                from app import corrections
+                corrections.migrate_to_9(self._conn)
 
     def _script(self, sql: str) -> None:
         try:
