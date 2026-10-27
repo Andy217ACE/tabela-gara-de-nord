@@ -8,8 +8,12 @@
 #     and the service is NOT restarted (it keeps running the old code);
 #  3. migrates /etc/tabela.env (adds LAST_IMAGE_PATH and CAPTURE_DIR if missing) and
 #     creates CAPTURE_DIR owned by the service user; ADMIN_TOKEN is set by hand (secret);
+#     creates/repairs BACKUP_DIR owned by the service user, mode 750 (the app lists it at
+#     startup before a migration; a root:root 0700 directory stopped Beta 1.29 from
+#     starting). Only the directory itself: existing backups keep their owner (root, 600);
 #  4. if the new code's store.SCHEMA_VERSION is above the database's user_version,
-#     takes an online SQLite backup first (/var/lib/tabela/backups, last 5 kept);
+#     takes an online SQLite backup first (/var/lib/tabela/backups, last 5 kept) and
+#     records it in <db dir>/.pre-migration-backup (version, backup, db) for the app;
 #  5. restarts and waits for /api/health; if it never gets healthy, ROLLS BACK to PREV
 #     on the ORIGINAL branch (checkout, pip install, restart, wait) and exits 1.
 #
@@ -47,7 +51,9 @@ HEALTH_CMD="${HEALTH_CMD:-curl -fs $HEALTH_URL}"
 HEALTH_TRIES="${HEALTH_TRIES:-90}"     # x HEALTH_SLEEP seconds (default: 3 minutes)
 HEALTH_SLEEP="${HEALTH_SLEEP:-2}"
 HEALTH_MODE="${HEALTH_MODE:-strict}"   # strict | up
-SVC_OWNER="${SVC_OWNER-tabela}"        # owner of CAPTURE_DIR (empty: current user, tests)
+SVC_OWNER="${SVC_OWNER-tabela}"        # owner of CAPTURE_DIR/BACKUP_DIR (empty: current user, tests)
+CHOWN="${CHOWN:-chown}"
+CHMOD="${CHMOD:-chmod}"
 UNIT_SRC="$APP_DIR/deploy/tabela.service"
 UNIT_DST="${UNIT_DST:-/etc/systemd/system/tabela.service}"
 
@@ -160,6 +166,26 @@ backup_db() {
     # keep only the newest $BACKUP_KEEP (names sort by time)
     find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-*.db' -print | sort -r |
         tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do rm -f -- "$old"; done
+    # tell the app a backup exists (app/dbbackup.py: proof when it cannot see the backup
+    # itself); written last, only after a good backup, readable by the service
+    local marker tmp
+    marker="$(dirname "$db")/.pre-migration-backup"
+    tmp="$marker.tmp.$$"
+    if (umask 022; printf 'version=%s\nbackup=%s\ndb=%s\n' "$2" "$dest" "$db" > "$tmp") &&
+        mv -f -- "$tmp" "$marker"; then
+        echo "backup marker: $marker"
+    else
+        rm -f -- "$tmp"
+        echo "WARNING: could not write $marker (the app finds the backup in $BACKUP_DIR)" >&2
+    fi
+}
+
+# The app (user SVC_OWNER) lists BACKUP_DIR at startup before migrating and may write its
+# own backup there: the directory (not the files in it) belongs to the service user.
+prepare_backup_dir() {
+    (umask 077; mkdir -p "$BACKUP_DIR") || return 1
+    [ -n "$SVC_OWNER" ] || return 0
+    $CHOWN "$SVC_OWNER:$SVC_OWNER" "$BACKUP_DIR" && $CHMOD 750 "$BACKUP_DIR"
 }
 
 echo "== fetch $BRANCH"
@@ -192,9 +218,15 @@ case "$CAPTURE_DIR_" in
     "") ;;
     "$DATA_DIR"/*)  # the unit can only write under DATA_DIR (ReadWritePaths)
         { mkdir -p "$CAPTURE_DIR_" && { [ -z "$SVC_OWNER" ] || {
-            chown "$SVC_OWNER:$SVC_OWNER" "$CAPTURE_DIR_" && chmod 750 "$CAPTURE_DIR_"; }; }; }             || abort_before_restart "cannot prepare $CAPTURE_DIR_" ;;
+            $CHOWN "$SVC_OWNER:$SVC_OWNER" "$CAPTURE_DIR_" && $CHMOD 750 "$CAPTURE_DIR_"; }; }; }             || abort_before_restart "cannot prepare $CAPTURE_DIR_" ;;
     *) echo "WARNING: CAPTURE_DIR=$CAPTURE_DIR_ is outside $DATA_DIR; the service cannot write there" >&2 ;;
 esac
+
+case "$BACKUP_DIR" in
+    "$DATA_DIR"/*) ;;
+    *) echo "WARNING: BACKUP_DIR=$BACKUP_DIR is outside $DATA_DIR; the service cannot write there" >&2 ;;
+esac
+prepare_backup_dir || abort_before_restart "cannot prepare $BACKUP_DIR for $SVC_OWNER"
 
 DB="$(db_path)"
 OLD_V="$(db_version "$DB")" || abort_before_restart "cannot read the schema version of $DB"
