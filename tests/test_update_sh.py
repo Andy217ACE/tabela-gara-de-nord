@@ -251,3 +251,115 @@ def test_install_sh_branch_choice(server, case):
         assert r.returncode == 0 and r.stdout.strip().endswith("main")
     else:
         assert r.returncode == 1 and "pass the branch" in r.stderr
+
+
+# -- Beta 1.31 hotfix: BACKUP_DIR belongs to the service user ----------------------------------
+
+def _owner_fakes(server):
+    """chown/chmod that only record their calls (the tests cannot chown to `tabela`);
+    injected by name like SYSTEMCTL (Git Bash puts /usr/bin before the fakes in PATH)."""
+    fake = server.tmp / "bin"
+    script(fake / "fake_chown", f'echo "chown $*" >> "{posix(server.log)}"\n')
+    script(fake / "fake_chmod", f'echo "chmod $*" >> "{posix(server.log)}"\n')
+    server.env.update(SVC_OWNER="tabela", CHOWN="fake_chown", CHMOD="fake_chmod")
+
+
+@pytest.mark.parametrize("migrates", [True, False])
+def test_backup_dir_is_given_to_the_service_user(server, migrates):
+    # production before 1.31: /var/lib/tabela/backups root:root 0700 with root-owned backups
+    bk = server.data / "backups"
+    bk.mkdir()
+    old = bk / "tabela-20260101-000000-v2.db"
+    old.write_bytes(b"x")
+    _owner_fakes(server)
+    commit(server.work, 3 if migrates else 2, '{"ok":true,"next":1}', "next")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    calls = server.log.read_text().splitlines()
+    assert f"chown -h tabela:tabela {posix(bk)}" in calls
+    assert f"chmod 750 {posix(bk)}" in calls
+    assert not any(c.startswith(("chown -R", "chmod -R")) for c in calls)  # files untouched
+    assert old.exists()  # nothing deleted
+    # the directory is prepared before the restart (the new code reads it at startup)
+    assert calls.index(f"chown -h tabela:tabela {posix(bk)}") < calls.index("systemctl restart tabela")
+
+
+def test_backup_dir_is_created_for_the_service_user(server):
+    _owner_fakes(server)
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (server.data / "backups").is_dir()
+    assert f"chown -h tabela:tabela {posix(server.data / 'backups')}" in server.log.read_text()
+
+
+def test_backup_dir_that_cannot_be_prepared_aborts_before_restart(server):
+    _owner_fakes(server)
+    script(server.tmp / "bin" / "fake_chown",
+           f'echo "chown $*" >> "{posix(server.log)}"\n'
+           f'case "$*" in *backups*) exit 1;; esac\n')
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "NOT restarted" in r.stderr and "backups" in r.stderr
+    assert "systemctl restart tabela" not in server.log.read_text()
+    assert server.head() == server.prev
+
+
+def test_marker_announces_the_backup_to_the_app(server):
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    (bk,) = list((server.data / "backups").glob("tabela-*-v2.db"))
+    marker = server.data / ".pre-migration-backup"
+    kv = dict(l.split("=", 1) for l in marker.read_text(encoding="utf-8").splitlines())
+    assert kv["version"] == "2"
+    assert kv["backup"] == posix(bk)
+    assert kv["db"] == posix(server.db)
+
+
+def test_backup_dir_symlink_aborts_before_chown(server):
+    target = server.tmp / "elsewhere"
+    target.mkdir()
+    try:
+        os.symlink(target, server.data / "backups", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("cannot create symlinks here")
+    r0 = subprocess.run([BASH, "-c", f'[ -L "{posix(server.data / "backups")}" ]'])
+    if r0.returncode != 0:
+        pytest.skip("bash does not see this symlink as one")
+    _owner_fakes(server)
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "symlink" in r.stderr and "NOT restarted" in r.stderr
+    log = server.log.read_text()
+    assert "backups" not in "".join(l for l in log.splitlines() if l.startswith("chown"))
+    assert "systemctl restart tabela" not in log
+
+
+@pytest.mark.parametrize("tool", ["sqlite3_cli", "python"])
+def test_failed_backup_leaves_no_partial_file(server, tool):
+    """Both backup paths of update.sh, whatever is installed: exported bash functions
+    (inherited by the script's bash, they win over PATH) stand in for the sqlite3 CLI,
+    or hide it (`command -v sqlite3` fails) so the Python path is taken."""
+    if tool == "sqlite3_cli":  # the CLI writes part of the copy, then fails
+        server.env["BASH_FUNC_sqlite3%%"] = (
+            "() { local p; p=$(printf %s \"${3#.backup }\" | tr -d \"'\"); "
+            "printf 'SQLite format 3 partial' > \"$p\"; return 1; }")
+    else:  # no CLI; the Python online backup writes part of the copy, then fails
+        server.env["BASH_FUNC_command%%"] = (
+            '() { if [ "$1" = -v ] && [ "$2" = sqlite3 ]; then return 1; fi; '
+            'builtin command "$@"; }')
+        real = posix(sys.executable)
+        script(server.tmp / "bin" / "halfpy",
+               'case "$*" in *s.backup*) printf "SQLite format 3 partial" > "${@: -1}"; exit 1;; esac\n'
+               f'exec "{real}" "$@"\n')
+        server.env["PYTHON"] = "halfpy"
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "database backup failed" in r.stderr, r.stdout + r.stderr
+    assert [p.name for p in (server.data / "backups").iterdir()] == []
+    assert not (server.data / ".pre-migration-backup").exists()
