@@ -62,7 +62,10 @@ def marker_path(db_path: str) -> Path:
 def recent_backup(db_path: str, version: int, now: float | None = None) -> Path | None:
     """A backup of schema `version` made by update.sh (or by `ensure`) in the last day.
     Raises OSError when the backup directory exists but cannot be listed."""
-    d = backup_dir(db_path)
+    return _recent_in(backup_dir(db_path), version, now)
+
+
+def _recent_in(d: Path, version: int, now: float | None = None) -> Path | None:
     if not d.is_dir():
         return None
     pat = re.compile(rf"^tabela-.*-v{version}\.db$")
@@ -79,24 +82,28 @@ def recent_backup(db_path: str, version: int, now: float | None = None) -> Path 
 
 
 def _make(db_path: str, version: int, directory: Path) -> Path:
-    """Online backup into `directory`; raises OSError / sqlite3.Error on failure."""
+    """Online backup into `directory`; raises OSError / sqlite3.Error on failure.
+    The copy is written as `<name>.db.tmp` (never matched as a backup) and renamed to
+    its final name only after its integrity check passed: a backup that fails half-way
+    leaves nothing that a later start could take for a backup."""
     dest = directory / f"tabela-{datetime.now():%Y%m%d-%H%M%S}-v{version}.db"
+    tmp = dest.with_name(dest.name + ".tmp")
     src = dst = None
     try:
         directory.mkdir(parents=True, exist_ok=True)
         src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        dst = sqlite3.connect(str(dest))
+        dst = sqlite3.connect(str(tmp))
         src.backup(dst)
         ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
         dst.close()
         dst = None
         if ok != "ok":
-            dest.unlink(missing_ok=True)
             raise sqlite3.DatabaseError(f"backup failed its integrity check: {ok}")
         try:
-            os.chmod(dest, 0o600)
+            os.chmod(tmp, 0o600)
         except OSError:
             pass
+        os.replace(tmp, dest)
         return dest
     finally:
         for c in (src, dst):
@@ -105,6 +112,22 @@ def _make(db_path: str, version: int, directory: Path) -> Path:
                     c.close()
                 except sqlite3.Error:
                     pass
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _prune(directory: Path) -> None:
+    """Keep the newest BACKUP_KEEP `tabela-*.db` in `directory` (names sort by time)."""
+    try:
+        old = sorted((p for p in directory.iterdir()
+                      if p.name.startswith("tabela-") and p.name.endswith(".db")),
+                     key=lambda p: p.name, reverse=True)[BACKUP_KEEP:]
+        for p in old:
+            p.unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("could not prune old backups in %s: %s", directory, e)
 
 
 def marker_backup(db_path: str, version: int, now: float | None = None) -> str | None:
@@ -148,7 +171,15 @@ def ensure(db_path: str, version: int) -> Path | str | None:
                   "read and write it)", primary, e)
     if found is not None:
         return found
-    for d in (primary, fallback_dir(db_path)):
+    fallback = fallback_dir(db_path)
+    try:  # a previous start (same failing migration, Restart=always) may have made one
+        found = _recent_in(fallback, version)
+    except OSError:
+        found = None
+    if found is not None:
+        log.warning("using the recent pre-migration backup in the fallback directory: %s", found)
+        return found
+    for d in (primary, fallback):
         try:
             dest = _make(db_path, version, d)
         except (OSError, sqlite3.Error) as e:
@@ -156,6 +187,7 @@ def ensure(db_path: str, version: int) -> Path | str | None:
             log.warning("pre-migration backup into %s failed: %s", d, e)
             continue
         if d != primary:
+            _prune(d)
             log.error("pre-migration backup made in the FALLBACK directory %s (the backup "
                       "directory %s is not usable)", dest, primary)
         else:

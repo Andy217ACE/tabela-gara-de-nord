@@ -277,12 +277,12 @@ def test_backup_dir_is_given_to_the_service_user(server, migrates):
     r = server.run()
     assert r.returncode == 0, r.stdout + r.stderr
     calls = server.log.read_text().splitlines()
-    assert f"chown tabela:tabela {posix(bk)}" in calls
+    assert f"chown -h tabela:tabela {posix(bk)}" in calls
     assert f"chmod 750 {posix(bk)}" in calls
     assert not any(c.startswith(("chown -R", "chmod -R")) for c in calls)  # files untouched
     assert old.exists()  # nothing deleted
     # the directory is prepared before the restart (the new code reads it at startup)
-    assert calls.index(f"chown tabela:tabela {posix(bk)}") < calls.index("systemctl restart tabela")
+    assert calls.index(f"chown -h tabela:tabela {posix(bk)}") < calls.index("systemctl restart tabela")
 
 
 def test_backup_dir_is_created_for_the_service_user(server):
@@ -290,7 +290,7 @@ def test_backup_dir_is_created_for_the_service_user(server):
     r = server.run()
     assert r.returncode == 0, r.stdout + r.stderr
     assert (server.data / "backups").is_dir()
-    assert f"chown tabela:tabela {posix(server.data / 'backups')}" in server.log.read_text()
+    assert f"chown -h tabela:tabela {posix(server.data / 'backups')}" in server.log.read_text()
 
 
 def test_backup_dir_that_cannot_be_prepared_aborts_before_restart(server):
@@ -317,3 +317,38 @@ def test_marker_announces_the_backup_to_the_app(server):
     assert kv["version"] == "2"
     assert kv["backup"] == posix(bk)
     assert kv["db"] == posix(server.db)
+
+
+def test_backup_dir_symlink_aborts_before_chown(server):
+    target = server.tmp / "elsewhere"
+    target.mkdir()
+    try:
+        os.symlink(target, server.data / "backups", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("cannot create symlinks here")
+    r0 = subprocess.run([BASH, "-c", f'[ -L "{posix(server.data / "backups")}" ]'])
+    if r0.returncode != 0:
+        pytest.skip("bash does not see this symlink as one")
+    _owner_fakes(server)
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "symlink" in r.stderr and "NOT restarted" in r.stderr
+    log = server.log.read_text()
+    assert "backups" not in "".join(l for l in log.splitlines() if l.startswith("chown"))
+    assert "systemctl restart tabela" not in log
+
+
+def test_failed_backup_leaves_no_partial_file(server):
+    # PYTHON wrapper: the online backup writes part of the file, then fails
+    real = posix(sys.executable)
+    script(server.tmp / "bin" / "halfpy",
+           'case "$*" in *s.backup*) printf "SQLite format 3 partial" > "${@: -1}"; exit 1;; esac\n'
+           f'exec "{real}" "$@"\n')
+    server.env["PYTHON"] = "halfpy"
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    r = server.run()
+    assert r.returncode == 1 and "database backup failed" in r.stderr
+    assert [p.name for p in (server.data / "backups").iterdir()] == []
+    assert not (server.data / ".pre-migration-backup").exists()

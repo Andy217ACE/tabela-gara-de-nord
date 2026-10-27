@@ -243,3 +243,84 @@ def test_real_unlistable_backup_dir(db, caplog):
     made = list(bk.glob("tabela-*-v8.db")) + list(
         (db.parent / dbbackup.FALLBACK_DIRNAME).glob("tabela-*-v8.db"))
     assert len(made) == 1 and _version(made[0]) == 8
+
+
+# -- review fixes: a half-written backup is never "a backup"; no copy per restart --------------
+
+def _half_backups(monkeypatch):
+    """Every online backup writes part of the copy, then fails (disk full, I/O error)."""
+    real_connect = sqlite3.connect
+
+    class HalfSource:
+        def __init__(self, conn):
+            self._c = conn
+
+        def backup(self, dst, *a, **kw):
+            dst.execute("CREATE TABLE half(x)")  # some pages reach the file...
+            dst.execute("INSERT INTO half VALUES (zeroblob(65536))")
+            dst.commit()
+            raise sqlite3.OperationalError("disk I/O error")  # ...then it fails
+
+        def __getattr__(self, name):
+            return getattr(self._c, name)
+
+    def connect(db, *a, **kw):
+        c = real_connect(db, *a, **kw)
+        return HalfSource(c) if str(db).startswith("file:") else c
+
+    monkeypatch.setattr(dbbackup.sqlite3, "connect", connect)
+
+
+def test_half_written_backup_is_not_left_as_a_valid_looking_backup(db, monkeypatch):
+    _half_backups(monkeypatch)
+    for _ in range(2):  # the failing start, then the restart systemd makes
+        s = Store(str(db))
+        with pytest.raises(dbbackup.BackupUnavailable):
+            s.migrate()
+        s.close()
+        assert _version(db) == 8  # never migrated on the strength of a partial copy
+    left = [p.name for d in (db.parent / "backups", db.parent / dbbackup.FALLBACK_DIRNAME)
+            if d.is_dir() for p in d.iterdir()]
+    assert left == []  # no partial file, no temp file
+
+
+def test_restarts_reuse_the_fallback_backup_instead_of_copying_again(db, monkeypatch):
+    _deny(monkeypatch, db.parent / "backups")
+    from app import corrections
+
+    def boom(conn):
+        raise sqlite3.OperationalError("simulated migration failure")
+    monkeypatch.setattr(corrections, "migrate_to_9", boom)
+    from datetime import datetime, timedelta
+    clock = iter(datetime(2026, 10, 27, 22, 0, 0) + timedelta(seconds=5 * i) for i in range(99))
+
+    class Clock:  # each start 5 s later (RestartSec=5): backup names do not collide
+        @staticmethod
+        def now():
+            return next(clock)
+    monkeypatch.setattr(dbbackup, "datetime", Clock)
+    for _ in range(3):  # Restart=always: every start retries the migration
+        s = Store(str(db))
+        with pytest.raises(sqlite3.OperationalError):
+            s.migrate()
+        s.close()
+    fb = list((db.parent / dbbackup.FALLBACK_DIRNAME).glob("tabela-*.db"))
+    assert len(fb) == 1 and _version(fb[0]) == 8
+
+
+def test_fallback_keeps_only_the_newest_backups(db, monkeypatch):
+    fbd = db.parent / dbbackup.FALLBACK_DIRNAME
+    fbd.mkdir()
+    old = time.time() - 3 * dbbackup.RECENT_S
+    for i in range(dbbackup.BACKUP_KEEP + 2):
+        p = fbd / f"tabela-2026010{i}-000000-v7.db"
+        p.write_bytes(b"x")
+        os.utime(p, (old, old))
+    _deny(monkeypatch, db.parent / "backups")
+    s = Store(str(db))
+    s.migrate()
+    s.close()
+    names = sorted(p.name for p in fbd.glob("tabela-*.db"))
+    assert len(names) == dbbackup.BACKUP_KEEP
+    assert any(n.endswith("-v8.db") for n in names)  # the new one is kept
+    assert "tabela-20260100-000000-v7.db" not in names  # the oldest went

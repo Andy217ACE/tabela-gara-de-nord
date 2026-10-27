@@ -149,19 +149,30 @@ code_version() { # SCHEMA_VERSION declared by the checked-out code
     sed -n 's/^SCHEMA_VERSION = \([0-9][0-9]*\).*/\1/p' "$APP_DIR/app/store.py" | head -n 1
 }
 
-backup_db() {
-    local db="$1" dest
-    # called as `backup_db ... || abort_before_restart`, where `set -e` is off: check each step
-    # umask 077: the directory is created 700 and the copy 600 (root only)
-    (umask 077; mkdir -p "$BACKUP_DIR") || return 1
-    dest="$BACKUP_DIR/tabela-$(date +%Y%m%d-%H%M%S)-v$2.db"
+backup_to() {   # online backup of $1 into the new file $2
     if command -v sqlite3 >/dev/null 2>&1; then
         # -readonly: the backup never creates root-owned -wal/-shm next to the live DB
-        (umask 077; sqlite3 -readonly "$db" ".backup '$dest'") || return 1
+        (umask 077; sqlite3 -readonly "$1" ".backup '$2'")
     else   # the same online-backup API, through Python
-        (umask 077; "$PYTHON" -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' "$db" "$dest") || return 1
+        (umask 077; "$PYTHON" -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' "$1" "$2")
     fi
-    [ -s "$dest" ] || return 1
+}
+
+backup_db() {
+    local db="$1" dest tmp
+    # called as `backup_db ... || abort_before_restart`, where `set -e` is off: check each step
+    # umask 077: the copy is 600 (root only); the directory was prepared by prepare_backup_dir
+    (umask 077; mkdir -p "$BACKUP_DIR") || return 1
+    dest="$BACKUP_DIR/tabela-$(date +%Y%m%d-%H%M%S)-v$2.db"
+    # written as .tmp (never taken for a backup by the app or by the retention below) and
+    # renamed only after an integrity check: a failed backup leaves nothing behind
+    tmp="$dest.tmp"
+    if ! backup_to "$db" "$tmp" || [ ! -s "$tmp" ] ||
+        ! "$PYTHON" -c 'import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True); r=c.execute("PRAGMA integrity_check").fetchone()[0]; c.close(); sys.exit(r != "ok")' "$tmp" ||
+        ! mv -f -- "$tmp" "$dest"; then
+        rm -f -- "$tmp"
+        return 1
+    fi
     echo "db backup: $dest"
     # keep only the newest $BACKUP_KEEP (names sort by time)
     find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-*.db' -print | sort -r |
@@ -183,9 +194,13 @@ backup_db() {
 # The app (user SVC_OWNER) lists BACKUP_DIR at startup before migrating and may write its
 # own backup there: the directory (not the files in it) belongs to the service user.
 prepare_backup_dir() {
+    if [ -L "$BACKUP_DIR" ]; then  # never hand a link's target to the service user
+        echo "ERROR: $BACKUP_DIR is a symlink; replace it with a real directory" >&2
+        return 1
+    fi
     (umask 077; mkdir -p "$BACKUP_DIR") || return 1
     [ -n "$SVC_OWNER" ] || return 0
-    $CHOWN "$SVC_OWNER:$SVC_OWNER" "$BACKUP_DIR" && $CHMOD 750 "$BACKUP_DIR"
+    $CHOWN -h "$SVC_OWNER:$SVC_OWNER" "$BACKUP_DIR" && $CHMOD 750 "$BACKUP_DIR"
 }
 
 echo "== fetch $BRANCH"
