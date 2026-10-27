@@ -18,8 +18,13 @@ What it does (the dry run prints all three; ``--apply`` does 1 and 2 only):
      read as "1"/"11" (weighted edit cost <= 1.5, where an inserted/deleted "1" and a
      substitution involving a "1" cost 0.5, any other inserted/deleted character 1, and
      any other substitution is forbidden) and the lengths differ (an equal-length
-     "1" substitution, 4011 vs 4017, is only LISTED, and so is a number that is the
-     tail of the other, R 19 / R 5019: the left digits were cut);
+     "1" substitution, 4011 vs 4017, is only LISTED);
+   - OR the shorter number (2+ digits, at most 3 fewer) is the tail or the start of
+     the longer one (R 93 / R 8093: digits cut, "truncated_number") under a STRICTER
+     rule: the long number is the winner and is seen on >= 2 days, and the short number
+     has no life of its own (each of its non-ghost services shares a slot with a service
+     of the long number). Any other truncation is only LISTED, its ``why_not_merged``
+     naming the failed condition (R 19 also running alone on another day stays listed);
    - never seen in the same capture on the same board (two rows in one frame are two
      real trains): neither the two services in this slot, nor the two NUMBERS anywhere
      in the history (``coexist``, app.quality.coexisting_numbers: RE 9209 and 92011 read
@@ -139,16 +144,20 @@ def _support(conn: sqlite3.Connection) -> dict[int, int]:
 
 
 def _is_truncation(a: int, b: int) -> bool:
-    """One number is the tail of the other (R 19 / R 5019): the left digits were cut."""
+    """One number is the tail (R 19 / R 5019, R 93 / R 8093) or the start of the other:
+    digits were cut."""
     sa, sb = sorted((str(a), str(b)), key=len)
-    return len(sa) >= 2 and sa != sb and sb.endswith(sa) and len(sb) - len(sa) <= 3
+    return (len(sa) >= 2 and len(sa) < len(sb) and len(sb) - len(sa) <= 3
+            and (sb.endswith(sa) or sb.startswith(sa)))
 
 
 def _services(conn: sqlite3.Connection) -> list[dict]:
     q = _has(conn, "service_quality")
+    n_obs = ("(SELECT COUNT(*) FROM observations o WHERE o.service_id = s.id)"
+             if _has(conn, "observations") else "0")
     rows = conn.execute(
         "SELECT s.*, " + ("COALESCE(q.ghost, 0)" if q else "0") + " AS ghost,"
-        " (SELECT COUNT(*) FROM observations o WHERE o.service_id = s.id) AS n_obs"
+        f" {n_obs} AS n_obs"
         " FROM services s" + (" LEFT JOIN service_quality q ON q.service_id = s.id" if q else "")
         + " ORDER BY s.id").fetchall()
     return [dict(r) for r in rows]
@@ -156,6 +165,8 @@ def _services(conn: sqlite3.Connection) -> list[dict]:
 
 def _shared_capture(conn, a: int, b: int) -> int:
     """Number of captures where both services were read (two rows in one frame)."""
+    if not _has(conn, "observations"):
+        return 0
     return conn.execute(
         "SELECT COUNT(*) FROM observations x JOIN observations y"
         " ON y.capture_id = x.capture_id AND y.board = x.board"
@@ -192,9 +203,11 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
     for s in svc:
         s["support"] = sup.get(s["train_no"], 0)
     slots: dict[tuple, list[dict]] = {}
+    slots_of: dict[int, set[tuple]] = {}  # non-ghost slots of each number
     for s in svc:
-        slots.setdefault((s["board"], s["service_date"], alias(s["station"]),
-                          s["sched_time"]), []).append(s)
+        k = (s["board"], s["service_date"], alias(s["station"]), s["sched_time"])
+        slots.setdefault(k, []).append(s)
+        slots_of.setdefault(s["train_no"], set()).add(k)
     merges: list[dict] = []
     listed: list[dict] = []
     for key, group in sorted(slots.items()):
@@ -210,8 +223,6 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
             for l in group:
                 if l["id"] == w["id"] or l["id"] in taken or w["id"] in taken:
                     continue
-                if (l["support"], l["n_obs"], -l["id"]) > (w["support"], w["n_obs"], -w["id"]):
-                    continue  # the winner is the more established number
                 rel = ("noise" if is_noise_pair(w["train_no"], l["train_no"]) else
                        "equal_length_sub" if _is_equal_length_one_sub(
                            w["train_no"], l["train_no"]) else
@@ -219,6 +230,12 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
                        else None)
                 if rel is None:
                     continue
+                if rel == "truncated_number":
+                    if len(str(l["train_no"])) > len(str(w["train_no"])):
+                        continue  # the winner of a truncation is the long number
+                elif (l["support"], l["n_obs"], -l["id"]) > (
+                        w["support"], w["n_obs"], -w["id"]):
+                    continue  # the winner is the more established number
                 shared = _shared_capture(conn, w["id"], l["id"])
                 co = coexist(w["train_no"], l["train_no"])
                 item = {"slot": {"board": key[0], "date": key[1], "station": key[2],
@@ -228,7 +245,10 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
                 item["winner_established"] = w["support"] >= 2
                 recent = any(x["status"] != "gone" or _key(x["last_seen"]) >= cutoff
                              for x in (w, l))
-                if rel == "noise" and shared == 0 and co is None and not recent:
+                alone = (sorted(slots_of[l["train_no"]] - slots_of[w["train_no"]])
+                         if rel == "truncated_number" else [])
+                trunc_ok = (rel == "truncated_number" and w["support"] >= 2 and not alone)
+                if (rel == "noise" or trunc_ok) and shared == 0 and co is None and not recent:
                     merges.append(item)
                     taken.add(l["id"])
                 else:
@@ -237,10 +257,13 @@ def plan_merges(conn: sqlite3.Connection, min_age_min: int = 60,
                         "coexist: the two numbers were read in the same frame on %s"
                         " (two real trains): never merged, decision is the user's"
                         % co[:10] if co else
-                        "truncated number (left digits cut): ambiguous, listed only"
-                        if rel == "truncated_number" else
-                        "equal-length substitution: ambiguous" if rel != "noise" else
-                        "still on the board / seen less than %d min ago" % min_age_min)
+                        "truncated number: the short number lives alone (%s %s %s %s,"
+                        " without the long one), listed only" % alone[0] if alone else
+                        "truncated number: the long number is seen on %d day(s) (< 2),"
+                        " listed only" % w["support"]
+                        if rel == "truncated_number" and not trunc_ok else
+                        "equal-length substitution: ambiguous" if rel == "equal_length_sub"
+                        else "still on the board / seen less than %d min ago" % min_age_min)
                     listed.append(item)
     return {"merges": merges, "listed": listed}
 

@@ -90,6 +90,14 @@ def _db(tmp_path):
                           ttype="R")
     _obs(c, ids["trunc_w"], "departure", 2, D2, 16, station="BUZAU")
     _obs(c, ids["trunc_l"], "departure", 1, D2, 16, station="BUZAU")
+    # R 5019 runs on 2 days, but R 19 also runs ALONE on D3: it has a life of its own,
+    # so the truncation stays listed (the strict rule)
+    ids["trunc_w1"] = _svc(c, "departure", D1, 5019, "BUZAU", "17:08", _t(D1, 16),
+                           _t(D1, 17), ttype="R")
+    _obs(c, ids["trunc_w1"], "departure", 1, D1, 16, station="BUZAU")
+    ids["trunc_alone"] = _svc(c, "departure", D3, 19, "BUZAU", "17:08", _t(D3, 16),
+                              _t(D3, 17), ttype="R")
+    _obs(c, ids["trunc_alone"], "departure", 1, D3, 16, station="BUZAU")
     # alias + merge across the alias: IRN 401 (KIEV - CHISINAU) / 4011 (KIEV -CHISINAU)
     ids["iw"] = _svc(c, "arrival", D3, 401, "KIEV - CHISINAU", "06:38", _t(D3, 5),
                      _t(D3, 6), ttype="IRN")
@@ -163,6 +171,8 @@ def test_dry_run_is_default_and_writes_nothing(tmp_path, capsys):
     assert "same frame" in why[(ids["a"], ids["b"])] or "same frame" in why[(ids["b"], ids["a"])]
     assert "equal-length" in why[(ids["sub_w"], ids["sub_l"])]
     assert "truncated" in why[(ids["trunc_w"], ids["trunc_l"])]
+    assert "lives alone" in why[(ids["trunc_w"], ids["trunc_l"])] and D3 in why[
+        (ids["trunc_w"], ids["trunc_l"])]
     assert all(ids["ghost"] not in (x["winner"]["id"], x["loser"]["id"])
                for x in rep["merge"]["list"] + rep["listed_not_merged"])
     assert rep["aliases"]["KIEV -CHISINAU"] == {"to": "KIEV - CHISINAU", "services": 2,
@@ -366,6 +376,61 @@ def test_coexisting_pair_is_never_merged(tmp_path, capsys):
         assert after[t] == before[t], t
 
 
+def _dump_all(db):
+    c = sqlite3.connect(db)
+    out = {t: c.execute(f"SELECT * FROM {t} ORDER BY 1").fetchall()
+           for t in ("services", "events", "service_quality", "event_quality",
+                     "observations", "trains")}
+    c.close()
+    return out
+
+
+def test_prefix_dup_is_merged_and_restorable(tmp_path, capsys):
+    """R 93 is R 8093 with the left digits cut: same slot, never in one frame, 8093 runs
+    on 2 days and 93 never alone -> merged by --apply; --restore puts back every row."""
+    db = tmp_path / "p.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    ids["long_d1"] = _svc(c, "departure", D1, 8093, "SUCEAVA", "10:05", _t(D1, 9), _t(D1, 10),
+                          ttype="R")
+    _obs(c, ids["long_d1"], "departure", 3, D1, 9, station="SUCEAVA", no=8093)
+    ids["long"] = _svc(c, "departure", D2, 8093, "SUCEAVA", "10:05", _t(D2, 9), _t(D2, 10),
+                       ttype="R")
+    _obs(c, ids["long"], "departure", 4, D2, 9, station="SUCEAVA", no=8093)
+    ids["short"] = _svc(c, "departure", D2, 93, "SUCEAVA", "10:05", _t(D2, 9, 30),
+                        _t(D2, 10, 5), ttype="R", platform=2, delay=5,
+                        delay_read_at=_t(D2, 10))
+    _obs(c, ids["short"], "departure", 2, D2, 10, station="SUCEAVA", no=93)
+    ids["ev"] = _ev(c, ids["short"], D2, 10, "delay", "0", "5")
+    c.execute("INSERT INTO service_quality(service_id, station_canonical, updated_at)"
+              " VALUES (?, 'SUCEAVA', 'x')", (ids["short"],))
+    c.execute("INSERT INTO event_quality(event_id, suspect, reason) VALUES (?, 1, 'x')",
+              (ids["ev"],))
+    for no in (8093, 93):
+        c.execute("INSERT OR IGNORE INTO trains(train_no, journeys, observations)"
+                  " VALUES (?, 1, 1)", (no,))
+    s.close()
+    before = _dump_all(db)
+
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert [(m["loser"]["id"], m["winner"]["id"], m["relation"]) for m in rep["merge"]["list"]
+            ] == [(ids["short"], ids["long"], "truncated_number")]
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["applied"]["services_merged"] == 1
+    c = sqlite3.connect(db)
+    assert not c.execute("SELECT 1 FROM services WHERE id=?", (ids["short"],)).fetchone()
+    assert c.execute("SELECT COUNT(*) FROM observations WHERE service_id=?",
+                     (ids["long"],)).fetchone()[0] == 4 + 2
+    assert c.execute("SELECT COUNT(*) FROM observations WHERE train_no=93").fetchone()[0] == 2
+    c.close()
+
+    _run(["--db", str(db), "--restore"], capsys)
+    assert _dump_all(db) == before
+
+
 def test_old_db_without_quality_or_observations(tmp_path, capsys):
     """A pre-quality database (no service_quality) still dry-runs."""
     db = tmp_path / "o.db"
@@ -381,3 +446,27 @@ def test_old_db_without_quality_or_observations(tmp_path, capsys):
     c.close()
     rep = _run(["--db", str(db)], capsys)
     assert rep["merge"]["services_affected"] == 0
+
+
+def test_db_without_observations_table_dry_runs(tmp_path, capsys):
+    """No observations table (oldest schema): no crash, slots still compared."""
+    db = tmp_path / "n.db"
+    c = sqlite3.connect(db)
+    c.executescript("""
+        CREATE TABLE services (id INTEGER PRIMARY KEY, board TEXT, service_date TEXT,
+          train_type TEXT, train_no INTEGER, station TEXT, operator TEXT, sched_time TEXT,
+          first_seen TEXT, last_seen TEXT, last_delay INTEGER, last_platform INTEGER,
+          flagged INTEGER DEFAULT 0, status TEXT, last_read TEXT, delay_read_at TEXT);""")
+    for d in (D1, D2):
+        c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+                  " sched_time, first_seen, last_seen, status) VALUES"
+                  " ('departure', ?, 'RE', 9209, 'PITESTI', '14:36', ?, ?, 'gone')",
+                  (d, _t(d, 13), _t(d, 14)))
+    c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+              " sched_time, first_seen, last_seen, status) VALUES"
+              " ('departure', ?, 'RE', 92011, 'PITESTI', '14:36', ?, ?, 'gone')",
+              (D2, _t(D2, 13), _t(D2, 14)))
+    c.commit()
+    c.close()
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert rep["merge"]["by_number_pair"] == {"RE 92011 -> RE 9209": 1}
