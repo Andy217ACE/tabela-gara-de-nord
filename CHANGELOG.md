@@ -5,6 +5,23 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.30 — 2026-10-27
+
+Igienă de interfață. **Tabela** (Carduri, Panou, Ecran complet) rămâne neschimbată pixel cu pixel în afara celor două butoane de mai jos; datele și API-ul nu se schimbă.
+
+### Nou
+- **Stări goale la Trenuri și Stații:** când nu există încă nicio dată, pagina spune „Nu există încă date pentru trenuri.” / „… pentru stații.”, în loc de antetul cu 0 rânduri și nota explicativă; mesajul stă singur, fără export și fără tabel. O căutare fără rezultate păstrează mesajul „Niciun tren / Nicio stație nu se potrivește căutării.”.
+- **Stare de eroare cu „Reîncearcă”:** dacă serverul nu răspunde, pagina spune „Nu am putut încărca trenurile / stațiile.” cu motivul și un buton „Reîncearcă” care cere din nou datele.
+
+### Schimbat
+- **Stea și clopoțel pe telefon:** butoanele au cel puțin 44 × 44 px. Pe Carduri pastila „urmărește” are bordură vizibilă, deci arată mai înaltă pe telefon (32 → 44 px), nu doar zona de atingere; extra înălțimea este compensată cu margini negative (−6 px), deci cardul nu se mută. Pe Panou steaua și clopoțelul ajung la 44 px, dar spațiul ocupat în rând rămâne 40 px (margine −2 px). Pe ecrane late (de la 760 px în sus) nimic nu se schimbă.
+
+### Reparat
+- **CSP fără Google Fonts:** fonturile sunt deja auto-găzduite (`web/fonts`), dar antetul `Content-Security-Policy` încă permitea `fonts.googleapis.com` și `fonts.gstatic.com`. Gazdele sunt scoase (`style-src 'self'`, `font-src 'self'`); un test verifică să nu mai apară în fișierele web, iar un test în browser real verifică lipsa încălcărilor CSP și încărcarea Fira Sans.
+
+### Tehnic
+- Service worker `v30` și `CHARTS_V` 1.30 (reîncarcă fișierele noi). Teste noi: `test_csp_browser`, `test_empty_states_browser`, `test_touch_targets_browser`; bugetul de precache din `test_brand_theme` a crescut de la 650 KB la 652 KB.
+
 ## Beta 1.29 — 2026-10-27
 
 **Corecție manuală din administrare** (pagina interioară „Capturi OCR”, `#ocr`). Pentru numerele pe care OCR le citește mereu la fel de greșit (de exemplu IR 1584 în loc de IR 1581, sau 7911 în loc de 7914). **Tabela** și paginile publice rămân neschimbate pixel cu pixel; nimic din corecții nu apare în API-ul public.

@@ -155,6 +155,17 @@
 
   function notice(text, cls) { return el("p", "notice" + (cls ? " " + cls : ""), text); }
 
+  // list pages: „Nu am putut încărca …” + the reason + a retry button (a refetch of the same URL)
+  function loadFailed(v, what, e) {
+    var box = el("div", "st-error");
+    box.append(notice("Nu am putut încărca " + what + ". " + errorText(e), "notice-error"));
+    var b = el("button", "btn btn-ghost btn-sm st-retry", "Reîncearcă");
+    b.type = "button";
+    b.addEventListener("click", function () { v.load(true); });
+    box.append(b);
+    return box;
+  }
+
   // Small sample: means are shown, percentages and p90 are not (API `sufficient=false`).
   function sampleWarn(s, params) {
     if (!s) return null;
@@ -630,6 +641,10 @@
   function renderTrenuri(v, d) {
     var list = Array.isArray(d.trains) ? d.trains : [];
     var params = d.params || {};
+    if (!list.length && !v.p.query) {
+      v.body.append(el("p", "empty", "Nu există încă date pentru trenuri."));
+      return;
+    }
     var totalJ = list.reduce(function (a, e) { return a + (e.journeys || 0); }, 0);
     var small = list.filter(function (e) { return e.stats && e.stats.sufficient === false; }).length;
 
@@ -669,7 +684,7 @@
         params.min_sample + "): procentele nu sunt afișate acolo („—”)."));
     }
     if (!list.length) {
-      v.body.append(el("p", "empty", v.p.query ? "Niciun tren nu se potrivește căutării." : "Încă nu există trenuri observate."));
+      v.body.append(el("p", "empty", "Niciun tren nu se potrivește căutării."));
       return;
     }
 
@@ -717,6 +732,7 @@
       var q = toSearch(v.p, TR_FIELDS).toString();
       return "/api/trains/stats" + (q ? "?" + q : "");
     },
+    errorNode: function (v, e) { return loadFailed(v, "trenurile", e); },
     render: renderTrenuri
   });
 
@@ -1126,6 +1142,10 @@
 
   function renderStatii(v, d) {
     var list = Array.isArray(d.stations) ? d.stations : [];
+    if (!list.length && !v.p.q) {
+      v.body.append(el("p", "empty", "Nu există încă date pentru stații."));
+      return;
+    }
     var head = el("div", "st-bar-head");
     var total = list.reduce(function (a, s) { return a + (s.journeys || 0); }, 0);
     head.append(el("p", "h-count", plural(list.length, "stație", "stații") +
@@ -1144,7 +1164,7 @@
       "tabela din Gara de Nord. Întârzierile din paginile stațiilor sunt cele citite la București Nord, " +
       "nu la stație. „Nume nesigur” = numele a fost citit doar nesigur (OCR) pe tabelă."));
     if (!list.length) {
-      v.body.append(el("p", "empty", v.p.q ? "Nicio stație nu se potrivește căutării." : "Încă nu există stații observate."));
+      v.body.append(el("p", "empty", "Nicio stație nu se potrivește căutării."));
       return;
     }
     var arr = list.reduce(function (a, x) { return a + (x.arrivals || 0); }, 0);
@@ -1214,6 +1234,7 @@
       q.set("limit", String(SL_LIMIT));
       return "/api/stations?" + q.toString();
     },
+    errorNode: function (v, e) { return loadFailed(v, "stațiile", e); },
     render: renderStatii
   });
 
