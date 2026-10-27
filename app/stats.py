@@ -13,7 +13,7 @@ import io
 import json
 import os
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from app import journeys
 from app import quality as dq
@@ -176,6 +176,23 @@ def delays(js: list[dict], p: Params) -> list[int]:
     return [j["result"]["observed_delay"] for j in js if counted(j, p)]
 
 
+TREND_DAYS = 14
+
+
+def daily_trend(js: list[dict], p: Params, last: str | None, days: int = TREND_DAYS) -> dict:
+    """Mean READ delay per service day over `days` calendar days ending at `last` (sparklines).
+    A day without a read delay is null (never 0); `n` is how many journeys back each value."""
+    end = date.fromisoformat(last) if last else None
+    by: dict = defaultdict(list)
+    for j in js:
+        if counted(j, p):
+            by[j["service_date"]].append(j["result"]["observed_delay"])
+    keys = [(end - timedelta(days=days - 1 - i)).isoformat() for i in range(days)] if end else []
+    return {"last": last, "days": days,
+            "values": [round(sum(by[k]) / len(by[k]), 1) if by.get(k) else None for k in keys],
+            "n": [len(by.get(k, [])) for k in keys]}
+
+
 def quality(js: list[dict]) -> dict:
     states = {s: 0 for s in journeys.STATES}
     for j in js:
@@ -274,6 +291,7 @@ def train_entries(js: list[dict], p: Params, extra: dict | None = None) -> list[
     for j in js:
         groups[(j["train_no"], j["board"])].append(j)
     extra = extra or {}
+    last_day = max((j["service_date"] for j in js), default=None)
     out = []
     for (no, board), g in groups.items():
         g.sort(key=lambda j: (j["service_date"], j["sched_time"]))
@@ -288,6 +306,7 @@ def train_entries(js: list[dict], p: Params, extra: dict | None = None) -> list[
             "observations": (extra.get(no) or {}).get("observations"),
             "quality": quality(g),
             "stats": summarize(delays(g, p), p.on_time, p.min_sample),
+            "trend": daily_trend(g, p, last_day),
         })
     out.sort(key=lambda e: (e["train_no"], e["board"]))
     return out
