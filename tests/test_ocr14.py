@@ -29,7 +29,7 @@ TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
 # `unread` an honest gap. Beta 1.15 on the same set: wrong no 19, time 6, platform 5
 # (+3 unread), station 2, operator 1; ok no 365, time 378, platform 376.
 # Left wrong: number under glare (4), 8 read 3 (time 2, platform 1).
-MAX_WRONG = {"no": 20, "time": 4, "type": 2, "platform": 0, "delay": 0,
+MAX_WRONG = {"no": 0, "time": 4, "type": 2, "platform": 0, "delay": 0,
              "station": 3, "operator": 5}
 MIN_OK = {"no": 379, "time": 381, "type": 383, "platform": 382, "delay": 374,
           "station": 381, "operator": 382}

@@ -530,7 +530,9 @@ def _numeric_read(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     if not trusted:
         if _confirmed(matcher, cell, name, tess[0].replace(" ", "")):
             return m_text, t_conf if t_conf is not None else m_score * 100
-        if name == "platform" and t_text and not _near_tie(matcher, cell, name, t_text):
+        if name == "no" and t_text and _edge_sliver(matcher, cell, t_text):
+            return t_text, t_conf
+        if name in NEAR_TIE_ONLY and t_text and not _near_tie(matcher, cell, name, t_text):
             return "", None  # Tesseract's digit is one the templates reject: unread
         return t_text, t_conf
     if m_text == t_text and t_conf is not None:
@@ -539,6 +541,40 @@ def _numeric_read(name: str, cell: np.ndarray, tess: tuple[str, float | None],
 
 
 FRAGMENT_MAX_H = 0.25  # a glyph whose ink spans less of the line height is a sliver
+# Columns where Tesseract's text replaces untrusted templates only to settle their near ties
+# (``_near_tie``); anything else is unread. Task 2.3 added "no": every wrong train number of
+# the truth set (20 of 1415, 12 on Departures lines 8-11) was Tesseract's unchecked text
+# over a doubtful glyph (9/0 tie read "3": 7909 -> 7309, 1659 -> 1653; a weak leading "1"
+# dropped or read "7": 1095 -> 95, 16591 -> 76591).
+NEAR_TIE_ONLY = ("platform", "no")
+# NO_FLOOR: on the number, Tesseract never confirms a glyph that matches no template
+# (score < MIN_SCORE): a 5 px sliver at the cell edge read "1" 0.338 became "4011" for the
+# board's 401 under a re-read; half of a "7" cut by the joint ("7" 0.456) gave 79117.
+
+
+SLIVER_MAX_SCORE = 0.40  # a trailing "glyph" matching no digit this well...
+SLIVER_MAX_W = 0.15      # ...and this narrow (x cell height) is a sliver, not a digit
+
+
+def _edge_sliver(matcher, cell: np.ndarray, t_text: str) -> bool:
+    """True when the templates trust every glyph of the number but a last one that is a
+    mere sliver (score < SLIVER_MAX_SCORE, at most SLIVER_MAX_W of the cell height wide)
+    and Tesseract reads exactly the trusted glyphs. Real: IRN 401 on the frames of
+    ocr14_delay100 (arrivals line 0): a 3-5 px sliver at the cell's right edge read "7"
+    0.24 / "1" 0.34 next to a trusted "401"; Tesseract "401". A doubtful real digit (a weak
+    leading "1" 0.52: 1095 read "095") is no sliver."""
+    try:
+        gl = matcher.glyphs(cell, _ALLOWED["no"])
+        spans = digits.segment_spans(cell)
+    except ValueError:
+        return False
+    if len(gl) < 2 or len(gl) != len(spans):
+        return False
+    *body, (_, s, _, *_) = gl
+    x0, x1 = spans[-1][1]
+    return (s < SLIVER_MAX_SCORE and x1 - x0 <= SLIVER_MAX_W * cell.shape[0]
+            and all(digits.glyph_trusted(bs, bm) for _, bs, bm, *_ in body)
+            and "".join(bc for bc, *_ in body) == t_text)
 
 
 def _fragment(score: float, glyph: np.ndarray | None) -> bool:
@@ -566,9 +602,11 @@ def _near_tie(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
         return False
     try:
         gl = [x for x in matcher.glyphs(cell, _ALLOWED[name]) if not _fragment(x[1], x[3])]
+        floor = digits.MIN_SCORE if name == "no" else 0.0  # NO_FLOOR
         return len(gl) == len(t_text) and all(
-            t == c or (s >= digits.MIN_SCORE and not digits.glyph_trusted(s, mg)
-                       and t in near(g, _ALLOWED[name]))
+            (t == c and s >= floor) or (s >= digits.MIN_SCORE
+                                        and not digits.glyph_trusted(s, mg)
+                                        and t in near(g, _ALLOWED[name]))
             for t, (c, s, mg, g, *_) in zip(t_text, gl))
     except Exception:  # noqa: BLE001 - fail safe: not a tie, the cell stays unread
         log.warning("near-tie check failed on a %s cell", name, exc_info=True)
@@ -596,6 +634,8 @@ def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
         return False
     m = "".join(ch for ch, *_ in gl)
     weak = [not digits.glyph_trusted(s, mg) for _, s, mg, *_ in gl]
+    if name == "no" and any(s < digits.MIN_SCORE for _, s, *_ in gl):
+        return False  # a glyph matching no template is no digit to confirm (NO_FLOOR)
     n, t = len(m), t_text
     if len(t) == n:  # same length: every doubtful glyph read the same by Tesseract
         return all(not w or t[k] == m[k] for k, w in enumerate(weak))

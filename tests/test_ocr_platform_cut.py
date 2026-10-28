@@ -460,3 +460,147 @@ def test_an_untrusted_own_digit_needs_min_score():
 def test_recovery_to_another_digit_needs_tesseract(cell, stub, tess, want):
     from app.ocr.reader import _numeric
     assert _numeric("platform", cell, (tess, 80.0), _Stub(*stub))[0] == want
+
+
+# --- Task 2.3: Departures train number, lines 8-11 (rows "9/11": 0-based 9 and 11) ----
+# Diagnosis (task-2.3-report.md): no geometry drift (the "no" cell sits at its nominal
+# x0/x1 on every line); every wrong number came through untrusted templates: (A) the
+# LED-module joint cuts the last digit "7" into a tall left piece and a short right piece
+# (bar end), giving 5 glyphs (7907 -> 7307 / 79117 / 94107 / 73917), (B) a 9/0 or 9/8 near
+# tie where Tesseract's unverified text was published (7909 -> 7309, 1659 -> 1653).
+
+GROUP4 = (8, 9, 10, 11)
+# measured after the fix on all 59 truth frames (236 cells): 236 ok / 0 unread / 0 wrong
+# (c81b602: 224 / 0 / 12). A first-pass number left unread (doubtful glyph, Tesseract not
+# settling a near tie) is re-read with the other binarisations, under the same rules
+NO_GROUP4_MAX_UNREAD = 0
+
+
+def test_departure_rows_9_11_number_never_wrong():
+    cells = [c for f in sorted(TRUTH["frames"])
+             for c in _cells(f, _lines(f), "no", ("departure",), GROUP4)]
+    c = _count(cells)
+    assert c["ok"] + c["unread"] + c["wrong"] >= 200
+    assert c["wrong"] == 0, c["misses"]
+    assert c["unread"] <= NO_GROUP4_MAX_UNREAD, c["misses"]
+
+
+# the 12 real failures of departure_group4_fail at c81b602: now the label or None
+GROUP4_WRONG = [("ocr_truth/srv/2026_10_21_212506-507579fb", 9, 7907),
+                ("ocr_truth/srv/2026_10_21_212606-1a274ed1", 8, 7039),
+                ("ocr_truth/srv/2026_10_22_051311-acf42e75", 9, 7917),
+                ("ocr_truth/srv/2026_10_22_220006-a4ceb247", 11, 7909),
+                ("ocr_truth/srv/2026_10_23_211505-11053345", 11, 7909),
+                ("ocr_truth/srv/2026_10_24_100805-5b763752", 11, 9107),
+                ("ocr_truth/srv/2026_10_24_173804-92e0c0df", 9, 1659),
+                ("ocr_truth/srv/2026_10_25_061407-7494243c", 10, 7917),
+                ("ocr_truth/srv/2026_10_25_232048-02d1ca2f", 11, 7909),
+                ("ocr_truth/srv/2026_10_26_205906-aa606133", 11, 9101),
+                ("ocr_truth/srv/2026_10_27_001707-b6f1134f", 9, 7909),
+                ("ocr_truth/srv/2026_10_27_071406-defae43d", 11, 8121)]
+
+
+@pytest.mark.parametrize("frame,line,board_shows", GROUP4_WRONG)
+def test_departure_number_is_the_board_or_none(frame, line, board_shows):
+    assert _lines(frame)[("departure", line)]["no"] in (board_shows, None)
+
+
+# (A) the 7 cut by the joint is one glyph again: the four real ones read right
+@pytest.mark.parametrize("frame,line,board_shows", [
+    g for g in GROUP4_WRONG if g[2] in (7907, 7917, 9107) and "212606" not in g[0]])
+def test_last_seven_cut_by_the_joint_reads(frame, line, board_shows):
+    assert _lines(frame)[("departure", line)]["no"] == board_shows
+
+
+# real component boxes (x, y, w, h; x3 mask) of srv 212506 departures line 9, "7907":
+# the joint cuts the last 7 into bar+diagonal (tall) and the bar's right end (short)
+BOXES_7907 = [[16, 8, 23, 32], [44, 7, 26, 33], [75, 7, 25, 33], [106, 7, 12, 33],
+              [120, 7, 10, 17]]
+
+
+def test_seven_cut_by_the_joint_is_glued():
+    from app.ocr import digits
+    out = digits._glue_seam_split([list(b) for b in BOXES_7907], 7, 33)
+    assert len(out) == 4
+    assert out[3][:4] == [106, 7, 24, 33]
+
+
+@pytest.mark.parametrize("boxes", [
+    [[106, 7, 12, 33], [120, 22, 10, 17]],   # the short piece is not at the line top
+    [[106, 7, 12, 33], [121, 7, 14, 17]],    # too wide for one digit (29 > 0.85 x 33 px)
+    [[106, 7, 12, 33], [126, 7, 4, 17]],     # gap beyond the joint's width (8 > 4.3 px)
+    [[106, 7, 12, 15], [120, 7, 10, 17]],    # neither piece is a full-height stroke
+])
+def test_other_pieces_are_not_glued(boxes):
+    from app.ocr import digits
+    assert len(digits._glue_seam_split([list(b) for b in boxes], 7, 33)) == 2
+
+
+# (B) Tesseract only breaks a near tie of the templates on the number, as on the platform
+@pytest.mark.parametrize("stub,tess,want", [
+    (("9", 0.791, 0.038, "90"), "3", ""),    # real 212606: 9/0 tie, Tesseract "3": unread
+    (("9", 0.751, 0.016, "90"), "8", ""),    # real 205906: 9/0 tie, Tesseract "8": unread
+    (("0", 0.775, 0.005, "086"), "8", "8"),  # real 054309: 0/8/6 tie settled by Tesseract
+    (("1", 0.517, 0.135, "1"), "", ""),      # a weak "1" Tesseract did not see: unread
+])
+def test_tesseract_only_breaks_a_template_near_tie_on_the_number(stub, tess, want):
+    from app.ocr.reader import _numeric
+    assert _numeric("no", SOLID, (tess, 80.0), _Stub(*stub))[0] == want
+
+
+class _Glyphs:
+    """Templates stub with several glyphs: (ch, score, margin, near) each, full height."""
+
+    def __init__(self, *gl):
+        import numpy as np
+        self.gl = [(ch, s, mg, np.ones((32, 32), np.float32), False) for ch, s, mg, _ in gl]
+        self._near = [n for *_, n in gl]
+
+    def glyphs(self, cell, allowed):
+        return self.gl
+
+    def read(self, cell, allowed):
+        from app.ocr import digits
+        return ("".join(g[0] for g in self.gl), min(g[1] for g in self.gl),
+                all(digits.glyph_trusted(g[1], g[2]) for g in self.gl))
+
+    def near(self, glyph, allowed):
+        return next(n for g, n in zip(self.gl, self._near) if g[3] is glyph)
+
+
+# a glyph that matches no template (score < MIN_SCORE) is not a digit Tesseract can confirm:
+# real ocr14_delay100 044306 arrival 0, "401" with a 5 px sliver at the cell's right edge,
+# read "1" 0.338 by the templates and "4011" by Tesseract under the "adapt" re-read
+@pytest.mark.parametrize("weak,tess,want", [
+    (("1", 0.338, 0.022, "17"), "4011", ""),  # confirmed only by Tesseract: unread
+    (("7", 0.456, 0.028, "71"), "4017", ""),  # real 051311 kind (half of a cut 7)
+    (("1", 0.62, 0.02, "17"), "4011", "4011"),  # a real but doubtful 1, confirmed: kept
+])
+def test_a_glyph_below_min_score_is_never_confirmed_on_the_number(weak, tess, want):
+    from app.ocr.reader import _numeric
+    m = _Glyphs(("4", 0.927, 0.21, "4"), ("0", 0.895, 0.091, "0"), ("1", 0.923, 0.21, "1"),
+                weak)
+    assert _numeric("no", SOLID, (tess, 80.0), m)[0] == want
+
+
+def _three_and_sliver(sliver_w):
+    """Three digit-sized blocks and a thin sliver at the right (x3 mask, 40 px high)."""
+    import numpy as np
+    cell = np.full((40, 163), 255, np.uint8)
+    for x in (13, 43, 76):
+        cell[3:40, x:x + 22] = 0
+    cell[24:40, 136:136 + sliver_w] = 0
+    return cell
+
+
+@pytest.mark.parametrize("sliver_w,last,tess,want", [
+    (3, ("7", 0.238, 0.023, "712"), "401", "401"),  # real 044306: Tesseract sees no 4th digit
+    (3, ("7", 0.238, 0.023, "712"), "4017", ""),    # ...but never the sliver as a digit
+    (12, ("7", 0.238, 0.023, "712"), "401", ""),    # a wide weak glyph may be a real digit
+    (3, ("1", 0.52, 0.13, "1"), "401", ""),         # a weak but real-looking match: unread
+])
+def test_a_sliver_after_the_number_is_not_a_digit(sliver_w, last, tess, want):
+    from app.ocr.reader import _numeric
+    m = _Glyphs(("4", 0.927, 0.21, "4"), ("0", 0.895, 0.091, "0"), ("1", 0.923, 0.21, "1"),
+                last)
+    assert _numeric("no", _three_and_sliver(sliver_w), (tess, 80.0), m)[0] == want
