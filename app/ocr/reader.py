@@ -300,6 +300,102 @@ def _time_colon(s: str) -> str:
 def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
              matcher: DigitMatcher | None, alt: np.ndarray | None = None
              ) -> tuple[str, float | None]:
+    """Text of a numeric cell (``_numeric_read``); a platform reading is checked against
+    the glyph shapes (``_platform_checked``)."""
+    text, conf = _numeric_read(name, cell, tess, matcher, alt)
+    if name == "platform" and matcher is not None:
+        return _platform_checked(cell, text, conf, matcher)
+    return text, conf
+
+
+# --- platform: shape checks (Task 2.2, real server frames 22-27.10) ---------------------
+# Measured on every labelled platform glyph of the truth set (~600, 58 frames): holes
+# (closed background >= HOLE_MIN_AREA px, centre above "U" / below "L" the glyph middle)
+#   0 U/L  1 -  2 -  3 -  4 U/-/L  5 -  6 L/-  7 -  8 UL/L  9 U
+# No label ever breaks these rules; every wrong read of the cut-platform frames does
+# (blurred 8 read 6 has an upper hole, 8/6 read 3/5 a lower one).
+HOLE_MIN_AREA = 12   # px (x3 mask); the profile is the same from 3 to 20
+LOST_INK = 0.08      # share of the cell's ink the segmentation may drop: a faint 4 in
+                     # pieces lost 11.1% and became a trusted "1" (srv 120408); the
+                     # most on a correct reading is 4.0%
+
+
+def _holes(cell: np.ndarray, x0: int, x1: int) -> str:
+    """Holes of the ink of ``cell[:, x0:x1]``, top to bottom: "U" (centre in the upper
+    half of the ink) or "L"."""
+    ink = cell[:, x0:x1] == 0
+    rows = np.flatnonzero(ink.any(axis=1))
+    if rows.size == 0:
+        return ""
+    a, b = rows[0], rows[-1] + 1
+    bg = np.pad(~ink[a:b], 1, constant_values=True).astype(np.uint8)
+    n, _, st, cen = cv2.connectedComponentsWithStats(bg, connectivity=4)
+    ys = sorted(cen[i][1] - 1 for i in range(1, n) if st[i, 4] >= HOLE_MIN_AREA
+                and st[i, 0] > 0 and st[i, 1] > 0 and st[i, 0] + st[i, 2] < bg.shape[1]
+                and st[i, 1] + st[i, 3] < bg.shape[0])
+    return "".join("U" if y < (b - a) / 2 else "L" for y in ys)
+
+
+def _fits(ch: str, holes: str) -> bool:
+    """A digit `ch` is possible for a glyph with these holes (rules measured above)."""
+    if ch in "12357":
+        return holes == ""
+    if ch == "6":
+        return "U" not in holes
+    if ch == "9":
+        return "L" not in holes
+    if ch == "0":
+        return len(holes) <= 1
+    return True  # 4, 8: no rule
+
+
+def _platform_checked(cell: np.ndarray, text: str, conf: float | None,
+                      matcher: DigitMatcher) -> tuple[str, float | None]:
+    """A platform reading only if every glyph's shape allows its digit and the
+    segmentation kept the cell's ink. A cell left unread, or whose reading the shapes
+    reject, is read from the templates when every glyph is trusted and allowed by its
+    shape, or doubtful (score >= MIN_SCORE) with exactly one near-tie candidate the shape
+    allows (templates and shape agree: the same kind of tie break as Tesseract's in
+    ``_near_tie``). Anything else: None."""
+    try:
+        spans = digits.segment_spans(cell)
+        gl = matcher.glyphs(cell, _ALLOWED["platform"])
+        if len(spans) != len(gl):  # same segmentation: only a stand-in matcher differs
+            return text, conf
+        ink = cell == 0
+        total = int(ink.sum())
+        kept = sum(int(ink[:, x0:x1].sum()) for _, (x0, x1), _ in spans)
+        if total and (total - kept) / total >= LOST_INK:
+            return "", None
+        keep = [(g, _holes(cell, x0, x1)) for g, (_, (x0, x1), _) in zip(gl, spans)
+                if not _fragment(g[1], g[3])]
+        if text and len(text) == len(keep) and all(
+                _fits(t, h) for t, (_, h) in zip(text, keep)):
+            return text, conf
+        # unread, or a reading the shapes reject (blurred 8 read "3"): templates + shape
+        out = []
+        for (c, s, mg, g, *_), h in keep:
+            if digits.glyph_trusted(s, mg):
+                cand = [c]
+            elif s >= digits.MIN_SCORE:
+                cand = list(matcher.near(g, _ALLOWED["platform"]))
+            else:
+                return "", None
+            cand = [x for x in cand if _fits(x, h)]
+            if len(cand) != 1:
+                return "", None
+            out.append(cand[0])
+        if not out:
+            return "", None
+        return "".join(out), min(g[1] for g, _ in keep) * 100
+    except Exception:  # noqa: BLE001 - fail safe: no platform rather than a guess
+        log.warning("platform shape check failed", exc_info=True)
+        return "", None
+
+
+def _numeric_read(name: str, cell: np.ndarray, tess: tuple[str, float | None],
+                  matcher: DigitMatcher | None, alt: np.ndarray | None = None
+                  ) -> tuple[str, float | None]:
     """Pick the text of a numeric cell: glyph templates first, Tesseract as fallback.
 
     The returned confidence is Tesseract's when both readers agree; when the

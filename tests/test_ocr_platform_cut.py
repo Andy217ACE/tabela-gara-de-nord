@@ -166,9 +166,10 @@ def test_baseline_recorded():
 # --- Task 2.2: platform read robustly (wrong 0; unread never above the baseline) -------
 
 BASE = json.loads(BASELINE.read_text(encoding="utf-8"))
-# unread threshold fixed from the measured baseline, never looser (baseline unread is 0:
-# no local frame shows a real cut-platform failure, so the threshold is 0)
-PLATFORM_MAX_UNREAD = BASE["platform"]["unread"]
+# unread threshold: measured after the fix (Task 2.2 round 2, real server frames: 21 cells
+# of platform_cut were 8 wrong + 13 unread at c81b602), never above the recorded baseline
+PLATFORM_MAX_UNREAD = 11
+assert PLATFORM_MAX_UNREAD <= BASE["platform"]["unread"]
 WRONG_8_AS_3 = "ocr_truth/2026_10_22_121707-b8eafa67"  # departures r1: board 8, read 3
 _reads: dict[str, dict] = {}
 
@@ -277,3 +278,51 @@ def test_a_sliver_is_not_a_platform_digit(third, want):
             return "1"
 
     assert _numeric("platform", np.zeros((10, 10), np.uint8), ("11", 80.0), _M())[0] == want
+
+
+# --- round 2: glyph shape (holes) and lost ink, measured on real server frames --------
+
+def _draw(*loops, size=(60, 30)):
+    """Black-on-white glyph: a filled box with the given hollow (y0, y1) loops cut out."""
+    import numpy as np
+    cell = np.full(size, 255, np.uint8)
+    cell[4:56, 6:24] = 0
+    for y0, y1 in loops:
+        cell[y0:y1, 11:19] = 255
+    return cell
+
+
+@pytest.mark.parametrize("loops,holes", [
+    ((), ""), (((10, 24),), "U"), (((36, 50),), "L"), (((10, 24), (36, 50)), "UL"),
+])
+def test_holes_are_counted_above_and_below_the_middle(loops, holes):
+    from app.ocr.reader import _holes
+    assert _holes(_draw(*loops), 0, 30) == holes
+
+
+@pytest.mark.parametrize("ch,holes,ok", [
+    ("3", "L", False), ("5", "L", False),  # blurred 8 / 6 read 3 / 5: the hole says no
+    ("6", "UL", False),                    # blurred 8 read 6: upper hole
+    ("8", "UL", True), ("8", "L", True), ("6", "L", True), ("6", "", True),
+    ("9", "L", False), ("9", "U", True), ("0", "UL", False), ("4", "U", True),
+    ("1", "", True), ("1", "U", False), ("7", "", True),
+])
+def test_digit_must_fit_the_glyph_holes(ch, holes, ok):
+    from app.ocr.reader import _fits
+    assert _fits(ch, holes) is ok
+
+
+# the 8 wrong cells of the real cut-platform frames at c81b602: now the label or None
+CUT_WRONG = [("ocr_truth/srv/2026_10_22_041906-0901ecd4", 8, 8),
+             ("ocr_truth/srv/2026_10_23_173806-4a34f182", 4, 8),
+             ("ocr_truth/srv/2026_10_24_085709-b107ed8c", 5, 8),
+             ("ocr_truth/srv/2026_10_27_093605-272f9ed9", 2, 8),
+             ("ocr_truth/srv/2026_10_24_224505-e04669e6", 2, 6),
+             ("ocr_truth/srv/2026_10_27_080506-faf616ce", 2, 6),
+             ("ocr_truth/srv/2026_10_26_155305-19468666", 1, 6),
+             ("ocr_truth/srv/2026_10_22_120408-e5206d05", 5, 4)]
+
+
+@pytest.mark.parametrize("frame,line,board_shows", CUT_WRONG)
+def test_blurred_platform_digit_is_never_misread(frame, line, board_shows):
+    assert _lines(frame)[("departure", line)]["platform"] in (board_shows, None)
