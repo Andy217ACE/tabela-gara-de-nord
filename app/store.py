@@ -374,12 +374,14 @@ class Store:
         # change is applied (and its event emitted) only once confirmed (app.quality).
         self._cand: dict[tuple[str, int], tuple[str, object, int]] = {}
         self._cand_next: dict[tuple[str, int], tuple[str, object, int]] = {}
-        # coexistence of two train numbers (app.quality.coexisting_numbers), per number pair
-        # (low, high): True is permanent (coexistence never ends); "never together" expires
-        # after COEXIST_RECHECK_S, or at once when a frame reads both on one board
-        self._together: set[tuple[int, int]] = set()
-        self._apart: dict[tuple[int, int], float] = {}  # pair -> monotonic expiry
-        self._frame_nos: dict[str, set[int]] = {}  # board -> numbers read in this frame
+        # slot coexistence of two train numbers (app.quality.coexisting_numbers with a
+        # sched_time), per (low, high, sched_time): True is permanent (coexistence never
+        # ends); "never together" expires after COEXIST_RECHECK_S, or at once when a frame
+        # reads both on one board at that time
+        self._together: set[tuple[int, int, str]] = set()
+        self._apart: dict[tuple[int, int, str], float] = {}  # key -> monotonic expiry
+        # (board, sched_time) -> numbers read there in this frame
+        self._frame_nos: dict[tuple[str, str], set[int]] = {}
         self.last_ghost_numbers: set[int] = set()  # train numbers flagged ghost by the last ingest
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
@@ -627,32 +629,39 @@ class Store:
         hits = [s for s in cands if s["id"] not in seen and _near_dup(
             (s["train_no"], s["sched_time"], s["station"], s["station_raw"]),
             (r.train_no, r.sched_time, r.station, r.station_raw))]
-        if len(hits) != 1 or self._coexist(r.train_no, hits[0]["train_no"]):
-            return None  # (a train once read together with r's number is another train)
+        if len(hits) != 1 or self._coexist(r.train_no, hits[0]["train_no"], r.sched_time):
+            return None  # (a train once read beside r's number, same time, is another train)
         return hits[0]
 
+    def _in_frame(self, k: tuple) -> bool:
+        return any(k[0] in s and k[1] in s
+                   for (_b, t), s in self._frame_nos.items() if t == k[2])
+
     def _note_frame(self, rows: list[Row]) -> None:
-        """The numbers read per board in this frame (all rows, as recorded in observations):
-        a cached "never together" pair read on one board here becomes coexisting at once."""
+        """The numbers read per (board, sched_time) slot in this frame (all rows, as recorded
+        in observations): a cached "never together" pair read in one slot here becomes
+        coexisting at once."""
         self._frame_nos = {}
         for r in rows:
             if r.train_no is not None:
-                self._frame_nos.setdefault(r.board, set()).add(int(r.train_no))
-        for k in [k for k in self._apart
-                  if any(k[0] in s and k[1] in s for s in self._frame_nos.values())]:
+                self._frame_nos.setdefault((r.board, r.sched_time), set()).add(int(r.train_no))
+        for k in [k for k in self._apart if self._in_frame(k)]:
             del self._apart[k]
             self._together.add(k)
 
-    def _coexist(self, a: int, b: int) -> bool:
-        """Were train numbers `a` and `b` ever read in one capture on one board (two real
-        trains, app.quality.coexisting_numbers), this frame included? Cached per pair;
+    def _coexist(self, a: int, b: int, sched_time: str) -> bool:
+        """Were train numbers `a` and `b` ever read in one capture on one board, both at
+        `sched_time` (two real trains in one slot, 5011/5014 04:47;
+        app.quality.coexisting_numbers), this frame included? Slot level on purpose: two
+        neighbouring trains at different times are on the board together all the time, and
+        a misread of one into the other's number must still match. Cached per (pair, time);
         queried only for a cross-number candidate, at most once per COEXIST_RECHECK_S."""
         if a is None or b is None or int(a) == int(b):
             return False
-        k = (min(int(a), int(b)), max(int(a), int(b)))
+        k = (min(int(a), int(b)), max(int(a), int(b)), sched_time)
         if k in self._together:
             return True
-        if any(k[0] in s and k[1] in s for s in self._frame_nos.values()):
+        if self._in_frame(k):
             self._apart.pop(k, None)
             self._together.add(k)
             return True
@@ -661,7 +670,7 @@ class Store:
             return False
         if len(self._apart) > 4000 or len(self._together) > 4000:  # bounded
             self._apart, self._together = {}, set()
-        if quality.coexisting_numbers(self._conn, k[0], [k[1]]):
+        if quality.coexisting_numbers(self._conn, k[0], [k[1]], sched_time=sched_time):
             self._apart.pop(k, None)
             self._together.add(k)
             return True
@@ -723,7 +732,7 @@ class Store:
                 continue
             if self._reads(p["id"]) > self._reads(cur["id"]) and (
                     best is None or self._reads(p["id"]) > self._reads(best["id"])) and (
-                    not self._coexist(cur["train_no"], p["train_no"])):  # distinct trains
+                    not self._coexist(cur["train_no"], p["train_no"], cur["sched_time"])):
                 best = p
         return best
 

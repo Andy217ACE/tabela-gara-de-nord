@@ -186,18 +186,22 @@ def _db_svc(c, day, no, sched, fs, ls, station="BUZAU"):
         (day, "R", no, station, "CFR", sched, fs, ls, station)).lastrowid
 
 
-def _db_obs(c, sid, no, at, cap=None):
+def _db_obs(c, sid, no, at, cap=None, sched="04:47"):
     if cap is None:
         cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
                         (at, f"h-{sid}-{at}")).lastrowid
     c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
-              " train_no, station, validation_state, processing_version)"
-              " VALUES (?,?, 'departure', 0, ?, ?, 'BUZAU', 'ok', 't')", (cap, sid, at, no))
+              " train_no, sched_time, station, validation_state, processing_version)"
+              " VALUES (?,?, 'departure', 0, ?, ?, ?, 'BUZAU', 'ok', 't')",
+              (cap, sid, at, no, sched))
     return cap
 
 
-@pytest.mark.parametrize("coexist", [False, True])
-def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, coexist):
+# coexist: None (never read together), "04:47" (two rows of one time in one frame: two
+# trains), "06:10" (5014 at another time beside 5011: neighbours, slot-level rule ignores it)
+@pytest.mark.parametrize("co_time", [None, "04:47", "06:10"])
+def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, co_time):
+    coexist = co_time == "04:47"
     from app.store import Store
 
     s = Store(str(tmp_path / "q.db"))
@@ -209,11 +213,11 @@ def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, coexist):
     for k in range(4):
         _db_obs(c, real, 5011, f"{d2}T01:0{k}:00+03:00")
     _db_obs(c, var, 5014, f"{d2}T01:10:00+03:00")
-    if coexist:  # two rows of one frame on another day
+    if co_time:  # two rows of one frame on another day
         a = _db_svc(c, d0, 5011, "04:47", f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
-        b = _db_svc(c, d0, 5014, "06:10", f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
+        b = _db_svc(c, d0, 5014, co_time, f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
         cap = _db_obs(c, a, 5011, f"{d0}T04:30:00+03:00")
-        _db_obs(c, b, 5014, f"{d0}T04:30:00+03:00", cap)
+        _db_obs(c, b, 5014, f"{d0}T04:30:00+03:00", cap, sched=co_time)
     want = None if coexist else ("near_dup", real)
     assert q.judge_ghost(c, var) == want
     # a stale ghost flag (judged before the rule) is cleared by the backfill

@@ -48,25 +48,25 @@ def svc(store, no):
     return store._conn.execute("SELECT * FROM services WHERE train_no=?", (no,)).fetchone()
 
 
-def coexist(store, a, b, board="departure"):
-    """History: `a` and `b` read in one capture on `board` (two real trains)."""
+def coexist(store, a, b, board="departure", times=("04:47", "04:47")):
+    """History: `a` and `b` read in one capture on `board` (at `times`)."""
     c = store._conn
     cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
-                    ("2026-10-21T03:00:00+00:00", f"h-{a}-{b}")).lastrowid
-    for i, no in enumerate((a, b)):
+                    ("2026-10-21T03:00:00+00:00", f"h-{a}-{b}-{times}")).lastrowid
+    for i, (no, t) in enumerate(zip((a, b), times)):
         c.execute("INSERT INTO observations(capture_id, service_id, board, row_index,"
-                  " observed_at, train_no, station, validation_state, processing_version)"
-                  " VALUES (?, NULL, ?, ?, '2026-10-21T03:00:00+00:00', ?, 'BUZAU', 'ok', 't')",
-                  (cap, board, i, no))
+                  " observed_at, train_no, sched_time, station, validation_state,"
+                  " processing_version) VALUES (?, NULL, ?, ?, '2026-10-21T03:00:00+00:00',"
+                  " ?, ?, 'BUZAU', 'ok', 't')", (cap, board, i, no, t))
 
 
 def count_queries(monkeypatch):
     calls = []
     real = quality.coexisting_numbers
 
-    def spy(conn, train_no, among):
-        calls.append((train_no, tuple(among)))
-        return real(conn, train_no, among)
+    def spy(conn, train_no, among, **kw):
+        calls.append((train_no, tuple(among), kw))
+        return real(conn, train_no, among, **kw)
     monkeypatch.setattr(quality, "coexisting_numbers", spy)
     return calls
 
@@ -109,6 +109,17 @@ def test_fuzzy_misread_still_matches_when_never_read_together(store):
     assert svc(store, 5011)["last_seen"] == at(1).isoformat()
 
 
+def test_neighbours_at_other_times_do_not_block_a_misread(store):
+    # review: R 5011 04:47 and R 5013 05:30 are on the board together all the time; a
+    # one-digit misread of 5013's row as "5011 05:30" is still 5013 (slot-level rule)
+    store.ingest(frame(R(5011), R(5013, "05:30")), at(0))
+    coexist(store, 5011, 5013, times=("04:47", "05:30"))
+    store.ingest(frame(R(5011), R(5011, "05:30")), at(1))
+    assert store._conn.execute("SELECT COUNT(*) FROM services WHERE train_no IN"
+                               " (5011, 5013)").fetchone()[0] == 2
+    assert svc(store, 5013)["last_seen"] == at(1).isoformat()
+
+
 def test_fuzzy_never_claims_a_coexisting_train(store):
     store.ingest(frame(R(5011)), at(0))
     coexist(store, 5011, 5014)
@@ -125,7 +136,7 @@ def test_rename_never_turns_a_train_into_a_coexisting_one(store):
     sid = svc(store, 1574)["id"]
     store.ingest(frame(R(1571, "05:30", station="GALATI")), at(1))
     store.ingest(frame(R(1571, "05:30", station="GALATI")), at(2))
-    coexist(store, 1571, 1574)
+    coexist(store, 1571, 1574, times=("05:30", "05:30"))
     store._apart.clear()  # (the pair's cached "never together" expires)
     store.ingest(frame(R(1571, "05:30", station="GALATI")), at(3))
     assert store._conn.execute("SELECT train_no FROM services WHERE id=?",
@@ -155,7 +166,7 @@ def test_cached_false_is_promoted_by_a_frame_reading_both(store, monkeypatch):
     store.ingest(frame(R(5011)), at(0))
     store.ingest(frame(R(5014)), at(1))  # noise so far: cached "never together"
     assert len(calls) == 1 and svc(store, 5014) is None
-    store.ingest(frame(R(5011), R(5014)), at(2))  # both on the board: two real trains
+    store.ingest(frame(R(5011), R(5014)), at(2))  # both in the 04:47 slot: two real trains
     s14 = svc(store, 5014)
     assert s14 is not None
     store.ingest(frame(R(5014)), at(3))  # (observations of at(2) were never recorded here)

@@ -252,23 +252,29 @@ def classify_delays(first_seen: str, last_seen: str, last_delay: int,
 
 
 def coexisting_numbers(conn: sqlite3.Connection, train_no: int,
-                       among) -> dict[int, str]:
+                       among, *, sched_time: str | None = None) -> dict[int, str]:
     """{number: earliest observed_at} for the numbers of `among` that were read in the
     SAME capture on the SAME board as `train_no`, in all history: two rows of one frame
     are two real trains, so such numbers are never one train read twice (5011/5014).
     Observations in EVERY validation_state count (incomplete / low-confidence rows too):
     on purpose, it errs on the safe side (a doubtful co-reading blocks a merge or a ghost
     verdict, never causes one). One indexed query (observations by train_no, then by
-    capture_id); the table check keeps databases without observations working."""
+    capture_id); the table check keeps databases without observations working.
+    `sched_time`: slot level — only co-readings where BOTH rows show that scheduled time
+    (two rows of one time side by side: 5011/5014 04:47). The live matching and the ghost
+    guard use it: neighbouring trains at other times share every frame, and a misread of
+    one into the other's number is still noise. Without it (offline listings): any time."""
     nums = sorted({int(n) for n in among if n is not None and int(n) != int(train_no)})
     if not nums or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
                                     " AND name='observations'").fetchone():
         return {}
+    slot = "" if sched_time is None else " AND x.sched_time = ? AND y.sched_time = ?"
     rows = conn.execute(
         "SELECT y.train_no, MIN(x.observed_at) FROM observations x JOIN observations y"
         " ON y.capture_id = x.capture_id AND y.board = x.board"
-        f" WHERE x.train_no = ? AND y.train_no IN ({','.join('?' * len(nums))})"
-        " GROUP BY y.train_no", (int(train_no), *nums)).fetchall()
+        f" WHERE x.train_no = ? AND y.train_no IN ({','.join('?' * len(nums))})" + slot +
+        " GROUP BY y.train_no",
+        (int(train_no), *nums, *(() if sched_time is None else (sched_time,) * 2))).fetchall()
     return {r[0]: r[1] for r in rows}
 
 
@@ -285,9 +291,9 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
     or when a one-character variant on the board at the same time has at least
     GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
     alternated between two keys; R 5014 90 vs R 5011 160 stays undecided).
-    `coexist`: train numbers once read in the same frame as svc's number (see
-    `coexisting_numbers`): a partner with such a number is a distinct train, never the
-    real one of a near_dup/minority_dup ("short" is unaffected). Pure: the caller
+    `coexist`: train numbers once read in the same frame as svc's number, at svc's
+    sched_time (see `coexisting_numbers`): a partner with such a number is a distinct
+    train, never the real one of a near_dup/minority_dup ("short" is unaffected). Pure: the caller
     queries it (`ghost_verdict_db`).
     """
     from app.store import _near_dup  # local: store imports this module
@@ -336,7 +342,9 @@ def ghost_verdict_db(conn: sqlite3.Connection, svc: dict, partners: list[dict], 
     verdict = ghost_verdict(svc, partners, n_obs, partner_obs)
     if verdict is None or verdict[1] is None:
         return verdict
-    co = coexisting_numbers(conn, svc["train_no"], {p["train_no"] for p in partners})
+    # slot level: a cross-number near_dup/minority_dup partner shares svc's sched_time
+    co = coexisting_numbers(conn, svc["train_no"], {p["train_no"] for p in partners},
+                            sched_time=svc["sched_time"])
     if not co:
         return verdict
     return ghost_verdict(svc, partners, n_obs, partner_obs, coexist=set(co))
