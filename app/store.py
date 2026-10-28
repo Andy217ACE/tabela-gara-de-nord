@@ -17,6 +17,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
+from time import monotonic
 from zoneinfo import ZoneInfo
 
 from app import quality
@@ -52,6 +53,7 @@ JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed 
 STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 9
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
+COEXIST_RECHECK_S = 600  # a cached "never read together" (see Store._coexist) is re-queried after
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
@@ -372,6 +374,12 @@ class Store:
         # change is applied (and its event emitted) only once confirmed (app.quality).
         self._cand: dict[tuple[str, int], tuple[str, object, int]] = {}
         self._cand_next: dict[tuple[str, int], tuple[str, object, int]] = {}
+        # coexistence of two train numbers (app.quality.coexisting_numbers), per number pair
+        # (low, high): True is permanent (coexistence never ends); "never together" expires
+        # after COEXIST_RECHECK_S, or at once when a frame reads both on one board
+        self._together: set[tuple[int, int]] = set()
+        self._apart: dict[tuple[int, int], float] = {}  # pair -> monotonic expiry
+        self._frame_nos: dict[str, set[int]] = {}  # board -> numbers read in this frame
         self.last_ghost_numbers: set[int] = set()  # train numbers flagged ghost by the last ingest
         self.last_rejected: dict[str, str] = {}  # panel -> reason, from the last ingest()
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
@@ -544,6 +552,7 @@ class Store:
             c = self._conn
             c.execute("BEGIN IMMEDIATE")
             try:
+                self._note_frame(rows)
                 good, low = self._split(rows)
                 accepted, rejected = self._judge(good)
                 read = {b: sum(1 for r in good + low if r.board == b) for b in BOARDS}
@@ -618,7 +627,46 @@ class Store:
         hits = [s for s in cands if s["id"] not in seen and _near_dup(
             (s["train_no"], s["sched_time"], s["station"], s["station_raw"]),
             (r.train_no, r.sched_time, r.station, r.station_raw))]
-        return hits[0] if len(hits) == 1 else None
+        if len(hits) != 1 or self._coexist(r.train_no, hits[0]["train_no"]):
+            return None  # (a train once read together with r's number is another train)
+        return hits[0]
+
+    def _note_frame(self, rows: list[Row]) -> None:
+        """The numbers read per board in this frame (all rows, as recorded in observations):
+        a cached "never together" pair read on one board here becomes coexisting at once."""
+        self._frame_nos = {}
+        for r in rows:
+            if r.train_no is not None:
+                self._frame_nos.setdefault(r.board, set()).add(int(r.train_no))
+        for k in [k for k in self._apart
+                  if any(k[0] in s and k[1] in s for s in self._frame_nos.values())]:
+            del self._apart[k]
+            self._together.add(k)
+
+    def _coexist(self, a: int, b: int) -> bool:
+        """Were train numbers `a` and `b` ever read in one capture on one board (two real
+        trains, app.quality.coexisting_numbers), this frame included? Cached per pair;
+        queried only for a cross-number candidate, at most once per COEXIST_RECHECK_S."""
+        if a is None or b is None or int(a) == int(b):
+            return False
+        k = (min(int(a), int(b)), max(int(a), int(b)))
+        if k in self._together:
+            return True
+        if any(k[0] in s and k[1] in s for s in self._frame_nos.values()):
+            self._apart.pop(k, None)
+            self._together.add(k)
+            return True
+        now = monotonic()
+        if self._apart.get(k, 0.0) > now:
+            return False
+        if len(self._apart) > 4000 or len(self._together) > 4000:  # bounded
+            self._apart, self._together = {}, set()
+        if quality.coexisting_numbers(self._conn, k[0], [k[1]]):
+            self._apart.pop(k, None)
+            self._together.add(k)
+            return True
+        self._apart[k] = now + COEXIST_RECHECK_S
+        return False
 
     def _vote(self, sid: int, key: tuple) -> None:
         if len(self._votes) > 4000:  # bounded: old services drop out
@@ -674,7 +722,8 @@ class Store:
                              me):
                 continue
             if self._reads(p["id"]) > self._reads(cur["id"]) and (
-                    best is None or self._reads(p["id"]) > self._reads(best["id"])):
+                    best is None or self._reads(p["id"]) > self._reads(best["id"])) and (
+                    not self._coexist(cur["train_no"], p["train_no"])):  # distinct trains
                 best = p
         return best
 
