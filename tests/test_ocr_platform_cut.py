@@ -3,15 +3,24 @@
 
 Task 2.1 only measures: it adds hand-labelled frames to ``tests/fixtures/ocr_truth/truth.json``
 (every cell read by eye on the image, never from the database or from the reader) and records
-what the reader (Beta 1.30) gets on them in ``tests/fixtures/ocr_truth/baseline-1.31.json``.
-Tasks 2.2/2.3 fix the reader against this set and select their frames from the baseline file:
+what the reader gets on them in ``tests/fixtures/ocr_truth/baseline-1.31.json``. Tasks 2.2/2.3
+fix the reader against this set and select their frames from the baseline file. The frames are
+the local ones of Task 2.1 plus real production frames (``ocr_truth/srv/``, Task 2.1-S, chosen
+because the reader got a platform or a Departures number wrong on them):
 
   platform_cut        frames where the reader currently gets a ``platform`` cell wrong or None
   platform_edge_risk  frames where the board shows a two-digit platform at the right edge
                       (the digit the cut would hit); a superset to watch for regressions
   departure_r9_r11    frames scored on ``no`` at Departures rows 9 and 11 (1-based = line
-                      indexes 8 and 10); every new frame
+                      indexes 8 and 10)
+  departure_r9_r11_fail     of those, frames where that ``no`` is currently not ok
+  departure_idx_9_11_fail   frames where ``no`` at line indexes 9 and 11 (rows 10 and 12 in
+                      1-based terms) is not ok: the real failures cluster here, so "r9/r11" in
+                      the live reports may be 0-based line indexes
+  departure_group4_fail     union of the two (the last group of Departures, lines 8..11)
 
+Adding or relabelling truth frames requires re-recording the baseline (the test compares
+``frames`` and the counters with truth.json).
 Re-record only on purpose:  OCR_RECORD_BASELINE=1 pytest tests/test_ocr_platform_cut.py
 (OMP_THREAD_LIMIT=1; by default the test only verifies the file and never writes).
 """
@@ -34,8 +43,11 @@ TRUTH = truth.load(TRUTH_PATH)
 
 # the 16 captures of Beta 1.16 (tests/test_ocr14.py); every other frame is new in 1.31
 ORIGINAL_PREFIXES = ("ocr13/", "ocr_truth/")
+SERVER_PREFIX = "ocr_truth/srv/"  # real production frames (Task 2.1-S), new in 1.31
 R9_R11 = (8, 10)  # 1-based rows 9 and 11 -> line indexes
-NEW_FRAMES = sorted(f for f in TRUTH["frames"] if not f.startswith(ORIGINAL_PREFIXES))
+IDX_9_11 = (9, 11)  # line indexes 9 and 11
+NEW_FRAMES = sorted(f for f in TRUTH["frames"]
+                    if f.startswith(SERVER_PREFIX) or not f.startswith(ORIGINAL_PREFIXES))
 
 
 def _count(cells: list[tuple]) -> dict:
@@ -74,21 +86,31 @@ def measure() -> dict:
         per_frame[frame] = {
             "platform": _count(_cells(frame, lines, "platform")),
             "no_departure_r9_r11": _count(_cells(frame, lines, "no", ("departure",), R9_R11)),
+            "no_departure_idx_9_11": _count(_cells(frame, lines, "no", ("departure",), IDX_9_11)),
         }
     edge = [f for f in NEW_FRAMES
             if any(isinstance(l.get("platform"), int) and l["platform"] >= 10
                    for b in TRUTH["frames"][f].values() for l in b)]
+    def _bad(key):
+        return [f for f in NEW_FRAMES if per_frame[f][key]["unread"] + per_frame[f][key]["wrong"]]
+
+    group4 = sorted(set(_bad("no_departure_r9_r11")) | set(_bad("no_departure_idx_9_11")))
     return {
-        "reader": "Beta 1.30 (PROCESSING_VERSION ocr-tess-grid-4), measured before Tasks 2.2/2.3",
+        "reader": "commit c81b602 (PROCESSING_VERSION ocr-tess-grid-5), measured before Task 2.3",
         "rows_r9_r11_line_indexes": list(R9_R11),
+        "rows_idx_9_11_line_indexes": list(IDX_9_11),
         "frames": NEW_FRAMES,
         "platform_cut": [f for f in NEW_FRAMES
                          if per_frame[f]["platform"]["unread"] + per_frame[f]["platform"]["wrong"]],
         "platform_edge_risk": edge,
         "departure_r9_r11": [f for f in NEW_FRAMES
                              if _cells(f, {}, "no", ("departure",), R9_R11)],
+        "departure_r9_r11_fail": _bad("no_departure_r9_r11"),
+        "departure_idx_9_11_fail": _bad("no_departure_idx_9_11"),
+        "departure_group4_fail": group4,
         "platform": _sum(per_frame, "platform"),
         "no_departure_r9_r11": _sum(per_frame, "no_departure_r9_r11"),
+        "no_departure_idx_9_11": _sum(per_frame, "no_departure_idx_9_11"),
         "per_frame": per_frame,
     }
 
@@ -114,14 +136,27 @@ def test_baseline_recorded():
     assert BASELINE.exists(), "run once with OCR_RECORD_BASELINE=1"
     base = json.loads(BASELINE.read_text(encoding="utf-8"))
     assert base["frames"] == NEW_FRAMES
-    for key in ("platform", "no_departure_r9_r11"):
+    for key in ("platform", "no_departure_r9_r11", "no_departure_idx_9_11"):
         assert set(base[key]) == {"ok", "unread", "wrong"}
         assert sum(base[key].values()) > 0
         assert base[key] == _sum(base["per_frame"], key)
     assert set(base["per_frame"]) == set(NEW_FRAMES)
-    for key in ("platform_cut", "platform_edge_risk", "departure_r9_r11"):
+    for key in ("platform_cut", "platform_edge_risk", "departure_r9_r11",
+                "departure_r9_r11_fail", "departure_idx_9_11_fail", "departure_group4_fail"):
         assert set(base[key]) <= set(NEW_FRAMES)
-    assert base["departure_r9_r11"] == NEW_FRAMES
+    # a real selection: only frames scored on r9/r11 are listed, and the failing lists are
+    # exactly the frames whose cells are not ok in the per-frame counters
+    assert set(base["departure_r9_r11"]) == {
+        f for f in NEW_FRAMES if _cells(f, {}, "no", ("departure",), R9_R11)}
+    for key, cnt in (("departure_r9_r11_fail", "no_departure_r9_r11"),
+                     ("departure_idx_9_11_fail", "no_departure_idx_9_11")):
+        assert base[key] == [f for f in NEW_FRAMES if
+                             base["per_frame"][f][cnt]["unread"] + base["per_frame"][f][cnt]["wrong"]]
+    assert base["departure_group4_fail"] == sorted(
+        set(base["departure_r9_r11_fail"]) | set(base["departure_idx_9_11_fail"]))
+    # the truth set holds the real failures Task 2.3 needs (targets of Task 2.1-S)
+    assert len(base["platform_cut"]) >= 15
+    assert len(base["departure_group4_fail"]) >= 10
     # the cut list is exactly the frames with a platform that is not ok
     assert base["platform_cut"] == [f for f in NEW_FRAMES if
                                     base["per_frame"][f]["platform"]["unread"]
