@@ -90,6 +90,14 @@ def _db(tmp_path):
                           ttype="R")
     _obs(c, ids["trunc_w"], "departure", 2, D2, 16, station="BUZAU")
     _obs(c, ids["trunc_l"], "departure", 1, D2, 16, station="BUZAU")
+    # R 5019 runs on 2 days, but R 19 also runs ALONE on D3: it has a life of its own,
+    # so the truncation stays listed (the strict rule)
+    ids["trunc_w1"] = _svc(c, "departure", D1, 5019, "BUZAU", "17:08", _t(D1, 16),
+                           _t(D1, 17), ttype="R")
+    _obs(c, ids["trunc_w1"], "departure", 1, D1, 16, station="BUZAU")
+    ids["trunc_alone"] = _svc(c, "departure", D3, 19, "BUZAU", "17:08", _t(D3, 16),
+                              _t(D3, 17), ttype="R")
+    _obs(c, ids["trunc_alone"], "departure", 1, D3, 16, station="BUZAU")
     # alias + merge across the alias: IRN 401 (KIEV - CHISINAU) / 4011 (KIEV -CHISINAU)
     ids["iw"] = _svc(c, "arrival", D3, 401, "KIEV - CHISINAU", "06:38", _t(D3, 5),
                      _t(D3, 6), ttype="IRN")
@@ -163,6 +171,8 @@ def test_dry_run_is_default_and_writes_nothing(tmp_path, capsys):
     assert "same frame" in why[(ids["a"], ids["b"])] or "same frame" in why[(ids["b"], ids["a"])]
     assert "equal-length" in why[(ids["sub_w"], ids["sub_l"])]
     assert "truncated" in why[(ids["trunc_w"], ids["trunc_l"])]
+    assert "lives alone" in why[(ids["trunc_w"], ids["trunc_l"])] and D3 in why[
+        (ids["trunc_w"], ids["trunc_l"])]
     assert all(ids["ghost"] not in (x["winner"]["id"], x["loser"]["id"])
                for x in rep["merge"]["list"] + rep["listed_not_merged"])
     assert rep["aliases"]["KIEV -CHISINAU"] == {"to": "KIEV - CHISINAU", "services": 2,
@@ -302,6 +312,204 @@ def test_winner_prefers_the_established_number(tmp_path, capsys):
     assert rep["merge"]["winner_seen_on_less_than_2_days"] == 0
 
 
+def _shared_frame(c, day, hh, *pairs, board="departure"):
+    """One capture in which every (service id, train number) of `pairs` was read."""
+    cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
+                    (_t(day, hh), f"frame-{day}-{hh}")).lastrowid
+    for sid, no in pairs:
+        _obs(c, sid, board, 1, day, hh, capture=cap, no=no)
+
+
+def test_coexisting_pair_is_never_merged(tmp_path, capsys):
+    """Two numbers once read in the same frame (any day) are two real trains: never merged,
+    listed for a human decision, even when today they look like "1" noise in one slot."""
+    D0 = "2026-10-20"
+    db = tmp_path / "c.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    # R 5011 / R 5014: the same slot on D2 (disjoint frames), two rows of one frame on D0
+    ids["r5011_d0"] = _svc(c, "departure", D0, 5011, "BUZAU", "04:47", _t(D0, 4), _t(D0, 5),
+                           ttype="R")
+    ids["r5014_d0"] = _svc(c, "departure", D0, 5014, "BUZAU", "05:10", _t(D0, 4), _t(D0, 5),
+                           ttype="R")
+    _shared_frame(c, D0, 4, (ids["r5011_d0"], 5011), (ids["r5014_d0"], 5014))
+    ids["r5011"] = _svc(c, "departure", D2, 5011, "BUZAU", "04:47", _t(D2, 4), _t(D2, 5),
+                        ttype="R")
+    ids["r5014"] = _svc(c, "departure", D2, 5014, "BUZAU", "04:47", _t(D2, 4), _t(D2, 5),
+                        ttype="R")
+    _obs(c, ids["r5011"], "departure", 4, D2, 4, no=5011, station="BUZAU")
+    _obs(c, ids["r5014"], "departure", 1, D2, 4, no=5014, station="BUZAU")
+    # RE 9209 / 92011: "1" noise in one slot on D2 (merged today), but both numbers were
+    # read in the same frame on D0 -> two real trains
+    ids["re9209_d1"] = _svc(c, "departure", D1, 9209, "PITESTI", "14:36", _t(D1, 13),
+                            _t(D1, 14, 40))
+    _obs(c, ids["re9209_d1"], "departure", 3, D1, 13, no=9209)
+    ids["re9209"] = _svc(c, "departure", D2, 9209, "PITESTI", "14:36", _t(D2, 13, 5),
+                         _t(D2, 14, 30))
+    _obs(c, ids["re9209"], "departure", 6, D2, 13, no=9209)
+    ids["re92011"] = _svc(c, "departure", D2, 92011, "PITESTI", "14:36", _t(D2, 14, 35),
+                          _t(D2, 14, 55))
+    _obs(c, ids["re92011"], "departure", 2, D2, 14, no=92011)
+    ids["re9209_d0"] = _svc(c, "departure", D0, 9209, "PITESTI", "14:36", _t(D0, 13),
+                            _t(D0, 15))
+    ids["re92011_d0"] = _svc(c, "departure", D0, 92011, "CURTEA DE ARGES", "18:40",
+                             _t(D0, 13), _t(D0, 15))
+    _shared_frame(c, D0, 13, (ids["re9209_d0"], 9209), (ids["re92011_d0"], 92011))
+    s.close()
+    before = _dump(db)
+
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert rep["merge"]["list"] == []
+    why = {frozenset((x["winner"]["id"], x["loser"]["id"])): x["why_not_merged"]
+           for x in rep["listed_not_merged"]}
+    for a, b in (("r5011", "r5014"), ("re9209", "re92011")):
+        w = why[frozenset((ids[a], ids[b]))]
+        assert w.startswith("coexist") and D0 in w, w
+
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["applied"]["services_merged"] == 0
+    after = _dump(db)
+    for t in ("services", "events", "service_quality", "observations", "trains"):
+        assert after[t] == before[t], t
+
+
+def _dump_all(db):
+    c = sqlite3.connect(db)
+    out = {t: c.execute(f"SELECT * FROM {t} ORDER BY 1").fetchall()
+           for t in ("services", "events", "service_quality", "event_quality",
+                     "observations", "trains")}
+    c.close()
+    return out
+
+
+def test_prefix_dup_is_merged_and_restorable(tmp_path, capsys):
+    """R 93 is R 8093 with the left digits cut: same slot, never in one frame, 8093 runs
+    on 2 days and 93 never alone -> merged by --apply; --restore puts back every row."""
+    db = tmp_path / "p.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    ids["long_d1"] = _svc(c, "departure", D1, 8093, "SUCEAVA", "10:05", _t(D1, 9), _t(D1, 10),
+                          ttype="R")
+    _obs(c, ids["long_d1"], "departure", 3, D1, 9, station="SUCEAVA", no=8093)
+    ids["long"] = _svc(c, "departure", D2, 8093, "SUCEAVA", "10:05", _t(D2, 9), _t(D2, 10),
+                       ttype="R")
+    _obs(c, ids["long"], "departure", 4, D2, 9, station="SUCEAVA", no=8093)
+    ids["short"] = _svc(c, "departure", D2, 93, "SUCEAVA", "10:05", _t(D2, 9, 30),
+                        _t(D2, 10, 5), ttype="R", platform=2, delay=5,
+                        delay_read_at=_t(D2, 10))
+    _obs(c, ids["short"], "departure", 2, D2, 10, station="SUCEAVA", no=93)
+    ids["ev"] = _ev(c, ids["short"], D2, 10, "delay", "0", "5")
+    c.execute("INSERT INTO service_quality(service_id, station_canonical, updated_at)"
+              " VALUES (?, 'SUCEAVA', 'x')", (ids["short"],))
+    c.execute("INSERT INTO event_quality(event_id, suspect, reason) VALUES (?, 1, 'x')",
+              (ids["ev"],))
+    for no in (8093, 93):
+        c.execute("INSERT OR IGNORE INTO trains(train_no, journeys, observations)"
+                  " VALUES (?, 1, 1)", (no,))
+    s.close()
+    before = _dump_all(db)
+
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert [(m["loser"]["id"], m["winner"]["id"], m["relation"]) for m in rep["merge"]["list"]
+            ] == [(ids["short"], ids["long"], "truncated_number")]
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["applied"]["services_merged"] == 1
+    c = sqlite3.connect(db)
+    assert not c.execute("SELECT 1 FROM services WHERE id=?", (ids["short"],)).fetchone()
+    assert c.execute("SELECT COUNT(*) FROM observations WHERE service_id=?",
+                     (ids["long"],)).fetchone()[0] == 4 + 2
+    assert c.execute("SELECT COUNT(*) FROM observations WHERE train_no=93").fetchone()[0] == 2
+    c.close()
+
+    _run(["--db", str(db), "--restore"], capsys)
+    assert _dump_all(db) == before
+
+
+def _trunc_db(tmp_path, long_no, short_no, long_days):
+    """long_no on `long_days` (the last one shared with short_no, same slot, never in
+    one frame); short_no never alone."""
+    db = tmp_path / "t.db"
+    s = Store(str(db))
+    s.migrate()
+    c = s._conn
+    ids = {}
+    for k, d in enumerate(long_days):
+        ids["long"] = _svc(c, "departure", d, long_no, "ARAD", "12:20", _t(d, 11),
+                           _t(d, 12), ttype="R")
+        _obs(c, ids["long"], "departure", 3 + k, d, 11, station="ARAD", no=long_no)
+    d = long_days[-1]
+    ids["short"] = _svc(c, "departure", d, short_no, "ARAD", "12:20", _t(d, 11, 30),
+                        _t(d, 12, 10), ttype="R", platform=1)
+    _obs(c, ids["short"], "departure", 1, d, 12, station="ARAD", no=short_no)
+    ids["ev"] = _ev(c, ids["short"], d, 12, "delay", "0", "3")
+    c.execute("INSERT INTO service_quality(service_id, station_canonical, updated_at)"
+              " VALUES (?, 'ARAD', 'x')", (ids["short"],))
+    for no in (long_no, short_no):
+        c.execute("INSERT OR IGNORE INTO trains(train_no, journeys, observations)"
+                  " VALUES (?, 1, 1)", (no,))
+    s.close()
+    return db, ids
+
+
+def test_start_truncation_is_merged_and_restorable(tmp_path, capsys):
+    """R 64 is the START of R 6478 (right digits cut): every strict condition holds ->
+    merged by --apply; --restore puts back every row."""
+    assert md._is_truncation(6478, 64) and not md.is_noise_pair(6478, 64)
+    db, ids = _trunc_db(tmp_path, 6478, 64, [D1, D2])
+    before = _dump_all(db)
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert [(m["loser"]["id"], m["winner"]["id"], m["relation"]) for m in rep["merge"]["list"]
+            ] == [(ids["short"], ids["long"], "truncated_number")]
+    assert rep["applied"]["services_merged"] == 1
+    c = sqlite3.connect(db)
+    assert not c.execute("SELECT 1 FROM services WHERE id=?", (ids["short"],)).fetchone()
+    c.close()
+    _run(["--db", str(db), "--restore"], capsys)
+    assert _dump_all(db) == before
+
+
+def test_truncation_with_long_number_on_one_day_is_listed(tmp_path, capsys):
+    db, ids = _trunc_db(tmp_path, 8093, 93, [D2])
+    before = _dump_all(db)
+    rep = _run(["--db", str(db), "--apply", "--backup-dir", str(tmp_path / "bk"),
+                "--min-age-min", "0"], capsys)
+    assert rep["merge"]["list"] == [] and rep["applied"]["services_merged"] == 0
+    [item] = rep["listed_not_merged"]
+    assert (item["winner"]["id"], item["loser"]["id"]) == (ids["long"], ids["short"])
+    assert "truncated" in item["why_not_merged"] and "< 2" in item["why_not_merged"]
+    assert _dump_all(db) == before
+
+
+def test_lives_alone_reason_renders_missing_values_as_dash(tmp_path, capsys):
+    """A NULL station of the lone slot is shown as "-", never as "None"."""
+    db = tmp_path / "a.db"
+    c = sqlite3.connect(db)
+    c.executescript("""
+        CREATE TABLE services (id INTEGER PRIMARY KEY, board TEXT, service_date TEXT,
+          train_type TEXT, train_no INTEGER, station TEXT, operator TEXT, sched_time TEXT,
+          first_seen TEXT, last_seen TEXT, last_delay INTEGER, last_platform INTEGER,
+          flagged INTEGER DEFAULT 0, status TEXT, last_read TEXT, delay_read_at TEXT);""")
+    for d, no, st in ((D1, 5019, "BUZAU"), (D2, 5019, "BUZAU"), (D2, 19, "BUZAU"),
+                      (D3, 19, None)):
+        c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+                  " sched_time, first_seen, last_seen, status) VALUES"
+                  " ('departure', ?, 'R', ?, ?, '17:08', ?, ?, 'gone')",
+                  (d, no, st, _t(d, 16), _t(d, 17)))
+    c.commit()
+    c.close()
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    [item] = rep["listed_not_merged"]
+    assert "lives alone (departure %s - 17:08," % D3 in item["why_not_merged"]
+    assert "None" not in item["why_not_merged"]
+
+
 def test_old_db_without_quality_or_observations(tmp_path, capsys):
     """A pre-quality database (no service_quality) still dry-runs."""
     db = tmp_path / "o.db"
@@ -317,3 +525,27 @@ def test_old_db_without_quality_or_observations(tmp_path, capsys):
     c.close()
     rep = _run(["--db", str(db)], capsys)
     assert rep["merge"]["services_affected"] == 0
+
+
+def test_db_without_observations_table_dry_runs(tmp_path, capsys):
+    """No observations table (oldest schema): no crash, slots still compared."""
+    db = tmp_path / "n.db"
+    c = sqlite3.connect(db)
+    c.executescript("""
+        CREATE TABLE services (id INTEGER PRIMARY KEY, board TEXT, service_date TEXT,
+          train_type TEXT, train_no INTEGER, station TEXT, operator TEXT, sched_time TEXT,
+          first_seen TEXT, last_seen TEXT, last_delay INTEGER, last_platform INTEGER,
+          flagged INTEGER DEFAULT 0, status TEXT, last_read TEXT, delay_read_at TEXT);""")
+    for d in (D1, D2):
+        c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+                  " sched_time, first_seen, last_seen, status) VALUES"
+                  " ('departure', ?, 'RE', 9209, 'PITESTI', '14:36', ?, ?, 'gone')",
+                  (d, _t(d, 13), _t(d, 14)))
+    c.execute("INSERT INTO services(board, service_date, train_type, train_no, station,"
+              " sched_time, first_seen, last_seen, status) VALUES"
+              " ('departure', ?, 'RE', 92011, 'PITESTI', '14:36', ?, ?, 'gone')",
+              (D2, _t(D2, 13), _t(D2, 14)))
+    c.commit()
+    c.close()
+    rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
+    assert rep["merge"]["by_number_pair"] == {"RE 92011 -> RE 9209": 1}

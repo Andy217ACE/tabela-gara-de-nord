@@ -251,18 +251,50 @@ def classify_delays(first_seen: str, last_seen: str, last_delay: int,
             "last": prev}
 
 
+def coexisting_numbers(conn: sqlite3.Connection, train_no: int,
+                       among, *, sched_time: str | None = None) -> dict[int, str]:
+    """{number: earliest observed_at} for the numbers of `among` that were read in the
+    SAME capture on the SAME board as `train_no`, in all history: two rows of one frame
+    are two real trains, so such numbers are never one train read twice (5011/5014).
+    Observations in EVERY validation_state count (incomplete / low-confidence rows too):
+    on purpose, it errs on the safe side (a doubtful co-reading blocks a merge or a ghost
+    verdict, never causes one). One indexed query (observations by train_no, then by
+    capture_id); the table check keeps databases without observations working.
+    `sched_time`: slot level — only co-readings where BOTH rows show that scheduled time
+    (two rows of one time side by side: 5011/5014 04:47). The live matching and the ghost
+    guard use it: neighbouring trains at other times share every frame, and a misread of
+    one into the other's number is still noise. Without it (offline listings): any time."""
+    nums = sorted({int(n) for n in among if n is not None and int(n) != int(train_no)})
+    if not nums or not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
+                                    " AND name='observations'").fetchone():
+        return {}
+    slot = "" if sched_time is None else " AND x.sched_time = ? AND y.sched_time = ?"
+    rows = conn.execute(
+        "SELECT y.train_no, MIN(x.observed_at) FROM observations x JOIN observations y"
+        " ON y.capture_id = x.capture_id AND y.board = x.board"
+        f" WHERE x.train_no = ? AND y.train_no IN ({','.join('?' * len(nums))})" + slot +
+        " GROUP BY y.train_no",
+        (int(train_no), *nums, *(() if sched_time is None else (sched_time,) * 2))).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
 def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
-                  partner_obs: dict[int, int] | None = None) -> tuple[str, int | None] | None:
+                  partner_obs: dict[int, int] | None = None, *,
+                  coexist=frozenset()) -> tuple[str, int | None] | None:
     """(reason, real service id) if `svc` is a ghost, else None.
 
     `svc`/`partners`: dicts with id, train_no, sched_time, station, station_raw,
     first_seen, last_seen, status (partners: same board and service date).
     A service still listed is never judged. Ghost when it lived < GHOST_MIN_LIFE_S
     ("short"), or when it has at most GHOST_MAX_OBS observations and a partner that
-    lived longer is a one-character variant of it ("near_dup": R 5011 + 5014/50141/501...),
+    lived longer is a one-character variant of it ("near_dup": R 9209 + 92011/920111/920...),
     or when a one-character variant on the board at the same time has at least
     GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
-    alternated between two keys; R 5014 90 vs R 5011 160 stays undecided).
+    alternated between two keys; R 92011 90 vs R 9209 160 stays undecided).
+    `coexist`: train numbers once read in the same frame as svc's number, at svc's
+    sched_time (see `coexisting_numbers`): a partner with such a number is a distinct
+    train, never the real one of a near_dup/minority_dup ("short" is unaffected). Pure: the caller
+    queries it (`ghost_verdict_db`).
     """
     from app.store import _near_dup  # local: store imports this module
 
@@ -270,6 +302,8 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
         return None
     life = (_ts(svc["last_seen"]) - _ts(svc["first_seen"])).total_seconds()
     me = (svc["train_no"], svc["sched_time"], svc["station"], svc["station_raw"])
+    partners = [p for p in partners
+                if p["train_no"] == svc["train_no"] or p["train_no"] not in coexist]
     best = None
     if n_obs <= GHOST_MAX_OBS:
         for p in partners:
@@ -300,6 +334,22 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
     return None
 
 
+def ghost_verdict_db(conn: sqlite3.Connection, svc: dict, partners: list[dict], n_obs: int,
+                     partner_obs: dict[int, int] | None = None
+                     ) -> tuple[str, int | None] | None:
+    """`ghost_verdict` with the coexistence guard read from the database. The query runs
+    only when a near_dup/minority_dup partner was found (at most once per service)."""
+    verdict = ghost_verdict(svc, partners, n_obs, partner_obs)
+    if verdict is None or verdict[1] is None:
+        return verdict
+    # slot level: a cross-number near_dup/minority_dup partner shares svc's sched_time
+    co = coexisting_numbers(conn, svc["train_no"], {p["train_no"] for p in partners},
+                            sched_time=svc["sched_time"])
+    if not co:
+        return verdict
+    return ghost_verdict(svc, partners, n_obs, partner_obs, coexist=set(co))
+
+
 # --- persistence helpers --------------------------------------------------------
 
 def _now() -> str:
@@ -327,8 +377,8 @@ def judge_ghost(conn: sqlite3.Connection, service_id: int) -> tuple[str, int | N
         " FROM services WHERE board=? AND service_date=? AND id != ?",
         (s["board"], s["service_date"], service_id)).fetchall()
     counts = _obs_count(conn, [service_id] + [p["id"] for p in partners])
-    verdict = ghost_verdict(dict(s), [dict(p) for p in partners],
-                            counts.get(service_id, 0), counts)
+    verdict = ghost_verdict_db(conn, dict(s), [dict(p) for p in partners],
+                               counts.get(service_id, 0), counts)
     if verdict is not None:
         upsert_service(conn, service_id, ghost=1, ghost_reason=verdict[0], ghost_of=verdict[1])
     elif (conn.execute("SELECT ghost FROM service_quality WHERE service_id=?",
@@ -457,8 +507,8 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
         live_dt = _ts(live_since)
         for s in services:
             sid = s["id"]
-            verdict = ghost_verdict(s, by_day[(s["board"], s["service_date"])],
-                                    n_obs.get(sid, 0), n_obs)
+            verdict = ghost_verdict_db(conn, s, by_day[(s["board"], s["service_date"])],
+                                       n_obs.get(sid, 0), n_obs)
             fs = _ts(s["first_seen"])
             low = int(any(a <= fs < b for a, b in periods))
             st_c, op_c = _canonical_names(s)
