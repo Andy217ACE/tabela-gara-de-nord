@@ -304,7 +304,7 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     the glyph shapes (``_platform_checked``)."""
     text, conf = _numeric_read(name, cell, tess, matcher, alt)
     if name == "platform" and matcher is not None:
-        return _platform_checked(cell, text, conf, matcher)
+        return _platform_checked(cell, text, conf, matcher, tess[0])
     return text, conf
 
 
@@ -325,6 +325,12 @@ EIGHT_RATIO = 0.5    # 8: smaller / larger hole area (real 8s: >= 0.725); a clos
 ZERO_MIN_H = 0.5     # 0: its one hole spans this share of the glyph height (real: >= 0.64)
 RECOVER_MIN_H = 0.6  # a glyph read without the templates' trust spans this share of the
                      # line (a sliver or a dot is no digit)
+SPECK_MAX_H = 0.3    # a glyph whose ink spans less of the CELL height is a speck, not a
+                     # digit (round 4, hold-out 24_160005 arrival line 1: a blank cell with
+                     # a 4x3 px glare dot at its edge; ``segment`` measures the line on that
+                     # dot alone and stretches it to a full glyph box, a filled square that
+                     # matched "4" 0.70 / margin 0.052, trusted). Measured on the truth set:
+                     # digits span >= 0.518 of the cell, the specks of blank cells <= 0.128
 
 
 def _hole_list(cell: np.ndarray, x0: int, x1: int) -> list[tuple[float, int, float]]:
@@ -353,7 +359,9 @@ def _profile(holes: list[tuple[float, int, float]]) -> str:
 
 
 def _fits(ch: str, holes: str) -> bool:
-    """A digit `ch` is possible for a glyph with these holes (rules measured above)."""
+    """A digit `ch` is possible for a glyph with these holes (rules measured above); an 8
+    always shows its lower hole (every labelled 8: "UL" 33, "L" 1), so a blurred 3/5/9
+    the templates trust as 8 is not one (Ruling R22)."""
     if ch in "12357":
         return holes == ""
     if ch == "6":
@@ -362,7 +370,9 @@ def _fits(ch: str, holes: str) -> bool:
         return "L" not in holes
     if ch == "0":
         return len(holes) <= 1
-    return True  # 4, 8: no rule
+    if ch == "8":
+        return "L" in holes
+    return True  # 4: no rule
 
 
 def _signature(ch: str, holes: list[tuple[float, int, float]]) -> bool:
@@ -392,30 +402,48 @@ def _tall(glyph: np.ndarray | None) -> bool:
     return rows.size > 0 and rows[-1] - rows[0] + 1 >= RECOVER_MIN_H * glyph.shape[0]
 
 
-def _decided(glyph: tuple, holes: list[tuple[float, int, float]], matcher) -> str:
+def _decided(glyph: tuple, holes: list[tuple[float, int, float]], matcher,
+             tess_ch: str | None) -> str:
     """The digit of a glyph the templates alone do not trust, or "": it must be a near-tie
     candidate (score >= MIN_SCORE, the glyph spanning the line) showing its own hole
     signature, and no other candidate may fit the holes at all (a hole-free 4 is also a
-    possible "1": srv 103806 read 1 by Tesseract, templates 4 0.66 / margin 0.039)."""
+    possible "1": srv 103806 read 1 by Tesseract, templates 4 0.66 / margin 0.039; an 8
+    or a 4 among the others always counts as possible, as before R22).
+    Ruling R22: never an 8 when "0" is a near candidate (a 0 split by a horizontal glare
+    streak shows an 8's two holes), and a digit other than the templates' own best
+    (`c`) only when Tesseract read that same digit at that place (`tess_ch`)."""
     c, s, _, g = glyph[0], glyph[1], glyph[2], glyph[3]
     if s < digits.MIN_SCORE or not _tall(g):
         return ""
     near = matcher.near(g, _ALLOWED["platform"])
     prof = _profile(holes)
     sig = [x for x in near if _signature(x, holes)]
-    if len(sig) != 1 or any(_fits(x, prof) for x in near if x != sig[0]):
+    if len(sig) != 1 or any(x in "48" or _fits(x, prof) for x in near if x != sig[0]):
+        return ""
+    if sig[0] == "8" and "0" in near:
+        return ""
+    if sig[0] != c and tess_ch != sig[0]:
         return ""
     return sig[0]
 
 
+def _speck(cell: np.ndarray, x0: int, x1: int) -> bool:
+    """The ink of ``cell[:, x0:x1]`` spans under SPECK_MAX_H of the cell height."""
+    rows = np.flatnonzero((cell[:, x0:x1] == 0).any(axis=1))
+    return rows.size == 0 or rows[-1] - rows[0] + 1 < SPECK_MAX_H * cell.shape[0]
+
+
 def _platform_checked(cell: np.ndarray, text: str, conf: float | None,
-                      matcher: DigitMatcher) -> tuple[str, float | None]:
+                      matcher: DigitMatcher, tess_text: str = "") -> tuple[str, float | None]:
     """A platform reading only if the segmentation kept the cell's ink and every glyph's
     shape allows its digit; a digit the templates alone do not trust (decided by
-    Tesseract, or a near tie) must also show its own hole signature (``_signature``).
+    Tesseract, or a near tie) must also show its own hole signature (``_signature``),
+    match well (score >= MIN_SCORE) and, if an 8, not be a possible 0 (R22).
     A cell left unread, or whose reading is rejected, is read from the templates: a
     trusted glyph whose shape allows it, or a doubtful one decided by ``_decided``
-    (templates and shape agree; R12, R20). Anything else: None."""
+    (templates and shape agree, Tesseract too for a digit other than the templates'
+    best; R12, R20, R22). A glyph that is a mere speck of the cell (``_speck``: glare
+    dot on a blank cell) makes the cell unread. Anything else: None."""
     try:
         spans = digits.segment_spans(cell)
         gl = matcher.glyphs(cell, _ALLOWED["platform"])
@@ -426,29 +454,35 @@ def _platform_checked(cell: np.ndarray, text: str, conf: float | None,
         kept = sum(int(ink[:, x0:x1].sum()) for _, (x0, x1), _ in spans)
         if total and (total - kept) / total >= LOST_INK:
             return "", None
-        keep = [(g, _hole_list(cell, x0, x1)) for g, (_, (x0, x1), _) in zip(gl, spans)
-                if not _fragment(g[1], g[3])]
+        keep = [(g, _hole_list(cell, x0, x1), _speck(cell, x0, x1))
+                for g, (_, (x0, x1), _) in zip(gl, spans) if not _fragment(g[1], g[3])]
+        if any(sp for _, _, sp in keep):  # a dot stretched into a "digit": no platform
+            return "", None
+        keep = [(g, h) for g, h, _ in keep]
+        tt = (tess_text or "").replace(" ", "")
+        tess_at = list(tt) if len(tt) == len(keep) else [None] * len(keep)
 
-        def shown(t: str, g: tuple, holes: list) -> bool:
+        def shown(t: str, g: tuple, holes: list, tc: str | None) -> bool:
             c, s, mg = g[0], g[1], g[2]
             if t == c:  # the templates' own digit: trusted, or confirmed by Tesseract
                 if digits.glyph_trusted(s, mg):
                     return _fits(t, _profile(holes))
-                return _tall(g[3]) and _signature(t, holes)
-            return t == _decided(g, holes, matcher)  # another digit: a near tie decided
+                return (s >= digits.MIN_SCORE and _tall(g[3]) and _signature(t, holes)
+                        and not (t == "8" and "0" in matcher.near(g[3], _ALLOWED["platform"])))
+            return t == _decided(g, holes, matcher, tc)  # another digit: a near tie decided
 
         if text and len(text) == len(keep) and all(
-                shown(t, g, h) for t, (g, h) in zip(text, keep)):
+                shown(t, g, h, tc) for t, (g, h), tc in zip(text, keep, tess_at)):
             return text, conf
         # unread, or a reading the shapes reject (blurred 8 read "3"): templates + shape
         out = []
-        for (c, s, mg, g, *_), h in keep:
+        for ((c, s, mg, g, *_), h), tc in zip(keep, tess_at):
             if digits.glyph_trusted(s, mg):
                 if not _fits(c, _profile(h)):
                     return "", None
                 out.append(c)
                 continue
-            x = _decided((c, s, mg, g), h, matcher)
+            x = _decided((c, s, mg, g), h, matcher, tc)
             if not x:
                 return "", None
             out.append(x)

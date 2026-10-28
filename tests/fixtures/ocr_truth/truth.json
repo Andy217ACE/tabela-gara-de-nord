@@ -1739,6 +1739,36 @@
         {"no": 5011, "time": "04:47", "type": "R", "platform": 3, "delay": 0, "station": "BUZAU", "operator": "CFR Calatori"},
         {"no": 7909, "time": "05:10", "type": "RM", "platform": 7, "delay": 0, "station": "AEROPORT H COANDA", "operator": "CFR Calatori"}
       ]
+    },
+    "ocr_truth/holdout/2026_10_24_160005-57702940": {
+      "arrival": [
+        {"no": 7038, "time": "18:44", "type": "R", "platform": 10, "delay": 10, "station": "URZICENI", "operator": "CFR Calatori"},
+        {"no": 11036, "time": "18:44", "type": "RE", "platform": null, "delay": 20, "station": "BRASOV", "operator": "Regio Calatori"},
+        {"no": 534, "time": "18:50", "type": "IC", "platform": 5, "delay": 5, "station": "BRASOV", "operator": "CFR Calatori"},
+        {"no": 1654, "time": "18:56", "type": "IR", "platform": null, "delay": 70, "station": "SUCEAVA", "operator": "CFR Calatori"},
+        {"no": 7940, "time": "18:57", "type": "RM", "platform": 9, "delay": 5, "station": "AEROPORT H COANDA", "operator": "CFR Calatori"},
+        {"no": 10054, "time": "19:18", "type": "RE", "platform": null, "delay": 5, "station": "BUZAU", "operator": "Transferoviar"},
+        {"no": 11616, "time": "19:21", "type": "RE", "platform": null, "delay": 10, "station": "CRAIOVA", "operator": "Softrans Calat"},
+        {"no": 536, "time": "19:24", "type": "IC", "platform": null, "delay": 0, "station": "CONSTANTA", "operator": "CFR Calatori"},
+        {"no": 10024, "time": "19:24", "type": "IR", "platform": null, "delay": 0, "station": "BRASOV", "operator": "Transferoviar"},
+        {"no": 8010, "time": "19:28", "type": "R", "platform": null, "delay": 0, "station": "CONSTANTA", "operator": "CFR Calatori"},
+        {"no": 9214, "time": "19:34", "type": "RE", "platform": null, "delay": 0, "station": "PITESTI", "operator": "CFR Calatori"},
+        {"no": 7942, "time": "19:37", "type": "RM", "platform": null, "delay": 0, "station": "AEROPORT H COANDA", "operator": "CFR Calatori"}
+      ],
+      "departure": [
+        {"no": 9213, "time": "19:00", "type": "RE", "platform": 13, "delay": 0, "station": "PITESTI", "operator": "CFR Calatori"},
+        {"no": 10157, "time": "19:00", "type": "RE", "platform": 2, "delay": 0, "station": "ROSIORI NORD", "operator": "Transferoviar"},
+        {"no": 402, "time": "19:06", "type": "IRN", "platform": 4, "delay": 0, "station": "CHISINAU-KIEV", "operator": "CFR Calatori"},
+        {"no": 7941, "time": "19:10", "type": "RM", "platform": 9, "delay": 0, "station": "AEROPORT H COANDA", "operator": "CFR Calatori"},
+        {"no": 5037, "time": "19:12", "type": "R", "platform": 7, "delay": 0, "station": "PLOIESTI SUD", "operator": "CFR Calatori"},
+        {"no": 1637, "time": "19:18", "type": "IR", "platform": 8, "delay": 0, "station": "BRASOV", "operator": "CFR Calatori"},
+        {"no": 11501, "time": "19:28", "type": "IRN", "platform": 3, "delay": 0, "station": "ARAD", "operator": "Astra Trans Ca"},
+        {"no": 1587, "time": "19:31", "type": "IR", "platform": null, "delay": 0, "station": "CONSTANTA", "operator": "CFR Calatori"},
+        {"no": 11635, "time": "19:34", "type": "RE", "platform": null, "delay": 0, "station": "BRASOV", "operator": "Softrans Calat"},
+        {"no": 16015, "time": "19:34", "type": "IR", "platform": 1, "delay": 0, "station": "CRAIOVA", "operator": "CFR Calatori"},
+        {"no": 11037, "time": "19:40", "type": "RE", "platform": null, "delay": 0, "station": "BRASOV", "operator": "Regio Calatori"},
+        {"no": 536, "time": "19:47", "type": "IC", "platform": null, "delay": 0, "station": "BRASOV", "operator": "CFR Calatori"}
+      ]
     }
   }
 }

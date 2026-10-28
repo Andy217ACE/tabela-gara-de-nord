@@ -168,10 +168,18 @@ def test_baseline_recorded():
 BASE = json.loads(BASELINE.read_text(encoding="utf-8"))
 # unread threshold: measured after the fix (real server frames: 21 cells of platform_cut
 # were 8 wrong + 13 unread at c81b602; round 2: 11; round 3 / R20, recovered digits must
-# show their own holes: 12), never above the recorded baseline
-PLATFORM_MAX_UNREAD = 12
-assert PLATFORM_MAX_UNREAD <= BASE["platform"]["unread"]
+# show their own holes: 12; round 4 / R22: 18), never above the recorded baseline except
+# for the cells Ruling R22 turns into None on purpose (precaution, cost accepted by the
+# ruling): srv 010204 dep 8, 041906 dep 8, 170107 dep 10 (8 decided against Tesseract's
+# "3"), 080506 dep 2 (6 decided against Tesseract's and the templates' "5"), 103106 dep 1
+# (8 with "0" near), 105404 dep 7 (a "1" at 0.48 < MIN_SCORE)
+PLATFORM_MAX_UNREAD = 18
+R22_COST = 6
+assert PLATFORM_MAX_UNREAD <= BASE["platform"]["unread"] + R22_COST
 WRONG_8_AS_3 = "ocr_truth/2026_10_22_121707-b8eafa67"  # departures r1: board 8, read 3
+# round 4 (R21): blind hold-out frame, arrival line 1: a BLANK platform cell under glare
+# read "4" (a 4x3 px glare dot stretched into a full glyph); now a regression frame
+GLARE_DOT_BLANK = "ocr_truth/holdout/2026_10_24_160005-57702940"
 _reads: dict[str, dict] = {}
 
 
@@ -197,7 +205,7 @@ def test_platform_cut_frames():
 def test_platform_blank_stays_none():
     """A blank platform cell (no platform yet) is read None, never an invented digit."""
     blanks = 0
-    for frame in NEW_FRAMES + [WRONG_8_AS_3]:
+    for frame in NEW_FRAMES + [WRONG_8_AS_3, GLARE_DOT_BLANK]:
         for board, line, label, read in _cells(frame, _lines(frame), "platform"):
             if label is None:
                 blanks += 1
@@ -364,6 +372,7 @@ def test_holes_are_counted_above_and_below_the_middle(loops, holes):
     ("3", "L", False), ("5", "L", False),  # blurred 8 / 6 read 3 / 5: the hole says no
     ("6", "UL", False),                    # blurred 8 read 6: upper hole
     ("8", "UL", True), ("8", "L", True), ("6", "L", True), ("6", "", True),
+    ("8", "U", False), ("8", "", False),   # R22: every labelled 8 has its lower hole
     ("9", "L", False), ("9", "U", True), ("0", "UL", False), ("4", "U", True),
     ("1", "", True), ("1", "U", False), ("7", "", True),
 ])
@@ -386,3 +395,68 @@ CUT_WRONG = [("ocr_truth/srv/2026_10_22_041906-0901ecd4", 8, 8),
 @pytest.mark.parametrize("frame,line,board_shows", CUT_WRONG)
 def test_blurred_platform_digit_is_never_misread(frame, line, board_shows):
     assert _lines(frame)[("departure", line)]["platform"] in (board_shows, None)
+
+
+# --- round 4 (R21, R22): glare dot on a blank cell; 8 vs 0; MIN_SCORE; Tesseract agreement
+
+def test_glare_dot_on_a_blank_platform_cell_stays_none():
+    """Real hold-out frame 24_160005, arrival line 1: the board shows no platform; a glare
+    dot at the cell's edge was read "4" (trusted 0.70). Now None."""
+    assert _lines(GLARE_DOT_BLANK)[("arrival", 1)]["platform"] is None
+
+
+class _Trusted(_Stub):
+    def read(self, cell, allowed):
+        return self.g[0], self.g[1], True
+
+
+def test_a_speck_stretched_into_a_glyph_is_no_digit():
+    import numpy as np
+
+    from app.ocr.reader import _numeric
+    cell = np.full((39, 80), 255, np.uint8)
+    cell[23:27, 77:80] = 0  # the real dot: 4 rows x 3 px at the right edge
+    stub = _Trusted("4", 0.70, 0.052, "4")  # what the templates made of it
+    for tess in ("", "4"):
+        assert _numeric("platform", cell, (tess, 80.0), stub)[0] == ""
+
+
+ZERO_SPLIT = _box((10, 28), (32, 50))  # a 0 cut in the middle by a glare streak: 2 equal holes
+
+
+@pytest.mark.parametrize("stub,tess", [
+    (("8", 0.80, 0.02, "80"), "8"),  # the templates' own 8, confirmed by Tesseract
+    (("8", 0.80, 0.02, "80"), ""),   # the same, recovered from templates + holes
+    (("0", 0.80, 0.02, "08"), "8"),  # the templates' 0, Tesseract 8 (the 8 holes agree)
+])
+def test_an_untrusted_8_with_a_near_0_is_unread(stub, tess):
+    from app.ocr.reader import _numeric
+    assert _numeric("platform", ZERO_SPLIT, (tess, 80.0), _Stub(*stub))[0] == ""
+
+
+def test_a_trusted_8_without_its_lower_hole_is_unread():
+    from app.ocr.reader import _numeric
+    upper_only = _box((10, 24))  # a blurred 9 / 3 with one closed upper counter
+    stub = _Trusted("8", 0.85, 0.2, "8")
+    assert _numeric("platform", upper_only, ("8", 80.0), stub)[0] == ""
+    assert _numeric("platform", EIGHT, ("8", 80.0), stub)[0] == "8"  # both holes: kept
+
+
+def test_an_untrusted_own_digit_needs_min_score():
+    from app.ocr.reader import _numeric
+    assert _numeric("platform", SOLID, ("1", 80.0), _Stub("1", 0.40, 0.2, "1"))[0] == ""
+    assert _numeric("platform", SOLID, ("1", 80.0), _Stub("1", 0.62, 0.02, "17"))[0] == "1"
+    assert _numeric("platform", SOLID, ("1", 80.0), _Stub("1", 0.62, 0.05, "1"))[0] == "1"
+
+
+@pytest.mark.parametrize("cell,stub,tess,want", [
+    (LOWER, ("5", 0.76, 0.003, "56"), "5", ""),   # 5 with a closed bowl / real 080506
+    (LOWER, ("5", 0.76, 0.003, "56"), "", ""),    # Tesseract saw nothing
+    (LOWER, ("5", 0.76, 0.003, "56"), "6", "6"),  # Tesseract agrees with the holes
+    (EIGHT, ("6", 0.78, 0.01, "683"), "3", ""),   # real 010204 / 041906 / 170107 kind
+    (EIGHT, ("6", 0.78, 0.01, "683"), "8", "8"),
+    (EIGHT, ("3", 0.75, 0.01, "38"), "", ""),     # a 3 with both counters closed
+])
+def test_recovery_to_another_digit_needs_tesseract(cell, stub, tess, want):
+    from app.ocr.reader import _numeric
+    assert _numeric("platform", cell, (tess, 80.0), _Stub(*stub))[0] == want
