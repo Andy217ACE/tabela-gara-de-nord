@@ -1,3 +1,4 @@
+# © 2026 Andy217Ace
 """Task 3.2b: the live matching never hands a reading of one train to a DISTINCT train.
 
 Two numbers once read in the same capture on the same board (app.quality.coexisting_numbers)

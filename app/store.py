@@ -53,7 +53,7 @@ JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed 
 STALE_MIN = 30  # listed services unseen this long are retired silently
 SCHEMA_VERSION = 9
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
-COEXIST_RECHECK_S = 600  # a cached "never read together" (see Store._coexist) is re-queried after
+COEXIST_RECHECK_S = 600  # a cached "never read together" (see Store._coexist) is re-queried after this many seconds
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
 
 _BOARD_KEYS = {"arrival": "arrivals", "departure": "departures"}
@@ -719,7 +719,8 @@ class Store:
                           listed: list[sqlite3.Row]) -> sqlite3.Row | None:
         """A listed one-character variant of `cur` (same panel/day, see `_near_dup`), not
         read in this frame, with more readings than `cur`: the same board row, which the
-        OCR alternates between two keys (R 5011 / R 5014 for hours at night). The
+        OCR alternates between two keys (R 9209 / R 92011 for hours at night), unless the
+        two numbers were ever read together in that slot (`_coexist`). The
         reading goes to the majority; the minority one then leaves the board as a ghost."""
         me = (cur["train_no"], cur["sched_time"], cur["station"], cur["station_raw"])
         best = None

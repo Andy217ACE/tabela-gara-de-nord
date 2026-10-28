@@ -287,10 +287,10 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
     first_seen, last_seen, status (partners: same board and service date).
     A service still listed is never judged. Ghost when it lived < GHOST_MIN_LIFE_S
     ("short"), or when it has at most GHOST_MAX_OBS observations and a partner that
-    lived longer is a one-character variant of it ("near_dup": R 5011 + 5014/50141/501...),
+    lived longer is a one-character variant of it ("near_dup": R 9209 + 92011/920111/920...),
     or when a one-character variant on the board at the same time has at least
     GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
-    alternated between two keys; R 5014 90 vs R 5011 160 stays undecided).
+    alternated between two keys; R 92011 90 vs R 9209 160 stays undecided).
     `coexist`: train numbers once read in the same frame as svc's number, at svc's
     sched_time (see `coexisting_numbers`): a partner with such a number is a distinct
     train, never the real one of a near_dup/minority_dup ("short" is unaffected). Pure: the caller
