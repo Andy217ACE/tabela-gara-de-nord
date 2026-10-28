@@ -312,28 +312,44 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
 # Measured on every labelled platform glyph of the truth set (~600, 58 frames): holes
 # (closed background >= HOLE_MIN_AREA px, centre above "U" / below "L" the glyph middle)
 #   0 U/L  1 -  2 -  3 -  4 U/-/L  5 -  6 L/-  7 -  8 UL/L  9 U
-# No label ever breaks these rules; every wrong read of the cut-platform frames does
-# (blurred 8 read 6 has an upper hole, 8/6 read 3/5 a lower one).
+# No label ever breaks these rules (``_fits``); every wrong read of the cut-platform
+# frames does (blurred 8 read 6 has an upper hole, 8/6 read 3/5 a lower one).
+# A digit the templates alone do not trust must show its own hole signature
+# (``_signature``, Ruling R20): a blurred or glare-closed 3/5/6/9/0 must never become an 8.
 HOLE_MIN_AREA = 12   # px (x3 mask); the profile is the same from 3 to 20
 LOST_INK = 0.08      # share of the cell's ink the segmentation may drop: a faint 4 in
                      # pieces lost 11.1% and became a trusted "1" (srv 120408); the
                      # most on a correct reading is 4.0%
+EIGHT_RATIO = 0.5    # 8: smaller / larger hole area (real 8s: >= 0.725); a closed hook
+                     # of a 6 or tail of a 9 leaves a small second hole
+ZERO_MIN_H = 0.5     # 0: its one hole spans this share of the glyph height (real: >= 0.64)
+RECOVER_MIN_H = 0.6  # a glyph read without the templates' trust spans this share of the
+                     # line (a sliver or a dot is no digit)
 
 
-def _holes(cell: np.ndarray, x0: int, x1: int) -> str:
-    """Holes of the ink of ``cell[:, x0:x1]``, top to bottom: "U" (centre in the upper
-    half of the ink) or "L"."""
+def _hole_list(cell: np.ndarray, x0: int, x1: int) -> list[tuple[float, int, float]]:
+    """Holes of the ink of ``cell[:, x0:x1]``, top to bottom: (centre, area px, height),
+    centre and height as shares of the ink height."""
     ink = cell[:, x0:x1] == 0
     rows = np.flatnonzero(ink.any(axis=1))
     if rows.size == 0:
-        return ""
+        return []
     a, b = rows[0], rows[-1] + 1
     bg = np.pad(~ink[a:b], 1, constant_values=True).astype(np.uint8)
     n, _, st, cen = cv2.connectedComponentsWithStats(bg, connectivity=4)
-    ys = sorted(cen[i][1] - 1 for i in range(1, n) if st[i, 4] >= HOLE_MIN_AREA
-                and st[i, 0] > 0 and st[i, 1] > 0 and st[i, 0] + st[i, 2] < bg.shape[1]
-                and st[i, 1] + st[i, 3] < bg.shape[0])
-    return "".join("U" if y < (b - a) / 2 else "L" for y in ys)
+    return sorted(((cen[i][1] - 1) / (b - a), int(st[i, 4]), st[i, 3] / (b - a))
+                  for i in range(1, n) if st[i, 4] >= HOLE_MIN_AREA
+                  and st[i, 0] > 0 and st[i, 1] > 0 and st[i, 0] + st[i, 2] < bg.shape[1]
+                  and st[i, 1] + st[i, 3] < bg.shape[0])
+
+
+def _holes(cell: np.ndarray, x0: int, x1: int) -> str:
+    """The holes as a string, top to bottom: "U" (centre in the upper half) or "L"."""
+    return _profile(_hole_list(cell, x0, x1))
+
+
+def _profile(holes: list[tuple[float, int, float]]) -> str:
+    return "".join("U" if y < 0.5 else "L" for y, _, _ in holes)
 
 
 def _fits(ch: str, holes: str) -> bool:
@@ -349,42 +365,93 @@ def _fits(ch: str, holes: str) -> bool:
     return True  # 4, 8: no rule
 
 
+def _signature(ch: str, holes: list[tuple[float, int, float]]) -> bool:
+    """The glyph shows `ch`'s own holes (needed when the templates alone do not trust
+    it): 8 one upper + one lower of comparable size, 6 one lower, 9 one upper, 0 one
+    tall hole, 4 a hole; 1, 2, 3, 5, 7 none."""
+    prof = _profile(holes)
+    if ch in "12357":
+        return prof == ""
+    if ch == "8":
+        return prof == "UL" and min(h[1] for h in holes) >= EIGHT_RATIO * max(h[1] for h in holes)
+    if ch == "6":
+        return prof == "L"
+    if ch == "9":
+        return prof == "U"
+    if ch == "0":
+        return len(holes) == 1 and holes[0][2] >= ZERO_MIN_H
+    if ch == "4":
+        return len(holes) >= 1
+    return False
+
+
+def _tall(glyph: np.ndarray | None) -> bool:
+    if glyph is None:
+        return False
+    rows = np.flatnonzero((np.asarray(glyph) > 0.5).any(axis=1))
+    return rows.size > 0 and rows[-1] - rows[0] + 1 >= RECOVER_MIN_H * glyph.shape[0]
+
+
+def _decided(glyph: tuple, holes: list[tuple[float, int, float]], matcher) -> str:
+    """The digit of a glyph the templates alone do not trust, or "": it must be a near-tie
+    candidate (score >= MIN_SCORE, the glyph spanning the line) showing its own hole
+    signature, and no other candidate may fit the holes at all (a hole-free 4 is also a
+    possible "1": srv 103806 read 1 by Tesseract, templates 4 0.66 / margin 0.039)."""
+    c, s, _, g = glyph[0], glyph[1], glyph[2], glyph[3]
+    if s < digits.MIN_SCORE or not _tall(g):
+        return ""
+    near = matcher.near(g, _ALLOWED["platform"])
+    prof = _profile(holes)
+    sig = [x for x in near if _signature(x, holes)]
+    if len(sig) != 1 or any(_fits(x, prof) for x in near if x != sig[0]):
+        return ""
+    return sig[0]
+
+
 def _platform_checked(cell: np.ndarray, text: str, conf: float | None,
                       matcher: DigitMatcher) -> tuple[str, float | None]:
-    """A platform reading only if every glyph's shape allows its digit and the
-    segmentation kept the cell's ink. A cell left unread, or whose reading the shapes
-    reject, is read from the templates when every glyph is trusted and allowed by its
-    shape, or doubtful (score >= MIN_SCORE) with exactly one near-tie candidate the shape
-    allows (templates and shape agree: the same kind of tie break as Tesseract's in
-    ``_near_tie``). Anything else: None."""
+    """A platform reading only if the segmentation kept the cell's ink and every glyph's
+    shape allows its digit; a digit the templates alone do not trust (decided by
+    Tesseract, or a near tie) must also show its own hole signature (``_signature``).
+    A cell left unread, or whose reading is rejected, is read from the templates: a
+    trusted glyph whose shape allows it, or a doubtful one decided by ``_decided``
+    (templates and shape agree; R12, R20). Anything else: None."""
     try:
         spans = digits.segment_spans(cell)
         gl = matcher.glyphs(cell, _ALLOWED["platform"])
-        if len(spans) != len(gl):  # same segmentation: only a stand-in matcher differs
-            return text, conf
+        if len(spans) != len(gl):  # glyphs not aligned with their shapes: unchecked
+            return "", None
         ink = cell == 0
         total = int(ink.sum())
         kept = sum(int(ink[:, x0:x1].sum()) for _, (x0, x1), _ in spans)
         if total and (total - kept) / total >= LOST_INK:
             return "", None
-        keep = [(g, _holes(cell, x0, x1)) for g, (_, (x0, x1), _) in zip(gl, spans)
+        keep = [(g, _hole_list(cell, x0, x1)) for g, (_, (x0, x1), _) in zip(gl, spans)
                 if not _fragment(g[1], g[3])]
+
+        def shown(t: str, g: tuple, holes: list) -> bool:
+            c, s, mg = g[0], g[1], g[2]
+            if t == c:  # the templates' own digit: trusted, or confirmed by Tesseract
+                if digits.glyph_trusted(s, mg):
+                    return _fits(t, _profile(holes))
+                return _tall(g[3]) and _signature(t, holes)
+            return t == _decided(g, holes, matcher)  # another digit: a near tie decided
+
         if text and len(text) == len(keep) and all(
-                _fits(t, h) for t, (_, h) in zip(text, keep)):
+                shown(t, g, h) for t, (g, h) in zip(text, keep)):
             return text, conf
         # unread, or a reading the shapes reject (blurred 8 read "3"): templates + shape
         out = []
         for (c, s, mg, g, *_), h in keep:
             if digits.glyph_trusted(s, mg):
-                cand = [c]
-            elif s >= digits.MIN_SCORE:
-                cand = list(matcher.near(g, _ALLOWED["platform"]))
-            else:
+                if not _fits(c, _profile(h)):
+                    return "", None
+                out.append(c)
+                continue
+            x = _decided((c, s, mg, g), h, matcher)
+            if not x:
                 return "", None
-            cand = [x for x in cand if _fits(x, h)]
-            if len(cand) != 1:
-                return "", None
-            out.append(cand[0])
+            out.append(x)
         if not out:
             return "", None
         return "".join(out), min(g[1] for g, _ in keep) * 100
