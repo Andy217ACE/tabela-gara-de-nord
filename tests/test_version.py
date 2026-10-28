@@ -91,9 +91,8 @@ def test_beta_103_lists_the_layout_fix():
 
 
 # Old gaps in the published numbering that CHANGELOG.md does not explain yet.
-# Beta 1.07 is pending a "nu a fost publicată separat" note, to be added by the release
-# controller; empty this set when that note lands.
-KNOWN_UNDOCUMENTED_GAPS = {7}
+# Empty: Beta 1.07 now has its "nu a fost publicată separat" note in CHANGELOG.md.
+KNOWN_UNDOCUMENTED_GAPS: set[int] = set()
 
 _PUB_HEAD = re.compile(r"^## Beta 1\.(\d+) — \d{4}-\d{2}-\d{2}\s*$", re.M)
 _NOT_SEPARATE = re.compile(r"Beta 1\.(\d+) nu a fost publicată separat")

@@ -5,6 +5,30 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.32 — 2026-10-28
+
+Trenurile care apar **în același timp** pe tabelă nu mai sunt comasate niciodată din greșeală. **Tabela** (Carduri, Panou, Ecran complet), paginile publice și API-ul nu se schimbă; schema bazei rămâne v9.
+
+### Nou
+- **Raport read-only de perechi ambigue** (`scripts/ambiguous_pairs.py`, `--db`, `--days`, implicit 30 de zile): listează perechile de numere de tren care ar putea fi același tren citit diferit (prefix sau sufix, o cifră diferită) sau două trenuri distincte care coexistă pe tabelă. Baza se deschide doar pentru citire (`mode=ro`); nu modifică nimic. Prioritatea tipurilor: coexistă, apoi prefix/sufix, apoi o cifră.
+- **Comasare strictă și reversibilă pentru numere trunchiate** (`scripts/merge_number_dups.py`): un număr scurt (de exemplu 93 sau 64) se comasează cu cel lung (8093, 6478) doar dacă sunt îndeplinite toate condițiile: aceeași oră programată, niciodată împreună pe tabelă, numărul scurt fără viață proprie, numărul lung văzut în cel puțin 2 zile, perechea nu e recentă, zero cadre comune. Lotul se poate anula cu `--restore`.
+- **Test pentru golul din numerotare** (`tests/test_version.py`): golurile din CHANGELOG trebuie explicate printr-o notă „nu a fost publicată separat”; un gol nou sau o ordine greșită a versiunilor face testul să pice.
+
+### Schimbat
+- **Perechile care coexistă nu se mai comasează niciodată** în `merge_number_dups`: două numere văzute în același cadru, pe aceeași tabelă, sunt două trenuri; perechea apare doar listată, cu motivul `coexist: …`, inclusiv pentru zgomotul „1” (de exemplu 9209 / 92011). Scriptul merge acum și pe baze fără tabelul `observations`.
+- **Fantomele** (verdictul `near_dup` / `minority_dup` din calitatea datelor) ignoră partenerii care coexistă cu trenul pe aceeași oră programată; repornirea calculului de calitate șterge marcajele vechi puse pe asemenea perechi.
+- **Potrivirea live în `app/store.py`** (potrivirea aproximativă și votul majoritar) nu mai dă citirea unui număr unui tren care coexistă cu el pe aceeași oră programată. Rezultatele se rețin pe pereche și oră: „împreună” rămâne permanent, „separat” expiră după 10 minute, iar un cadru care conține ambele numere promovează perechea. Pe calea obișnuită nu se face nicio interogare nouă.
+
+### Reparat
+- Citirile unui tren nu mai ajung la trenul care coexistă cu el pe slot.
+
+### Ce NU face încă
+- **Nu se aplică nimic retroactiv pe date.** Datele existente (comasări greșite deja făcute, fantome deja marcate sau șterse) nu sunt atinse de această versiune. Curățarea se face separat, după deploy: raportul și un dry-run pe o copie a bazei, apoi comasarea / restaurarea loturilor doar cu acord, cu backup și cu `--restore` la îndemână.
+- Regula de coexistență pe slot la potrivirea live și la fantome poate lăsa potrivite două trenuri distincte cu aceeași oră, care n-au apărut niciodată simultan; raportul și `merge_number_dups` verifică pe număr, nu pe slot, și doar listează.
+
+### Tehnic
+- Teste noi: `test_ambiguous_pairs`, `test_merge_number_dups`, `test_store_coexist`, completări în `test_quality` și `test_version`. Service worker `v32` și `CHARTS_V` 1.32.
+
 ## Beta 1.31 — 2026-10-27
 
 Reparație de deploy. Beta 1.29 (corecție manuală, schema v9) n-a putut porni pe server: actualizarea a fost anulată automat și a rămas în funcțiune Beta 1.28. **Beta 1.29 și Beta 1.30 intră pe server împreună, în această versiune.** Tabela, paginile publice și API-ul nu se schimbă față de 1.30.
@@ -337,6 +361,8 @@ mai ales noaptea: dubluri noi, redenumiri care oscilează și treceri repetate d
 - Întârzierea necunoscută rămâne „necitit”/necunoscută, nu 0, și nu intră în medie. Trenurile-fantomă nu apar. Evenimentele suspecte nu contează ca citiri. Călătoriile din perioada de calitate redusă (versiunea beta inițială) apar marcate, dar nu intră în rezumat (ca în statistici).
 
 ## Beta 1.08 — 2026-10-22
+
+Beta 1.07 nu a fost publicată separat și nu are intrare proprie în acest istoric; schimbările ei nu sunt documentate separat.
 
 ### Reparat
 - **Meniul de sus se vede pe orice ecran.** Pe telefon, cu „Site pentru desktop” activat, pagina e așezată la ~980 px lățime (sub pragul vechi de 1024 px), iar meniul ajungea o bară fixă JOS, afișată micșorată — minusculă sau ieșită din ecran, niciodată sus. Acum meniul (Tabelă, Istoric, Urmărite, Trenuri, Statistici, Clasamente, Stații) e o bară proprie sub antet, lipită sus la derulare, la orice lățime: telefon, telefon culcat, tabletă, desktop, „Site pentru desktop” pe Chrome Android și Safari iOS.
