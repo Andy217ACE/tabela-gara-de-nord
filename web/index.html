@@ -50,6 +50,10 @@
   <script src="stats.js" defer></script>
   <link rel="stylesheet" href="statistici.css">
   <script src="statistici.js" defer></script>
+  <link rel="stylesheet" href="sistem.css">
+  <script src="sistem.js" defer></script>
+  <script src="setari.js" defer></script>
+  <script src="sezoane.js" defer></script>
   <!-- Beta 1.26: stratul vizual al paginilor non-live (nu atinge Tabela) -->
   <link rel="stylesheet" href="ui2.css">
 </head>
@@ -118,6 +122,10 @@
       <a class="nav-item" href="#statii" data-route="statii">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
         <span>Stații</span>
+      </a>
+      <a class="nav-item" href="#sistem" data-route="sistem">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M9 20h6M12 16v4M7.5 10.5h2l1-2 2 4 1-2h3"/></svg>
+        <span>Sistem</span>
       </a>
     </nav>
   </div>
@@ -317,6 +325,8 @@
       <div class="st-root" id="st-clasamente"></div>
       <div class="st-rank-stations" id="rank-stations"></div>
     </section>
+
+    <section class="view view-setari" id="view-setari" hidden></section>
 
     <section class="view view-versions" id="view-versiuni" aria-labelledby="versiuni-heading" hidden>
       <div class="page-head">

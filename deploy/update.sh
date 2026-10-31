@@ -117,6 +117,24 @@ install_unit() {
     fi
 }
 
+# Watchdog (Val 4a): units din deploy/ se instalează doar dacă există în checkout;
+# timer-ul se activează doar dacă fișierul lui există. Repornește `tabela` (root).
+install_watchdog() {
+    local u src dst changed=0
+    for u in tabela-watchdog.service tabela-watchdog.timer; do
+        src="$APP_DIR/deploy/$u"
+        dst="/etc/systemd/system/$u"
+        [ -f "$src" ] || continue
+        if ! cmp -s "$src" "$dst" 2>/dev/null; then
+            install -m 644 "$src" "$dst" && changed=1
+        fi
+    done
+    [ "$changed" = 1 ] && $SYSTEMCTL daemon-reload
+    if [ -f "$APP_DIR/deploy/tabela-watchdog.timer" ]; then
+        $SYSTEMCTL enable --now tabela-watchdog.timer
+    fi
+}
+
 # Append KEY=VALUE when KEY is missing, never gluing it to a last line that has no
 # trailing newline.
 env_add_missing() {
@@ -252,6 +270,7 @@ if [ -f "$DB" ] && [ -n "$NEW_V" ] && [ "$NEW_V" -gt "$OLD_V" ]; then
 fi
 
 install_unit
+install_watchdog
 echo "== restart"
 $SYSTEMCTL restart tabela
 

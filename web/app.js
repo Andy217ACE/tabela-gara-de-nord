@@ -474,12 +474,13 @@
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
-    "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie" };
+    "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
+    "#sistem": "sistem", "#setari": "setari" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie"];
+    "clasamente", "statii", "statie", "sistem", "setari"];
   var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
     trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
-    statii: "Stații", statie: "Stație" };
+    statii: "Stații", statie: "Stație", sistem: "Sistem", setari: "Setări" };
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;
@@ -566,6 +567,12 @@
 
   window.TabelaApp = window.TabelaApp || {};
   window.TabelaApp.views = window.TabelaApp.views || {};
+  // „Setări” (#setari, admin): formularul vine din setari.js (încărcat cu defer)
+  window.TabelaApp.views.setari = {
+    show: function () {
+      if (window.TabelaSetari) window.TabelaSetari.mount($("view-setari"));
+    }
+  };
   if (typeof window.TabelaApp.onFollow !== "function") {
     window.TabelaApp.onFollow = function () {
       toast("Urmărirea trenurilor vine în curând.");
