@@ -251,7 +251,7 @@ Prima instalare (pe server, cu sudo):
     git clone --branch feat/app https://github.com/Andy217Ace/tabela-gara-de-nord.git /tmp/tabela
     sudo bash /tmp/tabela/deploy/install.sh feat/app   # branch obligatoriu la prima instalare
 
-Scriptul instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`; creează
+Scriptul instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`, `curl`, `sqlite3`; creează
 utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, venv în
 `/opt/tabela/venv`, datele în `/var/lib/tabela`, fișierul de configurare `/etc/tabela.env`
 (root, `chmod 600`), pornește serviciul `tabela` (un singur worker uvicorn pe
@@ -352,7 +352,8 @@ Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/upd
   `/var/lib/tabela/last.jpg` (ultima imagine a tabelei, utilă la depanarea OCR).
 - Variabile în `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
   `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `CAPTURE_DIR`, `ADMIN_TOKEN`
-  (opțional `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`); model fără valori
+  (opțional `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`, `TELEGRAM_BOT_TOKEN`,
+  `TELEGRAM_CHAT_ID`, `TELEGRAM_STATE_PATH`); model fără valori
   reale în `.env.example`.
 - Chei VAPID: generate o singură dată de `install.sh` (dacă lipsesc din `/etc/tabela.env`);
   nu se regenerează niciodată, altfel toate abonările push existente devin invalide.

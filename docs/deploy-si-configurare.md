@@ -82,7 +82,7 @@ Funcția `get_settings()` din `app/config.py` construiește obiectul `Settings`.
 | `SOURCE_URL` | șir (URL) | `https://cfr.ro/gari/camereweb/index.php?statie=BucurestiNord` | Adresa de unde poller-ul ia imaginea tablei (`app/poller.py`, `fetch_board_image`). | URL HTTP(S) valid. | Se folosește implicitul, care este sursa de producție. |
 | `VAPID_PRIVATE_KEY` | **Secret** (șir base64url) | `""` | Cheia privată VAPID pentru notificările push. Format: scalarul P-256 de 32 de octeți, codat base64url fără padding (așa cum îl citesc `py_vapid` și `pywebpush`). | Ambele chei VAPID trebuie să fie setate. | Notificările push sunt dezactivate. Aplicația se pornește și scrie un avertisment în log: „VAPID keys not configured; push notifications are disabled”. |
 | `VAPID_PUBLIC_KEY` | șir (base64url) | `""` | Cheia publică VAPID, trimisă browserului pentru abonare de `GET /api/push/key` (`app/api.py`; fără cheie, ruta răspunde 404). Nu e secretă, dar se ține împreună cu cea privată. | Punctul public necomprimat P-256, codat base64url. | Ca mai sus: push dezactivat. |
-| `VAPID_SUBJECT` | șir | `mailto:admin@example.com` | Subiectul din JWT-ul VAPID. `install.sh` scrie `https://tabelacfr.ddns.net` pe serverul nou. | `mailto:` sau URL `https:`. | Se folosește valoarea de placeholder din cod, care nu e una reală. De aceea trebuie să existe în fișier. |
+| `VAPID_SUBJECT` | șir | `https://tabelacfr.ddns.net` | Subiectul din JWT-ul VAPID. `install.sh` scrie aceeași valoare pe serverul nou. | `mailto:` sau URL `https:`. | Implicitul din cod, `.env.example` și `install.sh` au aceeași valoare; `tests/test_deploy_static.py` verifică asta. |
 | `TESSERACT_CMD` | șir (cale sau nume) | `tesseract` | Executabilul Tesseract, folosit prin `pytesseract` (`app/ocr/engine.py`). | Nume în `PATH` sau cale absolută. Timeout de 10 s per apel (`TESSERACT_TIMEOUT`). | Se caută `tesseract` în `PATH`. Dacă nu există, citirea OCR eșuează cu `OcrError`, iar verificarea Tesseract din administrare (`tesseract_status`, `app/admin.py`) o arată. |
 | `POLLER_RESTART_BACKOFF` | real (secunde) | `5` | Prima pauză înainte de repornirea poller-ului după un crash. Se dublează la fiecare eșec, până la `POLLER_MAX_BACKOFF` = 300 s (`app/api.py`). | Orice număr; valorile negative sunt aduse la 0 la utilizare. | Se folosește 5 s. Dacă valoarea există, dar nu e număr, `float()` ridică eroare la `get_settings()` și aplicația nu pornește. |
 | `POLLER_ENABLED` | booleană | `1` | `0` sau `false`, `no`, `off` (fără diferență între majuscule și minuscule) oprește poller-ul: aplicația servește doar ultima stare stocată. Folosit pentru dezvoltare. | `1` pornește, `0` oprește. | Poller pornit. |
@@ -122,7 +122,7 @@ Observații despre tabel:
 | `ON_TIME_MAX_MIN` | `app/stats.py` | `5` | Întârzierea maximă, în minute, considerată „la timp”. Interval acceptat: 0 până la 60. |
 | `TELEGRAM_BOT_TOKEN` | `app/telegram.py` | `""` | **Secret.** Tokenul botului Telegram pentru alerte. Canalul e activ doar dacă sunt setate și tokenul și `TELEGRAM_CHAT_ID`. Tokenul nu apare în log și nu e returnat de API. |
 | `TELEGRAM_CHAT_ID` | `app/telegram.py` | `""` | Identificatorul conversației care primește alertele. |
-| `TELEGRAM_STATE_PATH` | `app/telegram.py` | `data/telegram_sent.json` | Fișierul cu evenimentele deja trimise, ca să nu se retrimită după repornire. Implicitul este relativ; pe server trebuie setat către un loc scriptibil. Nesigur: `install.sh` și `update.sh` nu îl setează. |
+| `TELEGRAM_STATE_PATH` | `app/telegram.py` | `data/telegram_sent.json` | Fișierul cu evenimentele deja trimise, ca să nu se retrimită după repornire. Implicitul este relativ; pe server, `deploy/tabela.service` îl setează la `/var/lib/tabela/telegram_sent.json` (singurul loc scriptibil). |
 
 Variabile folosite doar de scripturi și de utilitare din `scripts/` (nu de serviciu):
 
@@ -143,7 +143,7 @@ Trei surse dau valori pentru aceleași variabile. Tabelul arată diferențele.
 | `DB_PATH` | `tabela.db` (relativ) | `/var/lib/tabela/tabela.db` | `/var/lib/tabela/tabela.db` |
 | `LAST_IMAGE_PATH` | `data/last.jpg` | `/var/lib/tabela/last.jpg` | `/var/lib/tabela/last.jpg` |
 | `POLLER_ENABLED` | `1` | `1` | `1` |
-| `VAPID_SUBJECT` | `mailto:admin@example.com` | `https://tabelacfr.ddns.net` | `mailto:admin@example.com` |
+| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` |
 | `REJECTED_DIR` | `/var/lib/tabela/rejected` | absentă (se folosește implicitul) | `/var/lib/tabela/rejected` |
 | `CAPTURE_DIR` | `/var/lib/tabela/captures` (dacă directorul există) | absentă; `update.sh` o adaugă | `/var/lib/tabela/captures` |
 | `CAPTURE_RETENTION_DAYS` | `7` | absentă | `7` |
@@ -564,7 +564,7 @@ Acestea sunt diferențe între cod, configurare și documentație, găsite la sc
 4. **Unitățile de antrenare umbră nu sunt instalate de niciun script.** Trebuie instalate manual. Vezi secțiunea 5.3.
 5. **Firewall-ul documentat.** README spune că firewall-ul este NSG-ul Azure. Dacă serverul nu mai este pe Azure, documentația trebuie actualizată. Nesigur: verifică firewall-ul efectiv pe server (secțiunea 7).
 6. **`VAPID_SUBJECT`** are valori diferite în cod, în `install.sh` și în `.env.example` (secțiunea 2.4). Nu strică funcționarea, dar trebuie știută.
-7. **`TELEGRAM_STATE_PATH`** are implicitul relativ `data/telegram_sent.json`. Nici `install.sh`, nici `update.sh` nu îl setează. Pe server, serviciul nu poate scrie în `/opt/tabela/app`. Nesigur: verifică în `app/telegram.py` ce se întâmplă când scrierea eșuează, și setează variabila în `/etc/tabela.env` dacă Telegram este activ.
+7. **`TELEGRAM_STATE_PATH`** are implicitul relativ `data/telegram_sent.json` în cod (dev și teste). Unitul `tabela.service` îl setează la `/var/lib/tabela/telegram_sent.json`, singurul loc scriptibil sub `ProtectSystem=strict`; `tests/test_deploy_static.py` verifică asta.
 8. **Certificatele trebuie să existe înainte de `install.sh`** (secțiunea 3, final). Altfel `nginx -t` eșuează.
 9. **README** spune că `install.sh` instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv` și `git`. Scriptul instalează în plus `curl` și `sqlite3`. Diferența nu strică, dar lista din README este incompletă.
 10. **Unele comentarii din CHANGELOG sunt depășite.** Intrarea Beta 1.31 spune că unitatea watchdog rulează ca root. Din Beta 1.42, unitatea rulează ca `tabela`. Textul istoric nu se rescrie, dar nu se trage concluzia din el.

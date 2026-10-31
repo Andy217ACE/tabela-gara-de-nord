@@ -12,6 +12,8 @@ User=tabela
 Group=tabela
 WorkingDirectory=/opt/tabela/app
 EnvironmentFile=/etc/tabela.env
+# Telegram alert state: the only writable place (ProtectSystem=strict); not a secret
+Environment=TELEGRAM_STATE_PATH=/var/lib/tabela/telegram_sent.json
 ExecStart=/opt/tabela/venv/bin/uvicorn app.main:create --factory --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
 Restart=always
 RestartSec=5
