@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -549,3 +550,108 @@ def test_db_without_observations_table_dry_runs(tmp_path, capsys):
     c.close()
     rep = _run(["--db", str(db), "--min-age-min", "0"], capsys)
     assert rep["merge"]["by_number_pair"] == {"RE 92011 -> RE 9209": 1}
+
+
+# --- backup: nume unic și retenție -------------------------------------------------
+
+def _tiny_db(tmp_path):
+    db = tmp_path / "src.db"
+    s = Store(str(db))
+    s.migrate()
+    s._conn.close()
+    return str(db)
+
+
+def _fixed_now(monkeypatch, when):
+    class _Fixed(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return when
+    monkeypatch.setattr(md, "datetime", _Fixed)
+
+
+def test_two_backups_in_the_same_instant_do_not_overwrite(tmp_path, monkeypatch):
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 0, 123456))
+    p1 = md.backup(db, str(bk))
+    p2 = md.backup(db, str(bk))
+    p3 = md.backup(db, str(bk))
+    assert len({p1, p2, p3}) == 3
+    for p in (p1, p2, p3):
+        assert Path(p).exists()
+        assert sqlite3.connect(p).execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_backup_name_has_microseconds_and_prefix(tmp_path, monkeypatch):
+    db = _tiny_db(tmp_path)
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 0, 5))
+    p = Path(md.backup(db, str(tmp_path / "bk")))
+    assert p.name == "tabela-before-merge-20261031-120000-000005.db"
+
+
+def test_backup_never_overwrites_an_existing_file(tmp_path, monkeypatch):
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    existing = bk / "tabela-before-merge-20261031-120000-000005.db"
+    existing.write_bytes(b"precious")
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 0, 5))
+    p = Path(md.backup(db, str(bk)))
+    assert p != existing
+    assert existing.read_bytes() == b"precious"
+
+
+def test_retention_keeps_newest_n_and_leaves_other_files(tmp_path, monkeypatch):
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    old = [bk / f"tabela-before-merge-2020010{i}-000000-000000.db" for i in range(1, 10)]  # 9
+    for f in old:
+        f.write_bytes(b"x")
+    others = [bk / "tabela.db", bk / "tabela-before-merge-notes.txt",
+              bk / "tabela-20260101-000000.db", bk / "altceva.db"]
+    for f in others:
+        f.write_bytes(b"y")
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 0, 0))
+    new = Path(md.backup(db, str(bk)))
+    # 9 vechi + 1 nou = 10 = BACKUP_KEEP: nimic nu se șterge
+    assert all(f.exists() for f in old)
+    assert new.exists()
+    assert all(f.exists() for f in others)
+
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 1, 0))
+    new2 = Path(md.backup(db, str(bk)))
+    # 9 vechi + primul nou + al doilea nou = 11 fișiere: se șterge cel mai vechi (2020-01-01)
+    assert not old[0].exists()
+    assert all(f.exists() for f in old[1:])
+    assert new.exists() and new2.exists()
+    assert all(f.exists() for f in others)
+    backups = sorted(bk.glob("tabela-before-merge-*.db"))
+    assert len(backups) == md.BACKUP_KEEP
+
+
+def test_retention_keeps_the_new_backup_even_if_its_name_sorts_oldest(tmp_path, monkeypatch):
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    recent = [bk / f"tabela-before-merge-2026123{i}-000000-000000.db" for i in range(10)]
+    for f in recent:
+        f.write_bytes(b"x")
+    # clock înapoi: backup-ul nou are un nume mai vechi decât toate celelalte
+    _fixed_now(monkeypatch, datetime(2000, 1, 1, 0, 0, 0, 0))
+    new = Path(md.backup(db, str(bk)))
+    assert new.exists()
+    assert len(list(bk.glob("tabela-before-merge-*.db"))) == md.BACKUP_KEEP
+    assert sum(f.exists() for f in recent) == md.BACKUP_KEEP - 1
+
+
+def test_apply_prunes_and_returns_the_new_backup(tmp_path, capsys):
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    for i in range(12):
+        (bk / f"tabela-before-merge-2020{i + 1:04d}-000000-000000.db").write_bytes(b"x")
+    rep = _run(["--db", db, "--apply", "--backup-dir", str(bk)], capsys)
+    assert Path(rep["backup"]).exists()
+    assert len(list(bk.glob("tabela-before-merge-*.db"))) == md.BACKUP_KEEP

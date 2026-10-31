@@ -324,9 +324,56 @@ def _archive(conn, batch, table, rows, now, key="id"):
                      " VALUES (?,?,?,?,?)", (batch, table, d.get(key, 0), json.dumps(d), now))
 
 
+# Backup-urile făcute înainte de --apply / --restore: se păstrează doar ultimele N.
+# N = 10 e suficient ca să poți reveni la câteva operații recente, fără să umple discul.
+BACKUP_PREFIX = "tabela-before-merge-"
+BACKUP_KEEP = 10
+
+
+def _new_backup_path(backup_dir: Path) -> Path:
+    """Alege un nume nou și îl creează exclusiv (open 'x'): nu suprascrie niciodată
+    un backup existent. Numele conține microsecunde; dacă și așa se ciocnește,
+    adaugă un sufix _1, _2, ..."""
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}"
+    n = 0
+    while True:
+        suffix = "" if n == 0 else f"_{n}"
+        p = backup_dir / f"{BACKUP_PREFIX}{stamp}{suffix}.db"
+        try:
+            with open(p, "x"):  # fișier gol, rezervă numele; sqlite îl completează după
+                pass
+            return p
+        except FileExistsError:
+            n += 1
+
+
+def _prune_backups(backup_dir: Path, keep: Path, n: int = BACKUP_KEEP) -> list[str]:
+    """Șterge backup-urile mai vechi, păstrând `keep` (cel făcut acum) și ceilalți cei mai
+    noi, în total `n`. Atinge doar fișiere `tabela-before-merge-*.db`.
+
+    Sortarea se face după NUME, nu după mtime: numele are un timestamp de lățime fixă
+    scris de noi, deci ordinea numelor e ordinea creării; mtime-ul se schimbă când
+    copiezi un backup (scp fără -p, restore din alt loc) și ar putea șterge greșit."""
+    try:
+        others = sorted((p for p in backup_dir.glob(f"{BACKUP_PREFIX}*.db")
+                         if p.is_file() and p.name != keep.name),
+                        key=lambda p: p.name, reverse=True)
+    except OSError as e:
+        print(f"avertisment: nu pot curăța backup-urile din {backup_dir}: {e}", file=sys.stderr)
+        return []
+    removed = []
+    for p in others[max(n - 1, 0):]:
+        try:
+            p.unlink()
+            removed.append(str(p))
+        except OSError as e:
+            print(f"avertisment: nu pot șterge backup-ul vechi {p}: {e}", file=sys.stderr)
+    return removed
+
+
 def backup(db: str, backup_dir: str) -> str:
     Path(backup_dir).mkdir(parents=True, exist_ok=True)
-    dest = Path(backup_dir) / f"tabela-before-merge-{datetime.now():%Y%m%d-%H%M%S}.db"
+    dest = _new_backup_path(Path(backup_dir))
     src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     dst = sqlite3.connect(dest)
     try:
@@ -338,6 +385,7 @@ def backup(db: str, backup_dir: str) -> str:
     if ok != "ok":
         raise SystemExit(f"backup integrity check failed: {ok}")
     os.chmod(dest, 0o600)
+    _prune_backups(Path(backup_dir), dest)  # după creare; backup-ul nou nu se șterge niciodată
     return str(dest)
 
 
