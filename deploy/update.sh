@@ -123,15 +123,18 @@ install_watchdog() {
     local u src dst changed=0
     for u in tabela-watchdog.service tabela-watchdog.timer; do
         src="$APP_DIR/deploy/$u"
-        dst="/etc/systemd/system/$u"
+        dst="${WD_UNIT_DIR:-/etc/systemd/system}/$u"
         [ -f "$src" ] || continue
         if ! cmp -s "$src" "$dst" 2>/dev/null; then
-            install -m 644 "$src" "$dst" && changed=1
+            install -m 644 "$src" "$dst" || abort_before_restart "watchdog: nu pot instala $u"
+            changed=1
         fi
     done
-    [ "$changed" = 1 ] && $SYSTEMCTL daemon-reload
+    if [ "$changed" = 1 ]; then
+        $SYSTEMCTL daemon-reload || abort_before_restart "watchdog: daemon-reload eșuat"
+    fi
     if [ -f "$APP_DIR/deploy/tabela-watchdog.timer" ]; then
-        $SYSTEMCTL enable --now tabela-watchdog.timer
+        $SYSTEMCTL enable --now tabela-watchdog.timer || abort_before_restart "watchdog: enable eșuat"
     fi
 }
 
@@ -281,6 +284,9 @@ fi
 
 echo "ERROR: not healthy after $((HEALTH_TRIES * HEALTH_SLEEP)) s; rolling back to $PREV" >&2
 echo "(logs: journalctl -u tabela -n 100)" >&2
+# the watchdog must not restart the old code (it may not know the new checks): off first;
+# a missing unit (older install) is not an error
+$SYSTEMCTL disable --now tabela-watchdog.timer >/dev/null 2>&1 || true
 restore_prev
 "$PIP" install -q -r "$APP_DIR/requirements.txt" || echo "WARNING: pip install during rollback failed" >&2
 install_unit

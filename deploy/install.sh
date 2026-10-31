@@ -133,6 +133,13 @@ systemctl daemon-reload
 systemctl enable tabela >/dev/null
 systemctl restart tabela
 
+# watchdog (Val 4a): the same units update.sh installs, so a fresh install gets them too
+for u in tabela-watchdog.service tabela-watchdog.timer; do
+    install -m 644 "$APP_DIR/deploy/$u" "/etc/systemd/system/$u"
+done
+systemctl daemon-reload
+systemctl enable --now tabela-watchdog.timer
+
 echo "== nginx"
 install -d -m 700 "$BACKUP_DIR"
 [ -f "$SITE" ] && cp -a "$SITE" "$BACKUP_DIR/tabela.site.bak"

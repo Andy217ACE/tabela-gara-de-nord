@@ -363,3 +363,67 @@ def test_failed_backup_leaves_no_partial_file(server, tool):
     assert r.returncode == 1 and "database backup failed" in r.stderr, r.stdout + r.stderr
     assert [p.name for p in (server.data / "backups").iterdir()] == []
     assert not (server.data / ".pre-migration-backup").exists()
+
+
+def _systemctl_fails_on(server, pattern: str):
+    """Fake systemctl that fails for any call whose arguments contain `pattern`."""
+    script(server.tmp / "bin" / "systemctl",
+           f'echo "systemctl $*" >> "{posix(server.log)}"\n'
+           f'case "$*" in *"{pattern}"*) exit 1;; esac\n')
+
+
+def _commit_watchdog_units(server):
+    d = server.work / "deploy"
+    d.mkdir(exist_ok=True)
+    (d / "tabela-watchdog.service").write_text("[Service]\n", encoding="utf-8")
+    (d / "tabela-watchdog.timer").write_text("[Timer]\n", encoding="utf-8")
+    commit(server.work, 2, '{"ok":true}', "watchdog units")
+    git(server.work, "push", "-q", "origin", "main")
+
+
+def test_watchdog_units_are_installed_and_timer_enabled(server):
+    _commit_watchdog_units(server)
+    units = server.tmp / "systemd"
+    units.mkdir()
+    server.env["WD_UNIT_DIR"] = posix(units)
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (units / "tabela-watchdog.service").is_file()
+    assert (units / "tabela-watchdog.timer").is_file()
+    calls = server.log.read_text().splitlines()
+    assert "systemctl enable --now tabela-watchdog.timer" in calls
+
+
+def test_watchdog_enable_failure_aborts_before_restart(server):
+    _commit_watchdog_units(server)
+    units = server.tmp / "systemd"
+    units.mkdir()
+    server.env["WD_UNIT_DIR"] = posix(units)
+    _systemctl_fails_on(server, "enable --now tabela-watchdog.timer")
+    r = server.run()
+    assert r.returncode == 1 and "watchdog: enable" in r.stderr, r.stderr  # ASCII part only (locale)
+    calls = server.log.read_text().splitlines()
+    assert "systemctl restart tabela" not in calls      # old code keeps running
+    assert server.head() == server.prev                  # and the checkout is the old one
+
+
+def test_rollback_disables_watchdog_timer_even_when_unit_is_missing(server):
+    _commit_watchdog_units(server)
+    units = server.tmp / "systemd"
+    units.mkdir()
+    server.env["WD_UNIT_DIR"] = posix(units)
+    commit(server.work, 2, "boom", "broken next")
+    git(server.work, "push", "-q", "origin", "main")
+    _systemctl_fails_on(server, "disable --now tabela-watchdog.timer")  # unit not there
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr, r.stderr
+    calls = server.log.read_text().splitlines()
+    disable = calls.index("systemctl disable --now tabela-watchdog.timer")
+    restarts = [i for i, c in enumerate(calls) if c == "systemctl restart tabela"]
+    assert disable < restarts[-1]                         # off before the old code is back
+
+
+def test_install_sh_installs_watchdog_units():
+    text = (ROOT / "deploy" / "install.sh").read_text(encoding="utf-8")
+    assert "tabela-watchdog.service tabela-watchdog.timer" in text
+    assert "systemctl enable --now tabela-watchdog.timer" in text
