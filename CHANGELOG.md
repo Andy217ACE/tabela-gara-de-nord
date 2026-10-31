@@ -12,6 +12,8 @@ Citirea nu mai depinde de o singură captură: starea afișată a unui tren e co
 ### Adăugat
 - **Vot în timp:** pe tablă și în istoric, o valoare e afișată doar dacă e majoritate strictă în ultimele 15 citiri utilizabile ale trenului (minim 3 voturi). Fără majoritate, rămâne valoarea stocată. Întârzierile deduse din reflexie nu votează.
 - **Antrenare zilnică în mod umbră:** la 03:30 se antrenează un clasificator de cifre și se scrie un raport. Nimic nu se promovează automat; decizia e manuală.
+- **Setul de adevăr fără capturi în git:** imaginile private din `tests/fixtures/ocr_truth/` nu mai sunt urmărite. Testele care le folosesc sar cu motiv când directorul privat lipsește.
+- **Măsurare OCR:** raportul zilnic compară clasificatorul cu motorul actual pe setul scris de mână.
 
 ### Schimbat
 - **Watchdog fără root:** rulează ca userul `tabela` și are voie doar să repornească serviciul `tabela`, prin sudoers.
