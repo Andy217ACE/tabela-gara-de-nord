@@ -502,6 +502,23 @@
     document.head.appendChild(s);
   }
 
+  // Paginile Sistem și Setări se încarcă la prima vizită (nu sunt în precache: bugetul SW).
+  var lazyPages = {};
+  function loadLazyPage(name, js, css) {
+    if (lazyPages[js]) return;
+    lazyPages[js] = true;
+    if (css) {
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = css;
+      document.head.appendChild(link);
+    }
+    var s = document.createElement("script");
+    s.src = js;
+    s.addEventListener("load", function () { if (currentRoute === name) route(); });
+    document.head.appendChild(s);
+  }
+
   function parseHash() {
     var h = location.hash || "";
     var q = h.indexOf("?");
@@ -529,6 +546,8 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
+    if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
+    if (name === "setari") loadLazyPage("setari", "setari.js");
     VIEWS.forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
