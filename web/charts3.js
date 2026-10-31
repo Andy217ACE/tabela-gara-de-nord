@@ -377,6 +377,11 @@
       if (!cur) return dir === "end" ? units[units.length - 1] : units[0];
       if (dir === "home") return units[0];
       if (dir === "end") return units[units.length - 1];
+      if (grouped && (dir === "left" || dir === "right")) {
+        // a column / line chart's marks are in category order: step to the next one, not by
+        // screen geometry (a short neighbour bar could otherwise win over the adjacent tall one)
+        return units[units.indexOf(cur) + (dir === "right" ? 1 : -1)] || null;
+      }
       var best = null, bs = Infinity;
       units.forEach(function (u) {
         if (u === cur) return;
