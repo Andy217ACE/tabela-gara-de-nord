@@ -561,9 +561,16 @@ def test_tren_and_statie_bar_charts_get_the_same_tooltip(browser, base_url, rout
 
 # ---- the live Tabela is left exactly as it was -------------------------------------------------
 
+_BOARD_SNAPSHOT = {}                            # base URL -> the /api/board answer both shots are given
+
+
 def _tabela_shot(browser, board_url, w, h, theme, view, with_layer):
     ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
-    ctx.add_init_script(f"localStorage.setItem('tabela.theme', '{theme}'); localStorage.setItem('tabela.view', '{view}');")
+    # „acum N s” is performance.now() minus the arrival time: it ticks every second and gains a digit
+    # at 10 s, which widens the live pill by ~7 px between the two captures (the mask only covers the
+    # pill's box at mask time). A frozen clock keeps the text and the box the same in both shots.
+    ctx.add_init_script(f"localStorage.setItem('tabela.theme', '{theme}'); localStorage.setItem('tabela.view', '{view}');"
+                        "performance.now = () => 0;")
 
     def route(r):
         u = r.request.url
@@ -571,6 +578,16 @@ def _tabela_shot(browser, board_url, w, h, theme, view, with_layer):
             r.abort()
         elif not with_layer and any(n in u for n in ("/ui2.css", "/ui2.js", "/charts3.")):
             r.abort()                           # the same page without the whole v2 / v3 visual layer
+        elif u.startswith(board_url + "/api/board"):
+            # the live board is the same answer for both shots: the first one is kept and replayed, with the
+            # server's age pinned (it ticks, and a fetch between the shots would move the „acum” text across a
+            # digit boundary; a train crossing the window between them would change the page's height)
+            if board_url not in _BOARD_SNAPSHOT:
+                resp = r.fetch()
+                data = resp.json()
+                data.update(age_s=0, stale=False)
+                _BOARD_SNAPSHOT[board_url] = data
+            r.fulfill(json=_BOARD_SNAPSHOT[board_url])
         else:
             r.continue_()
     ctx.route("**/*", route)
@@ -584,7 +601,11 @@ def _tabela_shot(browser, board_url, w, h, theme, view, with_layer):
         return page.screenshot(full_page=True, animations="disabled", mask=[
             # only the things that tick by themselves (clocks, „acum 3 s”, the live pill) are masked
             page.locator("#hdr-clock"), page.locator("#live"), page.locator(".pnl-clock"), page.locator(".pnl-status"),
-            page.locator(".pnl-clockwx")]), errors
+            page.locator(".pnl-clockwx"),
+            # the sticky menu: its labels are rasterised differently between two captures of the SAME page
+            # (~985 px, backdrop-filter layer; seen without the visual layer too). No v2 / v3 rule styles
+            # .navbar at rest (ui2.css only names it for View Transitions), so the layer cannot change it.
+            page.locator(".navbar")]), errors
     finally:
         ctx.close()
 
