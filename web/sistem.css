@@ -1,0 +1,23 @@
+/* © 2026 Andy217Ace — pagina „Sistem” (#sistem). Tokens come from style.css; no inline styles. */
+.view-sistem { max-width: 40rem; margin: 0 auto; padding: 1rem var(--gutter, 16px); }
+.sys-heading { margin: 0 0 .25rem; font-size: var(--fs-xl); }
+.sys-intro { margin: 0 0 1rem; color: var(--muted, inherit); font-size: var(--fs-sm); }
+.sys-error { color: var(--bad); }
+.sys-hero { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: 1rem;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card-bg); }
+.sys-badge { display: inline-block; padding: .2rem .7rem; border-radius: var(--radius-pill);
+  font-weight: 600; font-size: var(--fs-sm); }
+.sys-live { background: var(--ok-bg); color: var(--ok); }
+.sys-old { background: var(--bad-bg); color: var(--bad); }
+.sys-unknown { background: var(--chip-bg); color: inherit; }
+.sys-hero-text { margin: 0; overflow-wrap: anywhere; }
+.sys-list { list-style: none; margin: 1rem 0 0; padding: 0; border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--card-bg); }
+.sys-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .15rem 1rem;
+  padding: .7rem 1rem; border-top: 1px solid var(--border); }
+.sys-row:first-child { border-top: 0; }
+.sys-label { font-size: var(--fs-sm); color: var(--muted, inherit); }
+.sys-value { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.sys-sub { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--muted, inherit); }
+.sys-admin { margin-top: 1.5rem; }
+.sys-admin-title { font-size: var(--fs-lg); margin: 0 0 .5rem; }

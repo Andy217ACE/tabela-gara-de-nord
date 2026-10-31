@@ -249,3 +249,43 @@ async def test_run_survives_known_stations_failure(world, monkeypatch, caplog):
     # the failure is logged at most once per KNOWN_STATIONS_WARN_S, not per image
     warns = [r for r in caplog.records if "known stations unavailable" in r.getMessage()]
     assert len(got) > 1 and len(warns) == 1
+
+
+# ---- „Sistem” page: the last failure is recorded as a short code ------------------
+
+async def test_run_records_last_error_code(world, monkeypatch):
+    from app import system_status
+    monkeypatch.setattr(system_status, "_last_error", None)
+    w = world
+    w.fail_at = {1}
+
+    async def on_rows(rows, ts):
+        pass
+
+    await _run(w, on_rows)
+    assert system_status.last_error()[0] == "fetch"
+
+
+async def test_run_records_ocr_code(world, monkeypatch):
+    from app import system_status
+    monkeypatch.setattr(system_status, "_last_error", None)
+    w = world
+    w.ocr_fail_hashes = {b"img-16"}
+
+    async def on_rows(rows, ts):
+        pass
+
+    await _run(w, on_rows)
+    assert system_status.last_error()[0] == "ocr"
+
+
+async def test_run_records_store_code(world, monkeypatch):
+    from app import system_status
+    monkeypatch.setattr(system_status, "_last_error", None)
+    w = world
+
+    async def on_rows(rows, ts):
+        raise RuntimeError("cb")
+
+    await _run(w, on_rows)
+    assert system_status.last_error()[0] == "store"
