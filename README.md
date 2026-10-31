@@ -104,8 +104,8 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
 - Operatorul și stația citite sunt aduse la forma canonică (`app/canonical.py`, potrivire
   `difflib`, prag implicit 0,82): ex. „Transferovlar” → „Transferoviar”, „CFR Calatorl” →
   „CFR Calatori”. Operatorii cunoscuți sunt în `data/operators.txt`, stațiile în
-  `data/stations_seed.txt` plus cele învățate din istoric (stații văzute la cel puțin
-  2 servicii). Listele conțin doar nume văzute efectiv pe tabelă — se completează manual.
+  `data/stations_seed.txt` plus cele învățate din istoric (stații văzute în cel puțin
+  2 trenuri distincte, în cel puțin 2 zile de serviciu distincte). Listele conțin doar nume văzute efectiv pe tabelă — se completează manual.
 - Sub prag se păstrează textul citit și rândul e marcat `uncertain` (expus în `/api/board`
   și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
   (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
@@ -123,7 +123,7 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   incluse). Un panou cu mai mult de 4 rânduri necitite e considerat cadru stricat și nu
   se recitește (nu se inventează trenuri).
 - Rândurile rămân `necitit` (nu 0, nu tren ghicit); un rând fără text e `rând gol`.
-  Versiunea de procesare a fiecărei observații (`ocr-tess-grid-2`) are sufixe:
+  Versiunea de procesare a fiecărei observații (ex. `ocr-tess-grid-5`) are sufixe:
   `+empty`, `+unread`, `+retry:<variantă>:<încercări>`.
 - `/api/health` → `ocr`: rândurile pe panou din ultimul cadru, recitirile, durata, și
   pe ultimele 60 de cadre câte au avut 12/12. Pagina „Capturi OCR” arată „S 12 · P 11”
@@ -188,7 +188,10 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
 - **API** (JSON, `format=csv` pentru export): `/api/journeys`, `/api/journeys/{id}`,
   `/api/trains/stats`, `/api/trains/{nr}/journeys`, `/api/stats`, `/api/stats/rankings`,
   `/api/stations`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys`. Parametri: `prag`,
-  `min`, `board`, `from`, `to` (AAAA-LL-ZZ), `doar_confirmate=1`.
+  `min`, `board`, `from`, `to` (AAAA-LL-ZZ), `doar_confirmate=1`. Și: `/api/stats/overview` (tot ce arată
+  pagina Statistici), `/api/stats/seasons` (comparație pe sezoane și meteo), `/api/export/history.csv`
+  (export CSV al istoricului pe interval) și `/api/system` (starea sistemului; detalii doar pentru admin).
+  Lista completă, cu parametri, răspunsuri și erori: [docs/api.md](docs/api.md).
 - **Istoric pe toate zilele**: `/api/history?all=1` = toate trenurile, toate zilele;
   `train=N` restrânge la un tren (opțional `date`,
   `station`, `from`/`to` HH:MM, `board`, `limit` 1–200, `cursor` din răspunsul anterior,
@@ -254,7 +257,9 @@ utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, ven
 (root, `chmod 600`), pornește serviciul `tabela` (un singur worker uvicorn pe
 `127.0.0.1:8000` — poller-ul rulează în proces) și configurează nginx (cu `nginx -t` înainte
 de reload; copia anterioară a site-ului ajunge în `/root/backup-<data>/tabela.site.bak` și
-e restaurată automat dacă testul eșuează). `ufw` nu se activează: firewall-ul e NSG-ul Azure.
+e restaurată automat dacă testul eșuează). `ufw` nu se activează în script. Serverul de producție este acum serverul de acasă, nu o mașină Azure,
+  iar firewall-ul lui efectiv nu e descris în repo: de verificat pe server (vezi
+  [docs/deploy-si-configurare.md](docs/deploy-si-configurare.md), secțiunea 7).
 
 **La fiecare deploy crește versiunea și completează istoricul:** în `VERSION` se trece
 `Beta 1.NN` cu NN mărit cu 1 (ex. `Beta 1.01` → `Beta 1.02`), iar în `CHANGELOG.md` se
@@ -380,7 +385,7 @@ următoarele 24 h cu minim, maxim și marcajul „acum", ora observației și su
 - Stocare: tabelul `weather_observations` (schema v4; **schema v8** adaugă, aditiv și nullable,
   `relative_humidity_pct, is_day, rain_mm, showers_mm, snowfall_cm, surface_pressure_hpa,
   wind_gusts_kmh, hourly_json`; rândurile vechi rămân neatinse, cu `NULL` în coloanele noi),
-  un rând per oră de observație (UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi)
+  un rând per observație (la fiecare 15 minute, UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi)
   pentru analiza „Meteo și trenuri". Seria orară (25 de puncte din ora observației, JSON
   compact) se păstrează doar pe cea mai nouă observație: e o prognoză, nu istoric. API:
   `GET /api/weather` (câmpurile noi + `hourly`); `GET /api/config` → `weather`.

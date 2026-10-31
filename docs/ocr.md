@@ -391,7 +391,7 @@ operatorul, textul Tesseract este folosit ca atare, dar stația și operatorul t
 
 ### 8.3 Regula OMP_THREAD_LIMIT=1
 
-Regula este: **Tesseract rulează cu `OMP_THREAD_LIMIT=1`**, mai ales pe server, și **nu**
+Regula este: **Tesseract rulează cu `OMP_THREAD_LIMIT=1`**, mai ales pe server (**lacună cunoscută**: unitatea de producție nu o setează, vezi mai jos), și **nu**
 în paralel nelimitat. Motivul, din `scripts/ocr_eval.py` și din planul de lucru
 `docs/superpowers/plans/2026-10-27-backlog-wave.md`: „o rulare paralelă a blocat OCR-ul live 16 min”.
 
@@ -1005,9 +1005,10 @@ python scripts/ocr_eval.py score   OUT.json [INAINTE.json]   # tabel, cu compara
   | `station` | 3 | 381 |
   | `operator` | 5 | 382 |
 
-  **Nesigur și important**: docstring-ul din `test_ocr14.py` spune „16 capturi, 384 de linii”,
-  dar fișierul are acum 59 de cadre și 1416 linii. Pragurile `MIN_OK` (≈ 380 pe fiecare câmp)
-  par calibrate pe 384 de linii: pe cele 1415 valori de „no” etichetate, pragul de 379 corecte
+  **Stare**: docstring-ul din `test_ocr14.py` a fost actualizat la 59 de cadre și 1416 de linii.
+  Pragurile `MIN_OK` (≈ 380 pe fiecare câmp) au fost măsurate pe setul inițial de 16 capturi / 384 de linii
+  (Beta 1.16, conform comentariului de deasupra `MAX_WRONG`); codul nu arată că ar fi fost recalibrate
+  după extinderea setului. Pe cele 1415 valori de „no” etichetate, pragul de 379 corecte acoperă doar ~27%. pe cele 1415 valori de „no” etichetate, pragul de 379 corecte
   acoperă doar ~27%. Verificare necesară: rulați testul cu cadrele reale și comparați cu valorile măsurate.
 
 - `tests/test_ocr_platform_cut.py`: înregistrează `baseline-1.31.json` (`OCR_RECORD_BASELINE=1`, numai
@@ -1104,22 +1105,23 @@ element indică sursa. Nu e o listă completă: cadrele greșite necunoscute nu 
 
 ## 22. Neconcordanțe
 
-Verificate în cod. Nu le-am corectat în `README.md` sau în `CHANGELOG.md` (nu fac parte din sarcină).
+Verificate în cod. Punctele 1, 2, 4 și 5 au fost corectate în `README.md` și în `tests/test_ocr14.py`; punctul 6 este documentat ca lacună în 8.3. `CHANGELOG.md` nu se modifică (e istoric).
 
-1. **Stațiile învățate**: `README.md` (secțiunea „OCR și canonicalizare”) spune „seen on at least 2 services”
+1. **Stațiile învățate** (corectat în `README.md`): versiunea veche spunea „seen on at least 2 services”
    (văzute la cel puțin 2 servicii). Codul (`store.known_stations`) cere **2 trenuri distincte** și
    **2 zile de serviciu distincte** (`COUNT(DISTINCT train_no) >= 2 AND COUNT(DISTINCT service_date) >= 2`).
-2. **Versiunea de procesare**: `README.md` dă ca exemplu `ocr-tess-grid-2`. Codul are
+2. **Versiunea de procesare** (corectat în `README.md`, exemplul e acum `ocr-tess-grid-5`): versiunea veche era `ocr-tess-grid-2`. Codul are
    `PROCESSING_VERSION = "ocr-tess-grid-5"` (`app/observations.py`), iar comentariul de acolo
    spune că versiunea 5 e din Beta 1.31.
 3. **Stațiile seed**: `CHANGELOG`, Beta 1.06, spune „lista de stații cunoscute are acum 45 de nume reale”.
-   Fișierul `data/stations_seed.txt` are **46** de linii care nu sunt comentarii. Diferența de o unitate
+   Fișierul `data/stations_seed.txt` are **46** de linii care nu sunt comentarii (numărate cu `grep -v '^\s*#'`). README nu citează cifra. Diferența de o unitate
    nu se explică din documentație. **Nesigur**: dacă a fost adăugată o stație după CHANGELOG.
-4. **Pragurile din `test_ocr14.py`** sunt documentate pentru **16 capturi / 384 de linii**, dar setul
-   din `truth.json` are **59 / 1416**. Vezi 20.4.
-5. **Comentariul „platform 1” din `test_ocr14.py`** nu se potrivește cu `MAX_WRONG["platform"] = 0`. Vezi 21.3.
+4. **Docstring-ul din `test_ocr14.py`** (corectat): spunea 16 capturi / 384 de linii; setul din `truth.json`
+   are **59 de cadre / 1416 de linii**. Pragurile au rămas neschimbate. Vezi 20.4.
+5. **Comentariul „platform 1” din `test_ocr14.py`** (corectat): „1” e numărul din Beta 1.16; limita actuală este `MAX_WRONG["platform"] = 0`. Vezi 21.3.
 6. **Regula OMP_THREAD_LIMIT=1**: documentată în `ocr_eval.py` și în planul de lucru ca regulă pentru server,
-   dar `deploy/tabela.service` nu o setează, iar codul din `app/` nu o aplică. Vezi 8.3.
+   dar `deploy/tabela.service` nu o setează, iar codul din `app/` nu o aplică (verificat). Lacună cunoscută, de
+   închis cu o decizie umană (unitatea systemd nu se modifică în această corecție). Vezi 8.3.
 7. **Hold-out**: `CHANGELOG` (Beta 1.39) spune „0 cifre greșite la peron” pe hold-out, dar
    scorul se face cu „un script extern (nu e în repo)” (`holdout/README.md`). Nu se poate reproduce din repo.
 ## Cum se reproduce o măsurare locală
