@@ -427,3 +427,39 @@ def test_install_sh_installs_watchdog_units():
     text = (ROOT / "deploy" / "install.sh").read_text(encoding="utf-8")
     assert "tabela-watchdog.service tabela-watchdog.timer" in text
     assert "systemctl enable --now tabela-watchdog.timer" in text
+
+
+ENABLE = "systemctl enable --now tabela-watchdog.timer"
+DISABLE = "systemctl disable --now tabela-watchdog.timer"
+
+
+def _rollback_case(server):
+    """Watchdog units installed; the next commit is unhealthy, so the run rolls back."""
+    _commit_watchdog_units(server)
+    units = server.tmp / "systemd"
+    units.mkdir()
+    server.env["WD_UNIT_DIR"] = posix(units)
+    commit(server.work, 2, "boom", "broken next")
+    git(server.work, "push", "-q", "origin", "main")
+
+
+def test_rollback_reenables_watchdog_timer_when_it_was_enabled(server):
+    _rollback_case(server)  # fake `is-enabled` succeeds: the timer was on before the update
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr, r.stderr
+    calls = server.log.read_text().splitlines()
+    restarts = [i for i, c in enumerate(calls) if c == "systemctl restart tabela"]
+    assert DISABLE in calls and ENABLE in calls[restarts[-1]:]   # back on after the old code
+    assert "watchdog timer re-enabled" in r.stdout + r.stderr
+
+
+def test_rollback_leaves_watchdog_timer_disabled_when_it_was_disabled(server):
+    _rollback_case(server)
+    _systemctl_fails_on(server, "is-enabled")  # the timer was off before the update
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr, r.stderr
+    calls = server.log.read_text().splitlines()
+    restarts = [i for i, c in enumerate(calls) if c == "systemctl restart tabela"]
+    assert DISABLE in calls
+    assert ENABLE not in calls[restarts[-1]:]                    # stays off, as before
+    assert "watchdog timer left disabled" in r.stdout + r.stderr

@@ -134,6 +134,12 @@ systemctl enable tabela >/dev/null
 systemctl restart tabela
 
 # watchdog (Val 4a): the same units update.sh installs, so a fresh install gets them too
+# sudoers rule for the watchdog's restart: the same steps as update.sh (validated with
+# visudo before it goes into /etc/sudoers.d; a broken file would break sudo)
+WD_SUDOERS_SRC="$APP_DIR/deploy/tabela-watchdog.sudoers"
+WD_SUDOERS_DST=/etc/sudoers.d/tabela-watchdog
+visudo -cf "$WD_SUDOERS_SRC" >/dev/null || { echo "ERROR: watchdog: sudoers invalid" >&2; exit 1; }
+install -m 440 "$WD_SUDOERS_SRC" "$WD_SUDOERS_DST"
 for u in tabela-watchdog.service tabela-watchdog.timer; do
     install -m 644 "$APP_DIR/deploy/$u" "/etc/systemd/system/$u"
 done
