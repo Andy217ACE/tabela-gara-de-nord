@@ -300,6 +300,203 @@ def _time_colon(s: str) -> str:
 def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
              matcher: DigitMatcher | None, alt: np.ndarray | None = None
              ) -> tuple[str, float | None]:
+    """Text of a numeric cell (``_numeric_read``); a platform reading is checked against
+    the glyph shapes (``_platform_checked``)."""
+    text, conf = _numeric_read(name, cell, tess, matcher, alt)
+    if name == "platform" and matcher is not None:
+        return _platform_checked(cell, text, conf, matcher, tess[0])
+    return text, conf
+
+
+# --- platform: shape checks (Task 2.2, real server frames 22-27.10) ---------------------
+# Measured on every labelled platform glyph of the truth set (~600, 58 frames): holes
+# (closed background >= HOLE_MIN_AREA px, centre above "U" / below "L" the glyph middle)
+#   0 U/L  1 -  2 -  3 -  4 U/-/L  5 -  6 L/-  7 -  8 UL/L  9 U
+# No label ever breaks these rules (``_fits``); every wrong read of the cut-platform
+# frames does (blurred 8 read 6 has an upper hole, 8/6 read 3/5 a lower one).
+# A digit the templates alone do not trust must show its own hole signature
+# (``_signature``, Ruling R20): a blurred or glare-closed 3/5/6/9/0 must never become an 8.
+HOLE_MIN_AREA = 12   # px (x3 mask); the profile is the same from 3 to 20
+LOST_INK = 0.08      # share of the cell's ink the segmentation may drop: a faint 4 in
+                     # pieces lost 11.1% and became a trusted "1" (srv 120408); the
+                     # most on a correct reading is 4.0%
+EIGHT_RATIO = 0.5    # 8: smaller / larger hole area (real 8s: >= 0.725); a closed hook
+                     # of a 6 or tail of a 9 leaves a small second hole
+ZERO_MIN_H = 0.5     # 0: its one hole spans this share of the glyph height (real: >= 0.64)
+RECOVER_MIN_H = 0.6  # a glyph read without the templates' trust spans this share of the
+                     # line (a sliver or a dot is no digit)
+SPECK_MAX_H = 0.3    # a glyph whose ink spans less of the CELL height is a speck, not a
+                     # digit (round 4, hold-out 24_160005 arrival line 1: a blank cell with
+                     # a 4x3 px glare dot at its edge; ``segment`` measures the line on that
+                     # dot alone and stretches it to a full glyph box, a filled square that
+                     # matched "4" 0.70 / margin 0.052, trusted). Measured on the truth set:
+                     # digits span >= 0.518 of the cell, the specks of blank cells <= 0.128
+
+
+def _hole_list(cell: np.ndarray, x0: int, x1: int) -> list[tuple[float, int, float]]:
+    """Holes of the ink of ``cell[:, x0:x1]``, top to bottom: (centre, area px, height),
+    centre and height as shares of the ink height."""
+    ink = cell[:, x0:x1] == 0
+    rows = np.flatnonzero(ink.any(axis=1))
+    if rows.size == 0:
+        return []
+    a, b = rows[0], rows[-1] + 1
+    bg = np.pad(~ink[a:b], 1, constant_values=True).astype(np.uint8)
+    n, _, st, cen = cv2.connectedComponentsWithStats(bg, connectivity=4)
+    return sorted(((cen[i][1] - 1) / (b - a), int(st[i, 4]), st[i, 3] / (b - a))
+                  for i in range(1, n) if st[i, 4] >= HOLE_MIN_AREA
+                  and st[i, 0] > 0 and st[i, 1] > 0 and st[i, 0] + st[i, 2] < bg.shape[1]
+                  and st[i, 1] + st[i, 3] < bg.shape[0])
+
+
+def _holes(cell: np.ndarray, x0: int, x1: int) -> str:
+    """The holes as a string, top to bottom: "U" (centre in the upper half) or "L"."""
+    return _profile(_hole_list(cell, x0, x1))
+
+
+def _profile(holes: list[tuple[float, int, float]]) -> str:
+    return "".join("U" if y < 0.5 else "L" for y, _, _ in holes)
+
+
+def _fits(ch: str, holes: str) -> bool:
+    """A digit `ch` is possible for a glyph with these holes (rules measured above); an 8
+    always shows its lower hole (every labelled 8: "UL" 33, "L" 1), so a blurred 3/5/9
+    the templates trust as 8 is not one (Ruling R22)."""
+    if ch in "12357":
+        return holes == ""
+    if ch == "6":
+        return "U" not in holes
+    if ch == "9":
+        return "L" not in holes
+    if ch == "0":
+        return len(holes) <= 1
+    if ch == "8":
+        return "L" in holes
+    return True  # 4: no rule
+
+
+def _signature(ch: str, holes: list[tuple[float, int, float]]) -> bool:
+    """The glyph shows `ch`'s own holes (needed when the templates alone do not trust
+    it): 8 one upper + one lower of comparable size, 6 one lower, 9 one upper, 0 one
+    tall hole, 4 a hole; 1, 2, 3, 5, 7 none."""
+    prof = _profile(holes)
+    if ch in "12357":
+        return prof == ""
+    if ch == "8":
+        return prof == "UL" and min(h[1] for h in holes) >= EIGHT_RATIO * max(h[1] for h in holes)
+    if ch == "6":
+        return prof == "L"
+    if ch == "9":
+        return prof == "U"
+    if ch == "0":
+        return len(holes) == 1 and holes[0][2] >= ZERO_MIN_H
+    if ch == "4":
+        return len(holes) >= 1
+    return False
+
+
+def _tall(glyph: np.ndarray | None) -> bool:
+    if glyph is None:
+        return False
+    rows = np.flatnonzero((np.asarray(glyph) > 0.5).any(axis=1))
+    return rows.size > 0 and rows[-1] - rows[0] + 1 >= RECOVER_MIN_H * glyph.shape[0]
+
+
+def _decided(glyph: tuple, holes: list[tuple[float, int, float]], matcher,
+             tess_ch: str | None) -> str:
+    """The digit of a glyph the templates alone do not trust, or "": it must be a near-tie
+    candidate (score >= MIN_SCORE, the glyph spanning the line) showing its own hole
+    signature, and no other candidate may fit the holes at all (a hole-free 4 is also a
+    possible "1": srv 103806 read 1 by Tesseract, templates 4 0.66 / margin 0.039; an 8
+    or a 4 among the others always counts as possible, as before R22).
+    Ruling R22: never an 8 when "0" is a near candidate (a 0 split by a horizontal glare
+    streak shows an 8's two holes), and a digit other than the templates' own best
+    (`c`) only when Tesseract read that same digit at that place (`tess_ch`)."""
+    c, s, _, g = glyph[0], glyph[1], glyph[2], glyph[3]
+    if s < digits.MIN_SCORE or not _tall(g):
+        return ""
+    near = matcher.near(g, _ALLOWED["platform"])
+    prof = _profile(holes)
+    sig = [x for x in near if _signature(x, holes)]
+    if len(sig) != 1 or any(x in "48" or _fits(x, prof) for x in near if x != sig[0]):
+        return ""
+    if sig[0] == "8" and "0" in near:
+        return ""
+    if sig[0] != c and tess_ch != sig[0]:
+        return ""
+    return sig[0]
+
+
+def _speck(cell: np.ndarray, x0: int, x1: int) -> bool:
+    """The ink of ``cell[:, x0:x1]`` spans under SPECK_MAX_H of the cell height."""
+    rows = np.flatnonzero((cell[:, x0:x1] == 0).any(axis=1))
+    return rows.size == 0 or rows[-1] - rows[0] + 1 < SPECK_MAX_H * cell.shape[0]
+
+
+def _platform_checked(cell: np.ndarray, text: str, conf: float | None,
+                      matcher: DigitMatcher, tess_text: str = "") -> tuple[str, float | None]:
+    """A platform reading only if the segmentation kept the cell's ink and every glyph's
+    shape allows its digit; a digit the templates alone do not trust (decided by
+    Tesseract, or a near tie) must also show its own hole signature (``_signature``),
+    match well (score >= MIN_SCORE) and, if an 8, not be a possible 0 (R22).
+    A cell left unread, or whose reading is rejected, is read from the templates: a
+    trusted glyph whose shape allows it, or a doubtful one decided by ``_decided``
+    (templates and shape agree, Tesseract too for a digit other than the templates'
+    best; R12, R20, R22). A glyph that is a mere speck of the cell (``_speck``: glare
+    dot on a blank cell) makes the cell unread. Anything else: None."""
+    try:
+        spans = digits.segment_spans(cell)
+        gl = matcher.glyphs(cell, _ALLOWED["platform"])
+        if len(spans) != len(gl):  # glyphs not aligned with their shapes: unchecked
+            return "", None
+        ink = cell == 0
+        total = int(ink.sum())
+        kept = sum(int(ink[:, x0:x1].sum()) for _, (x0, x1), _ in spans)
+        if total and (total - kept) / total >= LOST_INK:
+            return "", None
+        keep = [(g, _hole_list(cell, x0, x1), _speck(cell, x0, x1))
+                for g, (_, (x0, x1), _) in zip(gl, spans) if not _fragment(g[1], g[3])]
+        if any(sp for _, _, sp in keep):  # a dot stretched into a "digit": no platform
+            return "", None
+        keep = [(g, h) for g, h, _ in keep]
+        tt = (tess_text or "").replace(" ", "")
+        tess_at = list(tt) if len(tt) == len(keep) else [None] * len(keep)
+
+        def shown(t: str, g: tuple, holes: list, tc: str | None) -> bool:
+            c, s, mg = g[0], g[1], g[2]
+            if t == c:  # the templates' own digit: trusted, or confirmed by Tesseract
+                if digits.glyph_trusted(s, mg):
+                    return _fits(t, _profile(holes))
+                return (s >= digits.MIN_SCORE and _tall(g[3]) and _signature(t, holes)
+                        and not (t == "8" and "0" in matcher.near(g[3], _ALLOWED["platform"])))
+            return t == _decided(g, holes, matcher, tc)  # another digit: a near tie decided
+
+        if text and len(text) == len(keep) and all(
+                shown(t, g, h, tc) for t, (g, h), tc in zip(text, keep, tess_at)):
+            return text, conf
+        # unread, or a reading the shapes reject (blurred 8 read "3"): templates + shape
+        out = []
+        for ((c, s, mg, g, *_), h), tc in zip(keep, tess_at):
+            if digits.glyph_trusted(s, mg):
+                if not _fits(c, _profile(h)):
+                    return "", None
+                out.append(c)
+                continue
+            x = _decided((c, s, mg, g), h, matcher, tc)
+            if not x:
+                return "", None
+            out.append(x)
+        if not out:
+            return "", None
+        return "".join(out), min(g[1] for g, _ in keep) * 100
+    except Exception:  # noqa: BLE001 - fail safe: no platform rather than a guess
+        log.warning("platform shape check failed", exc_info=True)
+        return "", None
+
+
+def _numeric_read(name: str, cell: np.ndarray, tess: tuple[str, float | None],
+                  matcher: DigitMatcher | None, alt: np.ndarray | None = None
+                  ) -> tuple[str, float | None]:
     """Pick the text of a numeric cell: glyph templates first, Tesseract as fallback.
 
     The returned confidence is Tesseract's when both readers agree; when the
@@ -333,10 +530,87 @@ def _numeric(name: str, cell: np.ndarray, tess: tuple[str, float | None],
     if not trusted:
         if _confirmed(matcher, cell, name, tess[0].replace(" ", "")):
             return m_text, t_conf if t_conf is not None else m_score * 100
+        if name == "no" and t_text and _edge_sliver(matcher, cell, t_text):
+            return t_text, t_conf
+        if name in NEAR_TIE_ONLY and t_text and not _near_tie(matcher, cell, name, t_text):
+            return "", None  # Tesseract's digit is one the templates reject: unread
         return t_text, t_conf
     if m_text == t_text and t_conf is not None:
         return m_text, t_conf
     return m_text, m_score * 100
+
+
+FRAGMENT_MAX_H = 0.25  # a glyph whose ink spans less of the line height is a sliver
+# Columns where Tesseract's text replaces untrusted templates only to settle their near ties
+# (``_near_tie``); anything else is unread. Task 2.3 added "no": every wrong train number of
+# the truth set (20 of 1415, 12 on Departures lines 8-11) was Tesseract's unchecked text
+# over a doubtful glyph (9/0 tie read "3": 7909 -> 7309, 1659 -> 1653; a weak leading "1"
+# dropped or read "7": 1095 -> 95, 16591 -> 76591).
+NEAR_TIE_ONLY = ("platform", "no")
+# NO_FLOOR: on the number, Tesseract never confirms a glyph that matches no template
+# (score < MIN_SCORE): a 5 px sliver at the cell edge read "1" 0.338 became "4011" for the
+# board's 401 under a re-read; half of a "7" cut by the joint ("7" 0.456) gave 79117.
+
+
+SLIVER_MAX_SCORE = 0.40  # a trailing "glyph" matching no digit this well...
+SLIVER_MAX_W = 0.15      # ...and this narrow (x cell height) is a sliver, not a digit
+
+
+def _edge_sliver(matcher, cell: np.ndarray, t_text: str) -> bool:
+    """True when the templates trust every glyph of the number but a last one that is a
+    mere sliver (score < SLIVER_MAX_SCORE, at most SLIVER_MAX_W of the cell height wide)
+    and Tesseract reads exactly the trusted glyphs. Real: IRN 401 on the frames of
+    ocr14_delay100 (arrivals line 0): a 3-5 px sliver at the cell's right edge read "7"
+    0.24 / "1" 0.34 next to a trusted "401"; Tesseract "401". A doubtful real digit (a weak
+    leading "1" 0.52: 1095 read "095") is no sliver."""
+    try:
+        gl = matcher.glyphs(cell, _ALLOWED["no"])
+        spans = digits.segment_spans(cell)
+    except ValueError:
+        return False
+    if len(gl) < 2 or len(gl) != len(spans):
+        return False
+    *body, (_, s, _, *_) = gl
+    x0, x1 = spans[-1][1]
+    return (s < SLIVER_MAX_SCORE and x1 - x0 <= SLIVER_MAX_W * cell.shape[0]
+            and all(digits.glyph_trusted(bs, bm) for _, bs, bm, *_ in body)
+            and "".join(bc for bc, *_ in body) == t_text)
+
+
+def _fragment(score: float, glyph: np.ndarray | None) -> bool:
+    """A "glyph" that is no digit: matches no template (score < MIN_SCORE) and its ink
+    spans under FRAGMENT_MAX_H of the line height (ocr13 152405, platform "11": a sliver
+    in the cell's bottom corner, rows 28-31 of 32, "2" 0.213). A digit cut at the top
+    still spans most of the line."""
+    if glyph is None or score >= digits.MIN_SCORE:
+        return False
+    rows = np.flatnonzero((np.asarray(glyph) > 0.5).any(axis=1))
+    return rows.size == 0 or rows[-1] - rows[0] + 1 < FRAGMENT_MAX_H * glyph.shape[0]
+
+
+def _near_tie(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
+    """True when Tesseract only breaks near ties of the templates: same glyph count, and
+    every character it reads differently is a near-tie candidate of that (untrusted)
+    glyph (``DigitMatcher.near``). Real frame (ocr_truth 121707, platform): a clear 8
+    (templates 8 0.832 / 6 0.811, untrusted) read "3" by Tesseract, ranked 4th (0.746)
+    by the templates: not a tie, so not published. A 6/8 tie decided by Tesseract's "8"
+    (ocr_truth 010407, templates 6 0.778 / 8 0.769) stays. Only a tie between good
+    matches: the best score must reach MIN_SCORE (only the margin failed); a weak glyph
+    (fused, "4" 0.57 / "1" 0.55) is never settled by Tesseract. Any failure: False."""
+    near = getattr(matcher, "near", None)
+    if near is None:
+        return False
+    try:
+        gl = [x for x in matcher.glyphs(cell, _ALLOWED[name]) if not _fragment(x[1], x[3])]
+        floor = digits.MIN_SCORE if name == "no" else 0.0  # NO_FLOOR
+        return len(gl) == len(t_text) and all(
+            (t == c and s >= floor) or (s >= digits.MIN_SCORE
+                                        and not digits.glyph_trusted(s, mg)
+                                        and t in near(g, _ALLOWED[name]))
+            for t, (c, s, mg, g, *_) in zip(t_text, gl))
+    except Exception:  # noqa: BLE001 - fail safe: not a tie, the cell stays unread
+        log.warning("near-tie check failed on a %s cell", name, exc_info=True)
+        return False
 
 
 def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
@@ -360,6 +634,8 @@ def _confirmed(matcher, cell: np.ndarray, name: str, t_text: str) -> bool:
         return False
     m = "".join(ch for ch, *_ in gl)
     weak = [not digits.glyph_trusted(s, mg) for _, s, mg, *_ in gl]
+    if name == "no" and any(s < digits.MIN_SCORE for _, s, *_ in gl):
+        return False  # a glyph matching no template is no digit to confirm (NO_FLOOR)
     n, t = len(m), t_text
     if len(t) == n:  # same length: every doubtful glyph read the same by Tesseract
         return all(not w or t[k] == m[k] for k, w in enumerate(weak))

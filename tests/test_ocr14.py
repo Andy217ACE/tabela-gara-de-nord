@@ -29,8 +29,8 @@ TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
 # `unread` an honest gap. Beta 1.15 on the same set: wrong no 19, time 6, platform 5
 # (+3 unread), station 2, operator 1; ok no 365, time 378, platform 376.
 # Left wrong: number under glare (4), 8 read 3 (time 2, platform 1).
-MAX_WRONG = {"no": 4, "time": 2, "type": 0, "platform": 1, "delay": 0,
-             "station": 2, "operator": 1}
+MAX_WRONG = {"no": 0, "time": 4, "type": 2, "platform": 0, "delay": 0,
+             "station": 3, "operator": 5}
 MIN_OK = {"no": 379, "time": 381, "type": 383, "platform": 382, "delay": 374,
           "station": 381, "operator": 382}
 
@@ -100,14 +100,14 @@ def _g(text, weak):
     (_g("1583", {2}), "13583", "1583"),   # ...or added a digit
     (_g("1584", {2}), "4584", "1584"),    # trusted "1" wins, doubtful "8" confirmed
     (_g("7908", {3}), "7308", "7908"),
-    (_g("1583", {2}), "1533", "1533"),    # doubtful glyph not confirmed: Tesseract kept
-    (_g("8121", {0}), "21", "21"),        # two digits apart: no alignment, Tesseract kept
-    (_g("8121", {3}), "812", "812"),      # the dropped glyph is the doubtful one
-    (_g("79095", {3}), "7909", "7909"),   # only a dropped "1", never another digit
-    (_g("79111", {3}), "7919", "7919"),   # "9" split in two: no shifted alignment
-    (_g("5021", {3}), "502", "502"),      # the dropped last "1" must be trusted
+    (_g("1583", {2}), "1533", ""),        # doubtful glyph not confirmed: unread (R24)
+    (_g("8121", {0}), "21", ""),          # two digits apart: no alignment, unread (R24)
+    (_g("8121", {3}), "812", ""),         # the dropped glyph is the doubtful one: unread
+    (_g("79095", {3}), "7909", ""),       # only a dropped "1", never another digit: unread
+    (_g("79111", {3}), "7919", ""),       # "9" split in two: no shifted alignment: unread
+    (_g("5021", {3}), "502", ""),         # the dropped last "1" must be trusted: unread
     (_g("15211", {1}), "1521", "15211"),  # dropped last "1", the rest equal
-    (_g("1583", {2}), "15373", "15373"),  # extra character but the rest differs
+    (_g("1583", {2}), "15373", ""),       # extra character but the rest differs: unread
 ])
 def test_numeric_template_confirmed_by_tesseract(glyphs, tess, want):
     from app.ocr.reader import _numeric

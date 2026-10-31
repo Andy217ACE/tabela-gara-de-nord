@@ -75,7 +75,10 @@ def _line(debug, board, idx):
 def test_frames_keep_12_rows_per_panel(name):
     rows, _ = _read(name)
     per = {b: sum(r.board == b and bool(r.train_no) for r in rows) for b in reader.BOARDS}
-    assert per == {"arrival": 12, "departure": 12}
+    # 070049 departures line 2 shows 8121 (truth.json); the reader published 2121, now
+    # unread (Ruling R24: a number Tesseract alone read is not published)
+    want = 11 if name == "2026_10_22_070049-e2db40a5" else 12
+    assert per == {"arrival": 12, "departure": want}
 
 
 @pytest.mark.parametrize("name", sorted(CLEAN))
@@ -216,7 +219,7 @@ def test_unread_delay_keeps_the_row_and_reports_why():
 
 def test_line_version_tags_delay_checks_and_retries():
     from app.observations import PROCESSING_VERSION, line_version, parse_line_version
-    assert PROCESSING_VERSION == "ocr-tess-grid-4"  # Beta 1.16 (test_ocr14)
+    assert PROCESSING_VERSION == "ocr-tess-grid-5"  # Beta 1.31 (test_ocr_platform_cut)
     e = {"state": "ok", "fields": {"delay": {"check": "glare"}}}
     assert line_version("v", e) == "v+delay:glare"
     e = {"state": "ok", "fields": {"delay": {"retry": {"variant": "lvl+", "attempts": 1}}}}

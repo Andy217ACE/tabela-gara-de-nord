@@ -128,6 +128,20 @@ SEAM_GAP = 0.13       # pieces of one glyph cut by the joint: at most this far a
                       # height, ~4 px at x3)
 
 
+BAR_MAX_TOP = 0.10   # a top bar cut by the joint: both pieces start this close to the line top
+
+
+def _cut_bar(y: int, h: int, sy: int, sh: int, gap: int, line_top: int, line_h: int) -> bool:
+    """Two pieces of one "7" cut by the joint (Task 2.3, Departures 7907/7917/9107): the
+    left one is the bar and the diagonal (full height), the right one only the bar's end
+    and the diagonal's start (16-19 of 33 px). Both start at the line top, a seam's width
+    apart; ``_glue_seam_split`` also checks they fit one digit (SEAM_SPAN)."""
+    return (1 < gap <= SEAM_GAP * line_h
+            and max(h, sh) >= STEM_MIN_H * line_h
+            and y - line_top <= BAR_MAX_TOP * line_h
+            and sy - line_top <= BAR_MAX_TOP * line_h)
+
+
 def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list[list[int]]:
     """Glue the flag of a "1" back onto its stem.
 
@@ -136,7 +150,7 @@ def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list
     fragment at the top) and the stem (thin, full height) 1-3 px to its right. Measured
     (audit OCR13): 3021 -> 302, 1661 -> 166, 9101 -> 9104. Only that shape is glued: a
     colon (its two dots already merged, as tall as half the line) or a fragment at the
-    bottom of the line is left alone.
+    bottom of the line is left alone. A "7" cut by the joint (``_cut_bar``) is glued too.
     """
     out: list[list[int]] = []
     i = 0
@@ -146,7 +160,8 @@ def _glue_seam_split(boxes: list[list[int]], line_top: int, line_h: int) -> list
             sx, sy, sw, sh = boxes[i + 1]
             gap = sx - (x + w)
             if (sx + sw - x <= SEAM_SPAN * line_h and (gap <= 1 or (
-                    gap <= SEAM_GAP * line_h and min(h, sh) >= STEM_MIN_H * line_h))):
+                    gap <= SEAM_GAP * line_h and min(h, sh) >= STEM_MIN_H * line_h)
+                    or _cut_bar(y, h, sy, sh, gap, line_top, line_h))):
                 # two pieces a hair apart (the joint's dark seam: up to SEAM_GAP x line
                 # height, both nearly the full line height beyond 1 px) and together at most one digit wide: one glyph cut by the joint
                 # ("9" -> "9" + "1": 7909 -> 79091; Beta 1.22: the seam is 2-4 px wide at
@@ -220,14 +235,18 @@ class DigitMatcher:
             boards = tuple(str(b) for b in data["boards"]) if "boards" in data else ()
             return cls(str(data["labels"]), data["templates"], boards)
 
-    def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
-        """(best character, its score 0..1, margin over the runner-up)."""
+    def _scores(self, glyph: np.ndarray, allowed: str) -> list[tuple[float, str]]:
+        """(score 0..1, character) per allowed template, best first."""
         padded = cv2.copyMakeBorder(glyph, _SHIFT, _SHIFT, _SHIFT, _SHIFT,
                                     cv2.BORDER_CONSTANT, value=0)
-        scored = sorted(
+        return sorted(
             ((float(cv2.matchTemplate(padded, tpl, cv2.TM_CCOEFF_NORMED).max()), ch)
              for ch, tpl in zip(self.labels, self.templates) if ch in allowed),
             reverse=True)
+
+    def classify(self, glyph: np.ndarray, allowed: str) -> tuple[str, float, float]:
+        """(best character, its score 0..1, margin over the runner-up)."""
+        scored = self._scores(glyph, allowed)
         if not scored:
             return "", 0.0, 0.0
         runner_up = scored[1][0] if len(scored) > 1 else 0.0
@@ -245,6 +264,14 @@ class DigitMatcher:
             worst = min(worst, score)
             trusted &= score >= MIN_SCORE and margin >= MIN_MARGIN
         return "".join(text), worst, trusted
+
+    def near(self, glyph: np.ndarray, allowed: str) -> str:
+        """Characters the templates cannot tell apart from the best match of a glyph:
+        score within MIN_MARGIN of the best (the near tie that leaves it untrusted)."""
+        scored = self._scores(glyph, allowed)
+        if not scored:
+            return ""
+        return "".join(ch for s, ch in scored if s >= scored[0][0] - MIN_MARGIN)
 
     def glyphs(self, cell: np.ndarray, allowed: str
                ) -> list[tuple[str, float, float, np.ndarray, bool]]:
