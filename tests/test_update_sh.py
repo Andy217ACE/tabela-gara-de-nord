@@ -463,3 +463,21 @@ def test_rollback_leaves_watchdog_timer_disabled_when_it_was_disabled(server):
     assert DISABLE in calls
     assert ENABLE not in calls[restarts[-1]:]                    # stays off, as before
     assert "watchdog timer left disabled" in r.stdout + r.stderr
+
+
+def test_keeps_only_its_own_backups_when_pruning(server):
+    # retenția din update.sh șterge doar copiile de pre-deploy (tabela-<stamp>-v<N>.db)
+    bk = server.data / "backups"
+    bk.mkdir()
+    for i in range(4):
+        (bk / f"tabela-2026010{i}-000000-v2.db").write_bytes(b"x")
+    keep_other = [bk / "tabela-before-merge-20260101-000000-000001.db",
+                  bk / "tabela-before-purge-20260101-000000.db"]
+    for f in keep_other:
+        f.write_bytes(b"x")
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    assert server.run().returncode == 0
+    assert all(f.exists() for f in keep_other)
+    names = sorted(p.name for p in bk.glob("tabela-[0-9]*-v*.db"))
+    assert len(names) == 2 and names[0] == "tabela-20260103-000000-v2.db"

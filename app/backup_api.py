@@ -33,7 +33,7 @@ def make_backup(store_path: str, dest_dir: str | Path, keep: int = KEEP) -> Path
     version = _schema_version(store_path)
     stamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}"  # microsecunde: copii rapide nu se suprascriu
     out = dbbackup._make(store_path, version, dest_dir, stamp=stamp)
-    dbbackup._prune(dest_dir, keep=keep)
+    dbbackup._prune(dest_dir, dbbackup.PREFIX, keep)
     log.info("copie de siguranță: %s", out)
     return out
 

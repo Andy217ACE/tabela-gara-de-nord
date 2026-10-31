@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app import dbbackup
+from app import backup_api, dbbackup
 from app.store import SCHEMA_VERSION, Store
 
 
@@ -324,3 +324,61 @@ def test_fallback_keeps_only_the_newest_backups(db, monkeypatch):
     assert len(names) == dbbackup.BACKUP_KEEP
     assert any(n.endswith("-v8.db") for n in names)  # the new one is kept
     assert "tabela-20260100-000000-v7.db" not in names  # the oldest went
+
+
+# -- retenție pe familii: o copie de pre-migrare nu șterge copiile de merge sau de purjare ------
+
+MERGE_BACKUPS = ["tabela-before-merge-20261030-100000-000001.db",
+                 "tabela-before-merge-20261030-100000-000002.db"]
+PURGE_BACKUPS = ["tabela-before-purge-20261030-100000.db",
+                 "tabela-before-purge-20261030-110000.db"]
+
+
+def _old_pre_migration(directory: Path, n: int) -> list[Path]:
+    """`n` copii de pre-migrare (schema v7), din zile diferite, în ordine crescătoare."""
+    out = []
+    for i in range(1, n + 1):
+        p = directory / f"tabela-2020010{i}-120000-v7.db"
+        p.write_bytes(b"x")
+        out.append(p)
+    return out
+
+
+def test_prune_deletes_only_its_family_and_orders_by_the_name_timestamp(tmp_path):
+    d = tmp_path / "bk"
+    d.mkdir()
+    # în aceeași secundă, copia fără micro-secunde ("-v7") ar părea mai nouă în ordinea
+    # literelor decât cea cu micro-secunde ("-000500-v7"), deși e mai veche
+    fam = ["tabela-20200101-120000-v7.db", "tabela-20200101-120000-000500-v7.db",
+           "tabela-20191231-235959-v7.db"]
+    tmp_copy = "tabela-20200101-120000-000500-v7.db.tmp"
+    for n in fam + MERGE_BACKUPS + PURGE_BACKUPS + [tmp_copy]:
+        (d / n).write_bytes(b"x")
+    dbbackup._prune(d, dbbackup.PREFIX, keep=1)
+    assert sorted(p.name for p in d.iterdir()) == sorted(
+        ["tabela-20200101-120000-000500-v7.db", tmp_copy] + MERGE_BACKUPS + PURGE_BACKUPS)
+
+
+@pytest.mark.parametrize("via", ["make_backup", "fallback"])
+def test_pre_migration_prune_never_touches_merge_or_purge_backups(db, monkeypatch, via):
+    bk = db.parent / "backups"
+    if via == "make_backup":  # restore.py: copia de siguranță în directorul de backup
+        d = bk
+    else:  # migrarea fără directorul de backup: copia merge în directorul de rezervă
+        _deny(monkeypatch, bk)
+        d = db.parent / dbbackup.FALLBACK_DIRNAME
+        d.mkdir()
+    old = _old_pre_migration(d, dbbackup.BACKUP_KEEP + 3)  # 8 copii, keep = 5
+    others = []
+    for name in MERGE_BACKUPS + PURGE_BACKUPS:
+        others.append(d / name)
+        others[-1].write_bytes(b"precious")
+    if via == "make_backup":
+        new = backup_api.make_backup(str(db), d)
+    else:
+        new = dbbackup.ensure(str(db), 8)
+    assert all(p.exists() for p in others)  # restore points: never removed by this family
+    assert Path(new).exists()
+    # 8 vechi + 1 nou, keep = 5: se șterg cei 4 mai vechi, nimic altceva
+    assert [p for p in old if not p.exists()] == old[:4]
+    assert all(p.exists() for p in old[4:])

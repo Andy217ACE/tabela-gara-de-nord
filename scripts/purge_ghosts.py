@@ -159,6 +159,8 @@ def _archive(conn, batch, table, rows, now):
 
 def backup(db: str, backup_dir: str) -> str:
     Path(backup_dir).mkdir(parents=True, exist_ok=True)
+    # fără retenție: copiile de dinaintea purjării nu se șterg automat (sunt puncte de
+    # restaurare); niciun prune nu le atinge (vezi app/dbbackup._prune, familia proprie)
     dest = Path(backup_dir) / f"tabela-before-purge-{datetime.now():%Y%m%d-%H%M%S}.db"
     src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     dst = sqlite3.connect(dest)
