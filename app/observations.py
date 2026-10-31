@@ -306,24 +306,33 @@ def capture_relpath(when: datetime, image_hash: str) -> str:
     return f"{u:%Y/%m/%d}/{u:%H%M%S}-{image_hash[:8]}.jpg"
 
 
-def min_free_bytes() -> int:
+def min_free_mb_env() -> int:
     try:
         mb = int(os.environ.get("CAPTURE_MIN_FREE_MB", MIN_FREE_MB_DEFAULT))
     except ValueError:
         mb = MIN_FREE_MB_DEFAULT
+    return max(0, mb)
+
+
+def min_free_bytes(store=None) -> int:
+    """Pragul de spațiu liber: din pagina Setări (store dat) sau din CAPTURE_MIN_FREE_MB."""
+    from app import admin_settings  # import local: admin_settings importă corrections
+    mb = min_free_mb_env() if store is None else admin_settings.effective(
+        store, "capture_min_free_mb", min_free_mb_env())
     return max(0, mb) * 1024 * 1024
 
 
-def _disk_ok(root: Path, need: int) -> bool:
+def _disk_ok(root: Path, need: int, floor: int | None = None) -> bool:
     """Enough free space for one more image while keeping the floor free."""
     try:
         probe = root if root.exists() else root.parent
         free = shutil.disk_usage(probe).free
     except OSError:
         return True  # cannot tell: the write itself will fail cleanly if needed
-    if free - need < min_free_bytes():
+    floor = min_free_bytes() if floor is None else floor
+    if free - need < floor:
         log.warning("capture image not saved: only %d MB free (floor %d MB)",
-                    free // 2**20, min_free_bytes() // 2**20)
+                    free // 2**20, floor // 2**20)
         return False
     return True
 
@@ -381,7 +390,8 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
 
     rel = None
     # retention 0 keeps no image at all; a nearly full disk keeps metadata only
-    if capture_dir is not None and retention_days > 0             and _disk_ok(Path(capture_dir), len(image_bytes)):
+    if capture_dir is not None and retention_days > 0 and _disk_ok(
+            Path(capture_dir), len(image_bytes), min_free_bytes(store)):
         rel = capture_relpath(when, h)
         if not _write_file(Path(capture_dir), rel, image_bytes):
             rel = None

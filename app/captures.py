@@ -23,6 +23,7 @@ from pathlib import Path, PurePosixPath
 import cv2
 import numpy as np
 
+from app import admin_settings
 from app.observations import parse_line_version
 from app.store import TZ
 
@@ -141,8 +142,9 @@ async def retention_loop(store, settings: CaptureSettings, stop: asyncio.Event, 
             pass
         delay = interval
         try:
-            res = await asyncio.to_thread(run_retention, store, settings.dir,
-                                          settings.retention_days)
+            days = await asyncio.to_thread(admin_settings.effective, store,
+                                           "capture_retention_days", settings.retention_days)
+            res = await asyncio.to_thread(run_retention, store, settings.dir, days)
             if res["candidates"]:
                 log.info("capture retention: %s", res)
         except Exception:
@@ -363,9 +365,11 @@ def make_on_capture(store, settings: CaptureSettings):
                 when = datetime.fromtimestamp(ts, TZ)
                 rows, debug = await asyncio.to_thread(corrections.correct_frame, store,
                                                       rows, debug, when)
+            days = await asyncio.to_thread(admin_settings.effective, store,
+                                           "capture_retention_days", settings.retention_days)
             await asyncio.to_thread(
                 observations.record_capture, store, image, rows, debug, ts,
-                capture_dir=settings.dir, retention_days=settings.retention_days,
+                capture_dir=settings.dir, retention_days=days,
                 duration_ms=duration_ms, error=error)
         except Exception:
             log.exception("capture recording failed (board ingest unaffected)")
