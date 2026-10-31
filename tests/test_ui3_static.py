@@ -90,8 +90,9 @@ def test_route_change_runs_inside_a_view_transition_and_tabela_is_left_alone():
     assert re.search(r'name\s*!==\s*"tabela"', app)               # the page-enter fallback never touches the board
     css = read("ui2.css")
     assert "view-transition" in css and "::view-transition-old(root)" in css
-    # the live board's own files are not part of this round
-    changed = subprocess.run(["git", "diff", "--name-only", "origin/main", "--", "web/panel.js", "web/panel.css",
+    # the live board's own files are not part of this round (Beta 1.41 changes panel.js/panel.css on purpose:
+    # the last safe delay reading, see test_brand_theme; weather and follows stay untouched)
+    changed = subprocess.run(["git", "diff", "--name-only", "origin/main", "--",
                               "web/weather.js", "web/weather.css", "web/follows.js"],
                              cwd=ROOT, capture_output=True, text=True)
     if changed.returncode == 0:
