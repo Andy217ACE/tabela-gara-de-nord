@@ -12,13 +12,13 @@
   var APPLY = {
     word: "APLICA", title: "Aplică fuziunea", path: "/api/admin/tools/dupes/apply",
     body: { min_age_min: MIN_AGE_MIN },
-    hint: "Se face o copie de siguranță a bazei înainte. Fuziunea se poate anula cu „Restaurează ultimul lot”.",
+    hint: "Se face o copie de siguranță a bazei înainte. Fuziunea se poate anula cu „Restaurează fuziunile”.",
     submit: "Confirmă aplicarea"
   };
   var RESTORE = {
-    word: "RESTAUREAZA", title: "Restaurează ultimul lot", path: "/api/admin/tools/dupes/restore",
+    word: "RESTAUREAZA", title: "Restaurează fuziunile", path: "/api/admin/tools/dupes/restore",
     body: { batch: null },
-    hint: "Se pun înapoi rândurile arhivate de ultimul lot de fuziune.",
+    hint: "Se pun înapoi rândurile arhivate de fuziunile făcute până acum (toate loturile).",
     submit: "Confirmă restaurarea"
   };
 
@@ -248,7 +248,7 @@
     var apply = el("button", "btn btn-ghost btn-sm", "Aplică fuziunea…");
     apply.type = "button";
     apply.addEventListener("click", function () { openConfirm(APPLY); });
-    var restore = el("button", "btn btn-ghost btn-sm", "Restaurează ultimul lot…");
+    var restore = el("button", "btn btn-ghost btn-sm", "Restaurează fuziunile…");
     restore.type = "button";
     restore.addEventListener("click", function () { openConfirm(RESTORE); });
     bar.appendChild(refresh);
