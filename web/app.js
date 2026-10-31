@@ -172,7 +172,10 @@
     var d = Math.max(0, t.delay_min | 0);
     // never "la timp" unless the delay cell was actually read (API `delay_read`)
     var read = t.delay_read === true;
-    var level = read ? delayLevel(d) : "unread";
+    // unreadable now (glare): the train's last safe reading, labelled with its age
+    var lastAge = !read && typeof t.delay_last_read_age_s === "number" ? t.delay_last_read_age_s : null;
+    var lastRead = lastAge !== null;
+    var level = read || lastRead ? delayLevel(d) : "unread";
     var where = c.board === "arrivals" ? "din " : "spre ";
     c.train = t;
     c.li.dataset.delay = level;
@@ -216,13 +219,21 @@
     c.op.title = t.operator ? t.operator + (unsure ? " (" + UNSURE + ")" : "") : "";
 
     c.delay.className = "delay delay-" + level;
+    var ageMin = lastRead ? Math.max(0, Math.round(lastAge / 60)) : 0;
+    var ageTxt = ageMin < 1 ? "acum sub 1 min" : "acum " + ageMin + " min";
+    var valTxt = level === "unread" ? "necitit" : level === "ok" ? "la timp" : "+" + d + " min";
     c.delay.replaceChildren(
       icon(level === "ok" ? ICONS.ok : level === "minor" || level === "unread" ? ICONS.clock : ICONS.alert),
-      document.createTextNode(level === "unread" ? "necitit" : level === "ok" ? "la timp" : "+" + d + " min")
+      document.createTextNode(valTxt)
     );
+    if (lastRead) {
+      c.delay.append(document.createTextNode(" (ultima citire " + ageTxt + ")"));
+      c.delay.classList.add("delay-last");
+    }
     c.delay.setAttribute("aria-label", level === "unread" ? "Întârziere necitită"
-      : level === "ok" ? "La timp" : "Întârziere " + d + " minute");
-    c.delay.title = level === "unread" ? "Celula de întârziere nu a putut fi citită de pe tabela CFR" : "";
+      : (level === "ok" ? "La timp" : "Întârziere " + d + " minute") + (lastRead ? ", ultima citire " + ageTxt : ""));
+    c.delay.title = level === "unread" ? "Celula de întârziere nu a putut fi citită de pe tabela CFR"
+      : lastRead ? "Reflexie pe rând: afișăm ultima întârziere citită sigur, " + ageTxt : "";
 
     var known = t.platform != null && t.platform !== "";
     c.plat.className = known ? "plat" : "plat plat-unknown";

@@ -969,6 +969,7 @@ main {
 .delay-ok { color: var(--ok); background: var(--ok-bg); }
 .h-truncated { color: var(--warn); font-weight: 600; }
 .delay-unread { color: var(--text-2); background: var(--chip-bg); }
+.delay.delay-last { font-style: italic; }
 .f-sub .delay-unread { padding: 0 6px; border-radius: 6px; font-style: italic; }
 .delay-minor { color: var(--warn); background: var(--warn-bg); }
 .delay-major { color: var(--bad); background: var(--bad-bg); }
