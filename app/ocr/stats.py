@@ -33,6 +33,22 @@ def _full(f: dict) -> bool:
     return bool(boards) and all(b["rows"] == EXPECTED_ROWS for b in boards.values())
 
 
+def unread_rate_1h() -> tuple[float | None, int]:
+    """(share of text lines left unread over the window, number of frames in it).
+
+    A text line is one read as a row or left unread (an empty line has no text and is not
+    counted). No text in the window gives None, never 0: nothing was read, not all right.
+    """
+    with _lock:
+        frames = list(_frames)
+    unread = text = 0
+    for f in frames:
+        for b in (f.get("boards") or {}).values():
+            unread += b["unread"]
+            text += b["rows"] + b["unread"]
+    return (unread / text if text else None), len(frames)
+
+
 def snapshot() -> dict:
     """{expected_rows, last: last frame summary or None, window: aggregates}."""
     with _lock:
