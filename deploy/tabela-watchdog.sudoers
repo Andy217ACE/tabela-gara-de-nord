@@ -1,0 +1,1 @@
+tabela ALL=(root) NOPASSWD: /bin/systemctl restart tabela
