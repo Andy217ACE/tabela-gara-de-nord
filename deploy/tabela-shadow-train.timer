@@ -1,0 +1,13 @@
+# © 2026 Andy217Ace
+# Porneste tabela-shadow-train.service zilnic (ora sistemului). Persistent: o rulare ratata
+# (server oprit) se face la urmatoarea pornire.
+[Unit]
+Description=Tabela Gara de Nord - antrenare umbra zilnic
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=tabela-shadow-train.service
+
+[Install]
+WantedBy=timers.target
