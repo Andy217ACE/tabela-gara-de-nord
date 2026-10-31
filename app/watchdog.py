@@ -77,8 +77,16 @@ def health_ok(url: str, timeout_s: float = CHECK_TIMEOUT_S) -> bool:
     return r.status_code == 200 and isinstance(r.json(), dict)
 
 
+SUDO_RESTART = ("/usr/bin/sudo", "-n", "/bin/systemctl", "restart")  # deploy/tabela-watchdog.sudoers
+
+
 def restart_service(name: str) -> None:
-    subprocess.run(["systemctl", "restart", name], check=False, timeout=60)
+    """Restart `name` as root through sudo: the watchdog runs as the `tabela` user, and
+    sudoers allows exactly `systemctl restart tabela` (no other command, no password).
+    No shell: the argument list goes to sudo as is."""
+    r = subprocess.run([*SUDO_RESTART, name], check=False, timeout=60)
+    if r.returncode != 0:
+        log.error("watchdog: sudo restart of %s failed (exit %s)", name, r.returncode)
 
 
 def _load_state(path: Path) -> dict | None:

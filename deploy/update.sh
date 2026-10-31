@@ -121,6 +121,18 @@ install_unit() {
 # timer-ul se activează doar dacă fișierul lui există. Repornește `tabela` (root).
 install_watchdog() {
     local u src dst changed=0
+    # sudoers rule for the watchdog's restart (deploy/tabela-watchdog.sudoers): validated
+    # with visudo before it goes into /etc/sudoers.d (a broken file would break sudo)
+    src="$APP_DIR/deploy/tabela-watchdog.sudoers"
+    dst="${WD_SUDOERS_DST:-/etc/sudoers.d/tabela-watchdog}"
+    if [ -f "$src" ] && ! cmp -s "$src" "$dst" 2>/dev/null; then
+        visudo -cf "$src" >/dev/null || abort_before_restart "watchdog: sudoers invalid"
+        install -m 440 "$src" "$dst" || abort_before_restart "watchdog: nu pot instala sudoers"
+    fi
+    # the state file is written by the watchdog as the service user
+    if [ -n "$SVC_OWNER" ] && [ -f "$DATA_DIR/watchdog.json" ]; then
+        $CHOWN "$SVC_OWNER" "$DATA_DIR/watchdog.json" || abort_before_restart "watchdog: chown state"
+    fi
     for u in tabela-watchdog.service tabela-watchdog.timer; do
         src="$APP_DIR/deploy/$u"
         dst="${WD_UNIT_DIR:-/etc/systemd/system}/$u"
