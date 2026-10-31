@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.39 — 2026-10-31
+
+Citirea OCR a tablei este mai prudentă: o cifră pe care o citește doar Tesseract nu mai este publicată. Când citirea nu e sigură, celula rămâne necitită, nu primește o cifră greșită. Schema bazei rămâne v9.
+
+### Corectat
+- **Peron tăiat de bandă**: peroanele tăiate sau reflectate sunt citite prin șabloane. Tesseract decide doar între șabloanele aproape egale și doar cu scor suficient; altfel celula rămâne necitită.
+- **Număr de plecare (rândurile 9 și 11)**: o cifră citită doar de Tesseract nu se publică.
+- **Celule goale sub reflexie**: rămân goale; cifra 8 se publică doar când are gaura de jos.
+- **Recuperarea peronului**: se aplică doar când există un singur candidat plauzibil; cu mai mulți candidați, celula rămâne necitită.
+
+### Teste
+- Setul de adevăr este completat cu cadre reale de pe server. Hold-out-ul de 21 de cadre (22–27.10) nu a fost folosit la reglare: 0 cifre greșite la peron.
+
 ## Beta 1.38 — 2026-10-31
 
 Predicția întârzierii finale are o poartă de publicare: nu se arată nimic public până când backtestul trece pragurile. Schema bazei rămâne v9.
