@@ -81,12 +81,13 @@ def _recent_in(d: Path, version: int, now: float | None = None) -> Path | None:
     return best
 
 
-def _make(db_path: str, version: int, directory: Path) -> Path:
+def _make(db_path: str, version: int, directory: Path, stamp: str | None = None) -> Path:
     """Online backup into `directory`; raises OSError / sqlite3.Error on failure.
     The copy is written as `<name>.db.tmp` (never matched as a backup) and renamed to
     its final name only after its integrity check passed: a backup that fails half-way
     leaves nothing that a later start could take for a backup."""
-    dest = directory / f"tabela-{datetime.now():%Y%m%d-%H%M%S}-v{version}.db"
+    stamp = stamp or f"{datetime.now():%Y%m%d-%H%M%S}"
+    dest = directory / f"tabela-{stamp}-v{version}.db"
     tmp = dest.with_name(dest.name + ".tmp")
     src = dst = None
     try:
@@ -94,6 +95,7 @@ def _make(db_path: str, version: int, directory: Path) -> Path:
         src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         dst = sqlite3.connect(str(tmp))
         src.backup(dst)
+        dst.execute("PRAGMA journal_mode = DELETE")  # a single file: no -wal beside a copy
         ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
         dst.close()
         dst = None
@@ -118,12 +120,12 @@ def _make(db_path: str, version: int, directory: Path) -> Path:
             pass
 
 
-def _prune(directory: Path) -> None:
-    """Keep the newest BACKUP_KEEP `tabela-*.db` in `directory` (names sort by time)."""
+def _prune(directory: Path, keep: int = BACKUP_KEEP) -> None:
+    """Keep the newest `keep` `tabela-*.db` in `directory` (names sort by time)."""
     try:
         old = sorted((p for p in directory.iterdir()
                       if p.name.startswith("tabela-") and p.name.endswith(".db")),
-                     key=lambda p: p.name, reverse=True)[BACKUP_KEEP:]
+                     key=lambda p: p.name, reverse=True)[keep:]
         for p in old:
             p.unlink(missing_ok=True)
     except OSError as e:
