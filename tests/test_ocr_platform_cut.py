@@ -35,8 +35,7 @@ import pytest
 
 from app.ocr import truth
 from app.ocr.reader import read_board_debug
-
-FIX = Path(__file__).parent / "fixtures"
+from tests.ocr_truth_images import FIX, PRIVATE, frame_path, read_frame
 TRUTH_PATH = FIX / "ocr_truth" / "truth.json"
 BASELINE = FIX / "ocr_truth" / "baseline-1.31.json"
 TRUTH = truth.load(TRUTH_PATH)
@@ -81,7 +80,7 @@ def measure() -> dict:
     """Run the reader on the new frames and build the baseline document."""
     per_frame = {}
     for frame in NEW_FRAMES:
-        _, debug = read_board_debug((FIX / f"{frame}.jpg").read_bytes(), budget_s=60.0)
+        _, debug = read_board_debug(read_frame(frame), budget_s=60.0)
         lines = truth.lines_of(debug)
         per_frame[frame] = {
             "platform": _count(_cells(frame, lines, "platform")),
@@ -123,11 +122,17 @@ def record_baseline() -> None:
 def test_new_frames_are_fully_labelled():
     assert len(NEW_FRAMES) >= 10
     for frame in NEW_FRAMES:
-        assert (FIX / f"{frame}.jpg").exists(), frame
         assert set(TRUTH["frames"][frame]) == {"arrival", "departure"}
         for lines in TRUTH["frames"][frame].values():
             assert len(lines) == 12
             assert all(set(truth.FIELDS) <= set(line) for line in lines)
+
+
+def test_new_frames_images_are_present():
+    if not PRIVATE.is_dir():
+        pytest.skip(f"directorul privat cu capturi lipseste: {PRIVATE} (seteaza OCR_TRUTH_DIR)")
+    missing = [f for f in NEW_FRAMES if not frame_path(f).is_file()]
+    assert not missing, missing
 
 
 def test_baseline_recorded():
@@ -186,7 +191,7 @@ _reads: dict[str, dict] = {}
 def _lines(frame: str, image: bytes | None = None, key: str | None = None) -> dict:
     key = key or frame
     if key not in _reads:
-        data = image if image is not None else (FIX / f"{frame}.jpg").read_bytes()
+        data = image if image is not None else read_frame(frame)
         _reads[key] = truth.lines_of(read_board_debug(data, budget_s=60.0)[1])
     return _reads[key]
 

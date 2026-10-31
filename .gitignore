@@ -10,3 +10,7 @@ data/*
 !data/operators.txt
 !data/stations_seed.txt
 !tests/fixtures/*.db
+
+# capturi reale (repo public): imaginile setului de adevar sunt locale
+tests/fixtures/ocr_truth/private/
+tests/fixtures/ocr_truth/**/*.jpg
