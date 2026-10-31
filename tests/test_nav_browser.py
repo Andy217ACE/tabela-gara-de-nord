@@ -19,7 +19,7 @@ IOS_DESKTOP_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/6
                   "(KHTML, like Gecko) Version/18.0 Safari/605.1.15")
 NAV = [("#", "Tabelă"), ("#istoric", "Istoric"), ("#urmarite", "Urmărite"),
        ("#trenuri", "Trenuri"), ("#statistici", "Statistici"), ("#clasamente", "Clasamente"),
-       ("#statii", "Stații")]
+       ("#statii", "Stații"), ("#sistem", "Sistem")]
 
 # name: (context options, desktop_site) — desktop_site drops <meta name=viewport>, which is
 # what Chrome Android / Safari iOS do in „desktop site” mode (layout viewport 980 px).

@@ -148,7 +148,7 @@
       err.hidden = true;
       fetchJson("/api/system").then(function (d) {
         render(d);
-        loadAdmin();
+        if (d.admin) loadAdmin();  // anonymous visitors get no admin request (no 503 noise)
       }, function () {
         err.hidden = false;
       });

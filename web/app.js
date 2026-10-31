@@ -567,7 +567,6 @@
 
   window.TabelaApp = window.TabelaApp || {};
   window.TabelaApp.views = window.TabelaApp.views || {};
-  // „Setări” (#setari, admin): formularul vine din setari.js (încărcat cu defer)
   window.TabelaApp.views.setari = {
     show: function () {
       if (window.TabelaSetari) window.TabelaSetari.mount($("view-setari"));
