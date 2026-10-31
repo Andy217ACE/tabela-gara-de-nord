@@ -5,6 +5,57 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.38 — 2026-10-31
+
+Predicția întârzierii finale are o poartă de publicare: nu se arată nimic public până când backtestul trece pragurile. Schema bazei rămâne v9.
+
+### Nou
+- **Teste dedicate predicției** (`tests/test_predict.py`): ierarhia de nivele, pragurile de n și poarta de publicare.
+- **Date de intrare read-only**: predicția citește doar `services`, `service_quality` și `events`.
+- **Predicție a întârzierii finale, cu poartă** (`app/predict.py`, Val 5b): mediana întârzierilor confirmate ale aceluiași tren sau ale stației, cu interval P25–P75 și N. Nu scrie în baza de date. Ierarhia: tren + stație + bord + zi a săptămânii (n ≥ 10), apoi tren + bord, apoi stație + bord + oră + zi (n ≥ 30).
+- **Backtest read-only** (`scripts/backtest_delay.py --db COPIE.db`): refuză calea de producție și deschide copia în `mode=ro`; afișează MAE față de linia de bază „ultima întârziere citită”.
+
+### Neexpus încă
+- Predicția **nu are rută publică** și nu apare în interfață. Ruta `GET /api/trains/{no}/prediction` nu este adăugată în această versiune. Publicarea cere cel puțin 30 de zile confirmate și cel puțin 100 de predicții în backtest, plus decizia pozitivă a porții (`gate`).
+
+## Beta 1.37 — 2026-10-31
+
+Comparație a întârzierii pe sezoane, corelată cu vremea. Corelație, nu cauzalitate: fiecare sezon are o notă explicită.
+
+### Nou
+- **Sezoane și meteo** (`app/seasons.py`, Val 5a): `GET /api/stats/seasons`, cu aceiași parametri ca `/api/stats/overview` (`board`, `from`, `to`, `prag`, `min`, `doar_confirmate`). Grupează pe precipitații și pe temperatură, excluzând zilele cu schimbare de orar. Sub 30 de zile eligibile pe sezon, nu se afișează cifre.
+
+### Neexpus încă
+- **Pagina Sezoane nu este expusă**: lipsesc clasele CSS `sz-*` (`sezoane.css` sau reguli în `style.css`) și nu există rută de navigare. `sezoane.js` este încărcat, dar fără punct de montare public. Marcat ca neterminat.
+
+## Beta 1.36 — 2026-10-31
+
+### Nou
+- **Alerte Telegram pentru trenurile urmărite** (`app/telegram.py`, Val 4d): un al doilea canal, lângă Web Push, trimis doar administratorului, către un singur chat. Activ doar dacă sunt setate `TELEGRAM_BOT_TOKEN` și `TELEGRAM_CHAT_ID`; implicit oprit.
+- Fără reîncercări: fiecare încercare se notează în `TELEGRAM_STATE_PATH` (implicit `data/telegram_sent.json`), ca un eveniment deja trimis să nu fie retrimis după repornire. Tokenul nu apare în log și nu este returnat.
+
+## Beta 1.35 — 2026-10-31
+
+### Nou
+- **Setări din admin** (`#setari`, `app/admin_settings.py`, `web/setari.js`): retenția imaginilor capturate și pragul minim de spațiu liber pe disc. Valorile din tabelul `settings` au prioritate; fără rând rămâne valoarea din mediu. Fiecare schimbare ajunge în `correction_audit` (cine, când, ce).
+- **Cheie de administrare strictă, opțională**: `ADMIN_TOKEN_STRICT=1` în `/etc/tabela.env`. Implicit este oprită. Procedura de rotație: `docs/admin-rotatie-cheie.md`.
+
+## Beta 1.34 — 2026-10-31
+
+### Nou
+- **Copii de siguranță** (`app/backup_api.py`): copie online, consistentă cu WAL, verificată cu `integrity_check`, apoi retenție de 5 copii pe server. Copiile nu se descarcă din interfață.
+- **Restaurare doar din linia de comandă** (`scripts/restore_db.py`, `app/restore.py`): cere `--confirm RESTAUREZ`, refuză dacă serviciul rulează, salvează starea curentă înainte și înlocuiește baza atomic. Nu există restaurare din interfața web.
+- **Export CSV al istoricului**: `GET /api/export/history.csv?from=AAAA-LL-ZZ&to=AAAA-LL-ZZ[&train=NR]`. Maximum 366 de zile și 50 000 de rânduri (`X-Truncated: 1` când se depășește). Limită de 30 de cereri pe minut per IP. Răspuns `Cache-Control: no-store`.
+
+## Beta 1.33 — 2026-10-31
+
+### Nou
+- **Pagina Sistem** (`#sistem`, `web/sistem.js`, `app/system_status.py`): dacă panoul este viu, ultima citire reușită, rata de rânduri necitite din ultima oră, spațiul pe disc și mărimea bazei. `GET /api/system` este public și minimal; `GET /api/admin/system` adaugă detalii pentru administrator. Valorile lipsă apar ca „necunoscut”, nu ca 0.
+- **Watchdog** (`app/watchdog.py`, `deploy/tabela-watchdog.service` și `.timer`): verifică `/api/health` la fiecare minut și repornește `tabela` după 3 verificări eșuate la rând, cel mult o dată la 10 minute. Nu repornește nginx. Unit-ul rulează ca root, fiindcă repornește serviciul; `deploy/update.sh` îl instalează și activează timer-ul.
+
+### Neexpus încă
+- Serviciile watchdog nu sunt pornite până la primul `deploy/update.sh` pe server, care le instalează și le activează.
+
 ## Beta 1.32 — 2026-10-28
 
 Trenurile care apar **în același timp** pe tabelă nu mai sunt comasate niciodată din greșeală. **Tabela** (Carduri, Panou, Ecran complet), paginile publice și API-ul nu se schimbă; schema bazei rămâne v9.
