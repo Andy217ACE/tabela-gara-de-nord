@@ -112,3 +112,16 @@ def test_listed_or_recent_ghost_never_purged(tmp_path):
     recent = {r["id"] for r in pg.candidates(c, 60, now=datetime(2026, 10, 21, 1, 0).astimezone())}
     assert recent == set()
     c.close()
+
+
+def test_purge_backups_are_never_pruned(tmp_path, capsys):
+    # copiile de dinaintea purjării nu au retenție: nicio copie veche nu se șterge
+    db, _ = _db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    old = [bk / f"tabela-before-purge-2020010{i}-120000.db" for i in range(1, 9)]
+    for f in old:
+        f.write_bytes(b"x")
+    assert pg.main(["--db", str(db), "--apply", "--backup-dir", str(bk)]) == 0
+    assert Path(json.loads(capsys.readouterr().out)["backup"]).exists()
+    assert all(f.exists() for f in old)

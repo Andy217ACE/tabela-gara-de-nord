@@ -207,8 +207,10 @@ backup_db() {
         return 1
     fi
     echo "db backup: $dest"
-    # keep only the newest $BACKUP_KEEP (names sort by time)
-    find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-*.db' -print | sort -r |
+    # keep only the newest $BACKUP_KEEP of THIS family (tabela-<stamp>-v<N>.db, names sort by
+    # time); the other families in the directory (tabela-before-merge-*, tabela-before-purge-*)
+    # are restore points and must not match
+    find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-[0-9]*-v[0-9]*.db' -print | sort -r |
         tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do rm -f -- "$old"; done
     # tell the app a backup exists (app/dbbackup.py: proof when it cannot see the backup
     # itself); written last, only after a good backup, readable by the service

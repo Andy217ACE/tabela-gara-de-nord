@@ -655,3 +655,19 @@ def test_apply_prunes_and_returns_the_new_backup(tmp_path, capsys):
     rep = _run(["--db", db, "--apply", "--backup-dir", str(bk)], capsys)
     assert Path(rep["backup"]).exists()
     assert len(list(bk.glob("tabela-before-merge-*.db"))) == md.BACKUP_KEEP
+
+
+def test_merge_retention_never_touches_pre_migration_backups(tmp_path, monkeypatch):
+    # retenția merge-ului șterge doar tabela-before-merge-*; copiile de pre-migrare
+    # (tabela-<stamp>-v<N>.db) din același director rămân
+    db = _tiny_db(tmp_path)
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    pre = [bk / f"tabela-2020010{i}-120000-v7.db" for i in range(1, 10)]
+    merge = [bk / f"tabela-before-merge-2020{i:04d}-000000-000000.db" for i in range(1, 13)]
+    for f in pre + merge:
+        f.write_bytes(b"x")
+    _fixed_now(monkeypatch, datetime(2026, 10, 31, 12, 0, 0, 0))
+    md.backup(db, str(bk))
+    assert all(f.exists() for f in pre)
+    assert len(list(bk.glob("tabela-before-merge-*.db"))) == md.BACKUP_KEEP
