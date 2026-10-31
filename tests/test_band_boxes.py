@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from app.ocr import preprocess, reader
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures" / "band_group4.jpg"
 
@@ -41,7 +42,7 @@ def _glyph_rows(gray: np.ndarray, box: tuple[int, int, int, int]) -> tuple[int, 
 
 @pytest.fixture(scope="module")
 def panels():
-    img = cv2.imread(str(FIX))
+    img = cv2.imread(str(capture(FIX)))
     assert img is not None
     return [(reader._Panel(half), cv2.cvtColor(half, cv2.COLOR_BGR2GRAY).astype(float))
             for half, _ in preprocess.split_boards_offsets(img)]

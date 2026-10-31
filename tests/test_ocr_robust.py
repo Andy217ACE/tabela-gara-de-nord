@@ -27,6 +27,7 @@ import numpy as np
 import pytest
 
 from app.ocr.reader import read_board
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 FIXTURES = ("board_1", "board_2")
@@ -143,7 +144,7 @@ def align(rows, golden) -> list[tuple]:
 
 @lru_cache(maxsize=None)
 def _image(name: str) -> np.ndarray:
-    return cv2.imread(str(FIX / f"{name}.jpg"), cv2.IMREAD_COLOR)
+    return cv2.imread(str(capture(FIX / f"{name}.jpg")), cv2.IMREAD_COLOR)
 
 
 @lru_cache(maxsize=None)

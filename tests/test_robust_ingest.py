@@ -16,6 +16,7 @@ import pytest
 from app import poller, rejected
 from app.models import Row
 from app.store import (CONFIRM_CONFIDENCE, PARTIAL_ACCEPT_AFTER, Store)
+from tests.ocr_truth_images import capture
 
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
@@ -206,7 +207,7 @@ def _augmented_two_rows() -> bytes:
     """board_1 with the arrivals panel blanked below its second row (blue)."""
     from app.ocr import preprocess, reader
 
-    img = cv2.imread(str(FIX / "board_1.jpg"))
+    img = cv2.imread(str(capture(FIX / "board_1.jpg")))
     (arr, ax), _ = preprocess.split_boards_offsets(img)
     y0 = reader._cell_grid_geo(arr)[2][1]["time"][1] - 2
     rows = preprocess.panel_rows(arr)
@@ -220,7 +221,7 @@ def _augmented_two_rows() -> bytes:
 def test_augmented_frame_with_two_arrival_rows_is_rejected_for_arrivals(store):
     from app.ocr.reader import read_board
 
-    full = read_board((FIX / "board_1.jpg").read_bytes())
+    full = read_board(capture(FIX / "board_1.jpg").read_bytes())
     partial = read_board(_augmented_two_rows())
     assert sum(r.board == "arrival" for r in partial) == 2
     assert sum(r.board == "departure" for r in partial) >= 10

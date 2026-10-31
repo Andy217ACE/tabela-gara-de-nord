@@ -11,13 +11,14 @@ import pytest
 from app.models import Row
 from app.ocr import preprocess
 from app.ocr.reader import COLUMNS, read_board
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 NUMERIC = ("train_no", "sched_time", "delay_min", "platform")
 
 
 def _bytes() -> bytes:
-    return (FIX / "board_1.jpg").read_bytes()
+    return capture(FIX / "board_1.jpg").read_bytes()
 
 
 def _golden() -> dict:
@@ -219,7 +220,7 @@ def test_digit_templates_reproducible_from_fixture():
 
     assert DEFAULT_BOARDS == ("arrival",)
     labels, templates = build_from_fixture(
-        FIX / "board_1.jpg", FIX / "board_1.json", DEFAULT_BOARDS)
+        capture(FIX / "board_1.jpg"), FIX / "board_1.json", DEFAULT_BOARDS)
     committed = DigitMatcher.load()
     assert labels == committed.labels
     assert templates.shape == committed.templates.shape
@@ -231,7 +232,7 @@ def test_cli_defaults_to_arrival_only(tmp_path, monkeypatch):
 
     out = tmp_path / "t.npz"
     monkeypatch.setattr(digits, "TEMPLATES_PATH", out)
-    assert digits.main([str(FIX / "board_1.jpg"), str(FIX / "board_1.json")]) == 0
+    assert digits.main([str(capture(FIX / "board_1.jpg")), str(FIX / "board_1.json")]) == 0
     assert digits.DigitMatcher.load(out).boards == ("arrival",)
 
 

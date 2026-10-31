@@ -11,6 +11,7 @@ import pytest
 from app import captures as cap
 from app import observations as obs
 from app.store import Store
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
@@ -124,7 +125,7 @@ def test_capture_stats(store, tmp_path):
 
 def test_overlay_png_same_size_and_coloured(store, tmp_path):
     from app.ocr.reader import read_board_debug
-    data = (FIX / "board_1.jpg").read_bytes()
+    data = capture(FIX / "board_1.jpg").read_bytes()
     rows, debug = read_board_debug(data)
     cid = obs.record_capture(store, data, rows, debug, NOW, capture_dir=tmp_path)
     det = cap.capture_detail(store, cid)

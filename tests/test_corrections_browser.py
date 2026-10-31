@@ -20,6 +20,7 @@ import uvicorn  # noqa: E402
 
 from app.api import create_app  # noqa: E402
 from app.config import Settings  # noqa: E402
+from tests.ocr_truth_images import capture  # noqa: E402
 from tests.test_footer_browser import browser  # noqa: E402,F401  (shared fixture)
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,6 +29,7 @@ TOKEN = "browser-test-admin-token-123"
 
 @pytest.fixture(scope="module")
 def server(tmp_path_factory):
+    capture(ROOT / "tests" / "fixtures" / "board_1.jpg")  # --capture-dir needs the photo
     d = tmp_path_factory.mktemp("corrb")
     db, cap = d / "c.db", d / "cap"
     env = {**os.environ, "OMP_THREAD_LIMIT": "1"}

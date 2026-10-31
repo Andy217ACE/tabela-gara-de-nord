@@ -15,6 +15,7 @@ from app.api import create_app
 from app.config import Settings
 from app.models import Row
 from app.ocr.reader import read_board_debug
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 BUC = ZoneInfo("Europe/Bucharest")
@@ -53,7 +54,7 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 @pytest.fixture(scope="module")
 def board():
-    data = (FIX / "board_1.jpg").read_bytes()
+    data = capture(FIX / "board_1.jpg").read_bytes()
     rows, debug = read_board_debug(data)
     return data, rows, debug
 

@@ -13,6 +13,7 @@ from app.models import Row
 from app.ocr import glare
 from app.ocr.reader import (INFER_MAX_RUN, INFER_STABLE, INFERRED, TIME_KEEP, DelayVotes,
                             read_board_debug)
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures" / "glare"
 T, F = True, False
@@ -228,7 +229,7 @@ def _line(debug, board, row_index):
 
 
 def _read(name, votes=None):
-    return read_board_debug((FIX / f"{name}.jpg").read_bytes(), budget_s=60.0, votes=votes)[1]
+    return read_board_debug(capture(FIX / f"{name}.jpg").read_bytes(), budget_s=60.0, votes=votes)[1]
 
 
 def test_real_frame_hidden_colon_time_is_completed_from_the_panel_order():

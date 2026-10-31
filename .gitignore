@@ -14,3 +14,5 @@ data/*
 # capturi reale (repo public): imaginile setului de adevar sunt locale
 tests/fixtures/ocr_truth/private/
 tests/fixtures/ocr_truth/**/*.jpg
+# capturile reale din tests/fixtures (imagini JPG) raman doar pe masina locala: nu se publica
+tests/fixtures/**/*.jpg

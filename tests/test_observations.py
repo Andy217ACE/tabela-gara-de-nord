@@ -13,6 +13,7 @@ from app import observations as obs
 from app.models import Row
 from app.ocr.reader import read_board_debug
 from app.store import Store
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 BUC = ZoneInfo("Europe/Bucharest")
@@ -21,7 +22,7 @@ TS = datetime(2026, 10, 20, 12, 0, tzinfo=BUC).timestamp()
 
 @pytest.fixture(scope="module")
 def board():
-    data = (FIX / "board_1.jpg").read_bytes()
+    data = capture(FIX / "board_1.jpg").read_bytes()
     rows, debug = read_board_debug(data)
     return data, rows, debug
 
