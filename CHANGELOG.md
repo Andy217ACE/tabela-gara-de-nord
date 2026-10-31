@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.41 — 2026-10-31
+
+Când întârzierea unui tren nu se poate citi sigur de pe tablă, afișăm ultima întârziere citită sigur, cu vechimea ei. Valoarea nu intră în statistici.
+
+### Adăugat
+- **Ultima citire sigură:** pe tablă și în panou, un tren cu întârziere necitită arată „+N min (ultima citire acum X min)", cursiv. Valoarea urmărește trenul când urcă pe tablă.
+- **Expirare:** după 15 minute fără o citire nouă, valoarea dispare și revine la „necunoscut".
+- **Backup-uri de fuziune:** fiecare copie primește un nume unic, deci două operații în aceeași secundă nu se mai suprascriu.
+- **Retenție:** se păstrează ultimele 10 copii de fuziune; cele mai vechi se șterg după fiecare operație.
+
+### Corectat
+- Testul de pixeli al Tabelei nu mai e instabil: pastila „acum N s" și datele live care se schimbă între capturi nu mai produc diferențe false. Pragul de comparare e neschimbat. Meniul de sus nu mai e comparat pixel cu pixel, din cauza backdrop-ului.
+
 ## Beta 1.40 — 2026-10-31
 
 Pagină nouă de administrare, ascunsă: `#admin`. Nu apare în meniu. Se intră cu aceeași cheie de administrare ca `#ocr`, deci sesiunea e comună.
