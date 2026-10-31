@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app import captures
+from app import admin_settings, captures, observations
 from app.ocr import stats as ocr_stats
 from app.store import TZ
 
@@ -39,6 +39,8 @@ log = logging.getLogger(__name__)
 COOKIE = "tabela_admin"
 SESSION_S = 12 * 3600
 MIN_TOKEN_LEN = 12  # the operator's chosen key; nginx + FAIL_LIMIT slow guessing
+STRICT_TOKEN_LEN = 24  # ADMIN_TOKEN_STRICT=1
+MAX_SETTINGS_BODY = 1024
 FAIL_LIMIT = 5
 GLOBAL_FAIL_LIMIT = 30  # wrong keys per FAIL_WINDOW_S from ALL clients (IP rotation)
 FAIL_WINDOW_S = 60.0
@@ -52,9 +54,25 @@ _global_failures: deque = deque(maxlen=GLOBAL_FAIL_LIMIT * 2)
 _fail_lock = threading.Lock()
 
 
+def strict_key() -> bool:
+    """ADMIN_TOKEN_STRICT=1: cheia trebuie să aibă cel puțin STRICT_TOKEN_LEN caractere. Oprit implicit."""
+    return os.environ.get("ADMIN_TOKEN_STRICT", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 def admin_token() -> str | None:
     t = os.environ.get("ADMIN_TOKEN", "").strip()
-    return t if len(t) >= MIN_TOKEN_LEN else None
+    return t if len(t) >= (STRICT_TOKEN_LEN if strict_key() else MIN_TOKEN_LEN) else None
+
+
+def check_startup() -> None:
+    """Refuză pornirea dacă modul strict e activ și cheia prezentă e prea scurtă. Mesajul nu
+    conține cheia. Fără cheie deloc, doar administrarea rămâne dezactivată (site-ul merge)."""
+    t = os.environ.get("ADMIN_TOKEN", "").strip()
+    if strict_key() and t and len(t) < STRICT_TOKEN_LEN:
+        raise RuntimeError(
+            f"ADMIN_TOKEN_STRICT=1, dar ADMIN_TOKEN are {len(t)} caractere; minimum "
+            f"{STRICT_TOKEN_LEN}. Schimbă cheia în /etc/tabela.env (vezi docs/admin-rotatie-cheie.md) "
+            "sau scoate ADMIN_TOKEN_STRICT.")
 
 
 def _err(status: int, msg: str, headers: dict | None = None) -> HTTPException:
@@ -310,7 +328,9 @@ async def stats(request: Request):
     out["ocr"] = ocr_stats.snapshot()
     out["tesseract"] = await run_in_threadpool(tesseract_status, settings.tesseract_cmd)
     cs = _cap_settings(request)
-    out["capture"] = {"enabled": cs.enabled, "retention_days": cs.retention_days}
+    days = await run_in_threadpool(admin_settings.effective, store, "capture_retention_days",
+                                   cs.retention_days)
+    out["capture"] = {"enabled": cs.enabled, "retention_days": days}
     last = out["last_capture_attempt"]
     src_age = None
     if last:
@@ -320,6 +340,40 @@ async def stats(request: Request):
                      "available": src_age is not None and src_age <= 300,
                      "poller_enabled": bool(settings.poller_enabled)}
     return _json(out)
+
+
+@guarded.get("/settings")
+async def settings_get(request: Request):
+    store = request.app.state.store
+    return _json(await run_in_threadpool(admin_settings.view, store, _env_defaults()))
+
+
+@guarded.post("/settings", dependencies=[Depends(require_csrf)])
+async def settings_post(request: Request):
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf += chunk
+        if len(buf) > MAX_SETTINGS_BODY:
+            raise _err(413, "Cererea este prea mare.")
+    try:
+        body = json.loads(bytes(buf).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise _err(422, "Parametri invalizi.")
+    if not isinstance(body, dict) or not body or set(body) - set(admin_settings.SPECS):
+        raise _err(422, "Parametri invalizi.")
+    try:
+        await run_in_threadpool(admin_settings.save, request.app.state.store, body,
+                                ip=_ip(request))
+    except ValueError:
+        raise _err(422, "Parametri invalizi.")
+    log.info("admin: settings updated from %s", _ip(request))  # fără valori
+    return _json(await run_in_threadpool(admin_settings.view, request.app.state.store,
+                                         _env_defaults()))
+
+
+def _env_defaults() -> dict[str, int]:
+    return {"capture_retention_days": captures.capture_settings().retention_days,
+            "capture_min_free_mb": observations.min_free_mb_env()}
 
 
 router.include_router(guarded)
