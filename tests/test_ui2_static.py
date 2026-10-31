@@ -108,14 +108,14 @@ def read_root(name):
 
 
 def test_live_board_files_untouched():
-    """panel.js/panel.css (Panou, Carduri, Ecran complet) and the weather widget are not part of
-    this change: no diff against the point where this branch left main."""
+    """The weather widget is not part of this change: no diff against the point where this branch left
+    main. panel.js/panel.css are excluded on purpose since Beta 1.41 (the last safe delay reading)."""
     import subprocess
     base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"], cwd=ROOT,
                           capture_output=True, text=True)
     if base.returncode != 0:  # no git / no origin in this checkout: nothing to compare
         return
     out = subprocess.run(["git", "diff", "--name-only", base.stdout.strip(), "HEAD", "--",
-                          "web/panel.js", "web/panel.css", "web/weather.js", "web/weather.css",
+                          "web/weather.js", "web/weather.css",
                           "app/weather.py"], cwd=ROOT, capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.strip() == "", out.stdout

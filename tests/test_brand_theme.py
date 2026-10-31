@@ -287,7 +287,8 @@ def test_panel_level_never_green_without_read_delay():
 def test_cards_never_green_without_read_delay():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert 'var read = t.delay_read === true;' in app
-    assert 'var level = read ? delayLevel(d) : "unread";' in app
+    assert 'var level = read || lastRead ? delayLevel(d) : "unread";' in app
+    assert 'typeof t.delay_last_read_age_s === "number"' in app  # ultima citire sigură, cu vechime (Beta 1.41)
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert 'if (t.delay_read !== true) return "unknown";' in panel
     assert "necitit" in panel and "necitit" in app
