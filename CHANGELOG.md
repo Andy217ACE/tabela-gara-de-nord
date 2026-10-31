@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.40 — 2026-10-31
+
+Pagină nouă de administrare, ascunsă: `#admin`. Nu apare în meniu. Se intră cu aceeași cheie de administrare ca `#ocr`, deci sesiunea e comună.
+
+### Adăugat
+- **Duplicate de numere de tren:** raport doar citire (perechile propuse, aliasurile de stații, ce rămâne nefuzionat). Fuziunea și restaurarea se fac doar după confirmarea scrisă (`APLICA`, `RESTAUREAZA`) și după o copie de siguranță a bazei.
+- **Server (live):** încărcare, memorie, swap, spațiu pe disc, uptime, starea serviciilor și eșecurile watchdog-ului, reîmprospătate la 10 secunde cât pagina e deschisă.
+- **Sesiune:** aceeași cheie și aceeași sesiune ca la `#ocr` (cookie HttpOnly, 12 ore). Cheia nu se salvează în browser.
+- **Marcaje propuse (OCR13):** informativ. Cele 60 de evenimente sunt calculate pe istoricul vechi și nu se aplică pe baza curentă, care începe la 31.10.
+
+### API
+- `GET /api/admin/tools/dupes`, `POST /api/admin/tools/dupes/apply`, `POST /api/admin/tools/dupes/restore`, `GET /api/admin/tools/server`.
+
 ## Beta 1.39 — 2026-10-31
 
 Citirea OCR a tablei este mai prudentă: o cifră pe care o citește doar Tesseract nu mai este publicată. Când citirea nu e sigură, celula rămâne necitită, nu primește o cifră greșită. Schema bazei rămâne v9.

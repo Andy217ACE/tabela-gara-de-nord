@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app import admin_settings, captures, observations
+from app import admin_settings, admin_tools, captures, observations
 from app.ocr import stats as ocr_stats
 from app.store import TZ
 
@@ -46,6 +46,9 @@ GLOBAL_FAIL_LIMIT = 30  # wrong keys per FAIL_WINDOW_S from ALL clients (IP rota
 FAIL_WINDOW_S = 60.0
 FAIL_DELAY_S = 0.5
 MAX_LOGIN_BODY = 1024
+MAX_TOOLS_BODY = 512  # corpul cererilor din pagina #admin (confirmare + parametri)
+DUPES_CONFIRM = "APLICA"
+DUPES_RESTORE_CONFIRM = "RESTAUREAZA"
 TESSERACT_CACHE_S = 300.0
 NO_STORE = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
 
@@ -369,6 +372,73 @@ async def settings_post(request: Request):
     log.info("admin: settings updated from %s", _ip(request))  # fără valori
     return _json(await run_in_threadpool(admin_settings.view, request.app.state.store,
                                          _env_defaults()))
+
+
+async def _tools_body(request: Request) -> dict:
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf += chunk
+        if len(buf) > MAX_TOOLS_BODY:
+            raise _err(413, "Cererea este prea mare.")
+    try:
+        body = json.loads(bytes(buf).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise _err(422, "Parametri invalizi.")
+    if not isinstance(body, dict):
+        raise _err(422, "Parametri invalizi.")
+    return body
+
+
+def _min_age(value) -> int:
+    if value is None:
+        return 60
+    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 1440:
+        raise _err(422, "Parametri invalizi.")
+    return value
+
+
+@guarded.get("/tools/dupes")
+async def dupes_report(request: Request):
+    """Raportul curățării duplicatelor (dry run, read-only)."""
+    rep = await run_in_threadpool(admin_tools.dupes_report, request.app.state.settings.db_path)
+    return _json({"report": rep, "generated_at": datetime.now(TZ).isoformat(timespec="seconds")})
+
+
+@guarded.post("/tools/dupes/apply", dependencies=[Depends(require_csrf)])
+async def dupes_apply(request: Request):
+    body = await _tools_body(request)
+    if body.get("confirm") != DUPES_CONFIRM:
+        raise _err(422, "Confirmarea lipsește.")
+    min_age = _min_age(body.get("min_age_min"))
+    log.info("admin: dupes apply from %s", _ip(request))  # fără valori
+    try:
+        out = await run_in_threadpool(admin_tools.dupes_apply, request.app.state.store, min_age)
+    except RuntimeError as e:
+        raise _err(500, str(e))
+    return _json(out)
+
+
+@guarded.post("/tools/dupes/restore", dependencies=[Depends(require_csrf)])
+async def dupes_restore(request: Request):
+    body = await _tools_body(request)
+    if body.get("confirm") != DUPES_RESTORE_CONFIRM:
+        raise _err(422, "Confirmarea lipsește.")
+    batch = body.get("batch")
+    if batch is not None and (not isinstance(batch, str) or not 1 <= len(batch) <= 64):
+        raise _err(422, "Parametri invalizi.")
+    log.info("admin: dupes restore from %s", _ip(request))
+    try:
+        out = await run_in_threadpool(admin_tools.dupes_restore, request.app.state.store, batch)
+    except RuntimeError as e:
+        raise _err(500, str(e))
+    return _json(out)
+
+
+@guarded.get("/tools/server")
+async def server_tools(request: Request):
+    """Starea serverului (read-only, fără CSRF)."""
+    out = await run_in_threadpool(admin_tools.server_status, request.app.state.settings.db_path)
+    return _json(out)
 
 
 def _env_defaults() -> dict[str, int]:

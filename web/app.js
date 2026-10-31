@@ -473,12 +473,12 @@
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
-    "#ocr": "ocr", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
+    "#ocr": "ocr", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari" };
-  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "versiuni", "trenuri", "tren", "statistici",
+  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
     "clasamente", "statii", "statie", "sistem", "setari"];
-  var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
+  var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", admin: "Administrare", versiuni: "Versiuni", urmarite: "Urmărite",
     trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
     statii: "Stații", statie: "Stație", sistem: "Sistem", setari: "Setări" };
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
@@ -499,6 +499,23 @@
     var s = document.createElement("script");
     s.src = "ocr.js";
     s.addEventListener("load", function () { if (currentRoute === "ocr") route(); });
+    document.head.appendChild(s);
+  }
+
+  // „Administrare" (#admin, admin only, not in the nav): admin.js/admin.css loaded on demand.
+  function loadAdminView() {
+    if ($("view-admin")) return;
+    var sec = el("section", "view view-admin");
+    sec.id = "view-admin";
+    sec.hidden = true;
+    $("main").appendChild(sec);
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "admin.css";
+    document.head.appendChild(css);
+    var s = document.createElement("script");
+    s.src = "admin.js";
+    s.addEventListener("load", function () { if (currentRoute === "admin") route(); });
     document.head.appendChild(s);
   }
 
@@ -546,6 +563,7 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
+    if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");
     VIEWS.forEach(function (v) {

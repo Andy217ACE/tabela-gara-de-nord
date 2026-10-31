@@ -1,0 +1,76 @@
+/* © 2026 Andy217Ace */
+/* „Administrare" (#admin) — pagină ascunsă; încărcată la cerere, folosește tokenii temei din style.css. */
+
+.view-admin { padding-bottom: 32px; }
+.admin-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.admin-bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.admin-bar .btn { margin-top: 0; }
+
+.admin-login { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.admin-login .btn { align-self: flex-start; margin-top: 0; }
+
+.admin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.admin-h2 { font-size: 1rem; margin: 0; }
+.admin-h3 { font-size: 0.9rem; margin: 6px 0 0; }
+.admin-text { margin: 0; color: var(--text-2); }
+.admin-meta { margin: 0; color: var(--text-3); font-size: 0.8rem; }
+.admin-muted { color: var(--text-3); }
+
+.admin-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.admin-actions .btn { margin-top: 0; }
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.admin-stat {
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.admin-stat dt { color: var(--text-3); font-size: 0.75rem; }
+.admin-stat dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.admin-stat.is-bad dd { color: var(--bad); }
+
+.admin-scroll { overflow-x: auto; max-width: 100%; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.admin-table th { color: var(--text-3); font-weight: 600; }
+
+.admin-confirm, .admin-result {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.admin-form { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
+.admin-form .btn { margin-top: 0; }
+
+.admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.admin-svc {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.admin-svc-name { overflow-wrap: anywhere; }
+.admin-svc-state { font-weight: 600; white-space: nowrap; }
