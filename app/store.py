@@ -20,7 +20,7 @@ from datetime import date, datetime, time, timedelta
 from time import monotonic
 from zoneinfo import ZoneInfo
 
-from app import quality
+from app import consensus, quality
 from app.canonical import _lev, near_name, seed_stations
 from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
@@ -983,17 +983,19 @@ class Store:
                 " WHERE status='listed' AND NOT " + quality.GHOST_SQL +
                 " ORDER BY service_date, sched_time, train_no"
             ).fetchall()
+            cons = consensus.service_consensus(self._conn, [s["id"] for s in rows])
         rows = [s for s in rows if not (s["board"] in trimmed and s["miss_count"] > 0)]
         now_local = _local(now or datetime.now(TZ))
         for s in _dedup(rows):
             # last safe reading of an unreadable delay: services are per train, so the
             # value follows the train when its row moves; shown only while recent
+            c = cons.get(s["id"], {})  # the frames' vote; the stored value without one
             out[_BOARD_KEYS[s["board"]]].append({
                 "delay_last_read_age_s": _last_read_age(s["delay_read_at"], now_local),
                 "train_type": s["train_type"], "train_no": s["train_no"],
                 "station": s["station"], "operator": s["operator"],
-                "sched_time": s["sched_time"], "delay_min": s["last_delay"],
-                "platform": s["last_platform"], "flagged": bool(s["flagged"]),
+                "sched_time": s["sched_time"], "delay_min": c.get("delay", s["last_delay"]),
+                "platform": c.get("platform", s["last_platform"]), "flagged": bool(s["flagged"]),
                 "status": s["status"], "service_date": s["service_date"],
                 "uncertain": bool(s["uncertain"]),
                 "delay_read": self._delay_read.get(s["id"], True),
@@ -1137,18 +1139,29 @@ class Store:
         )
         with self._lock:
             found = self._conn.execute(sql, args).fetchall()
-        return [{
-            "id": s["id"], "delay_known": s["delay_read_at"] is not None,
-            # display only: a delay was read at some point (pre-v6 delay events count);
-            # statistics use delay_known (proof stored per journey)
-            "delay_seen": s["delay_read_at"] is not None or (s["ev_max"] or 0) > 0
-            or (s["last_delay"] or 0) > 0,
-            "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
-            "station": s["station"], "operator": s["operator"], "sched_time": s["sched_time"],
-            **_clean_delays(s), "platform": s["last_platform"],
-            "status": s["status"], "first_seen": s["first_seen"], "last_seen": s["last_seen"],
-            "uncertain": bool(s["uncertain"]), "low_quality": bool(s["low_quality"]),
-        } for s in found]
+            cons = consensus.service_consensus(self._conn, [s["id"] for s in found])
+        out = []
+        for s in found:
+            c = cons.get(s["id"], {})  # per-field vote over the train's frames (app.consensus)
+            delays = _clean_delays(s)
+            if "delay" in c and not s["delay_checked"]:
+                delays = {"max_delay": max(s["ev_max"] or 0, c["delay"]),
+                          "final_delay": c["delay"]}
+            out.append({
+                "id": s["id"], "delay_known": s["delay_read_at"] is not None,
+                # display only: a delay was read at some point (pre-v6 delay events count);
+                # statistics use delay_known (proof stored per journey)
+                "delay_seen": s["delay_read_at"] is not None or (s["ev_max"] or 0) > 0
+                or (s["last_delay"] or 0) > 0 or "delay" in c,
+                "board": s["board"], "train_type": s["train_type"], "train_no": s["train_no"],
+                "station": s["station"], "operator": s["operator"],
+                "sched_time": s["sched_time"],
+                **delays, "platform": c.get("platform", s["last_platform"]),
+                "status": s["status"], "first_seen": s["first_seen"],
+                "last_seen": s["last_seen"],
+                "uncertain": bool(s["uncertain"]), "low_quality": bool(s["low_quality"]),
+            })
+        return out
 
     def train_events(self, train_no: int, day: date) -> list[dict]:
         """Events of every service of `train_no` on `day`, chronological. Events marked
