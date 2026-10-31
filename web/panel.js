@@ -569,6 +569,17 @@
   }
 
   function delayNode(t, lvl, fresh) {
+    // reflexie pe rând: ultima întârziere citită sigur a trenului, cu vechimea ei
+    if (t.delay_read !== true && typeof t.delay_last_read_age_s === "number" &&
+        typeof t.delay_min === "number" && t.delay_min >= 0) {
+      var ago = Math.max(0, Math.round(t.delay_last_read_age_s / 60));
+      var ageTxt = ago < 1 ? "acum sub 1 min" : "acum " + ago + " min";
+      var last = el("span", "pnl-delay pnl-last",
+        (t.delay_min === 0 ? "la timp" : "+" + t.delay_min + " min") + " (ultima citire " + ageTxt + ")");
+      last.setAttribute("aria-label", "Ultima întârziere citită " + t.delay_min + " minute, " + ageTxt);
+      last.title = "Celula de întârziere e acoperită de o reflexie; valoarea e ultima citită sigur";
+      return last;
+    }
     if (t.delay_read !== true) {
       var nr = el("span", "pnl-delay pnl-unread", "necitit");
       nr.setAttribute("aria-label", "Întârziere necitită");

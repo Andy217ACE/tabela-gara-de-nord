@@ -170,6 +170,23 @@ _WEATHER_COLS = ("observed_at", "fetched_at", "source", "kind", "latitude", "lon
                  ) + tuple(c for c, _ in _WEATHER_V8_COLUMNS)
 
 
+# An unreadable delay cell shows the last safe reading of the train only this long
+# (trains move up the board; the reading may be out of date). Beyond it: "necitit".
+DELAY_LAST_READ_MAX_S = 15 * 60
+
+
+def _last_read_age(stamp: str | None, now: datetime) -> float | None:
+    """Seconds since the stored delay reading, when it is at most DELAY_LAST_READ_MAX_S old."""
+    if not stamp:
+        return None
+    try:
+        at = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    age = (now - at).total_seconds()
+    return round(age) if 0 <= age <= DELAY_LAST_READ_MAX_S else None
+
+
 def _local(dt: datetime) -> datetime:
     """Aware datetime in Europe/Bucharest; naive input is taken as local time."""
     if dt.tzinfo is None:
@@ -961,14 +978,18 @@ class Store:
             rows = self._conn.execute(
                 "SELECT id, board, train_type, train_no, station, operator, sched_time,"
                 " last_delay, last_platform, flagged, status, service_date, uncertain,"
-                " station_raw, last_seen, miss_count"
+                " station_raw, last_seen, miss_count, delay_read_at"
                 " FROM services s"
                 " WHERE status='listed' AND NOT " + quality.GHOST_SQL +
                 " ORDER BY service_date, sched_time, train_no"
             ).fetchall()
         rows = [s for s in rows if not (s["board"] in trimmed and s["miss_count"] > 0)]
+        now_local = _local(now or datetime.now(TZ))
         for s in _dedup(rows):
+            # last safe reading of an unreadable delay: services are per train, so the
+            # value follows the train when its row moves; shown only while recent
             out[_BOARD_KEYS[s["board"]]].append({
+                "delay_last_read_age_s": _last_read_age(s["delay_read_at"], now_local),
                 "train_type": s["train_type"], "train_no": s["train_no"],
                 "station": s["station"], "operator": s["operator"],
                 "sched_time": s["sched_time"], "delay_min": s["last_delay"],

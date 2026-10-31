@@ -252,7 +252,7 @@ def test_current_board(store):
                  "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5,
                  "platform": 3, "flagged": True, "status": "listed",
                  "service_date": T0.date().isoformat(), "uncertain": False,
-                 "delay_read": True}
+                 "delay_read": True, "delay_last_read_age_s": None}
     assert a["flagged"] is True and b["arrivals"][1]["flagged"] is False
     # failed run doesn't move updated_at
     store.ingest([], T0 + timedelta(minutes=1))
