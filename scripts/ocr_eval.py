@@ -33,16 +33,25 @@ def _work(path: str):
                              for (b, i), v in truth.lines_of(debug).items()]
 
 
+def _image(name: str, img_dir: str | None) -> Path:
+    """Capturile "ocr_truth/..." sunt private: OCR_TRUTH_DIR (implicit .../ocr_truth/private)."""
+    if img_dir:
+        return Path(img_dir) / f"{name}.jpg"
+    if name.startswith("ocr_truth/"):
+        private = Path(os.environ.get("OCR_TRUTH_DIR") or TRUTH.parent / "private")
+        return private / (name[len("ocr_truth/"):] + ".jpg")
+    return TRUTH.parent.parent / f"{name}.jpg"
+
+
 def predict(out: str, img_dir: str | None = None) -> None:
     from multiprocessing import Pool
 
     from app.ocr import truth
     frames = truth.load(TRUTH)["frames"]
-    d = Path(img_dir) if img_dir else TRUTH.parent.parent
     names = sorted(frames)
     with Pool(int(os.environ.get("NPROC", "4"))) as pool:
         res = dict(zip(names, (lines for _, lines in pool.map(
-            _work, [str(d / f"{name}.jpg") for name in names]))))
+            _work, [str(_image(name, img_dir)) for name in names]))))
     Path(out).write_text(json.dumps(res), encoding="utf-8")
     print("frames", len(res))
 

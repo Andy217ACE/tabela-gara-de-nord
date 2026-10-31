@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.42 — 2026-10-31
+
+Citirea nu mai depinde de o singură captură: starea afișată a unui tren e consensul citirilor recente, nu ultima citire. Antrenarea clasificatorului de cifre rulează zilnic în mod umbră și nu schimbă nimic în producție. Watchdog-ul nu mai rulează ca root.
+
+### Adăugat
+- **Vot în timp:** pe tablă și în istoric, o valoare e afișată doar dacă e majoritate strictă în ultimele 15 citiri utilizabile ale trenului (minim 3 voturi). Fără majoritate, rămâne valoarea stocată. Întârzierile deduse din reflexie nu votează.
+- **Antrenare zilnică în mod umbră:** la 03:30 se antrenează un clasificator de cifre și se scrie un raport. Nimic nu se promovează automat; decizia e manuală.
+- **Setul de adevăr fără capturi în git:** imaginile private din `tests/fixtures/ocr_truth/` nu mai sunt urmărite. Testele care le folosesc sar cu motiv când directorul privat lipsește.
+- **Măsurare OCR:** raportul zilnic compară clasificatorul cu motorul actual pe setul scris de mână.
+
+### Schimbat
+- **Watchdog fără root:** rulează ca userul `tabela` și are voie doar să repornească serviciul `tabela`, prin sudoers.
+
 ## Beta 1.41 — 2026-10-31
 
 Când întârzierea unui tren nu se poate citi sigur de pe tablă, afișăm ultima întârziere citită sigur, cu vechimea ei. Valoarea nu intră în statistici.

@@ -21,6 +21,7 @@ import pytest
 
 from app.ocr import digits, truth
 from app.ocr.reader import read_board_debug
+from tests.ocr_truth_images import read_frame
 
 FIX = Path(__file__).parent / "fixtures"
 TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
@@ -39,7 +40,7 @@ _cache: dict[str, list] = {}
 
 def _debug(frame: str) -> list:
     if frame not in _cache:
-        _cache[frame] = read_board_debug((FIX / f"{frame}.jpg").read_bytes(), budget_s=60.0)[1]
+        _cache[frame] = read_board_debug(read_frame(frame), budget_s=60.0)[1]
     return _cache[frame]
 
 

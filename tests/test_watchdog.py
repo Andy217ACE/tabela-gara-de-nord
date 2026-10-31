@@ -101,3 +101,65 @@ def test_corrupt_state_starts_clean(bad):
     dog = Watchdog(check=lambda: True, on_fail=lambda: None, interval_s=60,
                    clock=Clock(), state=bad)
     assert dog.state() == {"failures": 0, "last_restart": None}
+
+
+def test_restart_runs_exact_sudo_command_without_shell(monkeypatch):
+    """Least privilege: sudo -n with one absolute systemctl path, no shell, no extra args."""
+    from app import watchdog
+
+    calls = []
+
+    class Done:
+        returncode = 0
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return Done()
+
+    monkeypatch.setattr(watchdog.subprocess, "run", fake_run)
+    watchdog.restart_service("tabela")
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == ["/usr/bin/sudo", "-n", "/bin/systemctl", "restart", "tabela"]
+    assert not kwargs.get("shell")
+
+
+def test_failed_sudo_restart_is_logged_not_raised(monkeypatch, caplog):
+    from app import watchdog
+
+    class Done:
+        returncode = 1
+
+    monkeypatch.setattr(watchdog.subprocess, "run", lambda args, **kw: Done())
+    with caplog.at_level("ERROR"):
+        watchdog.restart_service("tabela")
+    assert "sudo restart of tabela failed" in caplog.text
+
+
+def test_main_healthy_check_never_restarts(monkeypatch, tmp_path):
+    from app import watchdog
+
+    ran = []
+    monkeypatch.setattr(watchdog, "health_ok", lambda url: True)
+    monkeypatch.setattr(watchdog.subprocess, "run", lambda *a, **k: ran.append(a))
+    state = tmp_path / "watchdog.json"
+    assert watchdog.main(["--state", str(state), "--url", "http://x/api/health"]) == 0
+    assert ran == []
+    assert state.read_text(encoding="utf-8") == '{"failures": 0, "last_restart": null}'
+
+
+def test_main_three_failures_restart_through_sudo(monkeypatch, tmp_path):
+    from app import watchdog
+
+    ran = []
+
+    class Done:
+        returncode = 0
+
+    monkeypatch.setattr(watchdog, "health_ok", lambda url: False)
+    monkeypatch.setattr(watchdog.subprocess, "run",
+                        lambda args, **k: (ran.append(args), Done())[1])
+    state = tmp_path / "watchdog.json"
+    for _ in range(3):
+        watchdog.main(["--state", str(state)])
+    assert ran == [["/usr/bin/sudo", "-n", "/bin/systemctl", "restart", "tabela"]]
