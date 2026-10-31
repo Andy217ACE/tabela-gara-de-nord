@@ -10,6 +10,26 @@ Stare: **Beta** — versiuni și note în [Releases](https://github.com/Andy217A
 și în `CHANGELOG.md`. Datele sunt citite prin OCR de pe imaginea camerei web CFR și pot conține erori;
 valorile necitite apar ca „—”, nu ca 0.
 
+## Documentație detaliată
+
+Paginile de mai jos descriu fiecare subsistem în detaliu, cu diagrame Mermaid (se văd direct pe GitHub).
+README-ul de mai jos rămâne rezumatul; paginile sunt sursa completă.
+
+| Pagină | Ce acoperă |
+|---|---|
+| [Arhitectura](docs/arhitectura.md) | Procesele, modulele din `app/`, unitățile systemd, nginx, calea datelor pe server |
+| [Date și schema bazei](docs/date-si-schema.md) | Fiecare tabel și coloană, migrările v0–v9, ingestul, identitatea serviciilor, retenția, arhivele și restaurarea |
+| [API](docs/api.md) | Toate rutele publice și de administrare: parametri, răspunsuri, erori, cache, limite, modelul de securitate |
+| [Interfața](docs/interfata.md) | Paginile și rutele (#…), navigarea, tema, service worker, CSP, grafice, accesibilitate |
+| [OCR](docs/ocr.md) | Pipeline-ul de citire pas cu pas, constantele reale, regulile întârzierii, măsurarea, problemele deschise |
+| [Capturi și confidențialitate](docs/capturi-si-confidentialitate.md) | Ce e o captură, retenția, ce e ignorat de git, regula de confidențialitate, datele personale |
+| [Statistici, călătorii, calitate](docs/statistici-calatorii-calitate.md) | Catalog, călătorii, stații, formule și praguri, predicție, consens, calitatea datelor |
+| [Meteo](docs/meteo.md) | Sursa Open-Meteo, stocarea, frecvența, eșecurile |
+| [Administrare și operare](docs/administrare-operare.md) | Pagina #admin, corecții, fuziuni, purjare, backup și restaurare, Telegram, push, watchdog, runbook-uri |
+| [Deploy și configurare](docs/deploy-si-configurare.md) | Variabilele de mediu, install.sh, update.sh, systemd, nginx, certificate, procesul de release, rollback |
+| [Testare](docs/testare.md) | Cum rulezi suita, straturile de teste, testele care depind de capturi, cum adaugi un test |
+| [Rotația cheii de administrare](docs/admin-rotatie-cheie.md) | Pașii pentru schimbarea `ADMIN_TOKEN` |
+
 ## Ce face
 
 - **Tabelă (Carduri)** — sosiri și plecări cu ora programată, întârzierea citită, linia,
