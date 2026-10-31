@@ -117,6 +117,27 @@ install_unit() {
     fi
 }
 
+# Watchdog (Val 4a): units din deploy/ se instalează doar dacă există în checkout;
+# timer-ul se activează doar dacă fișierul lui există. Repornește `tabela` (root).
+install_watchdog() {
+    local u src dst changed=0
+    for u in tabela-watchdog.service tabela-watchdog.timer; do
+        src="$APP_DIR/deploy/$u"
+        dst="${WD_UNIT_DIR:-/etc/systemd/system}/$u"
+        [ -f "$src" ] || continue
+        if ! cmp -s "$src" "$dst" 2>/dev/null; then
+            install -m 644 "$src" "$dst" || abort_before_restart "watchdog: nu pot instala $u"
+            changed=1
+        fi
+    done
+    if [ "$changed" = 1 ]; then
+        $SYSTEMCTL daemon-reload || abort_before_restart "watchdog: daemon-reload eșuat"
+    fi
+    if [ -f "$APP_DIR/deploy/tabela-watchdog.timer" ]; then
+        $SYSTEMCTL enable --now tabela-watchdog.timer || abort_before_restart "watchdog: enable eșuat"
+    fi
+}
+
 # Append KEY=VALUE when KEY is missing, never gluing it to a last line that has no
 # trailing newline.
 env_add_missing() {
@@ -252,6 +273,7 @@ if [ -f "$DB" ] && [ -n "$NEW_V" ] && [ "$NEW_V" -gt "$OLD_V" ]; then
 fi
 
 install_unit
+install_watchdog
 echo "== restart"
 $SYSTEMCTL restart tabela
 
@@ -262,6 +284,9 @@ fi
 
 echo "ERROR: not healthy after $((HEALTH_TRIES * HEALTH_SLEEP)) s; rolling back to $PREV" >&2
 echo "(logs: journalctl -u tabela -n 100)" >&2
+# the watchdog must not restart the old code (it may not know the new checks): off first;
+# a missing unit (older install) is not an error
+$SYSTEMCTL disable --now tabela-watchdog.timer >/dev/null 2>&1 || true
 restore_prev
 "$PIP" install -q -r "$APP_DIR/requirements.txt" || echo "WARNING: pip install during rollback failed" >&2
 install_unit

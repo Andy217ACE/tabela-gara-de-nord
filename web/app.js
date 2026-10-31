@@ -474,12 +474,13 @@
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
-    "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie" };
+    "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
+    "#sistem": "sistem", "#setari": "setari" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie"];
+    "clasamente", "statii", "statie", "sistem", "setari"];
   var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", versiuni: "Versiuni", urmarite: "Urmărite",
     trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
-    statii: "Stații", statie: "Stație" };
+    statii: "Stații", statie: "Stație", sistem: "Sistem", setari: "Setări" };
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;
@@ -498,6 +499,23 @@
     var s = document.createElement("script");
     s.src = "ocr.js";
     s.addEventListener("load", function () { if (currentRoute === "ocr") route(); });
+    document.head.appendChild(s);
+  }
+
+  // Paginile Sistem și Setări se încarcă la prima vizită (nu sunt în precache: bugetul SW).
+  var lazyPages = {};
+  function loadLazyPage(name, js, css) {
+    if (lazyPages[js]) return;
+    lazyPages[js] = true;
+    if (css) {
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = css;
+      document.head.appendChild(link);
+    }
+    var s = document.createElement("script");
+    s.src = js;
+    s.addEventListener("load", function () { if (currentRoute === name) route(); });
     document.head.appendChild(s);
   }
 
@@ -528,6 +546,8 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
+    if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
+    if (name === "setari") loadLazyPage("setari", "setari.js");
     VIEWS.forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
@@ -566,6 +586,11 @@
 
   window.TabelaApp = window.TabelaApp || {};
   window.TabelaApp.views = window.TabelaApp.views || {};
+  window.TabelaApp.views.setari = {
+    show: function () {
+      if (window.TabelaSetari) window.TabelaSetari.mount($("view-setari"));
+    }
+  };
   if (typeof window.TabelaApp.onFollow !== "function") {
     window.TabelaApp.onFollow = function () {
       toast("Urmărirea trenurilor vine în curând.");

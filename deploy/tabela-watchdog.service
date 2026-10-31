@@ -1,0 +1,14 @@
+# © 2026 Andy217Ace
+# Watchdog pentru serviciul tabela: o verificare /api/health pe minut (pornit de
+# tabela-watchdog.timer). Rulează ca root deoarece repornește `tabela` (systemctl restart);
+# nu atinge nginx. Instalat de deploy/update.sh.
+[Unit]
+Description=Tabela Gara de Nord - verificare sănătate (watchdog)
+After=tabela.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/tabela/app
+ExecStart=/opt/tabela/venv/bin/python -m app.watchdog --state /var/lib/tabela/watchdog.json --url http://127.0.0.1:8000/api/health --service tabela
+TimeoutStartSec=90

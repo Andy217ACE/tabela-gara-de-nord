@@ -28,7 +28,8 @@ remembered `gone`, so a later `gone` is a new transition and may push again.
 `appeared` events are never pushed. A platform cleared to "none" is not pushed.
 
 State is kept in memory (lost on restart) and pruned to services of
-`today - 1` and later.
+`today - 1` and later. The Telegram channel (app.telegram) keeps its own sent
+log in a file, so its dedup survives a restart; Web Push dedup does not.
 """
 from __future__ import annotations
 
@@ -82,6 +83,13 @@ def message(ev: Event) -> str | None:
     return None
 
 
+def event_key(ev: Event) -> str:
+    """Identity of one alert for the Telegram channel: the service, the kind and the new
+    value. A repeat of the same transition on the same service day is not sent again."""
+    return "|".join(str(x) for x in (ev.service_date or "", ev.row.board, ev.row.train_no,
+                                     ev.row.sched_time, ev.kind, ev.new))
+
+
 def payload(ev: Event) -> dict:
     return {"title": TITLE, "body": message(ev),
             "tag": f"{ev.row.train_no}-{ev.service_date}", "url": "/"}
@@ -90,9 +98,11 @@ def payload(ev: Event) -> dict:
 class Notifier:
     def __init__(self, store, send: Callable[[Subscription, dict], Awaitable[None]],
                  confirm: int = 2, *, send_timeout: float = SEND_TIMEOUT,
-                 max_concurrency: int = MAX_CONCURRENCY):
+                 max_concurrency: int = MAX_CONCURRENCY, telegram=None):
         self.store = store
         self.send = send
+        self.telegram = telegram  # app.telegram.TelegramChannel or None (Val 4d)
+        self._today: date = date.min
         self.confirm = max(1, confirm)
         self.send_timeout = send_timeout
         self.max_concurrency = max_concurrency
@@ -151,6 +161,7 @@ class Notifier:
     async def handle(self, events: list[Event], today: date) -> None:
         """Process one ingest's events. Calls are serialized (safe to overlap)."""
         async with self._get_lock():
+            self._today = today
             # _process only touches the Store (blocking sqlite) and this notifier's state,
             # which the lock serialises: run it off the event loop.
             to_push = await asyncio.to_thread(self._process, events, today)
@@ -221,6 +232,23 @@ class Notifier:
         followers = await asyncio.to_thread(self.store.followers, ev.row.train_no,
                                             ev.service_date)
         await asyncio.gather(*(one(s) for s in followers))
+        if followers and self.telegram is not None:  # only followed trains (Val 4d)
+            await self._push_telegram(ev, data)
+
+    async def _push_telegram(self, ev: Event, data: dict) -> None:
+        """One attempt per event key, recorded before sending: a failure is logged by the
+        channel and never retried; a key already in the sent log is skipped (the log is a
+        file, so this also holds after a restart)."""
+        key = event_key(ev)
+        if self.telegram.has(key):
+            return
+        await asyncio.to_thread(self.telegram.record, key, ev.service_date, self._today)
+        try:
+            await asyncio.wait_for(self.telegram.send(None, data), self.send_timeout)
+        except asyncio.TimeoutError:
+            log.warning("telegram failed: timeout after %.0fs", self.send_timeout)
+        except Exception as e:  # the channel logs its own errors; this is a last guard
+            log.warning("telegram failed: %s", type(e).__name__)
 
 
 def make_webpush_sender(settings) -> Callable[[Subscription, dict], Awaitable[None]]:

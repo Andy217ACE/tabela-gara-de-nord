@@ -16,6 +16,7 @@ from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
 from app.ocr.reader import DelayVotes, OcrError, read_board, read_board_debug
 from app.rejected import save_rejected
+from app.system_status import record_error  # „Sistem” page: last failure as a short code
 
 log = logging.getLogger(__name__)
 
@@ -173,11 +174,13 @@ async def run_poller(
         try:
             data = await fetch_board_image(client, settings.source_url)
         except FetchError as e:
+            record_error("fetch", clock())
             delay = backoff.fail()
             log.warning("fetch failed (%s); retry in %.0fs", e, delay)
             await pause(delay)
             continue
         except Exception:
+            record_error("fetch", clock())
             log.exception("unexpected fetch error")
             await pause(backoff.fail())
             continue
@@ -210,6 +213,7 @@ async def run_poller(
                 if on_capture is not None:
                     rows, debug = rows
             except (OcrError, ValueError) as e:
+                record_error("ocr", ts)
                 log.exception("OCR failed for new image")
                 if rejected_dir:
                     await asyncio.to_thread(save_rejected, rejected_dir, data, ts,
@@ -222,6 +226,7 @@ async def run_poller(
                 try:
                     rejected = await on_rows(rows, ts)
                 except Exception:
+                    record_error("store", ts)
                     log.exception("on_rows callback failed")
                 if rejected and rejected_dir:
                     await asyncio.to_thread(save_rejected, rejected_dir, data, ts,

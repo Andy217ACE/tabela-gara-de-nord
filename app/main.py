@@ -11,7 +11,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app import api
+from app import admin, api
 
 _app: FastAPI | None = None
 
@@ -19,6 +19,7 @@ _app: FastAPI | None = None
 def create() -> FastAPI:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    admin.check_startup()  # ADMIN_TOKEN_STRICT=1 + cheie scurtă: refuză pornirea
     return api.create_app()
 
 

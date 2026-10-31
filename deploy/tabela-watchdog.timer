@@ -1,0 +1,14 @@
+# © 2026 Andy217Ace
+# Pornește tabela-watchdog.service la fiecare minut. Instalat și activat de deploy/update.sh
+# (systemctl enable --now tabela-watchdog.timer).
+[Unit]
+Description=Tabela Gara de Nord - watchdog la fiecare minut
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=tabela-watchdog.service
+
+[Install]
+WantedBy=timers.target

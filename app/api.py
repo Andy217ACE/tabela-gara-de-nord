@@ -30,8 +30,8 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app import (admin, captures, corrections, corrections_api, history_all, observations,
-                 poller, stats, stats_api, trains_api, weather)
+from app import (admin, captures, corrections, corrections_api, export, history_all, observations,
+                 poller, seasons, stats, stats_api, system_api, telegram, trains_api, weather)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
@@ -230,7 +230,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     async def lifespan(app: FastAPI):
         store = Store(settings.db_path)
         store.migrate()
-        notifier = Notifier(store, _make_sender(settings))
+        tg_cfg = telegram.config_from_env()
+        tg_channel = telegram.make_telegram_sender(tg_cfg) if tg_cfg else None
+        notifier = Notifier(store, _make_sender(settings), telegram=tg_channel)
         notify_tasks: set[asyncio.Task] = set()
 
         def _notify_done(t: asyncio.Task) -> None:
@@ -501,6 +503,35 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(corrections_api.router)  # /api/admin/corrections* (admin only, v9)
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(trains_api.router)  # /api/trains (public catalog)
+    app.include_router(system_api.router)  # /api/system (public, minimal)
+    app.include_router(system_api.admin_router)  # /api/admin/system (admin, Sistem)
+
+    @app.get("/api/export/history.csv", include_in_schema=False)
+    async def export_history_csv(request: Request):
+        # Export CSV al istoricului (Val 4b). Limitat per client; baza în mod doar-citire.
+        q = request.query_params
+        ip = request.client.host if request.client else "?"
+        try:
+            export.admit(ip)
+            text, truncated = await run_in_threadpool(
+                export.history_csv, store_of(request).path,
+                q.get("from"), q.get("to"), q.get("train"))
+        except export.ExportRefused as e:
+            return JSONResponse({"detail": e.msg}, status_code=e.status,
+                                headers={"Cache-Control": "no-store"})
+        name = f"istoric-{q.get('from') or 'start'}-{q.get('to') or 'azi'}.csv"
+        headers = {"Content-Disposition": f'attachment; filename="{name}"',
+                   "Cache-Control": "no-store"}
+        if truncated:
+            headers["X-Truncated"] = "1"
+        return Response(content=text.encode("utf-8"), media_type="text/csv; charset=utf-8",
+                        headers=headers)
+
+    @app.get("/api/stats/seasons", include_in_schema=False)
+    async def stats_seasons(request: Request):
+        # Comparație sezoane și meteo (Val 5a); parametrii ca la /api/stats/overview.
+        p = stats_api.params(request)
+        return await run_in_threadpool(seasons.overview, store_of(request), p)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
                    include_in_schema=False)
