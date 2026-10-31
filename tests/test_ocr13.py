@@ -20,6 +20,7 @@ from app.normalize import parse_delay
 from app.ocr import digits, reader
 from app.ocr.engine import CellResult
 from app.ocr.reader import DELAY_UNREAD, _delay, read_board_debug
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures" / "ocr13"
 
@@ -63,7 +64,7 @@ _cache: dict[str, tuple] = {}
 
 def _read(name: str):
     if name not in _cache:
-        _cache[name] = read_board_debug((FIX / f"{name}.jpg").read_bytes())
+        _cache[name] = read_board_debug(capture(FIX / f"{name}.jpg").read_bytes())
     return _cache[name]
 
 
@@ -210,7 +211,7 @@ class _Engine:
 
 
 def test_unread_delay_keeps_the_row_and_reports_why():
-    rows, debug = read_board_debug((FIX / "2026_10_22_150306-764bb6bc.jpg").read_bytes(),
+    rows, debug = read_board_debug(capture(FIX / "2026_10_22_150306-764bb6bc.jpg").read_bytes(),
                                    _Engine(), budget_s=0)
     d = _line(debug, "arrival", 0)
     assert d["fields"]["delay"]["norm"] in (65, None)
@@ -249,7 +250,7 @@ def test_delay_reread_takes_a_variant_only_when_the_rules_pass(monkeypatch):
         calls["reread"] = 0
         return orig(*a, **k)
     monkeypatch.setattr(reader, "_reread_delays", wrap)
-    _, debug = read_board_debug((FIX / "2026_10_22_150306-764bb6bc.jpg").read_bytes())
+    _, debug = read_board_debug(capture(FIX / "2026_10_22_150306-764bb6bc.jpg").read_bytes())
     d = _line(debug, "arrival", 0)
     f = d["fields"]["delay"]
     assert "retry" in f  # the first pass left it unread (glare)

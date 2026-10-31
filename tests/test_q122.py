@@ -18,6 +18,7 @@ from app.ocr import digits, order
 from app.ocr.reader import (DELAY_STEP, DELAY_UNREAD, _confirmed, _delay, read_board,
                             read_board_debug)
 from app.store import Store, _fold_station, _near_dup, _same_station
+from tests.ocr_truth_images import capture
 
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 26, 11, 0, tzinfo=BUC)
@@ -277,7 +278,7 @@ def test_tesseract_only_reading_is_checked_too():
 # -- 1b. cauza în OCR: cifra tăiată de rost (fixture live) ----------------------------------------
 
 def _rows(name):
-    return read_board((FIX / name).read_bytes())
+    return read_board(capture(FIX / name).read_bytes())
 
 
 def test_seam_cut_digit_with_a_gap_of_a_few_px_is_one_glyph():

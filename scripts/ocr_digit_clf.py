@@ -39,6 +39,9 @@ os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 TRUTH = ROOT / "tests" / "fixtures" / "ocr_truth" / "truth.json"
+# The truth frames are real captures, not in git. Searched first here (<dir>/<frame>.jpg),
+# then next to truth.json (as tests/ocr_truth_images.py does); a frame found nowhere is skipped.
+TRUTH_IMG_DIRS: list[Path] = []
 _WIN = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
 if "TESSERACT_CMD" not in os.environ and _WIN.exists():
     os.environ["TESSERACT_CMD"] = str(_WIN)
@@ -338,6 +341,16 @@ def verify(out_dir: str, n: int = 150, img_root: str | None = None) -> None:
 
 
 # --- set de adevar scris de mana ---------------------------------------------------------
+def _truth_image(frame: str) -> bytes | None:
+    cands = [Path(d) / f"{frame}.jpg" for d in TRUTH_IMG_DIRS]
+    cands.append(TRUTH.parent.parent / f"{frame}.jpg")
+    prefix = TRUTH.parent.name + "/"
+    if frame.startswith(prefix):
+        cands.append(TRUTH.parent / "private" / f"{frame[len(prefix):]}.jpg")
+    path = next((p for p in cands if p.is_file()), None)
+    return path.read_bytes() if path else None
+
+
 def truth_glyphs(out_dir: str) -> dict:
     from app.ocr import truth as truth_mod
     from app.ocr import digits, preprocess
@@ -347,9 +360,12 @@ def truth_glyphs(out_dir: str) -> dict:
     t = truth_mod.load(TRUTH)
     matcher = DigitMatcher.load()
     X, y, col, mch, msc, mmg, fus, frames = [], [], [], [], [], [], [], []
-    skipped = {"count": 0, "cells": 0}
+    skipped = {"count": 0, "cells": 0, "frames": len(t["frames"]), "frames_missing": 0}
     for frame, boards in t["frames"].items():
-        data = (TRUTH.parent.parent / f"{frame}.jpg").read_bytes()
+        data = _truth_image(frame)
+        if data is None:
+            skipped["frames_missing"] += 1
+            continue
         img = _decode(data)
         panels = {b: (_Panel(half), x_off) for b, (half, x_off) in
                   zip(BOARDS, preprocess.split_boards_offsets(img))}
@@ -382,12 +398,16 @@ def truth_glyphs(out_dir: str) -> dict:
                         fus.append(bool(fu))
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    if not y:
+        print("truth glyphs: none,", skipped["frames_missing"], "of", skipped["frames"],
+              "frame images missing", flush=True)
+        return skipped
     np.savez_compressed(out / "truth_glyphs.npz", X=np.stack(X), y=np.array(y, dtype="U1"),
                         col=np.array(col, dtype="U8"), frame=np.array(frames, dtype="U200"),
                         mchar=np.array(mch, dtype="U1"), mscore=np.array(msc, np.float32),
                         mmargin=np.array(mmg, np.float32), fused=np.array(fus, bool))
     print("truth glyphs", len(y), "cells", skipped["cells"], "skipped (count)", skipped["count"],
-          flush=True)
+          "frame images missing", skipped["frames_missing"], flush=True)
     return skipped
 
 

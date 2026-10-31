@@ -6,18 +6,19 @@ import cv2
 import pytest
 
 from app.ocr.reader import COLUMNS, read_board, read_board_debug
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(scope="module")
 def result():
-    return read_board_debug((FIX / "board_1.jpg").read_bytes())
+    return read_board_debug(capture(FIX / "board_1.jpg").read_bytes())
 
 
 def test_rows_identical_to_read_board(result):
     rows, _ = result
-    assert rows == read_board((FIX / "board_1.jpg").read_bytes())
+    assert rows == read_board(capture(FIX / "board_1.jpg").read_bytes())
 
 
 def test_debug_covers_every_row(result):
@@ -29,7 +30,7 @@ def test_debug_covers_every_row(result):
 
 def test_debug_fields_have_raw_conf_bbox_in_image(result):
     _, debug = result
-    img = cv2.imread(str(FIX / "board_1.jpg"))
+    img = cv2.imread(str(capture(FIX / "board_1.jpg")))
     h, w = img.shape[:2]
     for d in debug:
         assert d["board"] in ("arrival", "departure")

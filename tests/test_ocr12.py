@@ -19,12 +19,13 @@ import pytest
 
 from app.ocr import preprocess, reader, stats
 from app.ocr.reader import read_board_debug
+from tests.ocr_truth_images import capture
 
 FIX = Path(__file__).parent / "fixtures" / "ocr12"
 
 
 def _read(name: str, **kw):
-    return read_board_debug((FIX / f"{name}.jpg").read_bytes(), **kw)
+    return read_board_debug(capture(FIX / f"{name}.jpg").read_bytes(), **kw)
 
 
 def _per_board(rows):
@@ -140,7 +141,7 @@ def _jpg(img) -> bytes:
 
 
 def test_empty_line_keeps_its_slot_and_is_not_invented():
-    img = cv2.imread(str(FIX / "2026_10_21_213504-8f4c45f0.jpg"))
+    img = cv2.imread(str(capture(FIX / "2026_10_21_213504-8f4c45f0.jpg")))
     rows, debug = read_board_debug(_jpg(_blank_line(img, "arrival", 4)))
     arr = [d for d in debug if d["board"] == "arrival"]
     assert len(arr) == 12                                  # 4x3 grid: the slot stays
@@ -153,7 +154,7 @@ def test_empty_line_keeps_its_slot_and_is_not_invented():
 
 
 def test_two_empty_lines_in_a_group_still_give_12_slots():
-    img = cv2.imread(str(FIX / "2026_10_21_213504-8f4c45f0.jpg"))
+    img = cv2.imread(str(capture(FIX / "2026_10_21_213504-8f4c45f0.jpg")))
     img = _blank_line(_blank_line(img, "departure", 10), "departure", 11)
     rows, debug = read_board_debug(_jpg(img))
     dep = [d for d in debug if d["board"] == "departure"]
@@ -163,7 +164,7 @@ def test_two_empty_lines_in_a_group_still_give_12_slots():
 
 
 def test_faded_line_is_kept_or_marked_unread_never_dropped():
-    img = cv2.imread(str(FIX / "2026_10_21_213504-8f4c45f0.jpg"))
+    img = cv2.imread(str(capture(FIX / "2026_10_21_213504-8f4c45f0.jpg")))
     rows, debug = read_board_debug(_jpg(_fade_line(img, "departure", 7)))
     dep = [d for d in debug if d["board"] == "departure"]
     assert len(dep) == 12
@@ -266,7 +267,7 @@ def test_capture_admin_shows_rows_per_panel_and_rereads(tmp_path):
 
     from app import captures, observations
     from app.store import Store
-    img = cv2.imread(str(FIX / "2026_10_21_090409-d9214f34.jpg"))
+    img = cv2.imread(str(capture(FIX / "2026_10_21_090409-d9214f34.jpg")))
     data = _jpg(_blank_line(img, "departure", 2))
     rows, debug = read_board_debug(data)
     s = Store(":memory:")

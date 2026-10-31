@@ -12,8 +12,10 @@ Nu se atinge: app/ (inclusiv app/ocr/digit_templates.npz), baza de date, VERSION
 CHANGELOG.md, sw.js. Etichetele silver nu sunt verificate de om.
 
 Setul scris de mana: tests/fixtures/ocr_truth/truth.json din repo, altfel WORKDIR/truth.json
-(daca exista). Ca in ocr_digit_clf, cadrele lui se cauta la <dosarul parinte al dosarului
-truth.json>/<cadru>.jpg. Fara set de adevar, raportul il spune si nu se evalueaza nimic pe el.
+(daca exista). Imaginile cadrelor sunt capturi reale, deci nu sunt in git: se cauta intai in
+WORKDIR/truth-img/<cadru>.jpg (copiate manual pe server), apoi langa truth.json, ca in
+ocr_digit_clf. Cadrele fara imagine se sar si se numara in raport (set_adevar_cadre). Fara set
+de adevar, raportul il spune si nu se evalueaza nimic pe el.
 
 Rulare (pe server, din tabela-shadow-train.service):
     python scripts/nightly_shadow_train.py [--workdir DIR] [--db FILE] [--img-root DIR]
@@ -37,6 +39,7 @@ DEFAULT_WORKDIR = Path("/var/lib/tabela/shadow")
 DEFAULT_DB = Path("/var/lib/tabela/tabela.db")
 DEFAULT_IMG_ROOT = Path("/var/lib/tabela")
 REPO_TRUTH = ROOT / "tests" / "fixtures" / "ocr_truth" / "truth.json"
+TRUTH_IMG = "truth-img"  # WORKDIR/truth-img/<cadru>.jpg: imaginile setului scris de mana
 TIME_LIMIT_S = 2 * 3600
 MIN_TRAIN_GLYPHS = 200
 EPOCHS = 30
@@ -186,6 +189,7 @@ def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
     rep = {"data": day, "generat_la": now.isoformat(timespec="seconds"), "mod": "umbra",
            "stare": "ok", "eroare": None, "surse": None, "etichete": None,
            "antrenare": None, "set_adevar": str(truth_file) if truth_file else None,
+           "set_adevar_cadre": None,
            "limite": LIMITS}
     antrenare: dict = {"antrenat": False}
     try:
@@ -194,7 +198,8 @@ def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
         rep["etichete"] = clf.label(str(run_dir), None)
         if truth_file is not None:
             clf.TRUTH = truth_file
-            clf.truth_glyphs(str(run_dir))
+            clf.TRUTH_IMG_DIRS = [workdir / TRUTH_IMG]
+            rep["set_adevar_cadre"] = clf.truth_glyphs(str(run_dir))
         antrenare = _train_eval(clf, run_dir, workdir, day, truth_file)
         if not antrenare["antrenat"]:
             rep["stare"] = "date insuficiente"

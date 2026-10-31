@@ -21,7 +21,7 @@ import pytest
 
 from app.ocr import digits, truth
 from app.ocr.reader import read_board_debug
-from tests.ocr_truth_images import read_frame
+from tests.ocr_truth_images import capture, read_frame
 
 FIX = Path(__file__).parent / "fixtures"
 TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
@@ -221,12 +221,18 @@ def test_reread_that_lost_a_glyph_of_the_first_pass_is_not_taken():
 D100 = sorted((FIX / "ocr14_delay100").glob("*.jpg"))
 
 
+def _d100():
+    if not D100:
+        pytest.skip("capturile reale ocr14_delay100 lipsesc (nu sunt in repo)")
+    return D100
+
+
 def _arr0(debug):
     return next(d for d in debug if d["board"] == "arrival" and d["row_index"] == 0)
 
 
 def test_hundred_alone_in_one_frame_is_unread_never_a_guess():
-    for path in D100:
+    for path in _d100():
         line = _arr0(read_board_debug(path.read_bytes(), budget_s=60.0)[1])
         assert line["row"].train_no == 401
         f = line["fields"]["delay"]
@@ -237,7 +243,7 @@ def test_hundred_alone_in_one_frame_is_unread_never_a_guess():
 def test_hundred_read_by_the_vote_of_consecutive_frames():
     from app.ocr.reader import DelayVotes
     votes, got = DelayVotes(), []
-    for path in D100:
+    for path in _d100():
         line = _arr0(read_board_debug(path.read_bytes(), budget_s=60.0, votes=votes)[1])
         got.append(line["fields"]["delay"]["norm"])
         if got[-1] is not None:
@@ -290,6 +296,6 @@ def test_glare_misreads_of_two_digit_delays_give_no_candidate():
     board, never a 100+ candidate."""
     from tests.test_ocr13 import FIX as F13, GLARED
     for name, board, idx, _shown, _live in GLARED:
-        _, debug = read_board_debug((F13 / f"{name}.jpg").read_bytes(), budget_s=60.0)
+        _, debug = read_board_debug(capture(F13 / f"{name}.jpg").read_bytes(), budget_s=60.0)
         line = next(d for d in debug if d["board"] == board and d["row_index"] == idx)
         assert "candidate" not in line["fields"]["delay"]

@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.43 — 2026-10-31
+
+Nicio captură reală a tabelei nu mai e urmărită în git: imaginile de test rămân doar pe mașina de dezvoltare și pe server. Funcțiile aplicației nu se schimbă.
+
+### Schimbat
+- **Capturi scoase din git:** ultimele 41 de imagini reale din `tests/fixtures/` (`board_1.jpg`, `board_2.jpg`, `band_group4.jpg`, `glare/`, `ocr12/`, `ocr13/`, `ocr14_delay100/`, `q122/`) nu mai sunt urmărite; `tests/fixtures/**/*.jpg` e ignorat. Istoricul git nu e rescris.
+- **Teste fără capturi:** pe o clonă fără imagini, testele care citesc o captură sar cu motiv (`capture()` în `tests/ocr_truth_images.py`), în loc să pice.
+- **Date de test pentru browser:** `scripts/dev_seed.py` folosește rândurile așteptate din `board_1.json` când `board_1.jpg` lipsește, deci testele de interfață rulează și fără capturi.
+- **Antrenarea zilnică în mod umbră:** imaginile setului scris de mână se caută întâi în `/var/lib/tabela/shadow/truth-img/`, în afara repo-ului. Un cadru fără imagine e sărit și numărat în raport (`set_adevar_cadre`), în loc să oprească rularea.
+- **Teste noi:** ordinea de căutare a imaginilor setului, cadrele lipsă și rândurile din `board_1.json`.
+
 ## Beta 1.42 — 2026-10-31
 
 Citirea nu mai depinde de o singură captură: starea afișată a unui tren e consensul citirilor recente, nu ultima citire. Antrenarea clasificatorului de cifre rulează zilnic în mod umbră și nu schimbă nimic în producție. Watchdog-ul nu mai rulează ca root.

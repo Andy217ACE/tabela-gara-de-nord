@@ -152,6 +152,62 @@ def test_eroare_se_raporteaza_fara_promovare(env):
     assert data["decizie"]["promovez"] is False
 
 
+def test_imaginile_setului_se_cauta_in_workdir_si_se_raporteaza(env):
+    fake, seen = _fake_clf(), {}
+    real = fake.truth_glyphs
+
+    def truth_glyphs(out_dir):
+        seen["dirs"] = list(fake.TRUTH_IMG_DIRS)
+        real(out_dir)
+        return {"frames": 5, "frames_missing": 2, "cells": 4, "count": 0}
+
+    fake.truth_glyphs = truth_glyphs
+    rep = shadow.run(env.work, env.db, env.img_root, [env.truth], clf=fake, now=env.now)
+    assert seen["dirs"] == [env.work.resolve() / "truth-img"]
+    assert rep["set_adevar_cadre"]["frames_missing"] == 2
+    data = json.loads((env.work / "report-2026-10-31.json").read_text(encoding="utf-8"))
+    assert data["set_adevar_cadre"]["frames"] == 5
+
+
+def _truth_json(path: Path, frames) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = {"no": 1636, "time": "20:04", "platform": None, "delay": 10}
+    path.write_text(json.dumps({"frames": {f: {"arrival": [line]} for f in frames}}),
+                    encoding="utf-8")
+    return path
+
+
+def test_cadrele_fara_imagine_se_sar_fara_eroare(tmp_path, monkeypatch):
+    truth = _truth_json(tmp_path / "fix" / "ocr_truth" / "truth.json",
+                        ["ocr13/a", "ocr_truth/srv/b"])
+    monkeypatch.setattr(clf_real, "TRUTH", truth)
+    monkeypatch.setattr(clf_real, "TRUTH_IMG_DIRS", [tmp_path / "img"])
+    out = tmp_path / "out"
+    skipped = clf_real.truth_glyphs(str(out))
+    assert skipped["frames"] == 2 and skipped["frames_missing"] == 2
+    assert not (out / "truth_glyphs.npz").exists()
+
+
+def test_ordinea_cautarii_imaginilor_setului(tmp_path, monkeypatch):
+    fix = tmp_path / "fix"
+    truth = _truth_json(fix / "ocr_truth" / "truth.json", [])
+    extra = tmp_path / "img"
+    monkeypatch.setattr(clf_real, "TRUTH", truth)
+    monkeypatch.setattr(clf_real, "TRUTH_IMG_DIRS", [extra])
+
+    def put(p: Path, data: bytes):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+
+    put(fix / "ocr13" / "a.jpg", b"repo")
+    assert clf_real._truth_image("ocr13/a") == b"repo"
+    put(extra / "ocr13" / "a.jpg", b"workdir")
+    assert clf_real._truth_image("ocr13/a") == b"workdir"
+    put(fix / "ocr_truth" / "private" / "srv" / "b.jpg", b"private")
+    assert clf_real._truth_image("ocr_truth/srv/b") == b"private"
+    assert clf_real._truth_image("ocr13/lipsa") is None
+
+
 def test_workdir_in_repo_refuzat():
     with pytest.raises(ValueError):
         shadow.run(ROOT / "app" / "ocr" / "shadow", ROOT / "x.db", ROOT, [],
