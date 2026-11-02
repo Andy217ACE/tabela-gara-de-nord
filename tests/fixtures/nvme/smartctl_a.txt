@@ -1,0 +1,23 @@
+=== START OF INFORMATION SECTION ===
+Model Number:                       KINGSTON RBUSNS8154P3512GJ1
+Serial Number:                      FIXTURE0000000
+Firmware Version:                   FIXTURE
+=== START OF SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+SMART/Health Information (NVMe Log 0x02)
+Critical Warning:                   0x00
+Temperature:                        32 Celsius
+Available Spare:                    100%
+Available Spare Threshold:          10%
+Percentage Used:                    0%
+Data Units Read:                    12,345,678 [6.32 TB]
+Data Units Written:                 9,876,543 [5.06 TB]
+Host Read Commands:                 123,456,789
+Host Write Commands:                98,765,432
+Controller Busy Time:               1,234
+Power Cycles:                       412
+Power On Hours:                     6,736
+Unsafe Shutdowns:                   371
+Media and Data Integrity Errors:    0
+Error Information Log Entries:      3,920

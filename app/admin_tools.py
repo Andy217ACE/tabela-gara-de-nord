@@ -20,7 +20,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from app import dbbackup
+from app import dbbackup, nvme_status
 from app.store import TZ
 
 log = logging.getLogger(__name__)
@@ -201,3 +201,11 @@ def server_status(db_path: str) -> dict:
         "services": {u: _unit_state(u) for u in SERVICE_UNITS},
         "watchdog": _watchdog(db_path),
     }
+
+
+def nvme_snapshot(db_path: str, now_ts: float) -> dict:
+    """Discul NVMe: nvme.json lângă baza de date (scris de scripts/nvme_collect.py). Read-only;
+    fără rulare de comenzi și fără căi în răspuns."""
+    if db_path == ":memory:":
+        return {"available": False}
+    return nvme_status.read_snapshot(Path(os.path.abspath(db_path)).parent / "nvme.json", now_ts)
