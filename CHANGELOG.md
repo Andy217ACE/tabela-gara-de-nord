@@ -5,7 +5,7 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
-## Beta 1.44 — nepublicat (ramura fix/no-number-rows)
+## Beta 1.44 — 2026-11-03
 
 ### Reparat
 - **Rânduri fără număr de tren:** un rând în care celula numărului nu are cifre (`train_no` 0) nu mai creează servicii noi și nu mai modifică un tren existent. Rândul rămâne în observations ca „incomplete”. Înainte, cu încredere >= 0.7 devenea un serviciu nou cu numărul 0, adică o dublură a unui tren real care apărea ca „Rezultat neconfirmat”.
