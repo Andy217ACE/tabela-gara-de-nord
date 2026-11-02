@@ -1,0 +1,17 @@
+# © 2026 Andy217Ace
+# Colectorul discului NVMe (scripts/nvme_collect.py): rulează ca root, doar citire
+# (nvme smart-log / error-log, smartctl -a), și scrie /var/lib/tabela/nvme.json pentru #admin.
+# NEINSTALAT încă: propunere, nu e în deploy/update.sh. Privilegiul root e decizia
+# administratorului (vezi raportul de predare, feat/admin-nvme).
+[Unit]
+Description=Tabela Gara de Nord - colector NVMe (doar citire)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/tabela/venv/bin/python /opt/tabela/app/scripts/nvme_collect.py /var/lib/tabela/nvme.json
+TimeoutStartSec=90
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tabela
+PrivateTmp=yes

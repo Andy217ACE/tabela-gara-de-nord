@@ -5,6 +5,21 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.44 — 2026-11-02
+
+Pagina #admin arată starea discului NVMe al serverului, citită periodic de un colector. Aplicația nu rulează nicio comandă cu privilegii; colectorul e doar de citire.
+
+### Adăugat
+- **Disc NVMe (live) în #admin:** starea SMART, temperatura, rezerva disponibilă, uzura, erorile media, opririle nesigure, orele pornit, datele citite și scrise, toate câmpurile din `nvme smart-log`, sănătatea din `smartctl -a` și ultimele 5 intrări din `nvme error-log`. Afișează ora ultimei citiri și avertizează dacă datele au peste 15 minute.
+- **Colector:** `scripts/nvme_collect.py` citește `nvme smart-log`, `nvme error-log` și `smartctl -a` cu comenzi fixe, fără shell, și scrie `nvme.json` atomic. Nu scrie pe disc și nu resetează contoare.
+- **Endpoint admin:** `GET /api/admin/tools/nvme` (doar citire, fără CSRF); nu expune căi, serial sau erori brute.
+
+### Teste
+- **Teste noi:** parserele pe fixture-uri cu valorile de referință ale discului, colectorul cu un runner fals (comenzi fixe, fără comenzi de scriere) și endpoint-ul admin (acces, lipsă de fișier, fără căi în răspuns).
+
+### Propus, neinstalat
+- `deploy/tabela-nvme.service` și `deploy/tabela-nvme.timer` (root, la 2 minute). Nu sunt în `deploy/update.sh`; instalarea cere decizia administratorului.
+
 ## Beta 1.43 — 2026-10-31
 
 Nicio captură reală a tabelei nu mai e urmărită în git: imaginile de test rămân doar pe mașina de dezvoltare și pe server. Funcțiile aplicației nu se schimbă.

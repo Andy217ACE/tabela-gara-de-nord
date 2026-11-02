@@ -205,3 +205,12 @@ def test_nvme_endpoint_serves_snapshot_without_paths(nvme_client):
     assert body["error_log"] == [{"error_count": 3920}]
     text = json.dumps(body)
     assert str(tmp) not in text and "/dev/" not in text
+
+
+def test_admin_js_nvme_card_contract():
+    js = (Path(__file__).resolve().parent.parent / "web" / "admin.js").read_text(encoding="utf-8")
+    assert '"/api/admin/tools/nvme"' in js
+    assert 'card("admin-nvme"' in js
+    for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", ".style."):
+        assert bad not in js, bad
+    assert "dispositivul" not in js.lower()  # nu afișăm căi/dispozitive
