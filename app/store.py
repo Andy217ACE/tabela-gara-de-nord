@@ -761,6 +761,10 @@ class Store:
         seen: set[int] = set()
         self._cand_next = {}
         self.last_ghost_numbers = set()
+        # A row whose train number was not read (train_no 0) is no service: it creates
+        # nothing and matches nothing. observations keep it as "incomplete".
+        good = [r for r in good if r.train_no]
+        low = [r for r in low if r.train_no]
 
         def emit(sid: int, kind: str, row: Row, sd: str, old=None, new=None) -> None:
             self._insert_event(sid, ts_s, kind, old, new)

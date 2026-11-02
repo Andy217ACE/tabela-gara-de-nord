@@ -133,6 +133,17 @@ def test_incomplete_and_low_conf_lines_are_kept(store, tmp_path):
     assert (cap["width"], cap["height"]) == (None, None)  # undecodable image: no size
 
 
+def test_no_number_row_is_kept_as_incomplete(store, tmp_path):
+    """Rândul fără număr (train_no 0) rămâne în observations, fără tren și fără serviciu."""
+    r = _row(0, confidence=0.95)
+    debug = [{"board": "arrival", "row_index": 0, "row": r, "conf": 0.95,
+              "raw_text": "IR ? BRASOV", "fields": {}}]
+    cid = obs.record_capture(store, b"not-a-jpeg", [r], debug, TS, capture_dir=tmp_path)
+    o = q(store, "SELECT validation_state, train_no, service_id FROM observations"
+                 " WHERE capture_id=?", cid)[0]
+    assert (o["validation_state"], o["train_no"], o["service_id"]) == ("incomplete", None, None)
+
+
 def test_no_link_when_store_did_not_match(store, tmp_path):
     rows = [_row()]  # a single row: the run is invalid, services untouched
     _ingest(store, rows)
