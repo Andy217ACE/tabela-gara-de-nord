@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.46 — 2026-11-05
+
+### Adăugat
+- **Disc NVMe (live) în #admin:** pagina arată starea SMART, temperatura, rezerva, uzura, erorile media, opririle nesigure, datele citite și scrise, `nvme error-log` (ultimele 5 intrări) și sănătatea din `smartctl -a`. Avertizează dacă datele au peste 15 minute.
+- **Colector NVMe:** `scripts/nvme_collect.py` citește cu comenzi fixe, fără shell, și scrie `nvme.json` atomic. E doar de citire: nu scrie pe disc și nu resetează contoare. Rulează ca `tabela-nvme.timer` (la 2 minute) pe serverul de acasă.
+- **Endpoint admin:** `GET /api/admin/tools/nvme` (doar citire); nu expune căi, serial sau erori brute.
+- **Import reversibil al bazei vechi:** `scripts/import_legacy_db.py`, cu dry-run implicit, backup și manifest pentru restaurare.
+- **Documentație detaliată pe pagini**, cu diagrame.
+
+### Reparat
+- **Defecte de deploy:** sudoers pentru watchdog, rollback, cheile VAPID și notificările Telegram.
+- **Retenție backup pe familii:** curățarea copiilor de backup nu mai șterge punctele de restaurare.
+- **Corectări de consistență** în documentație: meteo, stații învățate, API, OCR, teste.
+
 ## Beta 1.45 — 2026-11-05
 
 ### Reparat

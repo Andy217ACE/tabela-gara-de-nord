@@ -1,10 +1,11 @@
 # © 2026 Andy217Ace
 """OCR quality wave 1 (Beta 1.16): hand-labelled truth set + the panel-seam fixes.
 
-Truth set: tests/fixtures/ocr_truth/truth.json — 16 real captures (the 8 of
-tests/fixtures/ocr13 + 8 picked for the measured errors of the audit), 384 lines, every
-field checked by eye on the image (app/ocr/truth.py). The thresholds below are the
-measured accuracy of this version: a change that misreads more cells fails here.
+Truth set: tests/fixtures/ocr_truth/truth.json — 59 real frames, 1416 lines (59 x 2 panels
+x 12 rows), every field checked by eye on the image (app/ocr/truth.py). The set started in
+Beta 1.16 as 16 captures / 384 lines (the 8 of tests/fixtures/ocr13 + 8 picked for the
+measured errors of the audit). The thresholds below were measured on that first set, not
+re-measured after it grew; a change that misreads more cells fails here.
 
 Seam: a vertical joint between two LED modules of the board runs through the last
 digit of the train number. It cuts the thin "1" into its flag and its stem (two
@@ -29,7 +30,8 @@ TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
 # measured on this version (Tesseract 5.5, local); `wrong` is a published misread,
 # `unread` an honest gap. Beta 1.15 on the same set: wrong no 19, time 6, platform 5
 # (+3 unread), station 2, operator 1; ok no 365, time 378, platform 376.
-# Left wrong: number under glare (4), 8 read 3 (time 2, platform 1).
+# Left wrong (Beta 1.16): number under glare (4), 8 read 3 (time 2, platform 1). The platform 1
+# was that release's count; the bound is now MAX_WRONG["platform"] = 0.
 MAX_WRONG = {"no": 0, "time": 4, "type": 2, "platform": 0, "delay": 0,
              "station": 3, "operator": 5}
 MIN_OK = {"no": 379, "time": 381, "type": 383, "platform": 382, "delay": 374,

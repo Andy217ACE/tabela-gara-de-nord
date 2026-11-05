@@ -207,8 +207,10 @@ backup_db() {
         return 1
     fi
     echo "db backup: $dest"
-    # keep only the newest $BACKUP_KEEP (names sort by time)
-    find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-*.db' -print | sort -r |
+    # keep only the newest $BACKUP_KEEP of THIS family (tabela-<stamp>-v<N>.db, names sort by
+    # time); the other families in the directory (tabela-before-merge-*, tabela-before-purge-*)
+    # are restore points and must not match
+    find "$BACKUP_DIR" -maxdepth 1 -name 'tabela-[0-9]*-v[0-9]*.db' -print | sort -r |
         tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do rm -f -- "$old"; done
     # tell the app a backup exists (app/dbbackup.py: proof when it cannot see the backup
     # itself); written last, only after a good backup, readable by the service
@@ -284,6 +286,10 @@ if [ -f "$DB" ] && [ -n "$NEW_V" ] && [ "$NEW_V" -gt "$OLD_V" ]; then
     backup_db "$DB" "$OLD_V" || abort_before_restart "database backup failed"
 fi
 
+# the watchdog timer's state before this update: a rollback puts it back the same way
+WD_WAS_ENABLED=0
+if $SYSTEMCTL is-enabled --quiet tabela-watchdog.timer 2>/dev/null; then WD_WAS_ENABLED=1; fi
+
 install_unit
 install_watchdog
 echo "== restart"
@@ -302,11 +308,22 @@ $SYSTEMCTL disable --now tabela-watchdog.timer >/dev/null 2>&1 || true
 restore_prev
 "$PIP" install -q -r "$APP_DIR/requirements.txt" || echo "WARNING: pip install during rollback failed" >&2
 install_unit
-$SYSTEMCTL restart tabela
+# not fatal: the health check below reports it, and the timer must still be restored
+$SYSTEMCTL restart tabela || echo "WARNING: rollback: systemctl restart tabela failed" >&2
 if healthy; then
     echo "ROLLED BACK: running $(git_ log -1 --oneline) again (failed: $NEW)" >&2
 else
     echo "ROLLBACK FAILED: $(git_ log -1 --oneline) is not healthy either; check journalctl -u tabela" >&2
+fi
+# the timer goes back to its state before the update (it was disabled above)
+if [ "$WD_WAS_ENABLED" = 1 ]; then
+    if $SYSTEMCTL enable --now tabela-watchdog.timer >/dev/null 2>&1; then
+        echo "rollback: watchdog timer re-enabled (it was enabled before the update)"
+    else
+        echo "WARNING: rollback: could not re-enable the watchdog timer" >&2
+    fi
+else
+    echo "rollback: watchdog timer left disabled (it was disabled before the update)"
 fi
 if [ -n "$NEW_V" ] && [ "$NEW_V" -gt "$OLD_V" ]; then
     echo "note: the new code may already have migrated the database to v$NEW_V (older code" >&2

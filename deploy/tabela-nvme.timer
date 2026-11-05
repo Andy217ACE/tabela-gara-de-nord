@@ -1,0 +1,13 @@
+# © 2026 Andy217Ace
+# Pornește tabela-nvme.service la fiecare 2 minute. NEINSTALAT (vezi tabela-nvme.service).
+[Unit]
+Description=Tabela Gara de Nord - colector NVMe la 2 minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=120s
+AccuracySec=5s
+Unit=tabela-nvme.service
+
+[Install]
+WantedBy=timers.target
