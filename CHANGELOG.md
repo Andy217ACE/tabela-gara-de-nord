@@ -5,6 +5,15 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.45 — 2026-11-05
+
+### Reparat
+- **Pauze ale poller-ului:** serviciile nevăzute în timpul unei pauze nu mai sunt trecute pe „gone” fără eveniment. Prima citire după pauză nu le numără ca lipsuri; un serviciu dispare doar după 3 citiri la rând în care lipsește (`GONE_AFTER_MISSES`), și atunci apare evenimentul „gone”.
+- **Capturi goale:** o captură cu 0 rânduri nu mai e înregistrată ca `ok=1`. Este o citire eșuată, cu eroarea „no rows read”, iar poller-ul o raportează ca eroare OCR și o înregistrează în jurnal.
+- **Stare fără citiri recente:** `STALE_MIN` (30 min) înseamnă acum o pauză (poller oprit sau tablă nerecitibilă), nu o retragere tăcută a serviciilor.
+- **Teste:** `test_store`, `test_poller`, `test_observations` și `test_captures` acoperă cazurile de pauză și de captură goală.
+- Versiune: `CHARTS_V` 1.45 (cache-buster-ul paginii Statistici urmărește versiunea).
+
 ## Beta 1.44 — 2026-11-03
 
 ### Reparat
