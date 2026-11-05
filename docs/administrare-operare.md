@@ -393,7 +393,7 @@ Sursa: `app/notifier.py`, `app/api.py` (`_make_sender`, `/api/push/*`), `app/con
 |---|---|---|
 | `VAPID_PRIVATE_KEY` | gol | generată de `install.sh`; **secret** |
 | `VAPID_PUBLIC_KEY` | gol | derivată din cheia privată; publică (apare în `GET /api/push/key`) |
-| `VAPID_SUBJECT` | `mailto:admin@example.com` | `install.sh` scrie `https://tabelacfr.ddns.net` |
+| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `install.sh` scrie `https://tabelacfr.ddns.net` |
 
 Dacă una dintre cele două chei lipsește, notificările push sunt **dezactivate**: se loghează „VAPID keys not configured; push notifications are disabled” o singură dată, iar restul aplicației funcționează.
 
@@ -709,7 +709,7 @@ Rezumat pentru orientare, fără secrete:
 **Inconsistențe între cod și documentație:**
 
 - Cuvântul de confirmare pentru restaurarea bazei este `RESTAUREZ` (`app/restore.py`, `scripts/restore_db.py`). `RESTAUREAZA` este cuvântul pentru restaurarea fuziunilor din `#admin` (`app/admin.py`, `web/admin.js`). Cerința de documentare le asocia pe amândouă cu restaurarea bazei; codul le deosebește.
-- README, secțiunea „Meteo”, spune „un rând per oră de observație”. Codul stochează câte un rând per observație, cu cadența de 15 minute (`DEFAULT_INTERVAL_S = 900`).
+- README, secțiunea „Meteo”, spunea „un rând per oră de observație”; a fost corectat. Codul stochează câte un rând per observație, cu cadența de 15 minute (`DEFAULT_INTERVAL_S = 900`).
 - README și `deploy/install.sh` nu menționează variabilele `TELEGRAM_*`, deși canalul există în cod.
 - Copiile de siguranță: `deploy/update.sh` păstrează 5 (`BACKUP_KEEP`), `app/dbbackup.py` 5, `scripts/merge_number_dups.py` 10. Documentația nu spune asta peste tot.
 

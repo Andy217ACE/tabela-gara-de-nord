@@ -38,6 +38,9 @@ log = logging.getLogger(__name__)
 
 RECENT_S = 24 * 3600
 BACKUP_KEEP = 5  # same as update.sh: the newest few of this module's own files
+PREFIX = "tabela-"  # familia copiilor de pre-migrare: tabela-<stamp>-v<N>.db (update.sh, _make)
+# stamp-ul din nume: YYYYmmdd-HHMMSS, sau YYYYmmdd-HHMMSS-micro (backup_api)
+_STAMP = r"(\d{8})-(\d{6})(?:-(\d{6}))?"
 FALLBACK_DIRNAME = "backups-fallback"
 MARKER_NAME = ".pre-migration-backup"  # written by deploy/update.sh after its backup
 
@@ -68,7 +71,7 @@ def recent_backup(db_path: str, version: int, now: float | None = None) -> Path 
 def _recent_in(d: Path, version: int, now: float | None = None) -> Path | None:
     if not d.is_dir():
         return None
-    pat = re.compile(rf"^tabela-.*-v{version}\.db$")
+    pat = re.compile(rf"^{re.escape(PREFIX)}{_STAMP}-v{version}\.db$")
     cutoff = (now if now is not None else time.time()) - RECENT_S
     best = None
     for p in d.iterdir():
@@ -87,7 +90,7 @@ def _make(db_path: str, version: int, directory: Path, stamp: str | None = None)
     its final name only after its integrity check passed: a backup that fails half-way
     leaves nothing that a later start could take for a backup."""
     stamp = stamp or f"{datetime.now():%Y%m%d-%H%M%S}"
-    dest = directory / f"tabela-{stamp}-v{version}.db"
+    dest = directory / f"{PREFIX}{stamp}-v{version}.db"
     tmp = dest.with_name(dest.name + ".tmp")
     src = dst = None
     try:
@@ -120,13 +123,23 @@ def _make(db_path: str, version: int, directory: Path, stamp: str | None = None)
             pass
 
 
-def _prune(directory: Path, keep: int = BACKUP_KEEP) -> None:
-    """Keep the newest `keep` `tabela-*.db` in `directory` (names sort by time)."""
+def _prune(directory: Path, prefix: str, keep: int = BACKUP_KEEP) -> None:
+    """Păstrează cele mai noi `keep` copii din FAMILIA `prefix` din `directory` și le șterge
+    pe celelalte.
+
+    O copie aparține familiei doar dacă numele are forma `<prefix><stamp>-v<N>.db`, cum scrie
+    `_make`. Celelalte familii din același director (`tabela-before-merge-*`,
+    `tabela-before-purge-*`) și copiile `.tmp` nu se ating niciodată. Ordinea e timestamp-ul
+    citit explicit din nume: nu literele numelui și nu mtime-ul (copierea schimbă mtime-ul)."""
+    pat = re.compile(rf"^{re.escape(prefix)}{_STAMP}-v\d+\.db$")
     try:
-        old = sorted((p for p in directory.iterdir()
-                      if p.name.startswith("tabela-") and p.name.endswith(".db")),
-                     key=lambda p: p.name, reverse=True)[keep:]
-        for p in old:
+        mine = []
+        for p in directory.iterdir():
+            m = pat.match(p.name)
+            if m:
+                mine.append(((int(m[1]), int(m[2]), int(m[3] or 0)), p))
+        mine.sort(key=lambda kp: kp[0], reverse=True)
+        for _, p in mine[keep:]:
             p.unlink(missing_ok=True)
     except OSError as e:
         log.warning("could not prune old backups in %s: %s", directory, e)
@@ -189,7 +202,7 @@ def ensure(db_path: str, version: int) -> Path | str | None:
             log.warning("pre-migration backup into %s failed: %s", d, e)
             continue
         if d != primary:
-            _prune(d)
+            _prune(d, PREFIX)
             log.error("pre-migration backup made in the FALLBACK directory %s (the backup "
                       "directory %s is not usable)", dest, primary)
         else:
