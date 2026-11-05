@@ -427,3 +427,21 @@ def test_install_sh_installs_watchdog_units():
     text = (ROOT / "deploy" / "install.sh").read_text(encoding="utf-8")
     assert "tabela-watchdog.service tabela-watchdog.timer" in text
     assert "systemctl enable --now tabela-watchdog.timer" in text
+
+
+def test_keeps_only_its_own_backups_when_pruning(server):
+    # retenția din update.sh șterge doar copiile de pre-deploy (tabela-<stamp>-v<N>.db)
+    bk = server.data / "backups"
+    bk.mkdir()
+    for i in range(4):
+        (bk / f"tabela-2026010{i}-000000-v2.db").write_bytes(b"x")
+    keep_other = [bk / "tabela-before-merge-20260101-000000-000001.db",
+                  bk / "tabela-before-purge-20260101-000000.db"]
+    for f in keep_other:
+        f.write_bytes(b"x")
+    commit(server.work, 3, '{"ok":true}', "v3")
+    git(server.work, "push", "-q", "origin", "main")
+    assert server.run().returncode == 0
+    assert all(f.exists() for f in keep_other)
+    names = sorted(p.name for p in bk.glob("tabela-[0-9]*-v*.db"))
+    assert len(names) == 2 and names[0] == "tabela-20260103-000000-v2.db"
