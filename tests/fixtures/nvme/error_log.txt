@@ -1,0 +1,23 @@
+Error Log Entries for device:nvme0 entries:2
+.................
+ Entry[ 0]
+.................
+error_count    : 3920
+sqid           : 0
+cmdid          : 0x1f
+status_field   : 0x4004(INVALID_FIELD: A reserved coded value or an unsupported value in a defined field)
+parm_err_loc   : 0x28
+lba            : 0
+nsid           : 0
+vs             : 0
+.................
+ Entry[ 1]
+.................
+error_count    : 3919
+sqid           : 0
+cmdid          : 0x1e
+status_field   : 0x4004(INVALID_FIELD: A reserved coded value or an unsupported value in a defined field)
+parm_err_loc   : 0x28
+lba            : 0
+nsid           : 0
+vs             : 0

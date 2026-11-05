@@ -228,6 +228,7 @@
     body.appendChild(bar);
     body.appendChild(dupesCard());
     body.appendChild(serverCard());
+    body.appendChild(nvmeCard());
     body.appendChild(marksCard());
     loadReport();
     syncTimer();
@@ -528,6 +529,133 @@
     return c;
   }
 
+  // ---- live NVMe card (GET /api/admin/tools/nvme; colectorul root scrie nvme.json) ---------
+
+  var NVME_TEMP_WARN_C = 70;  // temperatura de la care apare cu roșu
+  var nvmeBusy = false;
+
+  function nvmeCard() {
+    var c = card("admin-nvme", "Disc NVMe (live)");
+    c.appendChild(el("p", "admin-text",
+      "Date de la colectorul care citește discul la câteva minute (doar citire). " +
+      "Se reîmprospătează odată cu cardul „Server (live)”."));
+    var bar = el("div", "admin-actions");
+    var b = el("button", "btn btn-ghost btn-sm", "Reîmprospătează");
+    b.type = "button";
+    b.addEventListener("click", function () { loadNvme(); });
+    bar.appendChild(b);
+    c.appendChild(bar);
+    var meta = el("p", "admin-meta", "");
+    meta.id = "admin-nvme-meta";
+    c.appendChild(meta);
+    var dl = el("dl", "admin-stats");
+    dl.id = "admin-nvme-stats";
+    c.appendChild(dl);
+    c.appendChild(el("h3", "admin-h3", "smart-log (toate câmpurile)"));
+    var sl = el("dl", "admin-stats");
+    sl.id = "admin-nvme-smartlog";
+    c.appendChild(sl);
+    c.appendChild(el("h3", "admin-h3", "smartctl -a (sănătate NVMe)"));
+    var sc = el("dl", "admin-stats");
+    sc.id = "admin-nvme-smartctl";
+    c.appendChild(sc);
+    c.appendChild(el("h3", "admin-h3", "Ultimele intrări din error-log"));
+    var ul = el("ul", "admin-list");
+    ul.id = "admin-nvme-errors";
+    c.appendChild(ul);
+    return c;
+  }
+
+  function loadNvme() {
+    if (nvmeBusy || !$("admin-nvme-stats")) return;
+    nvmeBusy = true;
+    api("/api/admin/tools/nvme").then(function (r) {
+      nvmeBusy = false;
+      if (r.status === 200 && r.data) { renderNvme(r.data); return; }
+      if (r.status === 401 || r.status === 503 || r.status === 429) { handleAuth(r); return; }
+      var m = $("admin-nvme-meta");
+      if (m) m.textContent = "Eroare la citirea discului (" + r.status + ").";
+    }).catch(function () {
+      nvmeBusy = false;
+      var m = $("admin-nvme-meta");
+      if (m) m.textContent = "Serverul nu răspunde.";
+    });
+  }
+
+  function nvmeLabel(key) {
+    var s = key.replace(/_/g, " ");
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function pct(v) { return v == null ? "—" : v + " %"; }
+
+  function units(v) {
+    // o unitate de date NVMe = 1000 × 512 octeți
+    return v == null ? "—" : txt(v) + " unități (" + (v * 512000 / 1e12).toFixed(2) + " TB)";
+  }
+
+  function ageText(sec) {
+    return sec < 120 ? sec + " s" : Math.round(sec / 60) + " min";
+  }
+
+  function renderNvme(s) {
+    var dl = $("admin-nvme-stats");
+    if (!dl) return;
+    clear(dl);
+    clear($("admin-nvme-smartlog"));
+    clear($("admin-nvme-smartctl"));
+    clear($("admin-nvme-errors"));
+    var meta = $("admin-nvme-meta");
+    if (!s.available) {
+      if (meta) meta.textContent = "Colectorul n-a scris încă date.";
+      return;
+    }
+    var sl = s.smart_log || {}, sc = s.smartctl || {}, h = sc.health || {};
+    var dev = s.device || {};
+
+    stat(dl, "Stare SMART", txt(sc.overall_health),
+      sc.overall_health && sc.overall_health !== "PASSED" ? "is-bad" : "");
+    stat(dl, "Model", txt(dev.model));
+    stat(dl, "Temperatură", sl.temperature_c == null ? "—" : sl.temperature_c + " °C",
+      sl.temperature_c >= NVME_TEMP_WARN_C ? "is-bad" : "");
+    stat(dl, "Critical warning", txt(sl.critical_warning), sl.critical_warning ? "is-bad" : "");
+    stat(dl, "Rezervă disponibilă", pct(sl.available_spare),
+      sl.available_spare != null && sl.available_spare_threshold != null &&
+      sl.available_spare < sl.available_spare_threshold ? "is-bad" : "");
+    stat(dl, "Uzură (percentage used)", pct(sl.percentage_used));
+    stat(dl, "Erori media", txt(sl.media_errors), sl.media_errors ? "is-bad" : "");
+    stat(dl, "Opriri nesigure", txt(sl.unsafe_shutdowns));
+    stat(dl, "Ore pornit", txt(sl.power_on_hours));
+    stat(dl, "Date citite", units(sl.data_units_read));
+    stat(dl, "Date scrise", units(sl.data_units_written));
+    stat(dl, "Intrări în error-log", txt(sl.num_err_log_entries));
+    stat(dl, "Citit la", when(s.collected_at) +
+      (s.age_s != null ? " (acum " + ageText(s.age_s) + ")" : ""), s.stale ? "is-bad" : "");
+
+    var slDl = $("admin-nvme-smartlog");
+    Object.keys(sl).forEach(function (k) { stat(slDl, nvmeLabel(k), txt(sl[k])); });
+    var scDl = $("admin-nvme-smartctl");
+    Object.keys(h).forEach(function (k) { stat(scDl, nvmeLabel(k), txt(h[k])); });
+
+    var ul = $("admin-nvme-errors");
+    var errs = s.error_log || [];
+    if (!errs.length) {
+      ul.appendChild(el("li", "admin-muted", "Nicio intrare."));
+    } else {
+      errs.forEach(function (e) {
+        ul.appendChild(el("li", "admin-svc", "Erori " + txt(e.error_count) + " · sqid " +
+          txt(e.sqid) + " · cmdid " + txt(e.cmdid) + " · " + txt(e.status_field) +
+          " · LBA " + txt(e.lba)));
+      });
+    }
+
+    var notes = [];
+    if (s.stale) notes.push("Date vechi: colectorul nu a mai scris de peste 15 minute.");
+    if (!s.ok) notes.push("Colectorul a raportat o eroare parțială (" + txt(s.error) + ").");
+    if (meta) meta.textContent = notes.length ? notes.join(" ") :
+      "Citit la " + when(s.collected_at) + ".";
+  }
+
   // ---- timer: only while #admin is shown, the page is visible and the session is valid ---
 
   function stopTimer() {
@@ -538,8 +666,9 @@
     var on = loggedIn && location.hash === "#admin" && !document.hidden && !!$("admin-server-stats");
     if (!on) { stopTimer(); return; }
     if (!serverTimer) {
-      serverTimer = setInterval(loadServer, REFRESH_MS);
+      serverTimer = setInterval(function () { loadServer(); loadNvme(); }, REFRESH_MS);
       loadServer();
+      loadNvme();
     }
   }
 

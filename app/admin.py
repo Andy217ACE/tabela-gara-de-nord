@@ -441,6 +441,16 @@ async def server_tools(request: Request):
     return _json(out)
 
 
+@guarded.get("/tools/nvme")
+async def nvme_tools(request: Request):
+    """Discul NVMe (read-only, fără CSRF): citește nvme.json scris de colectorul root."""
+    now = datetime.now(TZ)
+    out = await run_in_threadpool(admin_tools.nvme_snapshot, request.app.state.settings.db_path,
+                                  now.timestamp())
+    out["generated_at"] = now.isoformat(timespec="seconds")
+    return _json(out)
+
+
 def _env_defaults() -> dict[str, int]:
     return {"capture_retention_days": captures.capture_settings().retention_days,
             "capture_min_free_mb": observations.min_free_mb_env()}
