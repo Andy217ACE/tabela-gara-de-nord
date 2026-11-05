@@ -222,6 +222,11 @@ async def run_poller(
                               f"{type(e).__name__}: {e}")
             else:
                 dur_ms = int((time.perf_counter() - t0) * 1000)
+                error = None
+                if not rows:  # OCR read nothing: a failed read, reported as one
+                    error = "no rows read"
+                    record_error("ocr", ts)
+                    log.warning("OCR read no rows for new image")
                 rejected = None
                 try:
                     rejected = await on_rows(rows, ts)
@@ -231,5 +236,5 @@ async def run_poller(
                 if rejected and rejected_dir:
                     await asyncio.to_thread(save_rejected, rejected_dir, data, ts,
                                             dict(rejected))
-                await capture(data, rows, debug, ts, dur_ms, None)
+                await capture(data, rows, debug, ts, dur_ms, error)
         await pause(tracker.next_poll_delay(clock(), last_change))

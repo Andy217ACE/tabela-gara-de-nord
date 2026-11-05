@@ -379,14 +379,31 @@ def test_jitter_does_not_merge_far_apart_or_claimed(store):
     assert [(e.kind, e.row.sched_time) for e in ev] == [("appeared", "20:06")]
 
 
-def test_stale_services_go_silently(store):
+def test_outage_does_not_retire_services(store):
+    """No readings for 45 min (poller down): the services unseen after the outage stay
+    listed (not 'gone' without an event) until three successful readings miss them."""
     store.ingest(base_rows(), T0)
     rows = [R("arrival", 1, "13:00"), R("arrival", 2, "13:05"),
             R("departure", 3, "13:10"), R("departure", 4, "13:15")]
     ev = store.ingest(rows, T0 + timedelta(minutes=45))
     assert all(e.kind == "appeared" for e in ev) and len(ev) == 4
-    assert count(store, "services", "status='gone'") == 4
+    old = "train_no IN (1621, 1622, 1731, 1732)"
+    assert count(store, "services", f"status='gone' AND {old}") == 0
+    for m in (46, 47):
+        store.ingest(rows, T0 + timedelta(minutes=m))
+    assert count(store, "services", f"status='gone' AND {old}") == 0
+    store.ingest(rows, T0 + timedelta(minutes=48))
+    assert count(store, "services", f"status='gone' AND {old}") == 4
+
+
+def test_empty_frame_keeps_last_good_state(store):
+    store.ingest(base_rows(), T0)
+    listed = count(store, "services", "status='listed'")
+    assert store.ingest([], T0 + timedelta(minutes=1)) == []
+    assert count(store, "services", "status='listed'") == listed
+    assert count(store, "services", "miss_count > 0") == 0
     assert count(store, "events", "kind='gone'") == 0
+    assert count(store, "runs", "ok=0 AND n_rows=0") == 1
 
 
 @pytest.mark.usefixtures("legacy_rules")  # mechanics of matching, not debounce

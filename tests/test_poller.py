@@ -289,3 +289,22 @@ async def test_run_records_store_code(world, monkeypatch):
 
     await _run(w, on_rows)
     assert system_status.last_error()[0] == "store"
+
+
+async def test_empty_read_is_reported_as_failed_capture(world, monkeypatch):
+    """OCR that returns no rows at all is a failed read: the capture gets an error."""
+    w = world
+    monkeypatch.setattr(poller, "read_board_debug", lambda data, **kw: ([], None))
+    errors = []
+
+    async def on_capture(data, rows, debug, ts, dur_ms, error):
+        errors.append(error)
+
+    async def on_rows(rows, ts):
+        pass
+
+    await asyncio.wait_for(
+        poller.run_poller(S(), on_rows, None, w.stop, clock=w.clock, sleep=w.sleep,
+                          last_image_path=w.path, on_capture=on_capture),
+        timeout=5)
+    assert errors and all(e and "no rows" in e for e in errors)

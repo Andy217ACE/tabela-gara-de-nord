@@ -376,6 +376,8 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
     `capture_dir` None: metadata only, no file. Returns the capture id.
     """
     rows = rows or []
+    if error is None and not rows:  # an empty read is a failed read, never an ok capture
+        error = "no rows read"
     h = hashlib.sha1(image_bytes).hexdigest()
     when = _utc(ts)
     now_s = when.isoformat(timespec="seconds")

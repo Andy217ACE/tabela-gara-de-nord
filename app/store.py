@@ -50,7 +50,7 @@ PANEL_ROWS = 12  # the physical CFR panel always shows this many rows; a frame w
 REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'appeared'
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
-STALE_MIN = 30  # listed services unseen this long are retired silently
+STALE_MIN = 30  # no accepted reading for this long = an outage (poller down, board unreadable)
 SCHEMA_VERSION = 9
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 COEXIST_RECHECK_S = 600  # a cached "never read together" (see Store._coexist) is re-queried after this many seconds
@@ -571,6 +571,7 @@ class Store:
             c = self._conn
             c.execute("BEGIN IMMEDIATE")
             try:
+                outage = self._outage(local)  # before this frame's runs row exists
                 self._note_frame(rows)
                 good, low = self._split(rows)
                 accepted, rejected = self._judge(good)
@@ -586,7 +587,7 @@ class Store:
                 self._pending_read = {}
                 good = [r for r in good if r.board in accepted]
                 low = [r for r in low if r.board in accepted]
-                events = self._diff(good, low, local, ts_s, tuple(accepted))
+                events = self._diff(good, low, local, ts_s, tuple(accepted), outage)
                 c.execute("COMMIT")
                 self._after_judge(accepted, rejected, ts_s, read)
                 # pending new services of a rejected panel wait for its next reading
@@ -754,8 +755,17 @@ class Store:
                 best = p
         return best
 
+    def _outage(self, local: datetime) -> bool:
+        """True when no accepted reading came in the last STALE_MIN minutes (the poller was
+        down or the board unreadable). A service missing from the first frame after such a
+        gap is not evidence that it left: it stays as it was until readings miss it."""
+        last = self._last_ok_ts()
+        if last is None:
+            return False
+        return local - datetime.fromisoformat(last) > timedelta(minutes=STALE_MIN)
+
     def _diff(self, good: list[Row], low: list[Row], local: datetime,
-              ts_s: str, boards: tuple[str, ...] = BOARDS) -> list[Event]:
+              ts_s: str, boards: tuple[str, ...] = BOARDS, outage: bool = False) -> list[Event]:
         c = self._conn
         events: list[Event] = []
         seen: set[int] = set()
@@ -908,19 +918,15 @@ class Store:
                 c.execute("UPDATE services SET last_seen=?, miss_count=0 WHERE id=?",
                           (ts_s, cur["id"]))
 
-        stale_before = local - timedelta(minutes=STALE_MIN)
         marks = ",".join("?" * len(boards))
         for s in c.execute(f"SELECT * FROM services WHERE status='listed' AND board IN ({marks})",
                            boards).fetchall():
             if s["id"] in seen:
                 continue
+            if outage:  # no readings before this frame: unseen is not absent, count nothing
+                continue
             misses = s["miss_count"] + 1
-            if datetime.fromisoformat(s["last_seen"]) < stale_before:
-                # Not seen for a long time (e.g. downtime): retire without an event.
-                c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
-                          (misses, s["id"]))
-                self._judge_ghost(s)
-            elif misses >= GONE_AFTER_MISSES:
+            if misses >= GONE_AFTER_MISSES:
                 c.execute("UPDATE services SET status='gone', miss_count=? WHERE id=?",
                           (misses, s["id"]))
                 if not self._judge_ghost(s):  # a ghost leaving is no event, no push

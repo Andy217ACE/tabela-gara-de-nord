@@ -172,6 +172,14 @@ def test_capture_dir_none_records_metadata_only(store, tmp_path):
     assert q(store, "SELECT path FROM captures WHERE id=?", cid)[0][0] is None
 
 
+def test_empty_capture_is_not_ok(store):
+    """A capture with 0 rows is a failed read, whatever the caller passed as error."""
+    cid = obs.record_capture(store, b"img", [], None, TS, capture_dir=None)
+    ok, n, err = q(store, "SELECT ok, n_rows, error FROM captures WHERE id=?", cid)[0]
+    assert (ok, n) == (0, 0)
+    assert err == "no rows read"
+
+
 def test_jittered_service_links(store, tmp_path):
     rows = [_row(1621, sched_time="12:10"), _row(1622, sched_time="12:20"),
             _row(1731, board="departure", sched_time="12:15"),

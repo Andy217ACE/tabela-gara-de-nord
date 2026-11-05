@@ -165,7 +165,10 @@ def test_image_path_only_under_root(store, tmp_path):
 
 
 def test_system_stats_shape(store, tmp_path):
-    obs.record_capture(store, b"a", [], None, NOW, capture_dir=tmp_path, duration_ms=100)
+    from app.models import Row
+    one = [Row(board="arrival", train_type="IR", train_no=1621, station="Brasov",
+               operator="CFR Calatori", sched_time="12:10", delay_min=0)]
+    obs.record_capture(store, b"a", one, None, NOW, capture_dir=tmp_path, duration_ms=100)
     obs.record_capture(store, b"b", [], None, NOW, capture_dir=tmp_path, duration_ms=300,
                        error="boom")
     s = cap.capture_system_stats(store, ":memory:", now=NOW + timedelta(minutes=1))
