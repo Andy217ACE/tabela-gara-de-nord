@@ -162,6 +162,6 @@ Limitele sunt cele din cod: o cerere la cel mult 5 minute, inclusiv după reporn
 
 ## Verificări și nesiguranțe
 
-- README (secțiunea „Meteo”) spune că se stochează „un rând per oră de observație”. Codul stochează un rând per observație, cu cadența de 15 minute (`DEFAULT_INTERVAL_S = 900`), deci aproximativ 96 pe zi. Este o nepotrivire între README și cod; de corectat în README, nu în cod.
+- README (secțiunea „Meteo”) spunea „un rând per oră de observație”; a fost corectat. Codul stochează un rând per observație, cu cadența de 15 minute (`DEFAULT_INTERVAL_S = 900`), deci aproximativ 96 pe zi.
 - Calea fișierului de mediu `/etc/tabela.env` este citată în README; nu am verificat-o pe server (de verificat pe serverul de producție: fișierul de unit systemd sau scriptul de deploy).
 - Fereastra de ±30 min și pragurile de grupe din statistici sunt verificate în `app/stats_overview.py` și `app/seasons.py`; nu am verificat cum se randează graficele pe telefon (de verificat în `web/statistici.js` cu un browser).
