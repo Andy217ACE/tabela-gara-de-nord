@@ -429,6 +429,7 @@ def test_install_sh_installs_watchdog_units():
     assert "systemctl enable --now tabela-watchdog.timer" in text
 
 
+<<<<<<< HEAD
 def test_keeps_only_its_own_backups_when_pruning(server):
     # retenția din update.sh șterge doar copiile de pre-deploy (tabela-<stamp>-v<N>.db)
     bk = server.data / "backups"
@@ -445,3 +446,39 @@ def test_keeps_only_its_own_backups_when_pruning(server):
     assert all(f.exists() for f in keep_other)
     names = sorted(p.name for p in bk.glob("tabela-[0-9]*-v*.db"))
     assert len(names) == 2 and names[0] == "tabela-20260103-000000-v2.db"
+=======
+ENABLE = "systemctl enable --now tabela-watchdog.timer"
+DISABLE = "systemctl disable --now tabela-watchdog.timer"
+
+
+def _rollback_case(server):
+    """Watchdog units installed; the next commit is unhealthy, so the run rolls back."""
+    _commit_watchdog_units(server)
+    units = server.tmp / "systemd"
+    units.mkdir()
+    server.env["WD_UNIT_DIR"] = posix(units)
+    commit(server.work, 2, "boom", "broken next")
+    git(server.work, "push", "-q", "origin", "main")
+
+
+def test_rollback_reenables_watchdog_timer_when_it_was_enabled(server):
+    _rollback_case(server)  # fake `is-enabled` succeeds: the timer was on before the update
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr, r.stderr
+    calls = server.log.read_text().splitlines()
+    restarts = [i for i, c in enumerate(calls) if c == "systemctl restart tabela"]
+    assert DISABLE in calls and ENABLE in calls[restarts[-1]:]   # back on after the old code
+    assert "watchdog timer re-enabled" in r.stdout + r.stderr
+
+
+def test_rollback_leaves_watchdog_timer_disabled_when_it_was_disabled(server):
+    _rollback_case(server)
+    _systemctl_fails_on(server, "is-enabled")  # the timer was off before the update
+    r = server.run()
+    assert r.returncode == 1 and "ROLLED BACK" in r.stderr, r.stderr
+    calls = server.log.read_text().splitlines()
+    restarts = [i for i, c in enumerate(calls) if c == "systemctl restart tabela"]
+    assert DISABLE in calls
+    assert ENABLE not in calls[restarts[-1]:]                    # stays off, as before
+    assert "watchdog timer left disabled" in r.stdout + r.stderr
+>>>>>>> fix/deploy-scripts

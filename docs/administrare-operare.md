@@ -393,7 +393,7 @@ Sursa: `app/notifier.py`, `app/api.py` (`_make_sender`, `/api/push/*`), `app/con
 |---|---|---|
 | `VAPID_PRIVATE_KEY` | gol | generată de `install.sh`; **secret** |
 | `VAPID_PUBLIC_KEY` | gol | derivată din cheia privată; publică (apare în `GET /api/push/key`) |
-| `VAPID_SUBJECT` | `mailto:admin@example.com` | `install.sh` scrie `https://tabelacfr.ddns.net` |
+| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `install.sh` scrie `https://tabelacfr.ddns.net` |
 
 Dacă una dintre cele două chei lipsește, notificările push sunt **dezactivate**: se loghează „VAPID keys not configured; push notifications are disabled” o singură dată, iar restul aplicației funcționează.
 
