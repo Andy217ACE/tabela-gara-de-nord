@@ -473,6 +473,7 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
 .pnl-row .c-op { font-family: var(--font); font-size: 0.85em; color: var(--p-text-2); }
 .c-delay { white-space: nowrap; }
 .c-plat { text-align: center; }
+.pnl-pest { border: 1px dashed var(--p-line); border-radius: var(--radius-md); padding: 1px 6px; color: var(--p-text-2); white-space: nowrap; }
 .pnl-row .c-msg { font-family: var(--font); font-size: 0.8em; color: var(--p-text-2); }
 .pnl-row .c-changed { font-size: 0.85em; color: var(--p-text-2); white-space: nowrap; }
 
@@ -504,6 +505,7 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
   .pnl-table .c-op { width: 17%; }
   .pnl-table .c-delay { width: calc(5.2em + 40px); }
   .pnl-table .c-plat { width: calc(2.2em + 28px); }
+  .pnl-table .c-pest { width: calc(8.2em + 20px); text-align: center; }
   .pnl-table .c-msg { width: 15%; }
   .pnl-table .c-changed { width: calc(3em + 20px); }
   .pnl-row td { overflow: hidden; }
@@ -581,6 +583,7 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
 .pnl-body.hide-op .c-op,
 .pnl-body.hide-delay .c-delay,
 .pnl-body.hide-plat .c-plat,
+.pnl-body.hide-pest .c-pest,
 .pnl-body.hide-msg .c-msg,
 .pnl-body.hide-changed .c-changed { display: none; }
 
@@ -727,6 +730,14 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
   .c-time { grid-area: time; width: auto; }
   .c-station { grid-area: station; }
   .c-plat { grid-area: plat; width: auto; }
+  .c-pest { grid-area: pest; width: auto; text-align: left; }
+  .pnl-body:not(.hide-pest) .pnl-row {
+    grid-template-areas:
+      "fav time station plat"
+      "fav train train delay"
+      "fav pest pest pest"
+      ". msg msg msg";
+  }
   .c-train { grid-area: train; font-size: 0.85em; }
   .c-delay { grid-area: delay; text-align: right; }
   .c-msg { grid-area: msg; }

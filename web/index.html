@@ -149,6 +149,10 @@
       <!-- mod „Panou" (web/panel.js): comutator Panou/Carduri + afișajul de gară -->
       <div id="panel-root" class="pnl-root"></div>
 
+      <!-- coloana "Peron estimat" (strat lazy, incarcat de app.js): implicit oprita -->
+      <label class="pe-toggle" for="pe-toggle"><input type="checkbox" id="pe-toggle"><span>Arată peron estimat</span></label>
+      <p class="pe-note" id="pe-note" hidden></p>
+
       <div class="tabs" role="tablist" aria-label="Panou">
         <button class="tab" type="button" role="tab" id="tab-arrivals" aria-controls="panel-arrivals" aria-selected="true" data-board="arrivals">
           <span>Sosiri</span><span class="tab-count" id="count-arrivals"></span>

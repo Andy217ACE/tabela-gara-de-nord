@@ -25,6 +25,9 @@
     { id: "op", label: "Operator", full: "Operator" },
     { id: "delay", label: "Întârziere", full: "Întârziere afișată", sort: "delay" },
     { id: "plat", label: "Linia", full: "Linia / peronul" },
+    // estimare, nu citire: implicit ascunsă; starea e în peron_est.js (cheia tabela.peronEst)
+    { id: "pest", label: "Peron estimat", full: "Arată peron estimat", est: true,
+      tip: "Peron estimat: estimare din istoricul observat, nu informație oficială CFR" },
     { id: "msg", label: "Stare", full: "Mesaj de stare" },
     { id: "changed", label: "Modificat", full: "Ultima modificare (observată aici)", off: true }
   ];
@@ -390,7 +393,15 @@
       var cb = el("input");
       cb.type = "checkbox";
       cb.checked = !S.hidden.has(c.id);
+      if (c.est) cb.id = "pnl-col-pest";
       cb.addEventListener("change", function () {
+        if (c.est) {  // starea comună cu peron_est.js; nu intră în lista de coloane ascunse
+          var ta = window.TabelaApp || {};
+          if (typeof ta.peronEstLoad === "function") {  // stratul lazy (app.js)
+            ta.peronEstLoad().then(function () { if (ta.peronEst) ta.peronEst.set(cb.checked); });
+          }
+          return;
+        }
         if (cb.checked) S.hidden.delete(c.id); else S.hidden.add(c.id);
         save(KEYS.cols, JSON.stringify(Array.from(S.hidden)));
         applyCols();
@@ -464,7 +475,8 @@
         } else {
           th.appendChild(el("span", "pnl-th-label", label));
         }
-        th.title = c.full;
+        th.title = c.tip || c.full;
+        if (c.tip) th.setAttribute("aria-label", c.tip);
         ths[c.id] = th;
         hr.appendChild(th);
       });
@@ -650,6 +662,8 @@
     if (known) plat.setAttribute("aria-label", "Linia " + t.platform);
     tr.appendChild(cell("plat", plat));
 
+    tr.appendChild(cell("pest", pestNode(board, t)));
+
     var msg = message(board, t, lvl, fresh);
     tr.appendChild(clipCell("msg", msg, msg));
 
@@ -662,6 +676,18 @@
       tr.appendChild(cell("changed", unknown("ultima modificare")));
     }
     return tr;
+  }
+
+  // Peron estimat (peron_est.js): doar peste pragul din backtest, altfel „—"; mereu etichetat.
+  function pestNode(board, t) {
+    var pe = window.TabelaApp && window.TabelaApp.peronEst;
+    var est = pe && pe.enabled() ? pe.lookup(board, t) : null;
+    var s = el("span", est ? "pnl-pest" : "pnl-unk", est ? est.platform + " · " + est.share_pct + "%" : "—");
+    var label = pe ? pe.label(est) : "Peron estimat indisponibil";
+    s.setAttribute("role", "img");
+    s.setAttribute("aria-label", label);
+    s.title = label;
+    return s;
   }
 
   // Nume canonic (A2). Dacă potrivirea a fost nesigură: subliniere punctată + titlu.
@@ -1116,11 +1142,29 @@
       var cols = JSON.parse(load(KEYS.cols) || "null");
       S.hidden = new Set(Array.isArray(cols) ? cols.map(String) : ["changed"]);
     } catch (e) { S.hidden = new Set(["changed"]); }
+    S.hidden.delete("pest");
+    if (!peronOn()) S.hidden.add("pest");  // estimarea e implicit ascunsă
     try {
       var favs = JSON.parse(load(KEYS.fav) || "[]");
       S.favs = new Set(Array.isArray(favs) ? favs.map(String) : []);
     } catch (e) { S.favs = new Set(); }
   }
+
+  function peronOn() {
+    try { return localStorage.getItem("tabela.peronEst") === "1"; } catch (e) { return false; }
+  }
+
+  // comutatorul „Arată peron estimat" (peron_est.js) sau estimările noi au schimbat starea
+  document.addEventListener("tabela:peronest", function () {
+    if (!S.dom || !S.dom.body) return;
+    var pe = window.TabelaApp && window.TabelaApp.peronEst;
+    var on = pe ? pe.enabled() : false;
+    if (on) S.hidden.delete("pest"); else S.hidden.add("pest");
+    var cb = document.getElementById("pnl-col-pest");
+    if (cb) cb.checked = on;
+    applyCols();
+    if (S.view === "panou") render();
+  });
 
   // ascultăm imediat: primul fetch al app.js poate termina înainte de init
   document.addEventListener("tabela:board", onBoard);

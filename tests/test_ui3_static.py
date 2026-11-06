@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PRECACHE_LIMIT = 650_000      # the budget set in Beta 1.26 (test_brand_theme); this round adds nothing to it
+PRECACHE_LIMIT = 660_000      # 650 KB (Beta 1.26) + ~5 KB: hook/coloana "Peron estimat" in app.js/panel.*/style.css (peron_est.* e lazy)
 
 
 def read(name):

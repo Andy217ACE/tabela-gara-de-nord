@@ -1831,3 +1831,20 @@ main {
   opacity: 0.8;
 }
 .board[data-stale="true"] .trains { opacity: 0.6; }
+
+/* ---------- comutatorul "Peron estimat" (coloana: peron_est.css, încărcat lazy) ---------- */
+.pe-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  min-height: 44px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.pe-toggle input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.pe-note { margin: 4px 0 0; color: var(--text-3); font-size: 0.75rem; line-height: 1.4; }
+.pe-note[hidden], .pe-cell[hidden] { display: none; }
+html[data-view="panou"] .pe-toggle,
+html[data-view="panou"] .pe-note { display: none !important; }
