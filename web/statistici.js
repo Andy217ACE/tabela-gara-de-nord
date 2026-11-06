@@ -196,6 +196,20 @@
     v.ui.ci.checked = p.doar_confirmate === "1";
   }
 
+  // lazy "steps" layer (stat_steps.js): own file, not in the SW shell (precache budget); resolves even if it fails
+  var stepsP = null;
+  function stepsLayer() {
+    if (App.statSteps) return Promise.resolve();
+    if (!stepsP) stepsP = new Promise(function (resolve) {
+      var sc = document.createElement("script");
+      sc.src = "stat_steps.js?v=1";
+      sc.onload = resolve;
+      sc.onerror = function () { stepsP = null; resolve(); };
+      document.head.append(sc);
+    });
+    return stepsP;
+  }
+
   function load() {
     var q = query(v.p);
     var url = API + (q ? "?" + q : "");
@@ -214,6 +228,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
+    chartsReady = chartsReady.then(function (c) { return stepsLayer().then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
@@ -1673,6 +1688,7 @@
         bigSection(d, boards);
         problemRoutesSection(d, boards);
         growthSection(d, boards);
+        if (App.statSteps) App.statSteps.render(d, boards, { el: el, nf: nf, figure: figure, multiples: multiples, hbars: hbars, nLine: nLine, warn: warn, boardKey: boardKey, hashLink: hashLink, dataTable: dataTable });
         trendSection(d, boards);
       }
       sectionHeading("Grafice de detaliu", "Toate cifrele, pe întrebări: distribuție, zile, ore, operatori, rute, linii, vreme și calitatea datelor.");

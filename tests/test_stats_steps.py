@@ -133,3 +133,22 @@ def test_overview_payload_has_steps():
     out = so.build([dict(j, operator="CFR", last_platform=None, uncertain=0, status="gone")],
                    [], e, P, date(2026, 10, 24), {})
     assert out["steps"]["arrival"]["changes"]["n"] == 1
+
+
+# ---- front end (static) -----------------------------------------------------------------------
+
+def test_stat_steps_js_wired_and_csp_safe():
+    from pathlib import Path
+    web = Path(__file__).resolve().parent.parent / "web"
+    js = (web / "stat_steps.js").read_text(encoding="utf-8")
+    assert js.startswith("// © 2026 Andy217Ace")
+    for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
+                "new Function", ".style.", 'setAttribute("style"', "cssText"):
+        assert bad not in js, bad
+    for needle in ("App.statSteps", "how:", "N = ", "Eșantion mic"):
+        assert needle in js, needle
+    main = (web / "statistici.js").read_text(encoding="utf-8")
+    assert "App.statSteps.render(" in main
+    # lazy-loaded (like charts3.js): not in index.html / the precache shell (660 KB budget)
+    assert "stat_steps.js" in main and "stat_steps" not in (web / "index.html").read_text(encoding="utf-8")
+    assert "stat_steps" not in (web / "sw.js").read_text(encoding="utf-8")
