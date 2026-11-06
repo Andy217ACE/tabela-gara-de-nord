@@ -30,6 +30,7 @@ var SHELL = [
   "/stats.css",
   "/stats.js",
   "/statistici.css",
+  "/stat_weekdays.js",
   "/statistici.js",
   "/ui2.css",
   "/ui2.js",
