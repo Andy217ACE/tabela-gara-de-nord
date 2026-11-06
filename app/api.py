@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app import (admin, captures, corrections, corrections_api, export, history_all, observations,
-                 poller, seasons, stats, stats_api, system_api, telegram, trains_api, weather)
+                 poller, seasons, stats, stats_api, stats_quality_daily, system_api, telegram, trains_api, weather)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
@@ -505,6 +505,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(trains_api.router)  # /api/trains (public catalog)
     app.include_router(system_api.router)  # /api/system (public, minimal)
     app.include_router(system_api.admin_router)  # /api/admin/system (admin, Sistem)
+    app.include_router(stats_quality_daily.router)  # /api/admin/quality-daily/* (admin, Sistem)
 
     @app.get("/api/export/history.csv", include_in_schema=False)
     async def export_history_csv(request: Request):

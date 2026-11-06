@@ -1,0 +1,31 @@
+/* © 2026 Andy217Ace — „Calitatea datelor pe zi” (în #sistem, doar admin). Tokenii temei din style.css. */
+.sqd { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.sqd-heading { font-size: var(--fs-lg); margin: 0; }
+.sqd-card { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card-bg);
+  padding: .9rem 1rem; min-width: 0; }
+.sqd-title { margin: 0 0 .15rem; font-size: var(--fs-md, 1rem); }
+.sqd-sub { margin: 1rem 0 .4rem; font-size: var(--fs-sm); }
+.sqd-intro, .sqd-note { margin: 0 0 .6rem; font-size: var(--fs-sm); color: var(--text-2); }
+.sqd-trend { color: inherit; font-weight: 600; }
+.sqd-error { color: var(--bad); }
+.sqd-scroll { overflow-x: auto; }
+.sqd-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.sqd-table th, .sqd-table td { padding: .35rem .5rem; text-align: right; white-space: nowrap;
+  border-top: 1px solid var(--border); font-weight: 400; }
+.sqd-table thead th { font-weight: 600; border-top: 0; }
+.sqd-table th:first-child { text-align: left; }
+.sqd-table tbody th { font-weight: 600; }
+.sqd-partial th:first-child { font-style: italic; font-weight: 400; }
+.sqd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.sqd-bar { display: block; width: 7rem; height: .7rem; border-radius: 3px; }
+.sqd-bar-bg { fill: var(--chip-bg); }
+.sqd-c-ok, .sqd-h-ok { fill: var(--ok); }
+.sqd-c-warn, .sqd-h-warn { fill: var(--warn); }
+.sqd-c-bad, .sqd-h-bad { fill: var(--bad); }
+.sqd-c-muted, .sqd-h-part { fill: var(--text); opacity: .4; }
+.sqd-h-none { fill: var(--chip-bg); }
+.sqd-legend { display: flex; flex-wrap: wrap; gap: .25rem .9rem; margin: 0 0 .5rem; font-size: var(--fs-xs); }
+.sqd-legend-item { display: inline-flex; align-items: center; gap: .3rem; }
+.sqd-heat-wrap { display: flex; gap: .4rem; align-items: stretch; overflow-x: auto; }
+.sqd-heat-lbl { fill: var(--text); font-size: 8px; }
+.sqd-heat { flex: 1 1 24rem; min-width: 18rem; max-width: 36rem; height: auto; }

@@ -106,6 +106,7 @@
     list.appendChild(row("Durata cadrului (mediană)", num(w.duration_ms_p50, "ms")));
     list.appendChild(row("Spațiu total pe disc", num(d.disk && d.disk.total_gb, "GB")));
     box.appendChild(list);
+    if (App.statQualityDaily) App.statQualityDaily.mount(box);  // calitatea datelor pe zi (admin)
     box.hidden = false;
   }
 
