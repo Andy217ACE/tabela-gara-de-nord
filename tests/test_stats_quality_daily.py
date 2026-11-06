@@ -219,7 +219,6 @@ def test_ui_js_safe_and_wired():
     assert "statQualityDaily" in js
     sis = (ROOT / "web" / "sistem.js").read_text(encoding="utf-8")
     assert "statQualityDaily" in sis
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
-    assert "stat_quality_daily.js" in html and "stat_quality_daily.css" in html
+    assert "stat_quality_daily.js" in sis and "stat_quality_daily.css" in sis  # lazy-loaded
     css = (ROOT / "web" / "stat_quality_daily.css").read_text(encoding="utf-8")
     assert "var(--" in css and "@import" not in css and "url(" not in css
