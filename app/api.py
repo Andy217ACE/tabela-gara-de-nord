@@ -32,6 +32,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app import (admin, captures, corrections, corrections_api, export, history_all, observations,
                  poller, seasons, stats, stats_api, stats_quality_daily, system_api, telegram, trains_api, weather)
+from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice noi #statistici)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
@@ -502,6 +503,8 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
     app.include_router(corrections_api.router)  # /api/admin/corrections* (admin only, v9)
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
+    app.include_router(stats_platform.router)  # /api/stats/platform-changes
+    app.include_router(stats_dwell.router)     # /api/stats/dwell
     app.include_router(trains_api.router)  # /api/trains (public catalog)
     app.include_router(system_api.router)  # /api/system (public, minimal)
     app.include_router(system_api.admin_router)  # /api/admin/system (admin, Sistem)

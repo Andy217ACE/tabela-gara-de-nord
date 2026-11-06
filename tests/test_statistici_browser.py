@@ -120,8 +120,9 @@ def test_statistici_page(browser, base_url, w, h, theme):
         # 11 detail charts + „Cum se împart călătoriile?” (donuts, Beta 1.26) + 7 „Problemele în
         # detaliu” cards + „Cum arată fiecare zi?” (the calendar, Beta 1.28: a week of data);
         # + the „Probleme” intro + „Comparație pe zilele săptămânii” (stat_weekdays.js)
-        assert page.locator(".ss-fig").count() == 21
-        assert page.locator(".ss-how").count() == 22
+        # + 2 public sections (stat_platform.js, stat_dwell.js)
+        assert page.locator(".ss-fig").count() == 23
+        assert page.locator(".ss-how").count() == 24
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")
