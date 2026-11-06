@@ -1697,6 +1697,7 @@
     weatherSection(d);
     trafficSection(d, boards);
     platformsSection(d, boards);
+    (App.statsExtra || []).forEach(function (x) { x(v.ui.body, v.p); });   // stat_platform.js, stat_dwell.js
     qualitySection(d);
     glossary(d);
     if (U()) {
