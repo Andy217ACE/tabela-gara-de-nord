@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.48 — 2026-11-06
+
+### Adăugat
+- **Coloana „Peron estimat":** estimarea peronului pentru trenurile fără peron anunțat, din istoricul observat pe aceeași stație. E o coloană separată, ascunsă implicit; o arăți din comutatorul „Arată peron estimat" și alegerea ta se păstrează în browser.
+- **Încredere vizibilă:** fiecare estimare apare cu procentul, de exemplu „4 · 83%". Se afișează doar cu cel puțin 5 observații și 80% din ele pe același peron.
+- **Acuratețe măsurată, sub ținta inițială:** în backtest, estimările afișate au fost corecte în 73,2% din cazuri (97 de cazuri, 7 zile de date), față de ținta de 80%. Cifra apare și în pagină. Acoperirea e mică (~4% din servicii).
+- **Endpoint:** `GET /api/predict/peron`, doar citire, cu cache de 5 minute.
+- **Notă:** estimare din istoricul observat, nu informație oficială CFR.
+
+### Schimbat
+- Limita de precache din testele UI a crescut de la 650 la 660 KB (comutatorul și coloana). Scripturile coloanei se încarcă la cerere.
+
 ## Beta 1.47 — 2026-11-06
 
 ### Adăugat
