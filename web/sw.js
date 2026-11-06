@@ -9,7 +9,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v38";
+var VERSION = "v39";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -49,6 +49,7 @@ var SHELL = [
 ];
 // the other Fira Sans weights (500/600/700) load on demand (HTTP cache); offline they fall
 // back to the 400 weight (synthetic bold) — keeps the precache inside its budget
+// peron_est.js/.css (lazy, injected by app.js) are NOT precached (precache budget); the shell works without them
 // icon-512 / maskable are fetched by the browser from the manifest; not precached.
 var DEFAULT_TITLE = "Gara de Nord";
 

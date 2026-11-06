@@ -33,6 +33,11 @@ MIN_SHARE_PCT = 60  # peronul dominant: cel puțin 60% din citiri (inclusiv)
 MIN_BACKTEST_N = 100  # predicții evaluate, înainte de orice publicare
 MIN_ACC = 80.0  # acuratețea predicțiilor, procente
 MIN_LIFT = 5.0  # puncte peste linia de bază „ultimul peron citit”
+# Prag de AFIȘARE publică, ales din backtest-ul pe baza live (vezi spec, secțiunea
+# „Afișare publică"): doar nivelul (a), n >= 5, peron dominant >= 80%. Nivelul (b) nu s-a
+# putut măsura (zero cazuri pe 7 zile de date), deci nu se afișează.
+DISPLAY_MIN_N = 5
+DISPLAY_MIN_SHARE_PCT = 80
 CONFUSION_PAIRS = (frozenset({5, 6}), frozenset({3, 8}))  # confuzii OCR, doar numărate
 
 
@@ -160,17 +165,18 @@ def walk_forward(cases: list[Case]) -> list[Evaluation]:
 _CASES_SQL = (
     "SELECT s.id, s.service_date, s.train_no, s.station, s.board, s.sched_time, o.platform"
     " FROM services s JOIN observations o ON o.service_id = s.id"
-    " WHERE o.validation_state = 'ok' AND o.platform IS NOT NULL AND {where}"
+    " WHERE o.validation_state = 'ok' AND o.platform IS NOT NULL AND {where}{since}"
     " ORDER BY s.service_date, s.id, o.id")
 
 
-def load_cases(conn: sqlite3.Connection) -> list[Case]:
+def load_cases(conn: sqlite3.Connection, since: str | None = None) -> list[Case]:
     """Servicii cu peronul adevărat: peronul modal din citirile valide. Egalitatea exclude
     serviciul. Doar citire."""
     reads: dict[int, list[int]] = defaultdict(list)
     meta: dict[int, tuple] = {}
-    for sid, sd, tn, station, board, st, plat in conn.execute(
-            _CASES_SQL.format(where=dq.public_services_where("s"))):
+    sql = _CASES_SQL.format(where=dq.public_services_where("s"),
+                            since=" AND s.service_date >= ?" if since else "")
+    for sid, sd, tn, station, board, st, plat in conn.execute(sql, (since,) if since else ()):
         reads[sid].append(int(plat))
         meta.setdefault(sid, (sd, int(tn), station, board, st))
     out: list[Case] = []
@@ -232,3 +238,30 @@ def gate(rep: dict) -> Gate:
         return Gate(False, f"nepublicat: avantaj {diff:.1f} puncte față de linia de bază "
                            f"(minim {MIN_LIFT})")
     return Gate(True, f"publicat: acuratețe {acc} %, avantaj {diff:.1f} puncte")
+
+
+def estimate_board(cases: list[Case], board: str, trains: list[dict]) -> list[dict]:
+    """Estimări de AFIȘAT pentru trenurile de pe panou (``board``: arrival | departure).
+
+    Doar trenuri fără peron anunțat, doar nivelul (a), doar peste pragul de afișare
+    (DISPLAY_MIN_N, DISPLAY_MIN_SHARE_PCT). Procentul se rotunjește în jos. Funcție pură."""
+    pool = Pool()
+    for c in cases:
+        if c.board == board:
+            pool.add(c)
+    out: list[dict] = []
+    for t in trains:
+        if t.get("platform") not in (None, ""):
+            continue  # peronul e deja anunțat: nu se estimează
+        probe = Case(0, t["service_date"], int(t["train_no"]), t["station"], board,
+                     t["sched_time"], 0)
+        pred = pool.predict(probe)
+        if pred is None or pred.basis != "a" or pred.n < DISPLAY_MIN_N:
+            continue
+        pct = int(pred.share * 100 + 1e-9)
+        if pct < DISPLAY_MIN_SHARE_PCT:
+            continue
+        out.append({"train_no": probe.train_no, "station": t["station"],
+                    "service_date": t["service_date"], "sched_time": t["sched_time"],
+                    "platform": pred.platform, "n": pred.n, "share_pct": pct})
+    return out

@@ -66,3 +66,11 @@ Data: 2026-11-05. Referință: `docs/superpowers/specs/2026-10-31-val5-predictie
 - Acuratețe predicție: 48,9 %. Linia de bază pe aceleași 133 de cazuri: 34,6 %.
 - Greșeli 5↔6 / 3↔8: 1 din greșelile predicției (1,5 %); 1,1 % din greșelile liniei de bază.
 - Decizie poartă: NU TRECE (acuratețe 48,9 % sub pragul de 80 %). Rămâne cod intern; nicio rută publică, nicio schimbare de interfață.
+
+## Rezultat backtest 2026-11-06 și afișare publică (decizia utilizatorului)
+
+Copia read-only a bazei live (2026-11-06): 2482 servicii cu peron adevărat, 7 zile. Pragul intern (n >= 5, cota >= 60%): 236 predicții (toate nivelul a; nivelul b: 0, nu există 20 de citiri pe aceeași oră și zi a săptămânii în 7 zile), acuratețe 54,2% față de 43,2% linia de bază (aceleași 236 cazuri); greșeli 5↔6/3↔8: 1,9% din greșeli (linia de bază: 1,5%). Poarta de 80% NU trece.
+
+Utilizatorul a cerut totuși afișarea. Reguli: doar ca ESTIMARE, cu procentul vizibil; doar nivelul a (singurul măsurat); doar trenuri fără peron anunțat; prag de afișare ales din backtest (tabel acuratețe pe n și cotă, walk-forward): **n >= 5 și cota >= 80%** = 97 predicții (3,9% din cele 2482 servicii; 4,6% din cele 2098 cu istoric), **acuratețe 73,2%** (sub 80%). Praguri mai stricte au acuratețe mai mare dar grupe prea mici (n>=5, cota >= 90%: 81,8% pe 22 cazuri; n>=6, cota >= 70%: 85,7% pe 28 cazuri), deci nesigure statistic; s-a ales cel mai strict prag cu minim 50 de cazuri. Pragul e ales pe aceleași date pe care e măsurat (risc de optimism), de reevaluat pe mai multe zile.
+
+UI: coloana „Peron estimat" (carduri: rând secundar; Panou: coloană proprie), comutator „Arată peron estimat" implicit oprit, reținut în localStorage (`tabela.peronEst`). Endpoint `GET /api/predict/peron` (read-only, cache 5 min). Textul de avertizare cu procentul din backtest vine din endpoint.

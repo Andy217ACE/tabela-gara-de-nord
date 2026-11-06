@@ -31,7 +31,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app import (admin, captures, corrections, corrections_api, export, history_all, observations,
-                 poller, seasons, stats, stats_api, stats_quality_daily, system_api, telegram, trains_api, weather)
+                 peron_api, poller, seasons, stats, stats_api, stats_quality_daily, system_api,
+                 telegram, trains_api, weather)
 from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice noi #statistici)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
@@ -505,6 +506,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(stats_platform.router)  # /api/stats/platform-changes
     app.include_router(stats_dwell.router)     # /api/stats/dwell
+    app.include_router(peron_api.router)       # /api/predict/peron (estimare, read-only)
     app.include_router(trains_api.router)  # /api/trains (public catalog)
     app.include_router(system_api.router)  # /api/system (public, minimal)
     app.include_router(system_api.admin_router)  # /api/admin/system (admin, Sistem)

@@ -279,3 +279,64 @@ def test_backtest_script_refuses_production_path(tmp_path):
     copy = tmp_path / "copie.db"
     copy.write_bytes(b"")
     assert mod.check_db_path(str(copy)) == str(copy)
+
+
+# --- afișare publică: prag din backtest (n >= 5, cota >= 80%, doar nivelul a) -------
+
+def _hist(platforms, train=100, station="Iași", board="departure"):
+    return [C(i, train=train, station=station, board=board, day=d, platform=p)
+            for i, (d, p) in enumerate(zip(days_from("2026-09-20", len(platforms)), platforms))]
+
+
+def _train(no=100, station="Iași", platform=None, day="2026-10-05", sched="08:00"):
+    return {"train_no": no, "station": station, "platform": platform,
+            "service_date": day, "sched_time": sched}
+
+
+def test_display_threshold_constants_come_from_backtest():
+    assert PP.DISPLAY_MIN_N == 5 and PP.DISPLAY_MIN_SHARE_PCT == 80
+
+
+def test_estimate_shown_at_eighty_percent_with_five_readings():
+    est = PP.estimate_board(_hist([4, 4, 4, 4, 6]), "departure", [_train()])
+    assert est == [{"train_no": 100, "station": "Iași", "service_date": "2026-10-05",
+                    "sched_time": "08:00", "platform": 4, "n": 5, "share_pct": 80}]
+
+
+def test_estimate_hidden_below_eighty_percent_even_if_gate_level_predicts():
+    cases = _hist([4, 4, 4, 6, 6])  # 60%: predicția internă există, afișarea nu
+    assert PP.Pool.predict(pool_of(cases), C(99, day="2026-10-05")) is not None
+    assert PP.estimate_board(cases, "departure", [_train()]) == []
+
+
+def test_estimate_hidden_with_four_readings():
+    assert PP.estimate_board(_hist([4, 4, 4, 4]), "departure", [_train()]) == []
+
+
+def test_estimate_never_for_train_with_announced_platform():
+    assert PP.estimate_board(_hist([4] * 6), "departure", [_train(platform=7)]) == []
+
+
+def test_estimate_level_b_is_never_displayed():
+    cases = [C(i, train=i, day=d, platform=3) for i, d in enumerate(mondays(25))]
+    assert PP.Pool.predict(pool_of(cases), C(999, train=999, day="2026-10-12")).basis == "b"
+    assert PP.estimate_board(cases, "departure", [_train(no=999, day="2026-10-12")]) == []
+
+
+def test_estimate_separates_arrival_and_departure_boards():
+    cases = _hist([4] * 6, board="arrival")
+    assert PP.estimate_board(cases, "departure", [_train()]) == []
+    assert len(PP.estimate_board(cases, "arrival", [_train()])) == 1
+
+
+def test_estimate_percent_is_rounded_down_never_up():
+    cases = _hist([4] * 6 + [6])  # 6/7 = 85,7%
+    assert PP.estimate_board(cases, "departure", [_train()])[0]["share_pct"] == 85
+
+
+def test_load_cases_since_filters_old_days(tmp_path):
+    conn = _db(str(tmp_path / "t.db"))
+    _svc(conn, 1, day="2026-01-01"); _obs(conn, 1, 5)
+    _svc(conn, 2, day="2026-10-01"); _obs(conn, 2, 5)
+    conn.commit()
+    assert [c.service_id for c in PP.load_cases(conn, since="2026-09-01")] == [2]

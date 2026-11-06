@@ -251,6 +251,9 @@
       c.li.classList.add("flash");
     }
     c.sig = sig;
+    // coloana "Peron estimat" (peron_est.js) se agata aici; absenta = nicio schimbare
+    var hook = window.TabelaApp.onCard;
+    if (typeof hook === "function") hook(c.li, t, c.board);
   }
 
   // Follow button state comes from follows.js (TabelaApp.followState); absent = enabled.
@@ -678,9 +681,44 @@
   }
   window.TabelaApp.renderThemeButtons = renderThemeButtons;
 
+  // ---- "Peron estimat": lazy layer (peron_est.js/.css), not in the SW shell (precache budget) ----
+
+  var peronLoad = null;
+  function loadPeronEst() {
+    if (peronLoad) return peronLoad;
+    peronLoad = new Promise(function (resolve) {
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "peron_est.css?v=1";
+      document.head.appendChild(css);
+      var js = document.createElement("script");
+      js.src = "peron_est.js?v=1";
+      js.onload = function () {
+        if (state.data) BOARDS.forEach(function (b) { renderBoard(b, state.data[b] || []); });
+        resolve(true);
+      };
+      js.onerror = function () { peronLoad = null; resolve(false); };
+      document.head.appendChild(js);
+    });
+    return peronLoad;
+  }
+  window.TabelaApp.peronEstLoad = loadPeronEst;
+
+  function initPeronEst() {
+    var on = false;
+    try { on = localStorage.getItem("tabela.peronEst") === "1"; } catch (e) { /* ignore */ }
+    var box = $("pe-toggle");
+    if (box) {
+      box.checked = on;   // at once, before the lazy layer arrives
+      box.addEventListener("change", loadPeronEst);
+    }
+    if (on) loadPeronEst();
+  }
+
   // ---- boot ------------------------------------------------------------------------
 
   function init() {
+    initPeronEst();
     loadConfig();
     initTheme();
     initTabs();
