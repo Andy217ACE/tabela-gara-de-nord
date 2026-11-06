@@ -1702,6 +1702,7 @@
     calendarSection(d, boards);
     hourlySection(d, boards);
     heatmapSection(d, boards);
+    if (App.statWeekdays) App.statWeekdays.section(d, boards, { figure: figure, el: el, nLine: nLine });
     rankedSection(d, boards, "operators", "Care operatori sunt cei mai punctuali?",
       "fiecare rând este un operator, cum apare scris pe tabelă; bara arată ce procent din călătoriile lui au fost " +
       "la timp. Operatorii cu prea puține călătorii apar fără bară, doar cu N.", "operators", "Operator");

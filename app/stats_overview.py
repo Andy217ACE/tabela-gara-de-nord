@@ -31,6 +31,7 @@ from app import journeys, stations, stats
 from app import quality as dq
 from app import stats_problems as sp
 from app import stats_steps
+from app import stats_weekdays as wd
 
 TZ = journeys.TZ
 log = logging.getLogger(__name__)
@@ -511,6 +512,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "distribution": distribution,
         "hourly": hourly,
         "heatmap": heatmap,
+        "weekdays": wd.build(js, boards, p, today),
         "daily": daily,
         "operators": operators,
         "types": types,
