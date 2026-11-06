@@ -321,7 +321,8 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.38 (Val 4a–5b integration): +~1.3 KB of routes and navigation in app.js (+960 B)
     # and index.html (+370 B) -> 652.5 KB; Sistem/Setări are no longer in the precache (ab718e5)
     # -> budget 660 KB, ~7 KB headroom
-    assert total <= 660_000, total
+    # statistici: stat_platform.js + stat_dwell.js (~12 KB, secțiunile publice noi) -> 680 KB
+    assert total <= 680_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

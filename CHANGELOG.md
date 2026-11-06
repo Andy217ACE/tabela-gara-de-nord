@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.47 — 2026-11-06
+
+### Adăugat
+- **Peroane schimbate după anunț (#statistici):** cât din servicii își schimbă peronul față de primul anunț, perechile din→în, topul trenurilor și al stațiilor. Valorile OCR evident false sunt ignorate și numărate.
+- **Cât stă trenul pe panou (#statistici):** mediana, media și „90% sub” pentru fereastra observată pe panou (nu orarul real), pe sosiri și plecări, tip de tren și stație.
+- **Întârzieri în trepte (#statistici):** matricea de la→la, mărimea tipică a treptei, timpul dintre modificări și cât din întârzierea finală era anunțată de la început.
+- **Modificări per cursă (#statistici):** histogramă 0–4+, medie, maxim și topul curselor cu cele mai multe modificări.
+- **Comparație pe zilele săptămânii (#statistici):** cifrele apar după cel puțin 4 apariții ale fiecărei zile; până atunci secțiunea arată „date insuficiente” și câte săptămâni s-au acumulat.
+- **Calitatea datelor pe zi (#sistem, admin):** rata de confirmare, calitatea citirii OCR și acoperirea panoului pe oră, cu golurile marcate. Endpoint-uri admin doar pentru citire.
+
+### Schimbat
+- Bugetul de precache al service worker-ului a crescut de la 660 la 680 KB (două scripturi noi în shell).
+
 ## Beta 1.46 — 2026-11-05
 
 ### Adăugat

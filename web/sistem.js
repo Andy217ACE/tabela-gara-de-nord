@@ -91,6 +91,19 @@
     box.appendChild(list);
   }
 
+  // „Calitatea datelor pe zi” (stat_quality_daily.js/.css) se încarcă la cerere, doar pentru admin
+  function loadQualityDaily(cb) {
+    if (App.statQualityDaily) return cb();
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "stat_quality_daily.css";
+    document.head.appendChild(link);
+    var sc = document.createElement("script");
+    sc.src = "stat_quality_daily.js";
+    sc.addEventListener("load", cb);
+    document.head.appendChild(sc);
+  }
+
   function renderAdmin(d) {
     var box = $("sys-admin");
     box.replaceChildren();
@@ -106,6 +119,7 @@
     list.appendChild(row("Durata cadrului (mediană)", num(w.duration_ms_p50, "ms")));
     list.appendChild(row("Spațiu total pe disc", num(d.disk && d.disk.total_gb, "GB")));
     box.appendChild(list);
+    loadQualityDaily(function () { App.statQualityDaily.mount(box); });  // calitatea datelor pe zi (admin)
     box.hidden = false;
   }
 

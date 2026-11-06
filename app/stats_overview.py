@@ -30,6 +30,8 @@ from pathlib import Path
 from app import journeys, stations, stats
 from app import quality as dq
 from app import stats_problems as sp
+from app import stats_steps
+from app import stats_weekdays as wd
 
 TZ = journeys.TZ
 log = logging.getLogger(__name__)
@@ -185,11 +187,11 @@ def fetch(store, p: stats.Params) -> tuple[list[dict], list[dict], dict]:
         sus = (" AND e.id NOT IN (SELECT event_id FROM event_quality WHERE suspect = 1)"
                if _has(c, "event_quality") else "")
         evs: dict = {}
-        for r in c.execute("SELECT e.service_id, e.old, e.new FROM events e JOIN services s"
+        for r in c.execute("SELECT e.service_id, e.old, e.new, e.ts FROM events e JOIN services s"
                            " ON s.id = e.service_id WHERE e.kind = 'delay'"
                            + "".join(" AND " + x for x in fw) + sus
                            + " ORDER BY e.service_id, e.ts, e.id", fa).fetchall():
-            evs.setdefault(r[0], []).append({"old": r[1], "new": r[2]})
+            evs.setdefault(r[0], []).append({"old": r[1], "new": r[2], "ts": r[3]})
         extra["delay_events"] = evs
         # pauses between two successful board readings (coverage); julianday() orders the
         # local timestamps correctly across a DST change
@@ -486,6 +488,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
                # observations / exclusions are counted per board and period only
                "counters_scope": "all" if (op or tip) else "filtered"}
     problems = sp.build(js, boards, p, extra, today)
+    steps = stats_steps.build(js, boards, p, extra.get("delay_events") or {})
     dates = [j["service_date"] for j in js]
     hist = extra.get("history") or {}
     history = {"first": hist.get("first"), "last": hist.get("last"), "days": hist.get("days", 0),
@@ -505,9 +508,11 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "boards": by_board,
         "insights": _insights(boards, by_board, hourly, problems, traffic, platforms, q, p),
         "problems": problems,
+        "steps": steps,
         "distribution": distribution,
         "hourly": hourly,
         "heatmap": heatmap,
+        "weekdays": wd.build(js, boards, p, today),
         "daily": daily,
         "operators": operators,
         "types": types,
