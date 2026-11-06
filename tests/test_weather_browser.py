@@ -100,8 +100,10 @@ def open_page(browser, base_url, body, w=1280, h=800, theme="dark", view="cardur
     errors = []
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     page.goto(base_url + "/")
-    page.wait_for_function("document.querySelector('.wx[data-state=ok], .wx[data-state=stale],"
-                           " .wx[data-state=unavailable]')")
+    # wait_for_selector, not wait_for_function(str): the app's CSP (script-src 'self', no
+    # unsafe-eval) makes Playwright's string evaluation fail intermittently (EvalError).
+    page.wait_for_selector(".wx[data-state=ok], .wx[data-state=stale], .wx[data-state=unavailable]",
+                           state="attached")
     page.wait_for_timeout(150)
     return ctx, page, external, errors
 
