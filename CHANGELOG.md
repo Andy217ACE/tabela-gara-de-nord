@@ -5,6 +5,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.50 — 2026-11-09
+
+### Adăugat
+- **Admin: secțiune Securitate** cu IP-urile banate de fail2ban, istoricul ban-urilor și numărul de cereri/probe pe 24h și 7 zile.
+- **Cardul „Securitate (fail2ban)" (#admin):** rezumat (banați acum, ban-uri și cereri-probă pe 24 h / 7 zile, IP-uri cu probe, jail-uri), trei tabele sortabile (banați acum, istoric, top IP-uri) și selector de fereastră 24 h / 7 zile. Orele sunt în ora României. Nu există buton de unban, intenționat.
+- **Exportator root doar de citire:** `scripts/security_snapshot.py` rulează la 2 minute din `tabela-security-snapshot.timer` (cu hardening systemd, fără rețea) și scrie atomic `/var/lib/tabela/security/snapshot.json` (root:tabela 0640). Aplicația nu primește privilegii noi.
+- **Endpoint admin:** `GET /api/admin/security` (doar citire, 401 fără sesiune). Datele sunt sanitizate; când snapshot-ul lipsește, e invalid sau are peste 10 minute, răspunsul spune „date indisponibile". API-urile publice nu se schimbă.
+- **Deploy:** `deploy/update.sh` și `deploy/install.sh` creează `/var/lib/tabela/security` (root:tabela 750) și instalează timer-ul; un eșec aici e doar avertisment, deploy-ul reușește.
+
+### Schimbat
+- Versiune: `CHARTS_V` 1.50 (cache-buster-ul paginii Statistici urmărește versiunea). `admin.js` / `admin.css` nu sunt în precache-ul service worker-ului, deci versiunea SW rămâne aceeași.
+
 ## Beta 1.49 — 2026-11-09
 
 ### Reparat
