@@ -41,6 +41,12 @@ DEFAULT_IMG_ROOT = Path("/var/lib/tabela")
 REPO_TRUTH = ROOT / "tests" / "fixtures" / "ocr_truth" / "truth.json"
 TRUTH_IMG = "truth-img"  # WORKDIR/truth-img/<cadru>.jpg: imaginile setului scris de mana
 TIME_LIMIT_S = 2 * 3600
+# Cadre citite cu OCR pe noapte, esantion stabil din toata retentia (ocr_digit_clf.select_frames).
+# Fara limita, timpul si memoria cresteau cu retentia capturilor: 10 544 de cadre (9.11) = peste
+# 2 ore doar de OCR si ~2,4 mil. de glife = OOM la antrenare (7.11). 3000 de cadre: ~700 mii de
+# glife, ~3 GB de X float32; cu cache-ul pastrat intre nopti se citesc doar cadrele noi.
+MAX_FRAMES = 3000
+CACHE = "cache"  # WORKDIR/cache/<amprenta motorului OCR>/: citirile per cadru, pastrate intre nopti
 MIN_TRAIN_GLYPHS = 200
 EPOCHS = 30
 DECISION = "nu promovez"
@@ -49,8 +55,9 @@ SIGNIFICANT = 0.005  # diferenta de 0,5 puncte procentuale fata de motor
 LIMITS = [
     "Etichetele silver sunt acordul dintre cititorul curent si observatiile salvate: "
     "aceeasi sursa, nu verificare independenta; nu sunt verificate de om.",
-    "Setul de antrenare vine doar din capturile pastrate pe server (retentie limitata); "
-    "numarul exact e in surse.capturi_cu_imagine si etichete.",
+    "Setul de antrenare vine doar din capturile pastrate pe server (retentie limitata), "
+    f"cel mult {MAX_FRAMES} de cadre pe noapte, esantion stabil din toata retentia; "
+    "numerele exacte sunt in surse, cadre si etichete.",
     "Setul scris de mana acopera cadre din 21-27.10; nu reprezinta neaparat conditiile de azi.",
 ]
 
@@ -75,23 +82,42 @@ def _check_workdir(workdir: Path) -> Path:
     return w
 
 
-def export_db(db: Path, img_root: Path, out_json: Path) -> dict:
+def export_db(db: Path, img_root: Path, out_json: Path, select=None) -> dict:
     """Capturile si observatiile din baza, in formatul asteptat de ocr_digit_clf.extract.
-    Baza se deschide doar in citire (mode=ro); nu se scrie nimic in ea."""
+    Baza se deschide doar in citire (mode=ro); nu se scrie nimic in ea.
+
+    Se exporta doar capturile cu fisier pe disc alese de ``select`` (lista de cadre ->
+    sublista; implicit toate) si observatiile lor: export.json se incarca intreg in memorie,
+    deci nu trebuie sa creasca cu toata baza (observatiile capturilor sterse de retentie
+    raman in baza)."""
     con = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True)
     try:
-        caps = [{"id": i, "path": p} for i, p in
-                con.execute("SELECT id, path FROM captures")]
-        obs = [{"capture_id": c, "board": b, "row_index": r, "fields_json": f} for c, b, r, f in
-               con.execute("SELECT capture_id, board, row_index, fields_json FROM observations")]
+        n_caps = n_with_img = n_obs = 0
+        on_disk = {}
+        for i, p in con.execute("SELECT id, path FROM captures"):
+            n_caps += 1
+            if p:
+                n_with_img += 1
+                if (Path(img_root) / "captures" / p).is_file():
+                    on_disk[p] = i
+        # select primeste numele cadrelor (calea fara .jpg), ca ocr_digit_clf.extract
+        frame_of = {(p[:-4] if p.endswith(".jpg") else p): p for p in on_disk}
+        chosen = list(frame_of) if select is None else select(list(frame_of))
+        caps = [{"id": on_disk[frame_of[f]], "path": frame_of[f]} for f in sorted(chosen)]
+        ids = {c["id"] for c in caps}
+        obs = []
+        for c, b, r, f in con.execute(
+                "SELECT capture_id, board, row_index, fields_json FROM observations"):
+            n_obs += 1
+            if c in ids:
+                obs.append({"capture_id": c, "board": b, "row_index": r, "fields_json": f})
     finally:
         con.close()
     out_json.write_text(json.dumps({"captures": caps, "observations": obs}, ensure_ascii=False),
                         encoding="utf-8")
-    with_img = [c for c in caps if c["path"]]
-    on_disk = sum(1 for c in with_img if (Path(img_root) / "captures" / c["path"]).is_file())
-    return {"capturi": len(caps), "capturi_cu_imagine": len(with_img),
-            "capturi_cu_fisier": on_disk, "observatii": len(obs)}
+    return {"capturi": n_caps, "capturi_cu_imagine": n_with_img,
+            "capturi_cu_fisier": len(on_disk), "observatii": n_obs,
+            "cadre_exportate": len(caps), "observatii_exportate": len(obs)}
 
 
 def _truth_file(candidates) -> Path | None:
@@ -118,6 +144,13 @@ def _eval(clf, P, X, y, cols, mch, msc, mmg) -> dict:
     }
 
 
+def _unit(a: np.ndarray) -> np.ndarray:
+    """Glife uint8 -> float32 in 0..1, cu o singura alocare (impartirea e pe loc)."""
+    a = a.astype(np.float32)
+    a /= 255.0
+    return a
+
+
 def _train_eval(clf, run: Path, workdir: Path, day: str, truth_file: Path | None) -> dict:
     d = np.load(run / "dataset.npz")
     te = np.asarray(d["split"], bool)
@@ -126,18 +159,20 @@ def _train_eval(clf, run: Path, workdir: Path, day: str, truth_file: Path | None
     out = {"n_train": n_tr, "n_test": int(te.sum()), "antrenat": False, "model": None}
     if n_tr < MIN_TRAIN_GLYPHS:
         return out
-    X = d["X"].reshape(len(d["y"]), -1).astype(np.float32) / 255.0
+    U = d["X"].reshape(len(d["y"]), -1)  # uint8; float32 doar pe parti, cate o copie
     y_idx = np.array([clf.CLASSES.index(c) for c in d["y"]])
-    P = clf.mlp_fit(X[tr], y_idx[tr], epochs=EPOCHS, log=lambda s: None)
+    Xtr = _unit(U[tr])
+    P = clf.mlp_fit(Xtr, y_idx[tr], epochs=EPOCHS, log=lambda s: None)
+    del Xtr
     model = workdir / f"model-{day}.npz"
     np.savez_compressed(model, **P)
     out.update(antrenat=True, model=str(model), epoci=EPOCHS)
-    out["silver_test"] = _eval(clf, P, X[te], d["y"][te], d["col"][te], d["mchar"][te],
+    out["silver_test"] = _eval(clf, P, _unit(U[te]), d["y"][te], d["col"][te], d["mchar"][te],
                                d["mscore"][te], d["mmargin"][te])
     out["set_adevar"] = None
     if truth_file is not None and (run / "truth_glyphs.npz").exists():
         t = np.load(run / "truth_glyphs.npz")
-        Xt = t["X"].reshape(len(t["y"]), -1).astype(np.float32) / 255.0
+        Xt = _unit(t["X"].reshape(len(t["y"]), -1))
         out["set_adevar"] = str(truth_file)
         out["scris_de_mana"] = _eval(clf, P, Xt, t["y"], t["col"], t["mchar"], t["mscore"],
                                      t["mmargin"])
@@ -174,6 +209,17 @@ def _load_clf():
     return ocr_digit_clf
 
 
+def _cache_dir(clf, workdir: Path) -> Path:
+    """WORKDIR/cache/<amprenta>; cache-urile altor versiuni ale motorului OCR se sterg."""
+    base = workdir / CACHE
+    fp = clf.engine_fingerprint()
+    if base.is_dir():
+        for d in base.iterdir():
+            if d.name != fp:
+                shutil.rmtree(d, ignore_errors=True) if d.is_dir() else d.unlink()
+    return base / fp
+
+
 def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
     """Ruleaza o data toate pasii si scrie report-AAAA-LL-ZZ.json in WORKDIR."""
     workdir = _check_workdir(Path(workdir))
@@ -189,12 +235,14 @@ def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
     rep = {"data": day, "generat_la": now.isoformat(timespec="seconds"), "mod": "umbra",
            "stare": "ok", "eroare": None, "surse": None, "etichete": None,
            "antrenare": None, "set_adevar": str(truth_file) if truth_file else None,
-           "set_adevar_cadre": None,
+           "set_adevar_cadre": None, "cadre": None,
            "limite": LIMITS}
     antrenare: dict = {"antrenat": False}
     try:
-        rep["surse"] = export_db(Path(db), Path(img_root), workdir / "export.json")
-        clf.extract(str(img_root), str(workdir / "export.json"), str(run_dir))
+        rep["surse"] = export_db(Path(db), Path(img_root), workdir / "export.json",
+                                 select=lambda fr: clf.select_frames(fr, MAX_FRAMES))
+        rep["cadre"] = clf.extract(str(img_root), str(workdir / "export.json"), str(run_dir),
+                                   max_frames=MAX_FRAMES, cache_dir=str(_cache_dir(clf, workdir)))
         rep["etichete"] = clf.label(str(run_dir), None)
         if truth_file is not None:
             clf.TRUTH = truth_file
