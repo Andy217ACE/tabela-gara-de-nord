@@ -5,6 +5,15 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.49 — 2026-11-09
+
+### Reparat
+- **Vremea:** detaliile deschise din antet nu mai sunt ascunse sub meniu și cardurile trenurilor (modul Carduri și celelalte pagini).
+- **Cauza:** antetul are un nume de tranziție (`view-transition-name`), care îl face un context de suprapunere separat; stratul ferestrei meteo conta doar în interiorul antetului, așa că meniul fix (stratul 20) și cardurile erau desenate peste ea.
+- **Corecția:** antetul stă acum pe stratul 21, imediat deasupra meniului (`.topbar { position: relative; z-index: 21; }` în `ui2.css`). Antetul și meniul nu se suprapun în repaus, deci restul paginii arată la fel.
+- **Teste:** `test_header_popover_is_above_menu_and_cards` (`tests/test_weather_browser.py`) verifică în browser că fereastra meteo e deasupra meniului și a cardurilor.
+- Versiune: `CHARTS_V` 1.49 (cache-buster-ul paginii Statistici urmărește versiunea).
+
 ## Beta 1.48 — 2026-11-06
 
 ### Adăugat
