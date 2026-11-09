@@ -7,9 +7,12 @@ Skipped when Playwright (dev only) or its Chromium is unavailable."""
 import json
 import math
 import socket
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -25,17 +28,12 @@ from scripts.contrast_audit import AUDIT_JS  # noqa: E402
 from tests.test_footer_browser import browser  # noqa: E402,F401  (shared fixture)
 
 UTC = timezone.utc
+ROOT = Path(__file__).resolve().parent.parent
 
 
-@pytest.fixture(scope="module")
-def base_url(tmp_path_factory):
-    """The app with weather ENABLED (widget visible) but no poller/weather task (no network);
-    a real observation is stored, so /api/weather answers for real."""
-    db = tmp_path_factory.mktemp("wxbrowser") / "w.db"
-    s = Store(str(db))
-    s.migrate()
-    s.add_weather(wx.parse_observation(_payload(5), datetime.now(UTC)))
-    s.close()
+def _serve(db):
+    """Start the app on `db` with weather ENABLED (widget visible) but no poller/weather task
+    (no network); yields the base URL."""
     cfg = wx.WeatherConfig(url="http://127.0.0.1:9/none", latitude=44.4323, longitude=26.1063,
                            interval_s=900)
     settings = Settings(db_path=str(db), source_url="http://127.0.0.1:9/none", vapid_private_key="",
@@ -55,6 +53,31 @@ def base_url(tmp_path_factory):
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     t.join(5)
+
+
+def _store_observation(db):
+    s = Store(str(db))
+    s.migrate()
+    s.add_weather(wx.parse_observation(_payload(5), datetime.now(UTC)))
+    s.close()
+
+
+@pytest.fixture(scope="module")
+def base_url(tmp_path_factory):
+    """No trains, a real stored observation, so /api/weather answers for real."""
+    db = tmp_path_factory.mktemp("wxbrowser") / "w.db"
+    _store_observation(db)
+    yield from _serve(db)
+
+
+@pytest.fixture(scope="module")
+def seeded_url(tmp_path_factory):
+    """Like base_url, but with the dev_seed board (real cards under the header)."""
+    db = tmp_path_factory.mktemp("wxseeded") / "s.db"
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "dev_seed.py"), str(db)],
+                   check=True, cwd=ROOT, capture_output=True)
+    _store_observation(db)
+    yield from _serve(db)
 
 
 def _payload(minutes_ago=5, **cur):
@@ -312,5 +335,41 @@ def test_real_api_end_to_end_with_a_stored_observation(browser, base_url):  # no
         assert "12,4°C" in t and "78 %" in t and "1012 hPa" in t and "Următoarele 24 h" in t
         assert not page.evaluate(HSCROLL)
         assert external == [] and errors == []
+    finally:
+        ctx.close()
+
+
+# Bug (Beta 1.48): in the Carduri view a click on the header weather button opened the
+# popover UNDER the sticky menu bar and the train cards. `.topbar` has a view-transition-name
+# (ui2.css), which makes it a stacking context with z-index auto, so the popover's z-index
+# only counted inside the header and everything positioned after it was painted on top.
+TOPMOST = """(s) => {
+  const p = document.querySelector(s + ' .wx-pop');
+  const r = p.getBoundingClientRect();
+  const miss = [];
+  for (const fy of [0.05, 0.2, 0.5, 0.8, 0.95]) for (const fx of [0.1, 0.5, 0.9]) {
+    const x = r.left + r.width * fx, y = r.top + r.height * fy;
+    if (y < 0 || y >= innerHeight) continue;
+    const e = document.elementFromPoint(x, y);
+    if (!p.contains(e)) miss.push([fx, fy, e ? (e.className.baseVal ?? e.className) || e.tagName : null]);
+  }
+  return {h: r.height, miss};
+}"""
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("w,h", [(1280, 800), (390, 844)])
+@pytest.mark.parametrize("reduced", [False, True])
+def test_header_popover_is_above_menu_and_cards(browser, seeded_url, theme, w, h, reduced):  # noqa: F811
+    ctx, page, _, errors = open_page(browser, seeded_url, None, w, h, theme, "carduri", reduced)
+    try:
+        page.wait_for_selector(".train .t-station")
+        sel = slot("carduri")
+        page.click(sel + " .wx-btn")
+        assert page.locator(sel + " .wx-btn").get_attribute("aria-expanded") == "true"
+        res = page.evaluate(TOPMOST, sel)
+        assert res["h"] > 200
+        assert res["miss"] == [], res                     # every probed point is the popover
+        assert errors == []
     finally:
         ctx.close()
