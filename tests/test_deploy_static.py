@@ -109,3 +109,29 @@ def test_readme_lists_every_apt_package_install_sh_installs():
     paragraph = readme[start:readme.index("creează", start)]
     for pkg in packages:
         assert f"`{pkg}`" in paragraph, pkg
+
+
+# -- exportatorul de securitate (root, doar citire, fără rețea) ------------------------------
+
+def test_security_snapshot_unit_is_hardened():
+    svc = _unit_section(_read(DEPLOY / "tabela-security-snapshot.service"), "Service")
+    for line in ("Type=oneshot", "User=root", "NoNewPrivileges=yes", "ProtectSystem=strict",
+                 "ReadWritePaths=/var/lib/tabela/security", "PrivateNetwork=yes",
+                 "RestrictAddressFamilies=AF_UNIX", "PrivateTmp=yes", "ProtectHome=yes",
+                 "PrivateDevices=yes", "CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_CHOWN"):
+        assert line in svc, line
+    exec_ = [l for l in svc if l.startswith("ExecStart=")]
+    assert exec_ == ["ExecStart=/usr/bin/python3 -I /opt/tabela/app/scripts/security_snapshot.py"
+                     " --out /var/lib/tabela/security/snapshot.json"]
+
+
+def test_security_snapshot_timer_runs_every_two_minutes():
+    t = _unit_section(_read(DEPLOY / "tabela-security-snapshot.timer"), "Timer")
+    assert "OnUnitActiveSec=120s" in t and "Unit=tabela-security-snapshot.service" in t
+    assert any(l.startswith("OnActiveSec=") for l in t)   # primul snapshot imediat după enable
+
+
+def test_install_sh_installs_security_units():
+    text = _read(DEPLOY / "install.sh")
+    assert "tabela-security-snapshot.service tabela-security-snapshot.timer" in text
+    assert "enable --now tabela-security-snapshot.timer" in text

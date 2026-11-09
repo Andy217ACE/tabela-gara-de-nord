@@ -150,6 +150,40 @@ install_watchdog() {
     fi
 }
 
+# Exportatorul de securitate (cardul „Securitate" din #admin): un timer root, doar citire, care
+# scrie $SEC_DIR/snapshot.json. Opțional: orice eșec e doar un avertisment, deploy-ul reușește
+# (aplicația arată „date indisponibile"). Rulează după ce aplicația nouă e sănătoasă.
+install_security_snapshot() {
+    local u src dst changed=0 unit_dir="${SEC_UNIT_DIR:-/etc/systemd/system}"
+    local sec_dir="${SEC_DIR:-$DATA_DIR/security}"
+    [ -f "$APP_DIR/deploy/tabela-security-snapshot.timer" ] || return 0
+    if [ -L "$sec_dir" ]; then   # root scrie acolo: niciodată prin symlink
+        echo "WARNING: security: $sec_dir is a symlink; snapshot timer not enabled" >&2
+        return 0
+    fi
+    # root:<grupul serviciului> 750: aplicația doar citește, nu poate scrie sau înlocui fișiere
+    if ! { mkdir -p "$sec_dir" && { [ -z "$SVC_OWNER" ] || {
+            $CHOWN "root:$SVC_OWNER" "$sec_dir" && $CHMOD 750 "$sec_dir"; }; }; }; then
+        echo "WARNING: security: cannot prepare $sec_dir" >&2
+        return 0
+    fi
+    for u in tabela-security-snapshot.service tabela-security-snapshot.timer; do
+        src="$APP_DIR/deploy/$u"
+        dst="$unit_dir/$u"
+        [ -f "$src" ] || continue
+        if ! cmp -s "$src" "$dst" 2>/dev/null; then
+            install -m 644 "$src" "$dst" || { echo "WARNING: security: cannot install $u" >&2; return 0; }
+            changed=1
+        fi
+    done
+    if [ "$changed" = 1 ]; then
+        $SYSTEMCTL daemon-reload || { echo "WARNING: security: daemon-reload failed" >&2; return 0; }
+    fi
+    $SYSTEMCTL enable --now tabela-security-snapshot.timer ||
+        echo "WARNING: security: could not enable tabela-security-snapshot.timer" >&2
+    return 0
+}
+
 # Append KEY=VALUE when KEY is missing, never gluing it to a last line that has no
 # trailing newline.
 env_add_missing() {
@@ -296,6 +330,7 @@ echo "== restart"
 $SYSTEMCTL restart tabela
 
 if healthy; then
+    install_security_snapshot
     echo "OK: $PREV -> $NEW ($(cat "$APP_DIR/VERSION" 2>/dev/null || echo 'fără VERSION'))"
     exit 0
 fi

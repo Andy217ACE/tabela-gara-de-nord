@@ -146,6 +146,17 @@ done
 systemctl daemon-reload
 systemctl enable --now tabela-watchdog.timer
 
+# exportatorul de securitate (#admin „Securitate"): aceleași unit-uri ca update.sh; opțional,
+# un eșec nu oprește instalarea. Directorul: root:tabela 750 (aplicația doar citește).
+if install -d -o root -g tabela -m 750 /var/lib/tabela/security; then
+    for u in tabela-security-snapshot.service tabela-security-snapshot.timer; do
+        install -m 644 "$APP_DIR/deploy/$u" "/etc/systemd/system/$u"
+    done
+    systemctl daemon-reload
+    systemctl enable --now tabela-security-snapshot.timer ||
+        echo "WARNING: security snapshot timer not enabled" >&2
+fi
+
 echo "== nginx"
 install -d -m 700 "$BACKUP_DIR"
 [ -f "$SITE" ] && cp -a "$SITE" "$BACKUP_DIR/tabela.site.bak"
