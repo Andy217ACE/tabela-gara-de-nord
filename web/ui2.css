@@ -572,6 +572,10 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 @media (prefers-reduced-motion: no-preference) {
   .navbar { view-transition-name: c3-nav; }
   .topbar { view-transition-name: c3-top; }
+  /* the name makes the header a stacking context, so the weather popover's z-index only counted
+     inside it and the sticky menu (z 20) and the cards were painted over it: lift the header just
+     above the menu. They never overlap at rest (the menu sticks only once the header is gone). */
+  .topbar { position: relative; z-index: 21; }
   ::view-transition-group(c3-nav), ::view-transition-group(c3-top) { animation-duration: 0s; }
   ::view-transition-old(root) { animation: 140ms ease both ui-vt-out; }
   ::view-transition-new(root) { animation: 220ms var(--ease) both ui-vt-in; }
