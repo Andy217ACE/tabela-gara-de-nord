@@ -138,6 +138,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/admin/tools/dupes` | admin | Raportul duplicatelor de numere (dry run) | 7.7 |
 | POST | `/api/admin/tools/dupes/apply` | admin + CSRF | Comasează duplicatele (cu copie de siguranță) | 7.7 |
 | POST | `/api/admin/tools/dupes/restore` | admin + CSRF | Restaurează comasările | 7.7 |
+| GET | `/api/admin/security` | admin | Securitate: IP-uri banate (fail2ban), istoric ban-uri, cereri/probe 24 h și 7 zile — din `security/snapshot.json` scris de exportatorul root; `available:false` + `reason` (`missing`/`invalid`/`stale`, cu `age_s`) | — |
 | GET | `/api/admin/tools/server` | admin | Starea serverului (load, memorie, servicii) | 7.8 |
 | GET | `/api/admin/system` | admin | Detaliile paginii Sistem | 7.9 |
 
