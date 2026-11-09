@@ -118,7 +118,8 @@ def test_security_snapshot_unit_is_hardened():
     for line in ("Type=oneshot", "User=root", "NoNewPrivileges=yes", "ProtectSystem=strict",
                  "ReadWritePaths=/var/lib/tabela/security", "PrivateNetwork=yes",
                  "RestrictAddressFamilies=AF_UNIX", "PrivateTmp=yes", "ProtectHome=yes",
-                 "PrivateDevices=yes", "CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_CHOWN"):
+                 "PrivateDevices=yes", "CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_CHOWN",
+                 "MemoryMax=256M", "TimeoutStartSec=120"):
         assert line in svc, line
     exec_ = [l for l in svc if l.startswith("ExecStart=")]
     assert exec_ == ["ExecStart=/usr/bin/python3 -I /opt/tabela/app/scripts/security_snapshot.py"

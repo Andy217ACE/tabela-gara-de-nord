@@ -42,6 +42,8 @@ def _data(now):
                "last_seen": "2026-11-09T11:05:00+00:00", "paths": [{"path": "/wp-login.php", "count": 30}]}}
     s["top"].append({"ip": "6.6.6.6", "probes_24h": 9, "probes_7d": 30, "requests_7d": 40,
                      "last_seen": "2026-11-09T11:05:00+00:00", "banned": False})
+    s["top"].append({"ip": "80.94.95.211", "probes_24h": 0, "probes_7d": 2, "requests_7d": 7,
+                     "last_seen": "2026-11-05T21:40:52+00:00", "banned": False})
     s["history"].append({"at": "2026-11-09T09:00:00+00:00", "event": "unban", "jail": "sshd",
                          "ip": "10.1.1.1"})
     s["totals"]["bans_7d"] = None
@@ -146,12 +148,17 @@ def test_security_card(browser, server, w, h, theme):
 
     # sortare: top după cereri-probă (implicit descrescător), apoi crescător la click
     top = [r[0] for r in _rows(page, "admin-sec-top")]
-    assert top == ["6.6.6.6", "195.178.110.159"]
+    assert top == ["6.6.6.6", "195.178.110.159", "80.94.95.211"]
+    page.select_option("#admin-sec-window", "24h")   # fără probe în 24 h -> nu e în top-ul 24 h
+    assert [r[0] for r in _rows(page, "admin-sec-top")] == ["6.6.6.6", "195.178.110.159"]
+    assert "(N = 2)" in page.text_content("#admin-sec-top-h")
+    page.select_option("#admin-sec-window", "7d")
     page.click("#admin-sec-top th:nth-child(2) button")
     top = [r[0] for r in _rows(page, "admin-sec-top")]
     th = page.get_attribute("#admin-sec-top th:nth-child(2)", "aria-sort")
     assert th in ("ascending", "descending")
-    assert top == (["195.178.110.159", "6.6.6.6"] if th == "ascending" else ["6.6.6.6", "195.178.110.159"])
+    assert top == (["80.94.95.211", "195.178.110.159", "6.6.6.6"] if th == "ascending"
+                   else ["6.6.6.6", "195.178.110.159", "80.94.95.211"])
     page.click("#admin-sec-top th:nth-child(2) button")
     assert page.get_attribute("#admin-sec-top th:nth-child(2)", "aria-sort") != th
 

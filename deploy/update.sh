@@ -161,11 +161,22 @@ install_security_snapshot() {
         echo "WARNING: security: $sec_dir is a symlink; snapshot timer not enabled" >&2
         return 0
     fi
-    # root:<grupul serviciului> 750: aplicația doar citește, nu poate scrie sau înlocui fișiere
-    if ! { mkdir -p "$sec_dir" && { [ -z "$SVC_OWNER" ] || {
-            $CHOWN "root:$SVC_OWNER" "$sec_dir" && $CHMOD 750 "$sec_dir"; }; }; }; then
-        echo "WARNING: security: cannot prepare $sec_dir" >&2
+    # root:<grupul serviciului> 750: aplicația doar citește, nu poate scrie sau înlocui fișiere.
+    # Părintele e al userului serviciului, deci nimic nu urmează căi: directorul nou ia modul din
+    # mkdir (umask 027) și grupul prin `chown -h`; unul existent doar se verifică (niciun
+    # chown/chmod pe o cale pe care aplicația o poate înlocui cu un symlink între verificare și
+    # schimbare). Exportatorul refuză oricum un director care nu e al lui root.
+    if [ ! -e "$sec_dir" ]; then
+        if ! { (umask 027; mkdir "$sec_dir") && { [ -z "$SVC_OWNER" ] ||
+                $CHOWN -h "root:$SVC_OWNER" "$sec_dir"; }; }; then
+            echo "WARNING: security: cannot prepare $sec_dir" >&2
+            return 0
+        fi
+    elif [ ! -d "$sec_dir" ]; then
+        echo "WARNING: security: $sec_dir is not a directory; snapshot timer not enabled" >&2
         return 0
+    elif [ -n "$SVC_OWNER" ] && [ "$(stat -c '%U:%G %a' "$sec_dir" 2>/dev/null)" != "root:$SVC_OWNER 750" ]; then
+        echo "WARNING: security: $sec_dir should be root:$SVC_OWNER 750 (fix by hand); the exporter refuses other owners" >&2
     fi
     for u in tabela-security-snapshot.service tabela-security-snapshot.timer; do
         src="$APP_DIR/deploy/$u"

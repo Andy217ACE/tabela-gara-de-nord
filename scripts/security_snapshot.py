@@ -30,6 +30,7 @@ import re
 import sqlite3
 import sys
 import time
+import zlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -45,6 +46,11 @@ MAX_PATH_LEN = 200
 MAX_LINE = 8192
 MAX_PATHS_PER_IP = 200  # chei distincte ținute în memorie pe IP
 MAX_RUN_S = 40.0       # peste acest timp citirea log-urilor se oprește (truncated)
+DEADLINE_EVERY = 100   # linii între verificările termenului
+MAX_MATCH_LEN = 1024   # regex-ul de probă vede doar începutul cererii (cost liniar, nu pătratic)
+MAX_TRACKED_IPS = 100_000  # IP-uri distincte ținute în memorie; peste: doar totaluri
+MAX_BANNED = 1000
+MAX_EVENTS = 100_000   # evenimente fail2ban ținute în memorie
 FUTURE_SKEW_S = 300
 
 DEFAULT_OUT = "/var/lib/tabela/security/snapshot.json"
@@ -108,6 +114,13 @@ def load_probe(filter_path) -> tuple[str, str]:
 
 
 def is_probe(request: str, status: int, rx: re.Pattern | None = None) -> bool:
+    """Doar răspunsurile 4xx pot fi probe (ca în filtru): restul nu ajung la regex. Cererea se
+    taie la MAX_MATCH_LEN păstrând protocolul, ca regex-ul să rămână ieftin pe linii ostile."""
+    if not 400 <= status < 500:
+        return False
+    if len(request) > MAX_MATCH_LEN:
+        head, _, proto = request.rpartition(" ")
+        request = head[:MAX_MATCH_LEN] + " " + proto[:16]
     return bool((rx or _DEFAULT_RX).match(f'"{request}" {status} '))
 
 
@@ -214,7 +227,8 @@ def _window_out(w: dict | None) -> dict:
 def _scan_access(paths, now, rx, deadline) -> dict:
     stats: dict[str, dict] = {}
     info = {"available": False, "files": 0, "lines": 0, "parse_errors": 0, "truncated": False,
-            "error": False}
+            "ips_capped": False, "error": False}
+    totals = {"24h": {"requests": 0, "probes": 0}, "7d": {"requests": 0, "probes": 0}}
     for p in paths:
         if time.monotonic() > deadline:
             info["truncated"] = True
@@ -231,7 +245,7 @@ def _scan_access(paths, now, rx, deadline) -> dict:
             with _lines(p) as fh:
                 for raw in fh:
                     info["lines"] += 1
-                    if info["lines"] % 2000 == 0 and time.monotonic() > deadline:
+                    if info["lines"] % DEADLINE_EVERY == 0 and time.monotonic() > deadline:
                         info["truncated"] = True
                         break
                     r = parse_access_line(raw)
@@ -242,9 +256,18 @@ def _scan_access(paths, now, rx, deadline) -> dict:
                     if age > WEEK or age < -FUTURE_SKEW_S:
                         continue
                     probe = r["path"] is not None and is_probe(r["request"], r["status"], rx)
-                    per = stats.setdefault(r["ip"], {"24h": _new_window(), "7d": _new_window()})
+                    per = stats.get(r["ip"])
+                    if per is None:
+                        if len(stats) < MAX_TRACKED_IPS:
+                            per = stats[r["ip"]] = {"24h": _new_window(), "7d": _new_window()}
+                        else:   # memoria e limitată: IP-ul intră doar în totaluri
+                            info["ips_capped"] = True
                     for name, span in (("24h", DAY), ("7d", WEEK)):
                         if age > span:
+                            continue
+                        totals[name]["requests"] += 1
+                        totals[name]["probes"] += probe
+                        if per is None:
                             continue
                         w = per[name]
                         w["requests"] += 1
@@ -256,11 +279,11 @@ def _scan_access(paths, now, rx, deadline) -> dict:
                             w["probes"] += 1
                             if r["path"] in w["paths"] or len(w["paths"]) < MAX_PATHS_PER_IP:
                                 w["paths"][r["path"]] += 1
-        except (OSError, EOFError, gzip.BadGzipFile):
+        except (OSError, EOFError, gzip.BadGzipFile, zlib.error):
             info["error"] = True
         if info["truncated"]:
             break
-    return {"stats": stats, "info": info}
+    return {"stats": stats, "info": info, "totals": totals}
 
 
 def build_snapshot(now: float, db, f2b_logs, access_logs, filter_path, tz=None) -> dict:
@@ -281,11 +304,16 @@ def build_snapshot(now: float, db, f2b_logs, access_logs, filter_path, tz=None) 
         try:
             with _lines(p) as fh:
                 log_ok = True
-                for line in fh:
+                for n, line in enumerate(fh, 1):
+                    if n % DEADLINE_EVERY == 0 and time.monotonic() > deadline:
+                        break
                     e = parse_f2b_line(line[:MAX_LINE], tz)
                     if e:
                         events.append(e)
-        except (OSError, EOFError, gzip.BadGzipFile):
+                        if len(events) > MAX_EVENTS:   # păstrează cele mai noi
+                            events.sort(key=lambda x: x["ts"])
+                            del events[:len(events) - MAX_EVENTS // 2]
+        except (OSError, EOFError, gzip.BadGzipFile, zlib.error):
             continue
     if f2b_logs and not log_ok:
         errors.append("fail2ban_log")
@@ -316,7 +344,7 @@ def build_snapshot(now: float, db, f2b_logs, access_logs, filter_path, tz=None) 
         history, bans_24h, bans_7d = [], None, None
 
     scan = _scan_access(access_logs, now, rx, deadline)
-    info, stats = scan["info"], scan["stats"]
+    info, stats, tot = scan["info"], scan["stats"], scan["totals"]
     if info.pop("error") or not info["available"]:
         errors.append("access_log")
 
@@ -346,17 +374,16 @@ def build_snapshot(now: float, db, f2b_logs, access_logs, filter_path, tz=None) 
            for ip in probers[:TOP_IPS]]
 
     acc = info["available"]
-    w24 = [s["24h"] for s in stats.values()]
-    w7 = [s["7d"] for s in stats.values()]
     totals = {
         "banned_now": len(banned) if f2 is not None else None,
         "bans_24h": bans_24h,
         "bans_7d": bans_7d,
-        "probes_24h": sum(w["probes"] for w in w24) if acc else None,
-        "probe_ips_24h": sum(1 for w in w24 if w["probes"]) if acc else None,
-        "requests_24h": sum(w["requests"] for w in w24) if acc else None,
-        "probes_7d": sum(w["probes"] for w in w7) if acc else None,
-        "requests_7d": sum(w["requests"] for w in w7) if acc else None,
+        "probes_24h": tot["24h"]["probes"] if acc else None,
+        # cu ips_capped e o limită inferioară (IP-urile peste MAX_TRACKED_IPS nu se numără)
+        "probe_ips_24h": sum(1 for s in stats.values() if s["24h"]["probes"]) if acc else None,
+        "requests_24h": tot["24h"]["requests"] if acc else None,
+        "probes_7d": tot["7d"]["probes"] if acc else None,
+        "requests_7d": tot["7d"]["requests"] if acc else None,
     }
     jails = []
     if f2 is not None:
@@ -374,7 +401,8 @@ def build_snapshot(now: float, db, f2b_logs, access_logs, filter_path, tz=None) 
         "totals": totals,
         "banned": [{"ip": b["ip"], "jail": b["jail"], "banned_at": _iso(b["banned_ts"]),
                     "expires_at": _iso(b["expires_ts"]), "permanent": b["expires_ts"] is None,
-                    "bancount": b["bancount"]} for b in banned],
+                    "bancount": b["bancount"]} for b in banned[:MAX_BANNED]],
+        "banned_truncated": len(banned) > MAX_BANNED,
         "history": [{"at": _iso(e["ts"]), "event": e["event"], "jail": e["jail"], "ip": e["ip"]}
                     for e in history[:MAX_HISTORY]],
         "ips": ips,

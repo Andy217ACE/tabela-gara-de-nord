@@ -12,7 +12,10 @@ After=fail2ban.service
 Type=oneshot
 User=root
 ExecStart=/usr/bin/python3 -I /opt/tabela/app/scripts/security_snapshot.py --out /var/lib/tabela/security/snapshot.json
-TimeoutStartSec=90
+# MAX_RUN_S=40 s pentru log-uri + DB/jurnal fail2ban; limitele protejează tabela.service
+TimeoutStartSec=120
+MemoryMax=256M
+CPUQuota=50%
 Nice=10
 IOSchedulingClass=idle
 

@@ -553,3 +553,34 @@ def test_without_security_units_nothing_happens(server):
     assert r.returncode == 0
     assert "tabela-security-snapshot" not in server.log.read_text()
     assert not (server.data / "security").exists()
+
+
+def test_security_dir_with_wrong_owner_is_not_changed_only_warned(server):
+    _commit_security_units(server)
+    sec = server.data / "security"
+    sec.mkdir()
+    server.env["SVC_OWNER"] = "tabela"
+    # fake chown/stat: a directory that exists is only checked, never chown-ed/chmod-ed by path
+    server.env["CHOWN"] = "fakechown"
+    script(server.tmp / "bin" / "fakechown", f'echo "chown $*" >> "{posix(server.log)}"\n')
+    script(server.tmp / "bin" / "stat", 'echo "tabela:tabela 755"\n')
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    calls = server.log.read_text()
+    assert f"chown root:tabela {posix(sec)}" not in calls and "chown -h root:tabela" not in calls
+    assert "WARNING" in r.stderr and "security" in r.stderr
+
+
+def test_security_dir_created_with_lchown(server):
+    _commit_security_units(server)
+    server.env["SVC_OWNER"] = "tabela"
+    server.env["CHOWN"] = "fakechown"
+    server.env["CHMOD"] = "fakechmod"
+    script(server.tmp / "bin" / "fakechown", f'echo "chown $*" >> "{posix(server.log)}"\n')
+    script(server.tmp / "bin" / "fakechmod", f'echo "chmod $*" >> "{posix(server.log)}"\n')
+    r = server.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    calls = server.log.read_text()
+    sec = posix(server.data / "security")
+    assert f"chown -h root:tabela {sec}" in calls
+    assert f"chmod 750 {sec}" not in calls       # modul vine din mkdir (umask 027), nu din chmod

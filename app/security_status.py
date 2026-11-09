@@ -86,6 +86,7 @@ def sanitize(data: dict) -> dict:
         "probe_rule": data.get("probe_rule") if data.get("probe_rule") in ("filter", "builtin") else None,
         "duration_ms": _i(data.get("duration_ms")),
         "ips_truncated": _b(data.get("ips_truncated")),
+        "banned_truncated": _b(data.get("banned_truncated")),
         "fail2ban": {
             "available": f2.get("available") is True,
             "log_available": _b(f2.get("log_available")),
@@ -109,7 +110,8 @@ def sanitize(data: dict) -> dict:
                 for t in _list(data.get("top"), MAX_TOP) if isinstance(t, dict)],
         "access_log": {"available": acc.get("available") is True, "files": _i(acc.get("files")),
                        "lines": _i(acc.get("lines")), "parse_errors": _i(acc.get("parse_errors")),
-                       "truncated": _b(acc.get("truncated"))},
+                       "truncated": _b(acc.get("truncated")),
+                       "ips_capped": _b(acc.get("ips_capped"))},
     }
 
 

@@ -168,6 +168,18 @@ def test_sanitizes_hostile_and_oversized_values(tmp_path):
     assert "extra" not in d
 
 
+def test_truncation_flags_pass_through(tmp_path):
+    now = time.time()
+    s = snapshot(now, banned_truncated=True)
+    s["access_log"]["ips_capped"] = True
+    d = security_status.read_snapshot(write(tmp_path, s), now)
+    assert d["banned_truncated"] is True and d["access_log"]["ips_capped"] is True
+    s2 = snapshot(now)
+    security_status.clear_cache()
+    d2 = security_status.read_snapshot(write(tmp_path, s2), now)
+    assert d2["banned_truncated"] is None and d2["access_log"]["ips_capped"] is None
+
+
 def test_cache_follows_file_changes(tmp_path):
     now = time.time()
     p = write(tmp_path, snapshot(now))

@@ -400,3 +400,62 @@ def test_exporter_uses_only_stdlib():
     assert imports <= set(sys.stdlib_module_names), imports - set(sys.stdlib_module_names)
     assert not imports & {"socket", "urllib", "http", "subprocess", "ssl", "ftplib", "smtplib"}
     assert "gethostbyaddr" not in text and "getaddrinfo" not in text
+
+
+# -- limite (review): linii ostile lungi, multe IP-uri, gz corupt ---------------------------
+
+def test_probe_regex_skipped_for_non_4xx_and_bounded_for_long_lines():
+    import time as _t
+    hostile = "GET /" + "a/" * 4000 + " HTTP/1.1"
+    t0 = _t.perf_counter()
+    for _ in range(200):
+        ss.is_probe(hostile, 200)      # nu e 4xx: regex-ul nici nu rulează
+    assert _t.perf_counter() - t0 < 0.05
+    t0 = _t.perf_counter()
+    for _ in range(50):
+        ss.is_probe(hostile, 404)      # 4xx: regex-ul vede doar MAX_MATCH_LEN caractere
+    assert _t.perf_counter() - t0 < 0.5
+    assert ss.is_probe("GET /" + "a/" * 10 + ".env HTTP/1.1", 404)
+
+
+def test_tracked_ips_are_capped_but_totals_stay_exact(tmp_path, env, monkeypatch):
+    monkeypatch.setattr(ss, "MAX_TRACKED_IPS", 3)
+    acc = tmp_path / "many.log"
+    acc.write_text("".join(nginx(f"1.0.0.{i}", "2026-11-09 17:00:00", "/.env") for i in range(10)),
+                   encoding="utf-8")
+    env["access_logs"] = [acc]
+    s = ss.build_snapshot(NOW, **env)
+    assert s["totals"]["requests_24h"] == 10 and s["totals"]["probes_24h"] == 10
+    assert s["access_log"]["ips_capped"] is True
+    assert len([ip for ip in s["ips"] if ip.startswith("1.0.0.")]) == 3
+
+
+def test_corrupt_gz_does_not_crash(tmp_path, env):
+    bad = tmp_path / "access.log.2.gz"
+    data = gzip.compress(nginx("1.1.1.1", "2026-11-09 17:00:00", "/.env").encode() * 50)
+    bad.write_bytes(data[:20] + b"\x00garbage" * 20)
+    env["access_logs"] = [env["access_logs"][0], bad]
+    s = ss.build_snapshot(NOW, **env)
+    assert "access_log" in s["errors"]
+    assert s["totals"]["probes_24h"] == 4      # fișierul bun e numărat
+
+
+def test_banned_list_is_capped(tmp_path, env, monkeypatch):
+    monkeypatch.setattr(ss, "MAX_BANNED", 2)
+    env["db"] = make_db(tmp_path / "f3.sqlite3", bips=[
+        (f"9.9.9.{i}", J, int(NOW) - 10 * i, 86400, 1) for i in range(1, 6)])
+    env["f2b_logs"] = []
+    s = ss.build_snapshot(NOW, **env)
+    assert len(s["banned"]) == 2 and s["banned_truncated"] is True
+    assert s["totals"]["banned_now"] == 5
+
+
+def test_unit_output_path_agrees_with_app_and_update_sh():
+    from app import security_status
+    unit = (ROOT / "deploy" / "tabela-security-snapshot.service").read_text(encoding="utf-8")
+    assert f"--out {ss.DEFAULT_OUT}" in unit
+    assert str(security_status.snapshot_path("/var/lib/tabela/tabela.db")).replace("\\", "/") \
+        .endswith("/var/lib/tabela/security/snapshot.json")
+    assert ss.DEFAULT_OUT == "/var/lib/tabela/security/snapshot.json"
+    upd = (ROOT / "deploy" / "update.sh").read_text(encoding="utf-8")
+    assert 'SEC_DIR:-$DATA_DIR/security' in upd and 'DATA_DIR="${DATA_DIR:-/var/lib/tabela}"' in upd

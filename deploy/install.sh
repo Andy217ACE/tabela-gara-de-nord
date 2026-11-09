@@ -148,7 +148,8 @@ systemctl enable --now tabela-watchdog.timer
 
 # exportatorul de securitate (#admin „Securitate"): aceleași unit-uri ca update.sh; opțional,
 # un eșec nu oprește instalarea. Directorul: root:tabela 750 (aplicația doar citește).
-if install -d -o root -g tabela -m 750 /var/lib/tabela/security; then
+if [ -d /var/lib/tabela/security ] && [ ! -L /var/lib/tabela/security ] ||
+    install -d -o root -g tabela -m 750 /var/lib/tabela/security; then
     for u in tabela-security-snapshot.service tabela-security-snapshot.timer; do
         install -m 644 "$APP_DIR/deploy/$u" "/etc/systemd/system/$u"
     done

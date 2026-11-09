@@ -784,6 +784,9 @@
     if (!acc.available) secNote("Log-ul nginx nu a putut fi citit: numărul de cereri e „—”.");
     if (acc.truncated) secNote("Citirea log-urilor s-a oprit la limita de timp: numerele pot fi incomplete.");
     if (s.ips_truncated) secNote("Prea multe IP-uri: detaliile sunt limitate la primele 500.");
+    if (acc.ips_capped) secNote("Prea multe IP-uri distincte în log: totalurile sunt exacte, " +
+      "dar unele IP-uri nu au detalii (numărul de IP-uri cu probe e o limită inferioară).");
+    if (s.banned_truncated) secNote("Prea multe IP-uri banate: lista e limitată la primele 1000.");
     if (s.probe_rule === "builtin") secNote("Filtrul fail2ban nu a putut fi citit; probele " +
       "sunt numărate cu copia regulii din aplicație.");
 
@@ -835,7 +838,10 @@
       { label: "IP", val: function (h) { return h.ip; }, mono: true }
     ], hist, { col: 0, dir: "desc" }, "Niciun eveniment în jurnal.");
 
-    var top = Array.isArray(s.top) ? s.top : [];
+    // top-ul vine ordonat după 7 zile; în fereastra de 24 h rămân doar cei cu probe în 24 h
+    var top = (Array.isArray(s.top) ? s.top : []).filter(function (x) {
+      return secWindow !== "24h" || x.probes_24h == null || x.probes_24h > 0;
+    });
     setHeading("top", "Top IP-uri după cereri-probă", top.length);
     secTable("admin-sec-top", [
       { label: "IP", val: function (x) { return x.ip; }, mono: true },
@@ -849,7 +855,7 @@
         text: function (x) { return when(x.last_seen); } },
       { label: "Banat acum", val: function (x) { return x.banned == null ? null : (x.banned ? "da" : "nu"); } },
       { label: "Căi probate " + winLabel, paths: function (x) { return pathsOf(x.ip); } }
-    ], top, { col: 1, dir: "desc" }, "Nicio cerere-probă în ultimele 7 zile.");
+    ], top, { col: 1, dir: "desc" }, "Nicio cerere-probă în ultimele " + winLabel + ".");
   }
 
   // comparator: valorile lipsă mereu la final, numerele numeric, restul ca text
