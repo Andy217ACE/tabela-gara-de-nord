@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.51 — 2026-11-09
+
+### Reparat
+- **Antrenarea de noapte a clasificatorului (în umbră) nu mai cade:** folosește cel mult 3000 de cadre pe noapte și refolosește rezultatele OCR din nopțile anterioare (înainte recitea toate cele ~10 500 de capturi și depășea timpul/memoria).
+- **Eșantion stabil:** cele 3000 de cadre sunt alese din toată retenția după un hash al numelui (`select_frames`), așa că de la o noapte la alta se schimbă doar cadrele noi și cache-ul rămâne valabil.
+- **Cache persistent:** citirile OCR per cadru se păstrează în `shadow/cache/<amprenta motorului OCR>/`; când codul OCR se schimbă, amprenta se schimbă și cache-ul vechi se șterge automat. Intrările cadrelor ieșite din eșantion se curăță, deci cache-ul nu crește nelimitat.
+- **Memorie:** la antrenare, glifele se convertesc în float32 pe părți, fără o a doua copie completă în memorie.
+- **Export:** `export.json` conține doar cadrele selectate și observațiile lor, aceleași pe care le citește OCR-ul.
+- **Teste:** 8 teste noi în `tests/test_nightly_shadow.py` (limita de cadre, stabilitatea selecției, curățarea și refolosirea cache-ului, amprenta motorului, memoria la antrenare, exportul).
+- **Pagina Versiuni pe telefon:** nu mai are derulare pe orizontală la 360 px. Căile și numele lungi din note (de ex. `/var/lib/tabela/security/snapshot.json`) nu se puteau rupe pe rând și lărgeau pagina; acum se rup oriunde e nevoie (`overflow-wrap: anywhere` pe punctele listei, în `ui2.css`).
+
+### Schimbat
+- Versiune: `CHARTS_V` 1.51 (cache-buster-ul paginii Statistici urmărește versiunea). API-urile nu se schimbă; lista de fișiere precache a service worker-ului e aceeași, deci versiunea SW rămâne aceeași.
+
 ## Beta 1.50 — 2026-11-09
 
 ### Adăugat

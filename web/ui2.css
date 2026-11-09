@@ -462,6 +462,7 @@ body[data-route]:not([data-route="tabela"]):not([data-route="ocr"])::before {
 .st-meter { width: 5.5rem; }
 .st-table td .st-cell-meter { align-items: flex-end; }
 .v-list { max-width: 90ch; }
+.v-items li { overflow-wrap: anywhere; }  /* long paths/names in the notes must not widen the page */
 .v-entry:first-child { border-left: 1px solid var(--card-line); }
 .v-entry.is-current { border-color: color-mix(in srgb, var(--accent) 45%, var(--card-line)); }
 .v-body[hidden] { display: none; }
