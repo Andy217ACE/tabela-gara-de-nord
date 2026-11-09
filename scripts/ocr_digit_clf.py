@@ -153,7 +153,41 @@ def _save(out: Path, cells: list[dict], glyphs: list[tuple]) -> None:
     (out / "cells_raw.json").write_text(json.dumps(cells, ensure_ascii=False), encoding="utf-8")
 
 
-def extract(img_root: str, db_json: str, out_dir: str) -> None:
+def _frame_key(frame: str) -> str:
+    return hashlib.md5(frame.encode("utf-8")).hexdigest()
+
+
+def select_frames(frames, max_frames: int | None) -> list[str]:
+    """At most ``max_frames`` frames, a sample spread over the whole retention: the ones with
+    the smallest hash of the name. Stable from one night to the next (a frame chosen yesterday
+    stays chosen unless a new frame with a smaller hash takes its place), so the per-frame
+    cache is reused and only the new frames are read again."""
+    frames = sorted(set(frames))
+    if max_frames is None or len(frames) <= max_frames:
+        return frames
+    return sorted(sorted(frames, key=_frame_key)[:max_frames])
+
+
+def engine_fingerprint(dirs=None) -> str:
+    """Hash of the OCR engine (app/ocr code and templates, and this script): the cached
+    readings of a frame are valid only for the engine that made them."""
+    dirs = [ROOT / "app" / "ocr"] if dirs is None else [Path(d) for d in dirs]
+    files = [f for d in dirs for f in sorted(Path(d).rglob("*"))
+             if f.is_file() and f.suffix in (".py", ".npz", ".json")]
+    if dirs == [ROOT / "app" / "ocr"]:
+        files.append(Path(__file__).resolve())
+    h = hashlib.sha256()
+    for f in files:
+        h.update(f.name.encode("utf-8"))
+        h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def extract(img_root: str, db_json: str, out_dir: str, max_frames: int | None = None,
+            cache_dir: str | None = None) -> dict:
+    """``max_frames``: read at most this many frames (see ``select_frames``). ``cache_dir``:
+    where the per-frame readings are kept (default OUT_DIR/cache); when given, the entries
+    of frames no longer selected are removed, so the cache stays bounded."""
     from app.ocr.digits import DigitMatcher  # noqa: F401  (fails early if missing)
 
     root = Path(img_root)
@@ -167,13 +201,19 @@ def extract(img_root: str, db_json: str, out_dir: str) -> None:
         frame = cap_of.get(o["capture_id"])
         if frame is not None:
             obs[(frame, o["board"], o["row_index"])] = json.loads(o["fields_json"] or "{}")
-    pairs = []
-    cache_dir = Path(out_dir) / "cache"
-    for frame in sorted(cap_of.values()):
-        p = root / "captures" / (frame + ".jpg")
-        if p.exists():
-            pairs.append((frame, str(p), str(cache_dir / (hashlib.md5(frame.encode()).hexdigest() + ".pkl"))))
-    print("frames", len(pairs), "of", len(cap_of), flush=True)
+    on_disk = [f for f in cap_of.values() if (root / "captures" / (f + ".jpg")).exists()]
+    chosen = select_frames(on_disk, max_frames)
+    cache = Path(cache_dir) if cache_dir else Path(out_dir) / "cache"
+    pairs = [(f, str(root / "captures" / (f + ".jpg")), str(cache / (_frame_key(f) + ".pkl")))
+             for f in chosen]
+    if cache_dir and cache.is_dir():
+        keep = {Path(p[2]).name for p in pairs}
+        for old in cache.glob("*.pkl"):
+            if old.name not in keep:
+                old.unlink()
+    hits = sum(1 for p in pairs if Path(p[2]).exists())
+    print("frames", len(pairs), "of", len(cap_of), "on disk", len(on_disk), "cached", hits,
+          flush=True)
     results = _run_frames(pairs)
     failed = {r[0] for r in results if r[1] is None}
     if failed:  # OCR timeouts under parallel load: once more, one frame at a time
@@ -196,6 +236,8 @@ def extract(img_root: str, db_json: str, out_dir: str) -> None:
         glyphs.extend(gs)
     _save(Path(out_dir), cells, glyphs)
     print("cells", len(cells), "glyphs", len(glyphs), flush=True)
+    return {"cadre_cu_fisier": len(on_disk), "cadre_folosite": len(pairs),
+            "cadre_din_cache": hits, "celule": len(cells), "glife": len(glyphs)}
 
 
 # --- labelling ---------------------------------------------------------------------------

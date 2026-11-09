@@ -48,7 +48,7 @@ def _fake_clf(rng_seed=0, n=300):
     """Pipeline fals: extract nu face nimic, label scrie un dataset sintetic."""
     rng = np.random.default_rng(rng_seed)
 
-    def extract(img_root, db_json, out_dir):
+    def extract(img_root, db_json, out_dir, max_frames=None, cache_dir=None):
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     def label(out_dir, verified=None):
@@ -73,7 +73,7 @@ def _fake_clf(rng_seed=0, n=300):
     return types.SimpleNamespace(
         extract=extract, label=label, truth_glyphs=truth_glyphs, TRUTH=None,
         CLASSES=clf_real.CLASSES, mlp_fit=clf_real.mlp_fit, mlp_predict=clf_real.mlp_predict,
-        _acc=clf_real._acc)
+        _acc=clf_real._acc, engine_fingerprint=lambda dirs=None: "motor-test")
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_date_insuficiente_nu_antreneaza(env):
 def test_eroare_se_raporteaza_fara_promovare(env):
     fake = _fake_clf()
 
-    def boom(img_root, db_json, out_dir):
+    def boom(img_root, db_json, out_dir, **kw):
         raise RuntimeError("tesseract lipsa")
 
     fake.extract = boom
@@ -212,3 +212,128 @@ def test_workdir_in_repo_refuzat():
     with pytest.raises(ValueError):
         shadow.run(ROOT / "app" / "ocr" / "shadow", ROOT / "x.db", ROOT, [],
                    clf=_fake_clf(), now=datetime(2026, 10, 31))
+
+
+# --- Limitele job-ului nocturn (OOM pe 7.11, timeout 120 min pe 6, 8, 9.11) ---------------
+# Cauza: in fiecare noapte se reciteau cu OCR TOATE capturile pastrate (10 544 pe 9.11, ~0,7 s
+# de cadru) cu cache-ul sters la inceput (era in run/), iar antrenarea tinea 2,4 mil. de glife
+# in float32 de doua ori. Timpul si memoria cresteau liniar cu retentia capturilor.
+
+def _frames_on_disk(img_root: Path, names) -> Path:
+    for n in names:
+        p = img_root / "captures" / (n + ".jpg")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"jpg")
+    db_json = img_root / "export.json"
+    db_json.write_text(json.dumps({
+        "captures": [{"id": i, "path": n + ".jpg"} for i, n in enumerate(names)],
+        "observations": []}), encoding="utf-8")
+    return db_json
+
+
+def _record_frames(monkeypatch):
+    seen = {}
+
+    def fake_run(pairs):
+        seen["pairs"] = list(pairs)
+        return [(name, [], []) for name, _, _ in pairs]
+
+    monkeypatch.setattr(clf_real, "_run_frames", fake_run)
+    return seen
+
+
+def test_extract_limiteaza_numarul_de_cadre(tmp_path, monkeypatch):
+    names = [f"2026/11/0{1 + i % 9}/{i:06d}-x" for i in range(200)]
+    db_json = _frames_on_disk(tmp_path / "img", names)
+    seen = _record_frames(monkeypatch)
+    clf_real.extract(str(tmp_path / "img"), str(db_json), str(tmp_path / "out"), max_frames=50)
+    assert len(seen["pairs"]) == 50
+    # esantion din toata retentia, nu doar ultimele cadre
+    days = {p[0].split("/")[2] for p in seen["pairs"]}
+    assert len(days) >= 5
+
+
+def test_selectia_cadrelor_e_stabila_de_la_o_noapte_la_alta(tmp_path, monkeypatch):
+    """Cadrele alese ieri raman alese azi (cu exceptia celor inlocuite de cadre noi), ca
+    cache-ul sa fie folosit si OCR-ul sa se faca doar pe cadrele noi."""
+    old = [f"2026/11/01/{i:06d}-a" for i in range(300)]
+    new = [f"2026/11/02/{i:06d}-b" for i in range(30)]
+    seen = _record_frames(monkeypatch)
+    db_json = _frames_on_disk(tmp_path / "img", old)
+    clf_real.extract(str(tmp_path / "img"), str(db_json), str(tmp_path / "o1"), max_frames=100)
+    ieri = {p[0] for p in seen["pairs"]}
+    db_json = _frames_on_disk(tmp_path / "img", old + new)
+    clf_real.extract(str(tmp_path / "img"), str(db_json), str(tmp_path / "o2"), max_frames=100)
+    azi = {p[0] for p in seen["pairs"]}
+    assert len(azi) == 100
+    assert len(ieri - azi) <= len(new)
+
+
+def test_cache_explicit_e_curatat_de_cadrele_iesite_din_selectie(tmp_path, monkeypatch):
+    names = [f"2026/11/01/{i:06d}-a" for i in range(40)]
+    db_json = _frames_on_disk(tmp_path / "img", names)
+    seen = _record_frames(monkeypatch)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "vechi.pkl").write_bytes(b"x")
+    clf_real.extract(str(tmp_path / "img"), str(db_json), str(tmp_path / "out"),
+                     max_frames=10, cache_dir=str(cache))
+    paths = {Path(p[2]) for p in seen["pairs"]}
+    assert all(p.parent == cache for p in paths)
+    assert not (cache / "vechi.pkl").exists()
+
+
+def test_amprenta_motorului_se_schimba_cu_codul_ocr(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1", encoding="utf-8")
+    (tmp_path / "t.npz").write_bytes(b"\x00\x01")
+    f1 = clf_real.engine_fingerprint([tmp_path])
+    assert f1 == clf_real.engine_fingerprint([tmp_path])
+    (tmp_path / "a.py").write_text("x = 2", encoding="utf-8")
+    assert clf_real.engine_fingerprint([tmp_path]) != f1
+
+
+def test_run_limiteaza_cadrele_si_pastreaza_cache_intre_nopti(env):
+    fake, calls = _fake_clf(), []
+    real = fake.extract
+
+    def extract(img_root, db_json, out_dir, max_frames=None, cache_dir=None):
+        calls.append((max_frames, cache_dir))
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        (Path(cache_dir) / f"cadru{len(calls)}.pkl").write_bytes(b"x")
+        real(img_root, db_json, out_dir)
+
+    fake.extract = extract
+    fake.engine_fingerprint = lambda dirs=None: "abc123"
+    stale = env.work / "cache" / "motor-vechi"
+    stale.mkdir(parents=True)
+    shadow.run(env.work, env.db, env.img_root, [env.truth], clf=fake, now=env.now)
+    shadow.run(env.work, env.db, env.img_root, [env.truth], clf=fake, now=env.now)
+    (mf1, cd1), (mf2, cd2) = calls
+    assert mf1 == mf2 == shadow.MAX_FRAMES
+    assert cd1 == cd2
+    run_dir = (env.work / "run").resolve()
+    assert run_dir not in Path(cd1).resolve().parents, "cache-ul nu trebuie sters la fiecare rulare"
+    assert (Path(cd1) / "cadru1.pkl").exists(), "cache-ul din noaptea trecuta s-a pierdut"
+    assert not stale.exists(), "cache-ul altui motor OCR trebuie sters"
+
+
+def test_antrenarea_nu_dubleaza_glifele_in_memorie(tmp_path):
+    """X in float32 se face o singura data (nu astype + /255 intr-o copie noua)."""
+    import tracemalloc
+    n = 6000
+    rng = np.random.default_rng(1)
+    run = tmp_path / "run"
+    run.mkdir()
+    y = np.array([str(i) for i in rng.integers(0, 10, n)], dtype="U1")
+    np.savez(run / "dataset.npz", X=rng.integers(0, 256, (n, 32, 32), dtype=np.uint8), y=y,
+             col=np.array(["no"] * n, dtype="U8"), split=np.arange(n) % 5 == 0,
+             mchar=y.copy(), mscore=np.full(n, 0.9, np.float32),
+             mmargin=np.full(n, 0.5, np.float32))
+    fake = _fake_clf()
+    fake.mlp_fit = lambda X, y, **kw: clf_real.mlp_fit(X[:300], y[:300], epochs=1, log=kw["log"])
+    tracemalloc.start()
+    shadow._train_eval(fake, run, tmp_path, "2026-11-09", None)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    float_x = n * 32 * 32 * 4
+    assert peak < 1.6 * float_x, f"varf {peak / float_x:.2f} x dimensiunea X float32"
