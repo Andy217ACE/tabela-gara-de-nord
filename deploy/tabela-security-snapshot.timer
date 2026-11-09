@@ -1,0 +1,14 @@
+# © 2026 Andy217Ace
+# Pornește tabela-security-snapshot.service la 2 minute (primul la 15 s după activare).
+[Unit]
+Description=Tabela Gara de Nord - snapshot securitate la 2 minute
+
+[Timer]
+OnActiveSec=15s
+OnBootSec=1min
+OnUnitActiveSec=120s
+AccuracySec=5s
+Unit=tabela-security-snapshot.service
+
+[Install]
+WantedBy=timers.target

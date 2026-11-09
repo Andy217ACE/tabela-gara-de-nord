@@ -229,8 +229,10 @@
     body.appendChild(dupesCard());
     body.appendChild(serverCard());
     body.appendChild(nvmeCard());
+    body.appendChild(securityCard());
     body.appendChild(marksCard());
     loadReport();
+    loadSecurity();
     syncTimer();
   }
 
@@ -656,6 +658,279 @@
       "Citit la " + when(s.collected_at) + ".";
   }
 
+  // ---- Securitate (GET /api/admin/security; exportatorul root scrie snapshot.json) --------
+  // IP-urile și căile probate vin din trafic ostil: totul se afișează doar cu textContent.
+
+  var SEC_REFRESH_TICKS = 6;       // 6 × 10 s: snapshot-ul se schimbă la 2 minute
+  var SEC_TZ = "ora României";
+  var SEC_EVENT = { ban: "Ban", unban: "Unban", restore: "Ban restaurat" };
+  var SEC_WINDOWS = { "24h": "24 h", "7d": "7 zile" };
+  var secBusy = false;
+  var secTick = 0;
+  var secData = null;
+  var secWindow = "24h";
+  var secSort = {};                // id container -> { col, dir }
+
+  function securityCard() {
+    var c = card("admin-security", "Securitate (fail2ban)");
+    c.appendChild(el("p", "admin-text",
+      "IP-urile banate de fail2ban și cererile lor din log-ul nginx. Datele vin de la un " +
+      "exportator care rulează pe server la 2 minute, doar în citire; aplicația nu are acces " +
+      "la fail2ban. Orele sunt în " + SEC_TZ + ". Valorile necunoscute apar ca „—”."));
+    var bar = el("div", "admin-actions");
+    var b = el("button", "btn btn-ghost btn-sm", "Reîmprospătează");
+    b.type = "button";
+    b.addEventListener("click", function () { loadSecurity(); });
+    bar.appendChild(b);
+    var lab = el("label", "admin-sec-window");
+    lab.appendChild(el("span", null, "Cereri pe ultimele"));
+    var sel = el("select");
+    sel.id = "admin-sec-window";
+    Object.keys(SEC_WINDOWS).forEach(function (k) {
+      var o = el("option", null, SEC_WINDOWS[k]);
+      o.value = k;
+      sel.appendChild(o);
+    });
+    sel.value = secWindow;
+    sel.addEventListener("change", function () {
+      secWindow = sel.value;
+      if (secData) renderSecurity(secData);
+    });
+    lab.appendChild(sel);
+    bar.appendChild(lab);
+    c.appendChild(bar);
+    var meta = el("p", "admin-meta", "");
+    meta.id = "admin-sec-meta";
+    meta.setAttribute("role", "status");
+    c.appendChild(meta);
+    var notes = el("ul", "admin-list admin-sec-notes");
+    notes.id = "admin-sec-notes";
+    c.appendChild(notes);
+    var dl = el("dl", "admin-stats");
+    dl.id = "admin-sec-summary";
+    c.appendChild(dl);
+    [["banned", "IP-uri banate acum"], ["history", "Istoric ban-uri"],
+     ["top", "Top IP-uri după cereri-probă"]].forEach(function (x) {
+      var h = el("h3", "admin-h3", x[1]);
+      h.id = "admin-sec-" + x[0] + "-h";
+      c.appendChild(h);
+      var box = el("div", "admin-sec-box");
+      box.id = "admin-sec-" + x[0];
+      c.appendChild(box);
+    });
+    return c;
+  }
+
+  function loadSecurity() {
+    if (secBusy || !$("admin-sec-summary")) return;
+    secBusy = true;
+    api("/api/admin/security").then(function (r) {
+      secBusy = false;
+      if (r.status === 200 && r.data) { renderSecurity(r.data); return; }
+      if (r.status === 401 || r.status === 503 || r.status === 429) { handleAuth(r); return; }
+      var m = $("admin-sec-meta");
+      if (m) m.textContent = "Eroare la citirea datelor de securitate (" + r.status + ").";
+    }).catch(function () {
+      secBusy = false;
+      var m = $("admin-sec-meta");
+      if (m) m.textContent = "Serverul nu răspunde.";
+    });
+  }
+
+  function setHeading(key, title, n) {
+    var h = $("admin-sec-" + key + "-h");
+    if (h) h.textContent = n == null ? title : title + " (N = " + n + ")";
+  }
+
+  function secClear() {
+    ["admin-sec-summary", "admin-sec-notes", "admin-sec-banned", "admin-sec-history",
+     "admin-sec-top"].forEach(function (id) { var n = $(id); if (n) clear(n); });
+    setHeading("banned", "IP-uri banate acum", null);
+    setHeading("history", "Istoric ban-uri", null);
+    setHeading("top", "Top IP-uri după cereri-probă", null);
+  }
+
+  function secNote(text) {
+    var ul = $("admin-sec-notes");
+    if (ul) ul.appendChild(el("li", "admin-sec-note", text));
+  }
+
+  function renderSecurity(s) {
+    var meta = $("admin-sec-meta");
+    if (!meta) return;
+    secData = s.available ? s : null;
+    secClear();
+    if (!s.available) {
+      if (s.reason === "stale") {
+        meta.textContent = "Date vechi: ultimul snapshot e de acum " +
+          (s.age_s != null ? ageText(s.age_s) : "—") + " (la " + when(s.generated_at) + ", " +
+          SEC_TZ + "). Exportatorul de pe server nu mai rulează?";
+      } else if (s.reason === "invalid") {
+        meta.textContent = "Fișierul scris de exportator e invalid (format necunoscut).";
+      } else {
+        meta.textContent = "Exportatorul de securitate nu a scris încă date " +
+          "(timer-ul tabela-security-snapshot nu e instalat sau n-a rulat).";
+      }
+      return;
+    }
+    meta.textContent = "Actualizat acum " + (s.age_s != null ? ageText(s.age_s) : "—") +
+      " (la " + when(s.generated_at) + ", " + SEC_TZ + ").";
+
+    var f2 = s.fail2ban || {}, acc = s.access_log || {}, t = s.totals || {};
+    if (!f2.available) secNote("fail2ban indisponibil: baza lui nu a putut fi citită; " +
+      "se afișează doar cererile din log-ul nginx.");
+    if (f2.available && f2.log_available === false) secNote("Jurnalul fail2ban nu a putut " +
+      "fi citit: istoricul vine din baza fail2ban (doar ultima zi), ban-urile pe 7 zile sunt „—”.");
+    if (!acc.available) secNote("Log-ul nginx nu a putut fi citit: numărul de cereri e „—”.");
+    if (acc.truncated) secNote("Citirea log-urilor s-a oprit la limita de timp: numerele pot fi incomplete.");
+    if (s.ips_truncated) secNote("Prea multe IP-uri: detaliile sunt limitate la primele 500.");
+    if (acc.ips_capped) secNote("Prea multe IP-uri distincte în log: totalurile sunt exacte, " +
+      "dar unele IP-uri nu au detalii (numărul de IP-uri cu probe e o limită inferioară).");
+    if (s.banned_truncated) secNote("Prea multe IP-uri banate: lista e limitată la primele 1000.");
+    if (s.probe_rule === "builtin") secNote("Filtrul fail2ban nu a putut fi citit; probele " +
+      "sunt numărate cu copia regulii din aplicație.");
+
+    var dl = $("admin-sec-summary");
+    stat(dl, "Banați acum", txt(t.banned_now), t.banned_now ? "is-bad" : "");
+    stat(dl, "Ban-uri 24 h", txt(t.bans_24h));
+    stat(dl, "Ban-uri 7 zile", txt(t.bans_7d));
+    stat(dl, "Cereri-probă 24 h", txt(t.probes_24h));
+    stat(dl, "IP-uri cu probe 24 h", txt(t.probe_ips_24h));
+    stat(dl, "Cereri totale 24 h", txt(t.requests_24h));
+    stat(dl, "Cereri-probă 7 zile", txt(t.probes_7d));
+    stat(dl, "Cereri totale 7 zile", txt(t.requests_7d));
+    var jails = Array.isArray(f2.jails) ? f2.jails : [];
+    stat(dl, "Jail-uri (banați acum)", jails.length ? jails.map(function (j) {
+      return txt(j.name) + ": " + txt(j.banned_now);
+    }).join(" · ") : "—");
+    if (acc.lines != null) stat(dl, "Linii de log citite", txt(acc.lines) +
+      (acc.parse_errors ? " (nerecunoscute: " + acc.parse_errors + ")" : ""));
+
+    var ips = s.ips || {};
+    var winLabel = SEC_WINDOWS[secWindow];
+    function win(ip) { var x = ips[ip]; return x ? x[secWindow] || null : null; }
+    function field(ip, k) { var w = win(ip); return w ? w[k] : null; }
+    function pathsOf(ip) { var w = win(ip); return w && Array.isArray(w.paths) ? w.paths : null; }
+
+    var banned = Array.isArray(s.banned) ? s.banned : [];
+    setHeading("banned", "IP-uri banate acum", banned.length);
+    secTable("admin-sec-banned", [
+      { label: "IP", val: function (b) { return b.ip; }, mono: true },
+      { label: "Jail", val: function (b) { return b.jail; } },
+      { label: "Banat la (" + SEC_TZ + ")", val: function (b) { return b.banned_at; },
+        text: function (b) { return when(b.banned_at); } },
+      { label: "Expiră la (" + SEC_TZ + ")",
+        val: function (b) { return b.permanent ? "9999" : b.expires_at; },
+        text: function (b) { return b.permanent ? "permanent" : when(b.expires_at); } },
+      { label: "Nr. ban-uri", num: true, val: function (b) { return b.bancount; } },
+      { label: "Cereri " + winLabel, num: true, val: function (b) { return field(b.ip, "requests"); } },
+      { label: "Cereri-probă " + winLabel, num: true, val: function (b) { return field(b.ip, "probes"); } },
+      { label: "Căi probate " + winLabel, paths: function (b) { return pathsOf(b.ip); } }
+    ], banned, { col: 2, dir: "desc" }, "Niciun IP banat acum.");
+
+    var hist = Array.isArray(s.history) ? s.history : [];
+    setHeading("history", "Istoric ban-uri", hist.length);
+    secTable("admin-sec-history", [
+      { label: "Moment (" + SEC_TZ + ")", val: function (h) { return h.at; },
+        text: function (h) { return when(h.at); } },
+      { label: "Eveniment", val: function (h) { return SEC_EVENT[h.event] || null; } },
+      { label: "Jail", val: function (h) { return h.jail; } },
+      { label: "IP", val: function (h) { return h.ip; }, mono: true }
+    ], hist, { col: 0, dir: "desc" }, "Niciun eveniment în jurnal.");
+
+    // top-ul vine ordonat după 7 zile; în fereastra de 24 h rămân doar cei cu probe în 24 h
+    var top = (Array.isArray(s.top) ? s.top : []).filter(function (x) {
+      return secWindow !== "24h" || x.probes_24h == null || x.probes_24h > 0;
+    });
+    setHeading("top", "Top IP-uri după cereri-probă", top.length);
+    secTable("admin-sec-top", [
+      { label: "IP", val: function (x) { return x.ip; }, mono: true },
+      { label: "Cereri-probă " + winLabel, num: true,
+        val: function (x) { return secWindow === "24h" ? x.probes_24h : x.probes_7d; } },
+      { label: "Cereri " + winLabel, num: true, val: function (x) {
+        var v = field(x.ip, "requests");
+        return v == null && secWindow === "7d" ? x.requests_7d : v;
+      } },
+      { label: "Ultima cerere (" + SEC_TZ + ")", val: function (x) { return x.last_seen; },
+        text: function (x) { return when(x.last_seen); } },
+      { label: "Banat acum", val: function (x) { return x.banned == null ? null : (x.banned ? "da" : "nu"); } },
+      { label: "Căi probate " + winLabel, paths: function (x) { return pathsOf(x.ip); } }
+    ], top, { col: 1, dir: "desc" }, "Nicio cerere-probă în ultimele " + winLabel + ".");
+  }
+
+  // comparator: valorile lipsă mereu la final, numerele numeric, restul ca text
+  function secCompare(a, b, dir) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    var r = typeof a === "number" && typeof b === "number" ? a - b :
+      String(a).localeCompare(String(b), "ro");
+    return dir === "asc" ? r : -r;
+  }
+
+  function secTable(boxId, cols, rows, defSort, emptyText) {
+    var box = $(boxId);
+    if (!box) return;
+    clear(box);
+    if (!rows.length) { box.appendChild(el("p", "empty", emptyText)); return; }
+    var st = secSort[boxId] || defSort;
+    var sorted = rows.map(function (r, i) { return { r: r, i: i }; });
+    var sortCol = cols[st.col];
+    if (sortCol && sortCol.val) {
+      sorted.sort(function (x, y) {
+        return secCompare(sortCol.val(x.r), sortCol.val(y.r), st.dir) || x.i - y.i;
+      });
+    }
+    var wrap = el("div", "admin-scroll");
+    var t = el("table", "admin-table admin-sec-table");
+    var tr = el("tr");
+    cols.forEach(function (c, i) {
+      var th = el("th", c.num ? "is-num" : null);
+      th.scope = "col";
+      if (c.val) {
+        var on = i === st.col;
+        if (on) th.setAttribute("aria-sort", st.dir === "asc" ? "ascending" : "descending");
+        var btn = el("button", "admin-sort",
+          c.label + (on ? (st.dir === "asc" ? " ↑" : " ↓") : ""));
+        btn.type = "button";
+        btn.addEventListener("click", function () {
+          var dir = on ? (st.dir === "asc" ? "desc" : "asc") : (c.num ? "desc" : "asc");
+          secSort[boxId] = { col: i, dir: dir };
+          secTable(boxId, cols, rows, defSort, emptyText);
+        });
+        th.appendChild(btn);
+      } else {
+        th.textContent = c.label;
+      }
+      tr.appendChild(th);
+    });
+    var thead = el("thead");
+    thead.appendChild(tr);
+    t.appendChild(thead);
+    var tb = el("tbody");
+    sorted.forEach(function (x) {
+      var row = el("tr");
+      cols.forEach(function (c) {
+        var td = el("td", ((c.num ? "is-num" : "") + (c.mono ? " admin-mono" : "")).trim() || null);
+        if (c.paths) {
+          var ps = c.paths(x.r);
+          if (!ps) td.textContent = "—";
+          else if (!ps.length) td.textContent = "niciuna";
+          else ps.forEach(function (p) {
+            td.appendChild(el("span", "admin-sec-path", txt(p.path) + " ×" + txt(p.count)));
+          });
+        } else {
+          td.textContent = c.text ? c.text(x.r) : txt(c.val(x.r));
+        }
+        row.appendChild(td);
+      });
+      tb.appendChild(row);
+    });
+    t.appendChild(tb);
+    wrap.appendChild(t);
+    box.appendChild(wrap);
+  }
+
   // ---- timer: only while #admin is shown, the page is visible and the session is valid ---
 
   function stopTimer() {
@@ -666,7 +941,12 @@
     var on = loggedIn && location.hash === "#admin" && !document.hidden && !!$("admin-server-stats");
     if (!on) { stopTimer(); return; }
     if (!serverTimer) {
-      serverTimer = setInterval(function () { loadServer(); loadNvme(); }, REFRESH_MS);
+      serverTimer = setInterval(function () {
+        loadServer();
+        loadNvme();
+        secTick += 1;
+        if (secTick % SEC_REFRESH_TICKS === 0) loadSecurity();
+      }, REFRESH_MS);
       loadServer();
       loadNvme();
     }

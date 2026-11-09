@@ -74,3 +74,40 @@
 }
 .admin-svc-name { overflow-wrap: anywhere; }
 .admin-svc-state { font-weight: 600; white-space: nowrap; }
+
+/* Securitate (fail2ban): tabele sortabile, căi probate ca text, fereastra 24 h / 7 zile */
+.admin-sec-window { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 0.85rem; }
+.admin-sec-window select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 6px 8px;
+  min-height: 36px;
+}
+.admin-sec-notes:empty { display: none; }
+.admin-sec-note { color: var(--bad); font-size: 0.85rem; }
+.admin-sec-table th { white-space: nowrap; }
+.admin-sec-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-sort {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  min-height: 32px;
+  cursor: pointer;
+  text-align: inherit;
+  white-space: nowrap;
+}
+.admin-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.admin-mono, .admin-sec-path { font-family: var(--mono); font-size: 0.8rem; }
+.admin-sec-path { display: block; overflow-wrap: anywhere; }
+.admin-sec-path + .admin-sec-path { margin-top: 2px; }
+/* tabelele de securitate derulează în container (.admin-scroll) în loc să rupă IP-urile */
+.admin-sec-table td, .admin-sec-table th { overflow-wrap: normal; }
+.admin-sec-table td { white-space: nowrap; }
+.admin-sec-table td:has(.admin-sec-path) { white-space: normal; min-width: 16em; }
+.admin-sec-table .admin-sec-path { overflow-wrap: anywhere; }
+#admin-sec-summary { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

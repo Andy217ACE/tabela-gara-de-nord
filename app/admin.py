@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app import admin_settings, admin_tools, captures, observations
+from app import admin_settings, admin_tools, captures, observations, security_status
 from app.ocr import stats as ocr_stats
 from app.store import TZ
 
@@ -448,6 +448,20 @@ async def nvme_tools(request: Request):
     out = await run_in_threadpool(admin_tools.nvme_snapshot, request.app.state.settings.db_path,
                                   now.timestamp())
     out["generated_at"] = now.isoformat(timespec="seconds")
+    return _json(out)
+
+
+@guarded.get("/security")
+async def security(request: Request):
+    """Securitate (read-only, fără CSRF): IP-uri banate de fail2ban și cereri din log-ul nginx,
+    din snapshot.json scris de exportatorul root (aplicația nu are privilegii)."""
+    now = datetime.now(TZ)
+    path = security_status.snapshot_path(request.app.state.settings.db_path)
+    if path is None:
+        out = {"available": False, "reason": "missing"}
+    else:
+        out = await run_in_threadpool(security_status.read_snapshot, path, now.timestamp())
+    out["now"] = now.isoformat(timespec="seconds")
     return _json(out)
 
 

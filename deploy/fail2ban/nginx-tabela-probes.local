@@ -1,0 +1,9 @@
+# Tabela CFR - doar cereri evidente de scanere (probe), cu raspuns 4xx.
+# Aplicatia NU serveste dotfiles, .php, wp-*, /SDK/ etc. /.well-known/ este exclus explicit.
+[Definition]
+_probe = (?:[^" ?]*/)?(?:\.(?:env[^/" ]*|git(?:/|ignore|-credentials|lab-ci\.ya?ml)|aws/|svn/|hg/|npmrc|htpasswd|htaccess|ssh/|DS_Store|docker/|vscode/sftp)|SDK/webLanguage|wp-(?:config|login|admin|includes|content)|[^" ?]*\.php\d?(?:[./?]|(?=[ "]))|phpinfo|config\.json(?=[ "?])|docker-compose\.ya?ml|storage/logs/laravel\.log)
+failregex = ^<HOST> - \S+ \[\] "[A-Z]+ (?:https?://[^/" ]+)?/(?!\.well-known/)%(_probe)s[^"]*" 4\d\d 
+ignoreregex =
+datepattern = {^LN-BEG}%%ExY(?P<_sep>[-/.])%%m(?P=_sep)%%d[T ]%%H:%%M:%%S(?:[.,]%%f)?(?:\s*%%z)?
+              ^[^\[]*\[({DATE})
+              {^LN-BEG}
