@@ -100,8 +100,10 @@ def export_db(db: Path, img_root: Path, out_json: Path, select=None) -> dict:
                 n_with_img += 1
                 if (Path(img_root) / "captures" / p).is_file():
                     on_disk[p] = i
-        chosen = list(on_disk) if select is None else select(list(on_disk))
-        caps = [{"id": on_disk[p], "path": p} for p in sorted(chosen)]
+        # select primeste numele cadrelor (calea fara .jpg), ca ocr_digit_clf.extract
+        frame_of = {(p[:-4] if p.endswith(".jpg") else p): p for p in on_disk}
+        chosen = list(frame_of) if select is None else select(list(frame_of))
+        caps = [{"id": on_disk[frame_of[f]], "path": frame_of[f]} for f in sorted(chosen)]
         ids = {c["id"] for c in caps}
         obs = []
         for c, b, r, f in con.execute(

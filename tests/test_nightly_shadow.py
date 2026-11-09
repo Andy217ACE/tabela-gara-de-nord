@@ -369,3 +369,25 @@ def test_exportul_contine_doar_cadrele_selectate(tmp_path):
     assert counts["capturi"] == 20 and counts["capturi_cu_fisier"] == 15
     assert counts["observatii"] == 20 and counts["cadre_exportate"] == 5
     assert counts["observatii_exportate"] == 5
+
+
+def test_exportul_si_extract_aleg_acelasi_esantion(tmp_path, monkeypatch):
+    """select_frames primeste numele cadrelor (fara .jpg), ca in extract: altfel exportul si
+    extract aleg esantioane diferite si cache-ul din noptile trecute nu se mai potriveste."""
+    names = [f"2026/11/01/{i:06d}-a" for i in range(60)]
+    db = tmp_path / "t.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE captures (id INTEGER PRIMARY KEY, path TEXT)")
+    con.execute("CREATE TABLE observations (id INTEGER PRIMARY KEY, capture_id INTEGER, "
+                "board TEXT, row_index INTEGER, fields_json TEXT)")
+    img = tmp_path / "img"
+    for i, n in enumerate(names):
+        con.execute("INSERT INTO captures VALUES (?, ?)", (i, n + ".jpg"))
+        (img / "captures" / (n + ".jpg")).parent.mkdir(parents=True, exist_ok=True)
+        (img / "captures" / (n + ".jpg")).write_bytes(b"jpg")
+    con.commit()
+    con.close()
+    out = tmp_path / "export.json"
+    shadow.export_db(db, img, out, select=lambda fr: clf_real.select_frames(fr, 10))
+    exported = {c["path"][:-4] for c in json.loads(out.read_text(encoding="utf-8"))["captures"]}
+    assert exported == set(clf_real.select_frames(names, 10))
