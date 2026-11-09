@@ -82,23 +82,40 @@ def _check_workdir(workdir: Path) -> Path:
     return w
 
 
-def export_db(db: Path, img_root: Path, out_json: Path) -> dict:
+def export_db(db: Path, img_root: Path, out_json: Path, select=None) -> dict:
     """Capturile si observatiile din baza, in formatul asteptat de ocr_digit_clf.extract.
-    Baza se deschide doar in citire (mode=ro); nu se scrie nimic in ea."""
+    Baza se deschide doar in citire (mode=ro); nu se scrie nimic in ea.
+
+    Se exporta doar capturile cu fisier pe disc alese de ``select`` (lista de cadre ->
+    sublista; implicit toate) si observatiile lor: export.json se incarca intreg in memorie,
+    deci nu trebuie sa creasca cu toata baza (observatiile capturilor sterse de retentie
+    raman in baza)."""
     con = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True)
     try:
-        caps = [{"id": i, "path": p} for i, p in
-                con.execute("SELECT id, path FROM captures")]
-        obs = [{"capture_id": c, "board": b, "row_index": r, "fields_json": f} for c, b, r, f in
-               con.execute("SELECT capture_id, board, row_index, fields_json FROM observations")]
+        n_caps = n_with_img = n_obs = 0
+        on_disk = {}
+        for i, p in con.execute("SELECT id, path FROM captures"):
+            n_caps += 1
+            if p:
+                n_with_img += 1
+                if (Path(img_root) / "captures" / p).is_file():
+                    on_disk[p] = i
+        chosen = list(on_disk) if select is None else select(list(on_disk))
+        caps = [{"id": on_disk[p], "path": p} for p in sorted(chosen)]
+        ids = {c["id"] for c in caps}
+        obs = []
+        for c, b, r, f in con.execute(
+                "SELECT capture_id, board, row_index, fields_json FROM observations"):
+            n_obs += 1
+            if c in ids:
+                obs.append({"capture_id": c, "board": b, "row_index": r, "fields_json": f})
     finally:
         con.close()
     out_json.write_text(json.dumps({"captures": caps, "observations": obs}, ensure_ascii=False),
                         encoding="utf-8")
-    with_img = [c for c in caps if c["path"]]
-    on_disk = sum(1 for c in with_img if (Path(img_root) / "captures" / c["path"]).is_file())
-    return {"capturi": len(caps), "capturi_cu_imagine": len(with_img),
-            "capturi_cu_fisier": on_disk, "observatii": len(obs)}
+    return {"capturi": n_caps, "capturi_cu_imagine": n_with_img,
+            "capturi_cu_fisier": len(on_disk), "observatii": n_obs,
+            "cadre_exportate": len(caps), "observatii_exportate": len(obs)}
 
 
 def _truth_file(candidates) -> Path | None:
@@ -220,7 +237,8 @@ def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
            "limite": LIMITS}
     antrenare: dict = {"antrenat": False}
     try:
-        rep["surse"] = export_db(Path(db), Path(img_root), workdir / "export.json")
+        rep["surse"] = export_db(Path(db), Path(img_root), workdir / "export.json",
+                                 select=lambda fr: clf.select_frames(fr, MAX_FRAMES))
         rep["cadre"] = clf.extract(str(img_root), str(workdir / "export.json"), str(run_dir),
                                    max_frames=MAX_FRAMES, cache_dir=str(_cache_dir(clf, workdir)))
         rep["etichete"] = clf.label(str(run_dir), None)

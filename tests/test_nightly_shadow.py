@@ -73,7 +73,7 @@ def _fake_clf(rng_seed=0, n=300):
     return types.SimpleNamespace(
         extract=extract, label=label, truth_glyphs=truth_glyphs, TRUTH=None,
         CLASSES=clf_real.CLASSES, mlp_fit=clf_real.mlp_fit, mlp_predict=clf_real.mlp_predict,
-        _acc=clf_real._acc, engine_fingerprint=lambda dirs=None: "motor-test")
+        _acc=clf_real._acc, select_frames=clf_real.select_frames, engine_fingerprint=lambda dirs=None: "motor-test")
 
 
 @pytest.fixture
@@ -93,10 +93,13 @@ def test_export_nu_modifica_baza(env):
     before = _sha(env.db)
     out = env.work
     out.mkdir()
+    jpg = env.img_root / "captures" / "2026/10/31/024840-aaaa.jpg"
+    jpg.parent.mkdir(parents=True)
+    jpg.write_bytes(b"jpg")
     counts = shadow.export_db(env.db, env.img_root, out / "export.json")
     assert _sha(env.db) == before
-    assert counts == {"capturi": 2, "capturi_cu_imagine": 1, "capturi_cu_fisier": 0,
-                      "observatii": 1}
+    assert counts == {"capturi": 2, "capturi_cu_imagine": 1, "capturi_cu_fisier": 1,
+                      "observatii": 1, "cadre_exportate": 1, "observatii_exportate": 1}
     data = json.loads((out / "export.json").read_text(encoding="utf-8"))
     assert data["observations"][0]["fields_json"] == '{"no": {"raw": "123"}}'
 
@@ -337,3 +340,32 @@ def test_antrenarea_nu_dubleaza_glifele_in_memorie(tmp_path):
     tracemalloc.stop()
     float_x = n * 32 * 32 * 4
     assert peak < 1.6 * float_x, f"varf {peak / float_x:.2f} x dimensiunea X float32"
+
+
+def test_exportul_contine_doar_cadrele_selectate(tmp_path):
+    """export.json se incarca intreg in memorie: nu trebuie sa creasca cu toata baza
+    (observatiile capturilor sterse de retentie raman in baza la nesfarsit)."""
+    db = tmp_path / "t.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE captures (id INTEGER PRIMARY KEY, path TEXT)")
+    con.execute("CREATE TABLE observations (id INTEGER PRIMARY KEY, capture_id INTEGER, "
+                "board TEXT, row_index INTEGER, fields_json TEXT)")
+    img = tmp_path / "img"
+    for i in range(1, 21):
+        path = f"2026/11/01/{i:06d}.jpg" if i <= 15 else None  # 16..20: imagine stearsa
+        con.execute("INSERT INTO captures VALUES (?, ?)", (i, path))
+        con.execute("INSERT INTO observations (capture_id, board, row_index, fields_json) "
+                    "VALUES (?, 'arrival', 0, '{}')", (i,))
+        if path:
+            (img / "captures" / path).parent.mkdir(parents=True, exist_ok=True)
+            (img / "captures" / path).write_bytes(b"jpg")
+    con.commit()
+    con.close()
+    out = tmp_path / "export.json"
+    counts = shadow.export_db(db, img, out, select=lambda fr: sorted(fr)[:5])
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data["captures"]) == 5
+    assert {o["capture_id"] for o in data["observations"]} == {c["id"] for c in data["captures"]}
+    assert counts["capturi"] == 20 and counts["capturi_cu_fisier"] == 15
+    assert counts["observatii"] == 20 and counts["cadre_exportate"] == 5
+    assert counts["observatii_exportate"] == 5
