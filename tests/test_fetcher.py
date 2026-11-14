@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
 import base64
+import re
 from pathlib import Path
 
 import httpx
@@ -35,6 +36,27 @@ def test_extract_image_png():
     raw = b"\x89PNG\r\n\x1a\n" + b"0" * 20
     payload = base64.b64encode(raw).decode()
     assert extract_image(f'<img src="data:image/png;base64,{payload}">') == raw
+
+
+def _truncated_page(keep: int) -> str:
+    from app.fetcher import _DATA_URI
+    html = _page()
+    m = _DATA_URI.search(html)
+    full = base64.b64decode(re.sub(r"\s+", "", m.group(1)))
+    cut = base64.b64encode(full[:keep]).decode()
+    return html.replace(m.group(1), cut)
+
+
+def test_extract_image_rejects_truncated_jpeg():
+    with pytest.raises(ValueError, match="truncated"):
+        extract_image(_truncated_page(8192))
+
+
+async def test_fetch_truncated_jpeg_is_fetch_error():
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, text=_truncated_page(16384)))
+    async with httpx.AsyncClient(transport=transport) as c:
+        with pytest.raises(FetchError):
+            await fetch_board_image(c, "http://x/")
 
 
 def test_image_hash():

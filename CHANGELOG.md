@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.52 — 2026-11-14
+
+### Reparat
+- **Imagini tăiate de la sursă nu mai sunt salvate ca bune:** dacă fișierul JPEG al tablei nu se termină cu marcajul de final (FF D9), citirea e tratată ca eșec și se reia la runda următoare. Până acum astfel de cadre (8–24 KB) ajungeau în capturi și apăreau ca „nu s-a putut decoda” în jurnal.
+- **Reîncercare:** după un cadru tăiat, poller-ul așteaptă 5 secunde (backoff) și descarcă din nou pagina CFR.
+- **Teste:** 2 teste noi în `tests/test_fetcher.py` pentru JPEG-ul tăiat (la nivel de extragere și de descărcare).
+
+### Adăugat
+- **Jurnal mai clar:** cadrele tăiate apar ca `fetch failed (image is truncated …)`, deosebite de cadrele stricate, care apar ca eșec de decodare sau de citire.
+- Versiune nouă: `VERSION` 1.52. Nu se schimbă API-urile, interfața, lista de precache a service worker-ului sau `CHARTS_V`.
+
+### Notă
+- Cadrele stricate la sursă (imagine completă, dar cu conținut greșit) nu sunt afectate de această verificare; rămân eșecuri de citire, ca înainte.
+
 ## Beta 1.51 — 2026-11-09
 
 ### Reparat
