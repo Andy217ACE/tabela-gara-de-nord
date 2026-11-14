@@ -317,7 +317,12 @@ def test_offline_page_in_english_from_cache(browser, base_url):  # noqa: F811
         page.evaluate("navigator.serviceWorker.ready.then(() => 0)")
         page.reload()  # now controlled by the service worker
         page.evaluate("fetch('/i18n/en.json').then(r => r.status)")  # runtime-cached by the SW
-        page.wait_for_function("caches.open('tabela-shell-' + 'v40').then(c => c.match('/i18n/en.json')).then(Boolean)")
+        import re
+        from pathlib import Path
+        sw = (Path(__file__).resolve().parent.parent / "web" / "sw.js").read_text(encoding="utf-8")
+        sw_version = re.search(r'var VERSION = "([^"]+)"', sw).group(1)
+        page.wait_for_function(
+            "v => caches.open('tabela-shell-' + v).then(c => c.match('/i18n/en.json')).then(Boolean)", arg=sw_version)
         ctx.set_offline(True)
         page.goto(base_url + "/offline.html")
         page.wait_for_function("document.documentElement.lang === 'en'")
