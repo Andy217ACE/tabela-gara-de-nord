@@ -225,6 +225,33 @@ def _make_sender(settings: Settings):
 
 # -- app --------------------------------------------------------------------
 
+_HEAD_SUBS = (  # (key, exact Romanian head fragment with {} where the value goes)
+    ("meta.title", "<title>{}</title>"),
+    ("meta.description", '<meta name="description" content="{}">'),
+    ("meta.ogTitle", '<meta property="og:title" content="{}">'),
+    ("meta.ogDescription", '<meta property="og:description" content="{}">'),
+    ("meta.ogLocale", '<meta property="og:locale" content="{}">'),
+    ("meta.ogTitle", '<meta name="twitter:title" content="{}">'),
+    ("meta.twitterDescription", '<meta name="twitter:description" content="{}">'),
+)
+
+
+def _index_en(html: str) -> str:
+    """English head for index.html: plain replacement of the Romanian fragments."""
+    import html as _html
+    try:
+        ro = json.loads((WEB_DIR / "i18n" / "ro.json").read_text(encoding="utf-8"))
+        en = json.loads((WEB_DIR / "i18n" / "en.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return html
+    out = html.replace('<html lang="ro">', '<html lang="en">', 1)
+    for key, frag in _HEAD_SUBS:
+        if key in ro and key in en:
+            out = out.replace(frag.format(ro[key]),
+                              frag.format(_html.escape(en[key], quote=True)), 1)
+    return out
+
+
 def create_app(settings: Settings | None = None, start_poller: bool = True) -> FastAPI:
     settings = settings or get_settings()
 
@@ -564,6 +591,19 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         return FileResponse(WEB_DIR / "manifest.webmanifest",
                             media_type="application/manifest+json",
                             headers={"Cache-Control": "no-cache"})
+
+    # index.html: head served in English for ?lang=en (link previews / crawlers
+    # without JS). Anything else keeps the static Romanian head byte for byte.
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    @app.api_route("/index.html", methods=["GET", "HEAD"], include_in_schema=False)
+    def index_page(request: Request):
+        index = WEB_DIR / "index.html"
+        if not index.is_file():
+            raise _bad("Nu există.", 404)
+        if request.query_params.get("lang") != "en":
+            return FileResponse(index, media_type="text/html; charset=utf-8")
+        return Response(_index_en(index.read_bytes().decode("utf-8")),
+                        media_type="text/html; charset=utf-8")
 
     # Static frontend last, so /api/* routes win. No disk writes here.
     if WEB_DIR.is_dir():
