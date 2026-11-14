@@ -66,6 +66,14 @@
   document.addEventListener("DOMContentLoaded", function () { syncMeta(current); });
 })();
 
+// Limba paginii: <html lang> înainte de prima pictare (?lang= valid → localStorage → ro).
+(function () {
+  var v = null;
+  try { v = new URLSearchParams(location.search).get("lang"); } catch (e) { /* ignore */ }
+  if (v === null) { try { v = localStorage.getItem("tabela-lang"); } catch (e) { /* ignore */ } }
+  document.documentElement.lang = v === "en" ? "en" : "ro";
+})();
+
 // „Site pentru desktop” pe telefon: pagina e așezată mult mai lată decât ecranul (~980 px pe
 // un ecran de ~400 px) și afișată micșorată. Marcăm <html class="zoomed-out"> ca meniul de sus
 // (style.css) să fie mai mare, lizibil și ușor de apăsat. Doar pe ecrane tactile (pointer

@@ -18,6 +18,7 @@ var SHELL = [
   "/",
   OFFLINE_URL,
   "/theme-init.js",
+  "/i18n/i18n.js",
   "/style.css",
   "/panel.css",
   "/app.js",

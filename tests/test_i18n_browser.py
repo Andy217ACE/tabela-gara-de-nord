@@ -83,3 +83,23 @@ def test_set_lang_survives_throwing_storage(browser, base_url):  # noqa: F811
         assert page.evaluate("I18N.lang()") == "en"
     finally:
         ctx.close()
+
+
+def test_toggle_switches_language_and_url(browser, base_url):  # noqa: F811
+    ctx = browser.new_context(service_workers="block", viewport={"width": 360, "height": 740})
+    try:
+        page = ctx.new_page()
+        page.goto(base_url + "/")
+        page.evaluate("() => window.I18N && window.I18N.ready")
+        btn = page.locator(".navbar [data-lang-toggle]")
+        assert btn.is_visible()
+        assert page.evaluate("() => document.documentElement.scrollWidth") <= 360
+        assert page.evaluate("document.documentElement.lang") == "ro"
+        btn.click()
+        page.wait_for_function("() => document.documentElement.lang === 'en'")
+        assert page.evaluate("I18N.lang()") == "en"
+        assert "lang=en" in page.url
+        assert page.evaluate("document.documentElement.lang") == "en"
+        assert page.evaluate("() => document.documentElement.scrollWidth") <= 360
+    finally:
+        ctx.close()

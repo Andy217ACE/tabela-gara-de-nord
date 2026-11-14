@@ -717,7 +717,32 @@
 
   // ---- boot ------------------------------------------------------------------------
 
+  // Comutator RO/EN: butonul arată limba la care se trece; după setLang reaplicăm textele data-i18n.
+  function initLang() {
+    var I = window.I18N, btn = document.querySelector("[data-lang-toggle]");
+    if (!I) return;
+    function sync() {
+      document.documentElement.lang = I.lang();
+      I.applyDom(document);
+      if (btn) btn.textContent = I.lang() === "en" ? "RO" : "EN";
+    }
+    I.ready.then(sync);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var next = I.lang() === "en" ? "ro" : "en";
+      I.setLang(next).then(function () {
+        try {
+          var u = new URL(location.href);
+          u.searchParams.set("lang", next);
+          history.replaceState(null, "", u.pathname + u.search + u.hash);
+        } catch (e) { /* ignore */ }
+        sync();
+      });
+    });
+  }
+
   function init() {
+    initLang();
     initPeronEst();
     loadConfig();
     initTheme();

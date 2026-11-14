@@ -41,17 +41,36 @@
   var jobs = [load("ro")];
   if (active === "en") jobs.push(load("en"));
 
+  // Completează data-i18n="cheie" (textContent) și data-i18n-attr="atribut:cheie;atribut2:cheie2".
+  function applyDom(root) {
+    var scope = root || document, i, n, list, parts, p, c;
+    if (scope.nodeType === 1 && scope.hasAttribute("data-i18n")) scope.textContent = t(scope.getAttribute("data-i18n"));
+    list = scope.querySelectorAll("[data-i18n]");
+    for (i = 0; i < list.length; i++) list[i].textContent = t(list[i].getAttribute("data-i18n"));
+    list = scope.querySelectorAll("[data-i18n-attr]");
+    for (i = 0; i < list.length; i++) {
+      parts = list[i].getAttribute("data-i18n-attr").split(";");
+      for (n = 0; n < parts.length; n++) {
+        c = parts[n].indexOf(":");
+        if (c > 0) list[i].setAttribute(parts[n].slice(0, c).trim(), t(parts[n].slice(c + 1).trim()));
+      }
+    }
+  }
+
   function setLang(code) {
     var c = norm(code) || "ro";
     active = c;
     try { localStorage.setItem(KEY, c); } catch (e) { /* stocare indisponibilă: limba rămâne pe sesiune */ }
     var p = c === "ro" ? Promise.resolve() : load(c);
-    window.I18N.ready = p.then(function () { /* void */ });
+    window.I18N.ready = p.then(function () {
+      try { document.dispatchEvent(new CustomEvent("i18n:change", { detail: { lang: c } })); } catch (e) { /* ignore */ }
+    });
     return window.I18N.ready;
   }
 
   window.I18N = {
     t: t,
+    applyDom: applyDom,
     setLang: setLang,
     lang: function () { return active; },
     ready: Promise.all(jobs).then(function () { /* void */ })
