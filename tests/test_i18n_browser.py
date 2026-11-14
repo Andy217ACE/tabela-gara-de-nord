@@ -327,3 +327,71 @@ def test_offline_page_in_english_from_cache(browser, base_url):  # noqa: F811
         assert "Sigla" not in page.get_attribute(".logo-offline", "alt")
     finally:
         ctx.close()
+
+
+def _mock_admin(page, apply_status=422):
+    """Pretend to be a signed-in admin; the dupes `apply` call fails with a Romanian API detail."""
+    detail = "Confirmarea nu corespunde cererii (mesaj din API)."
+
+    def handler(route):
+        url = route.request.url
+        if url.endswith("/api/admin/session"):
+            body = {"enabled": True, "authenticated": True}
+        elif url.endswith("/api/admin/csrf"):
+            body = {"token": "t"}
+        elif url.endswith("/api/admin/tools/dupes/apply"):
+            route.fulfill(status=apply_status, content_type="application/json",
+                          body='{"detail": "%s"}' % detail)
+            return
+        elif url.endswith("/api/admin/tools/dupes"):
+            body = {"report": {"merge": {"list": []}}, "generated_at": None}
+        else:
+            body = {}
+        route.fulfill(status=200, content_type="application/json", body=__import__("json").dumps(body))
+
+    page.route("**/api/admin/**", handler)
+    return detail
+
+
+def test_admin_in_english_with_romanian_fallback(browser, base_url):  # noqa: F811
+    ctx = browser.new_context(service_workers="block")
+    page = ctx.new_page()
+    try:
+        detail = _mock_admin(page)
+        page.goto(base_url + "/?lang=en#admin")
+        page.wait_for_selector("#admin-dupes")
+        assert page.inner_text("#admin-heading") == "Administration"
+        assert page.inner_text("#admin-dupes h2") == "Duplicate train numbers"
+        assert "Sign out" in page.inner_text("#admin-body")
+        page.click("#admin-dupes .admin-actions button:nth-child(2)")  # "Apply the merge…"
+        page.fill("#admin-confirm input", "APLICA")
+        page.click("#admin-confirm button[type=submit]")
+        page.wait_for_function("() => !document.getElementById('admin-msg').hidden")
+        # the message from the API stays as the server sent it (Romanian), no raw key
+        assert page.inner_text("#admin-msg") == detail
+        assert page.evaluate(r"() => /admin\.[a-z]+\.[A-Za-z]+/.test(document.getElementById('view-admin').innerText)") is False
+        # switching to Romanian rebuilds the page in Romanian
+        page.evaluate("I18N.setLang('ro')")
+        page.wait_for_function("() => document.getElementById('admin-heading') && document.getElementById('admin-heading').textContent === 'Administrare'")
+    finally:
+        ctx.close()
+
+
+def test_ocr_and_system_titles_in_english(browser, base_url):  # noqa: F811
+    ctx = browser.new_context(service_workers="block")
+    page = ctx.new_page()
+    try:
+        _mock_admin(page)
+        page.route("**/api/system", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body='{"stare": "live", "poller": {"last_ok_age_s": 30}, "ocr": {}, "disk": {}, "db": {}}'))
+        page.goto(base_url + "/?lang=en#ocr")
+        page.wait_for_selector("#ocr-heading")
+        assert page.inner_text("#ocr-heading") == "OCR captures"
+        page.goto(base_url + "/?lang=en#sistem")
+        page.wait_for_selector("#sistem-heading")
+        assert page.inner_text("#sistem-heading") == "System"
+        page.wait_for_selector(".sys-badge")
+        assert "Last successful read" in page.inner_text("#sys-body")
+    finally:
+        ctx.close()

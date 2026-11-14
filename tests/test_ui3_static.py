@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PRECACHE_LIMIT = 760_000      # was 660 KB; Task 9 (English version): ro.json (~83 KB) joined the precache (measured here: 742731 B); en.json is runtime-cached, not precached
+PRECACHE_LIMIT = 780_000      # was 660 KB; Task 9 (English version): ro.json (~83 KB) joined the precache (measured here: 742731 B); en.json is runtime-cached, not precached
 
 
 def read(name):

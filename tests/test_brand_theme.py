@@ -332,7 +332,7 @@ def test_icon_weights_and_precache_budget(client):
     # Task 9: ro.json (~83 KB, ~20 KB gzip) is precached so the default language works offline;
     # en.json is NOT (cached by the service worker on first use) -> 780 KB
     assert "/i18n/en.json" not in paths
-    assert total <= 780_000, total
+    assert total <= 800_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

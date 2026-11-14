@@ -1,5 +1,5 @@
 // © 2026 Andy217Ace
-// Tabela Gara de Nord — versiunea aplicației în footer + ecranul „Versiuni” (#versiuni).
+// Tabela Gara de Nord — the app version in the footer + the "Versions" screen (#versiuni).
 // Data: GET /api/changelog -> {version, entries:[{version, date, groups:[{title, items}]}]}.
 // DOM built with createElement/textContent only (CSP: no inline styles/scripts).
 "use strict";
@@ -9,6 +9,7 @@
   App.views = App.views || {};
   var $ = function (id) { return document.getElementById(id); };
   var loaded = null;  // Promise of the changelog JSON (fetched once per page load)
+  function T(k, p) { return window.I18N.t(k, p); }
 
   function load() {
     if (!loaded) {
@@ -33,7 +34,7 @@
     return String(s).replace(/`/g, "");
   }
 
-  // „**text**" din CHANGELOG → <strong> (doar textContent, fără HTML din date)
+  // "**text**" from the CHANGELOG -> <strong> (only textContent, no HTML from data)
   function item(s) {
     var li = el("li");
     plain(s).split("**").forEach(function (part, i) {
@@ -49,12 +50,21 @@
   }
 
   var GROUP_KIND = { "nou": "new", "reparat": "fix", "tehnic": "tech", "modificat": "fix" };
+  // group titles in the CHANGELOG are Romanian words; known ones get a translated badge, others stay as written
+  function groupTitle(t) {
+    var k = String(t).toLowerCase();
+    return GROUP_KIND[k] ? T("versions.group." + k) : plain(t);
+  }
+
   var OPEN_FIRST = 3;   // the newest versions start open; older ones are one click away
-  var dateFmt = new Intl.DateTimeFormat("ro-RO", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
+  var dateFmts = {};
 
   function niceDate(iso) {
     var d = new Date(iso + "T12:00:00Z");
-    return isNaN(d.getTime()) ? String(iso || "") : dateFmt.format(d);
+    if (isNaN(d.getTime())) return String(iso || "");
+    var loc = window.I18N.lang() === "en" ? "en-GB" : "ro-RO";
+    if (!dateFmts[loc]) dateFmts[loc] = new Intl.DateTimeFormat(loc, { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
+    return dateFmts[loc].format(d);
   }
 
   function entryBody(e) {
@@ -63,8 +73,8 @@
       if (g.title) {
         var gh = el("h3", "v-group");
         var kind = GROUP_KIND[String(g.title).toLowerCase()] || "";
-        gh.append(el("span", "v-badge" + (kind ? " v-badge-" + kind : ""), plain(g.title)));
-        gh.append(el("span", "v-count", (g.items || []).length + ((g.items || []).length === 1 ? " punct" : " puncte")));
+        gh.append(el("span", "v-badge" + (kind ? " v-badge-" + kind : ""), groupTitle(g.title)));
+        gh.append(el("span", "v-count", (g.items || []).length + " " + T((g.items || []).length === 1 ? "versions.point" : "versions.points")));
         body.appendChild(gh);
       }
       var ul = el("ul", "v-items");
@@ -78,18 +88,18 @@
     var box = $("v-list");
     var entries = (data && Array.isArray(data.entries)) ? data.entries : [];
     box.replaceChildren();
-    $("v-current").textContent = data && data.version ? "Versiunea curentă: " + data.version : "";
+    $("v-current").textContent = data && data.version ? T("versions.current", { v: data.version }) : "";
     if (!entries.length) {
-      box.appendChild(el("p", "empty", "Istoricul versiunilor nu este disponibil."));
+      box.appendChild(el("p", "empty", T("versions.unavailable")));
       return;
     }
     var U = App.ui2;
     if (U) {
       var hero = U.hero([
-        { label: "Versiunea curentă", text: plain(entries[0].version), cls: "ui-stat-name", sub: niceDate(entries[0].date) },
-        { label: "Versiuni publicate", value: entries.length, sub: "de la " + plain(entries[entries.length - 1].version) },
-        { label: "Schimbări în ultima versiune", value: (entries[0].groups || []).reduce(function (a, g) { return a + (g.items || []).length; }, 0),
-          sub: (entries[0].groups || []).map(function (g) { return plain(g.title || ""); }).filter(Boolean).join(" · ") }]);
+        { label: T("versions.heroCurrent"), text: plain(entries[0].version), cls: "ui-stat-name", sub: niceDate(entries[0].date) },
+        { label: T("versions.heroCount"), value: entries.length, sub: T("versions.since", { v: plain(entries[entries.length - 1].version) }) },
+        { label: T("versions.heroChanges"), value: (entries[0].groups || []).reduce(function (a, g) { return a + (g.items || []).length; }, 0),
+          sub: (entries[0].groups || []).map(function (g) { return g.title ? groupTitle(g.title) : ""; }).filter(Boolean).join(" · ") }]);
       hero.classList.add("v-hero");
       box.appendChild(hero);
     }
@@ -97,7 +107,7 @@
     entries.forEach(function (e, i) {
       var art = el("article", "v-entry" + (i === 0 ? " is-current" : ""));
       var h = el("h2", "v-title", plain(e.version));
-      if (i === 0) h.appendChild(el("span", "v-tag", "curentă"));
+      if (i === 0) h.appendChild(el("span", "v-tag", T("versions.tag")));
       var t = el("time", "v-date", e.date);
       t.dateTime = e.date;
       h.appendChild(document.createTextNode(" "));
@@ -110,7 +120,7 @@
         body.id = "v-body-" + i;
         body.hidden = true;
         var n = (e.groups || []).reduce(function (a, g) { return a + (g.items || []).length; }, 0);
-        var btn = el("button", "btn btn-ghost btn-sm v-more", "Arată cele " + n + " puncte");
+        var btn = el("button", "btn btn-ghost btn-sm v-more", T("versions.showAll", { n: n }));
         btn.type = "button";
         btn.setAttribute("aria-expanded", "false");
         btn.setAttribute("aria-controls", body.id);
@@ -118,7 +128,7 @@
           var open = body.hidden;
           body.hidden = !open;
           btn.setAttribute("aria-expanded", open ? "true" : "false");
-          btn.textContent = open ? "Ascunde" : "Arată cele " + n + " puncte";
+          btn.textContent = open ? T("versions.hide") : T("versions.showAll", { n: n });
         });
         art.appendChild(btn);
         art.appendChild(body);
@@ -134,11 +144,17 @@
       var err = $("v-error");
       err.hidden = true;
       load().then(function (d) { setFooter(d); render(d); }, function () {
-        err.textContent = "Nu am putut încărca istoricul versiunilor. Încearcă din nou mai târziu.";
+        err.textContent = T("versions.error");
         err.hidden = false;
       });
     }
   };
+
+  // language switch: redraw the list (the changelog JSON is already loaded) if it is on screen
+  document.addEventListener("i18n:change", function () {
+    var box = $("v-list");
+    if (box && box.childNodes.length && loaded) loaded.then(render, function () { /* keep what is shown */ });
+  });
 
   function init() { load().then(setFooter, function () { /* footer keeps its fallback text */ }); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

@@ -1,8 +1,8 @@
 // © 2026 Andy217Ace
-// Tabela Gara de Nord — pagina „Sistem” (#sistem): panoul e viu? când a fost ultima citire
-// reușită, rata de rânduri necitite din ultima oră, spațiu pe disc, mărimea bazei.
-// Date: GET /api/system (public); pentru admin și GET /api/admin/system (detalii, dacă
-// sesiunea e de admin). Valoarea lipsă se afișează „necunoscut”, nu 0.
+// Tabela Gara de Nord — the "System" page (#sistem): is the board alive? when was the last
+// successful read, the rate of unread rows in the last hour, disk space, database size.
+// Data: GET /api/system (public); for admins also GET /api/admin/system (details, if the
+// session is an admin one). A missing value is shown as "unknown" (sistem.unknown), never 0.
 // DOM built with createElement/textContent only (CSP: no inline styles/scripts).
 "use strict";
 
@@ -11,6 +11,7 @@
   App.views = App.views || {};
   var $ = function (id) { return document.getElementById(id); };
   var MIN_FRAMES = 10;  // mirrors app.system_status.OCR_MIN_FRAMES
+  function T(k, p) { return window.I18N.t(k, p); }
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -26,28 +27,28 @@
     });
   }
 
-  // age in seconds -> „acum 3 min” / „acum 45 s”; missing -> „necunoscut”
+  // age in seconds -> "3 min ago" / "45 s ago" (ro: "acum 3 min"); missing -> "unknown"
   function ago(s) {
-    if (s == null) return "necunoscut";
-    if (s < 60) return "acum " + s + " s";
-    if (s < 3600) return "acum " + Math.round(s / 60) + " min";
-    return "acum " + Math.round(s / 3600) + " h";
+    if (s == null) return T("sistem.unknown");
+    if (s < 60) return T("sistem.ago", { v: s + " s" });
+    if (s < 3600) return T("sistem.ago", { v: Math.round(s / 60) + " min" });
+    return T("sistem.ago", { v: Math.round(s / 3600) + " h" });
   }
 
   function uptime(s) {
-    if (s == null) return "necunoscut";
+    if (s == null) return T("sistem.unknown");
     var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
-    return (d ? d + " z " : "") + (h ? h + " h " : "") + m + " min";
+    return (d ? d + " " + T("sistem.unit.day") + " " : "") + (h ? h + " h " : "") + m + " min";
   }
 
   function num(v, unit) {
-    return v == null ? "necunoscut" : v + (unit ? " " + unit : "");
+    return v == null ? T("sistem.unknown") : v + (unit ? " " + unit : "");
   }
 
   var STATE = {
-    live: { text: "LIVE", cls: "sys-live" },
-    date_vechi: { text: "Date vechi", cls: "sys-old" },
-    necunoscut: { text: "Necunoscut", cls: "sys-unknown" }
+    live: { text: "sistem.state.live", cls: "sys-live" },
+    date_vechi: { text: "sistem.state.old", cls: "sys-old" },
+    necunoscut: { text: "sistem.state.unknown", cls: "sys-unknown" }
   };
 
   // one labelled row of the status list
@@ -60,11 +61,11 @@
   }
 
   function ocrValue(o) {
-    if (o.unread_rate_1h == null) return { value: "necunoscut", sub: "nu sunt cadre citite" };
+    if (o.unread_rate_1h == null) return { value: T("sistem.unknown"), sub: T("sistem.ocr.noFrames") };
     var pct = Math.round(o.unread_rate_1h * 1000) / 10;  // one decimal
-    var sub = "din ultima oră (" + o.n + " cadre)";
-    if (o.insufficient) sub += " · date insuficiente";
-    return { value: pct + " % necitite", sub: sub };
+    var sub = T("sistem.ocr.lastHour", { n: o.n });
+    if (o.insufficient) sub += " · " + T("sistem.ocr.insufficient");
+    return { value: T("sistem.ocr.unreadPct", { pct: pct }), sub: sub };
   }
 
   function render(d) {
@@ -72,26 +73,26 @@
     box.replaceChildren();
     var st = STATE[d.stare] || STATE.necunoscut;
     var hero = el("div", "sys-hero");
-    hero.appendChild(el("span", "sys-badge " + st.cls, st.text));
+    hero.appendChild(el("span", "sys-badge " + st.cls, T(st.text)));
     hero.appendChild(el("p", "sys-hero-text",
       d.poller && d.poller.last_ok_age_s != null
-        ? "Ultima citire reușită: " + ago(d.poller.last_ok_age_s)
-        : "Nu există nicio citire reușită."));
+        ? T("sistem.lastOkHero", { v: ago(d.poller.last_ok_age_s) })
+        : T("sistem.noOk")));
     box.appendChild(hero);
 
     var list = el("ul", "sys-list");
     var o = ocrValue(d.ocr || {});
-    list.appendChild(row("Versiune", num(d.version)));
-    list.appendChild(row("Ultima citire reușită", d.poller ? ago(d.poller.last_ok_age_s) : "necunoscut"));
-    list.appendChild(row("Rânduri necitite", o.value, o.sub));
-    list.appendChild(row("Spațiu liber pe disc", num(d.disk && d.disk.free_gb, "GB")));
-    list.appendChild(row("Mărimea bazei", num(d.db && d.db.size_mb, "MB"),
-      d.db && d.db.wal_mb != null ? "jurnal WAL: " + d.db.wal_mb + " MB" : null));
-    list.appendChild(row("Pornit de", uptime(d.uptime_s)));
+    list.appendChild(row(T("sistem.row.version"), num(d.version)));
+    list.appendChild(row(T("sistem.row.lastOk"), d.poller ? ago(d.poller.last_ok_age_s) : T("sistem.unknown")));
+    list.appendChild(row(T("sistem.row.unread"), o.value, o.sub));
+    list.appendChild(row(T("sistem.row.diskFree"), num(d.disk && d.disk.free_gb, "GB")));
+    list.appendChild(row(T("sistem.row.dbSize"), num(d.db && d.db.size_mb, "MB"),
+      d.db && d.db.wal_mb != null ? T("sistem.row.wal", { v: d.db.wal_mb }) : null));
+    list.appendChild(row(T("sistem.row.uptime"), uptime(d.uptime_s)));
     box.appendChild(list);
   }
 
-  // „Calitatea datelor pe zi” (stat_quality_daily.js/.css) se încarcă la cerere, doar pentru admin
+  // "Data quality per day" (stat_quality_daily.js/.css) is loaded on demand, for admins only
   function loadQualityDaily(cb) {
     if (App.statQualityDaily) return cb();
     var link = document.createElement("link");
@@ -107,19 +108,19 @@
   function renderAdmin(d) {
     var box = $("sys-admin");
     box.replaceChildren();
-    box.appendChild(el("h2", "sys-admin-title", "Detalii (administrare)"));
+    box.appendChild(el("h2", "sys-admin-title", T("sistem.admin.title")));
     var list = el("ul", "sys-list");
     var p = d.poller || {};
-    var err = p.last_error ? "cod " + p.last_error + (p.last_error_age_s != null ? ", " + ago(p.last_error_age_s) : "") : "nicio eroare";
-    list.appendChild(row("Ultima eroare", err));
+    var err = p.last_error ? T("sistem.admin.code") + " " + p.last_error + (p.last_error_age_s != null ? ", " + ago(p.last_error_age_s) : "") : T("sistem.admin.noError");
+    list.appendChild(row(T("sistem.admin.lastError"), err));
     var w = d.ocr_window || {};
-    list.appendChild(row("Cadre în fereastră", num(w.frames)));
-    list.appendChild(row("Cadre complete", num(w.full_frames)));
-    list.appendChild(row("Cadre reluate", num(w.frames_retried)));
-    list.appendChild(row("Durata cadrului (mediană)", num(w.duration_ms_p50, "ms")));
-    list.appendChild(row("Spațiu total pe disc", num(d.disk && d.disk.total_gb, "GB")));
+    list.appendChild(row(T("sistem.admin.frames"), num(w.frames)));
+    list.appendChild(row(T("sistem.admin.fullFrames"), num(w.full_frames)));
+    list.appendChild(row(T("sistem.admin.retried"), num(w.frames_retried)));
+    list.appendChild(row(T("sistem.admin.duration"), num(w.duration_ms_p50, "ms")));
+    list.appendChild(row(T("sistem.admin.diskTotal"), num(d.disk && d.disk.total_gb, "GB")));
     box.appendChild(list);
-    loadQualityDaily(function () { App.statQualityDaily.mount(box); });  // calitatea datelor pe zi (admin)
+    loadQualityDaily(function () { App.statQualityDaily.mount(box); });  // data quality per day (admin)
     box.hidden = false;
   }
 
@@ -136,11 +137,11 @@
     sec.id = "view-sistem";
     sec.setAttribute("aria-labelledby", "sistem-heading");
     sec.hidden = true;
-    var h = el("h1", "sys-heading", "Sistem");
+    var h = el("h1", "sys-heading", T("sistem.title"));
     h.id = "sistem-heading";
     sec.appendChild(h);
-    sec.appendChild(el("p", "sys-intro", "Starea panoului și a serverului. Datele se reîmprospătează automat."));
-    var err = el("p", "sys-error", "Nu am putut încărca starea sistemului. Încearcă din nou mai târziu.");
+    sec.appendChild(el("p", "sys-intro", T("sistem.intro")));
+    var err = el("p", "sys-error", T("sistem.error"));
     err.id = "sys-error";
     err.hidden = true;
     sec.appendChild(err);
@@ -153,6 +154,15 @@
     sec.appendChild(admin);
     $("main").appendChild(sec);
   }
+
+  // language switch: drop the built section so it is rebuilt in the new language
+  document.addEventListener("i18n:change", function () {
+    var sec = $("view-sistem");
+    if (!sec) return;
+    var wasShown = !sec.hidden;
+    sec.remove();
+    if (wasShown && location.hash === "#sistem") App.views.sistem.show();
+  });
 
   App.views.sistem = {
     show: function () {
