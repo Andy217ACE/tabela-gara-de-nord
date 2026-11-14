@@ -11,6 +11,8 @@ from app.api import create_app
 from app.config import Settings
 
 WEB = Path(__file__).resolve().parent.parent / "web"
+import json as _json
+_RO_VALUES = set(_json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8")).values())
 
 
 @pytest.fixture
@@ -69,7 +71,7 @@ def test_index_has_stats_views_nav_and_assets():
                          ("clasamente", "Clasamente")):
         assert re.search(rf'<a class="nav-item" href="#{route}" data-route="{route}">\s*<svg class="nav-icon"',
                          html), route
-        assert f"<span>{label}</span>" in html
+        assert f">{label}</span>" in html and label in _RO_VALUES, label
     assert 'id="rank-stations"' in html
     assert html.count("<footer") == 1
 
@@ -77,8 +79,8 @@ def test_index_has_stats_views_nav_and_assets():
 def test_app_routes_for_stats_views():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     for needle in ('"#trenuri": "trenuri"', '"#tren": "tren"', '"#statistici": "statistici"',
-                   '"#clasamente": "clasamente"', 'tren: "trenuri"', 'statistici: "Statistici"',
-                   'clasamente: "Clasamente"'):
+                   '"#clasamente": "clasamente"', 'tren: "trenuri"', 'statistici',
+                   '"#statii": "statii"'):
         assert needle in js, needle
 
 

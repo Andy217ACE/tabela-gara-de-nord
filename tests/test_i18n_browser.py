@@ -257,3 +257,43 @@ def test_stats_switch_language_redraws_charts(browser, stats_url):  # noqa: F811
         assert "cat-de-mult-intarzie-trenurile" in keys, keys
     finally:
         ctx.close()
+
+
+def _journeys(n):
+    js = [{"id": i + 1, "board": "arrival", "train_type": "IR", "train_no": 1636 + i, "station": "BRASOV",
+           "sched_time": "10:0%d" % i, "service_date": "2026-11-10", "max_read_delay": 0, "platform": "3",
+           "result": {"state": "unknown"}} for i in range(n)]
+    return {"total": n, "journeys": js, "next": "x" if n == 2 else None,
+            "period": {"first": "2026-11-10", "last": "2026-11-10", "days": 1}, "params": {}, "summary": {}}
+
+
+def test_history_and_follows_in_english(browser, base_url):  # noqa: F811
+    import json
+    ctx = browser.new_context(service_workers="block", viewport={"width": 1100, "height": 800})
+    try:
+        page = ctx.new_page()
+        state = {"n": 1}
+        page.route("**/api/history?**", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(_journeys(state["n"]))))
+        page.goto(base_url + "/?lang=en#istoric")
+        page.evaluate("() => window.I18N.ready")
+        page.wait_for_function("() => document.querySelector('#h-count').textContent.includes('journey')")
+        assert page.locator("#istoric-heading").inner_text() == "History"
+        assert page.locator("#h-more").text_content() == "Load more"
+        assert page.locator("#h-count").inner_text().startswith("1 journey")
+        assert "1 journeys" not in page.locator("#h-count").inner_text()
+        state["n"] = 2
+        page.fill("#h-train", "1636")
+        page.wait_for_function("() => document.querySelector('#h-count').textContent.startsWith('Train 1636: 2 journeys')")
+        # follows: plural keys picked by Intl.PluralRules
+        assert page.evaluate("() => TabelaApp.follows.countLabel(1)") == "1 train followed"
+        assert page.evaluate("() => TabelaApp.follows.countLabel(2)") == "2 trains followed"
+        page.evaluate("() => { location.hash = '#urmarite'; }")
+        page.wait_for_function("() => document.querySelector('#urmarite-heading').textContent === 'Followed trains'")
+        # Romanian stays the default and keeps its own plural forms
+        page.goto(base_url + "/?lang=ro#urmarite")
+        page.evaluate("() => window.I18N.ready")
+        assert page.evaluate("() => TabelaApp.follows.countLabel(2)") == "2 trenuri urmărite"
+        assert page.evaluate("() => TabelaApp.follows.countLabel(1)") == "1 tren urmărit"
+    finally:
+        ctx.close()

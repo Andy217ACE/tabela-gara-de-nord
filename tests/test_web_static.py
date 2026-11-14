@@ -207,10 +207,13 @@ def test_history_js_journey_result():
     date, a chart from the real readings, and the list never says „la timp” unread."""
     js = (WEB / "history.js").read_text(encoding="utf-8")
     for needle in ('"/api/journeys/"', "delay_series", "disappeared_at", "estimated_at",
-                   "Data de serviciu", "zilei următoare", "București Nord", "chart-gone",
-                   "j.max_read_delay != null", '"necitit"', '"#tren?nr="', "openJourney",
+                   "history.res.service_date", "history.res.note", "chart-gone",
+                   "j.max_read_delay != null", "history.delay.unread", '"#tren?nr="', "openJourney",
                    "final_delay", "document.body.appendChild(dlg)"):
         assert needle in js, needle
+    ro = (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")
+    for text in ("Data de serviciu", "zilei următoare", "București Nord", "necitit"):
+        assert text in ro, text
     css = (WEB / "style.css").read_text(encoding="utf-8")
     for cls in (".res-confirmed", ".res-unconfirmed", ".res-unknown", ".res-progress", ".chart-gone"):
         assert cls in css, cls
@@ -220,9 +223,12 @@ def test_follows_js_uses_api():
     js = (WEB / "follows.js").read_text(encoding="utf-8")
     for needle in ("/api/push/key", "/api/push/subscribe", "/api/push/unsubscribe",
                    "/api/follow", "/api/follows", "urlBase64ToUint8Array", "onFollow",
-                   "Notificările necesită conexiune sigură (HTTPS) și un browser compatibil.",
-                   "Pe iPhone, adaugă mai întâi aplicația pe ecranul principal."):
+                   "follows.reason."):
         assert needle in js, needle
+    ro = (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")
+    for text in ("Notificările necesită conexiune sigură (HTTPS) și un browser compatibil.",
+                 "Pe iPhone, adaugă mai întâi aplicația pe ecranul principal."):
+        assert text in ro, text
 
 
 def test_style_defines_theme_variables(client):
@@ -295,5 +301,5 @@ def test_app_js_quality_fixes():
 def test_follows_list_never_shows_la_timp_for_unread_delay():
     js = (WEB / "follows.js").read_text(encoding="utf-8")
     assert "t.delay_read !== true" in js
-    assert 'el("span", "delay-unread", "necitit")' in js
+    assert 'el("span", "delay-unread", T("follows.unread"))' in js
     assert '" · la timp"' not in js

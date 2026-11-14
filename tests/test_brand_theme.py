@@ -223,7 +223,7 @@ def test_uncertain_marker_in_cards_panel_history():
     assert re.search(r"\.is-uncertain \{[^}]*dotted", css, re.S)
     for f in ("app.js", "panel.js", "history.js"):
         js = (WEB / f).read_text(encoding="utf-8")
-        assert "citire nesigură" in js or "UNSURE" in js, f
+        assert "citire nesigură" in js or "UNSURE" in js or "history.uncertain" in js, f
         assert "uncertain" in js and "is-uncertain" in js, f
 
 

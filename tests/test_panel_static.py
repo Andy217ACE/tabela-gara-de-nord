@@ -117,7 +117,7 @@ def test_history_paginates_instead_of_truncating():
     """Beta 1.13+: Istoric always reads /api/history?all=1 (200 per page + cursor), so the
     old one-day 500-row cut (X-Truncated) is no longer shown — nothing is silently cut."""
     js = (WEB / "history.js").read_text(encoding="utf-8")
-    assert 'p.set("cursor", cursor)' in js and "afișate " in js
+    assert 'p.set("cursor", cursor)' in js and 'T("' in js
     assert "primele 500" not in js
 
 
