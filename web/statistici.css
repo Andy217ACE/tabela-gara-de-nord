@@ -394,3 +394,9 @@
 
 /* the section chips (charts3) stick under the sticky filters; --ss-filters-h is set by statistici.js */
 .st-root .c3-toc { top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px)); }
+
+/* ---------- direct links to sections (?sect=) ---------- */
+.ss-body > * { scroll-margin-top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px) + 64px); }
+.ss-target { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius); }
+.ss-card-link { color: inherit; text-decoration: none; }
+.ss-card-link:hover, .ss-card-link:focus-visible { text-decoration: underline; }

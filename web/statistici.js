@@ -95,15 +95,24 @@
     return q.toString();
   }
 
+  // section ids for ?sect= (not a filter: never in FIELDS, never sent to the API)
+  var SECTS = { sumar: ".ss-summary", probleme: ".ss-problems", bune: ".ss-good", glosar: ".ss-glossary",
+    rute: '[data-key="ce-rute-intarzie-cel-mai-mult-si-c"]', operatori: '[data-key="care-operatori-sunt-cei-mai-punctu"]' };
+  function cleanSect(raw) {
+    var k = raw == null ? "" : String(raw).trim();
+    return Object.prototype.hasOwnProperty.call(SECTS, k) ? k : "";
+  }
+  function sectQuery(sect) { return query(v.p, { sect: sect }); }
+
   function syncHash(p) {
-    var q = query(p);
+    var q = v.sect ? sectQuery(v.sect) : query(p);
     var hash = "#statistici" + (q ? "?" + q : "");
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
 
   // ---- shell: filters + body ---------------------------------------------------------
 
-  var v = { sect: "", p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
+  var v = { sect: "", sectPending: false, p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
 
   function segmented(name, label, opts) {
     var fs = el("fieldset", "ss-seg");
@@ -268,6 +277,7 @@
         render(d);
         if (snap && C3()) C3().morph(v.ui.body, snap);
         focusChart();
+        applySect();
       })
       .catch(function (e) {
         if (v.ctrl !== ctrl || e.aborted) return;
@@ -290,14 +300,28 @@
     v.focus = null;
   }
 
+  // ?sect=: scroll to the section and highlight it for 2 s; an unknown or missing name is ignored
+  function applySect() {
+    if (!v.sectPending || !v.data || !v.ui) return;
+    v.sectPending = false;
+    if (!v.sect) return;
+    var node = v.ui.body.querySelector(SECTS[v.sect]);
+    if (!node) return;
+    node.classList.add("ss-target");
+    node.scrollIntoView({ block: "start" });
+    setTimeout(function () { node.classList.remove("ss-target"); }, 2000);
+  }
+
   function show(params) {
     window.I18N.ready.then(function () {   // the dictionary must be loaded before the first labels are drawn
       ensure();
       v.focus = params && params.get ? (params.get("grafic") || "").slice(0, 40) : "";
       v.p = readParams(params);
+      v.sect = cleanSect(params && params.get ? params.get("sect") : "");
+      v.sectPending = !!v.sect;
       setForm(v.p);
       load();
-      if (v.data && !v.ctrl) focusChart();
+      if (v.data && !v.ctrl) { focusChart(); applySect(); }
     });
   }
 
@@ -696,16 +720,23 @@
     var f = quickFigures(d);
     var sec = el("section", "ss-quick");
     sec.setAttribute("aria-label", tt("stats.sum.aria"));
-    function card(title, value, sub) {
+    function card(title, value, sub, sect) {
       var c = el("div", "ss-card");
-      c.append(el("h3", "ss-card-t", title), el("p", "ss-card-v", value), el("p", "ss-card-s", sub));
+      var val = el("p", "ss-card-v");
+      if (sect) {   // a direct link to the section behind the figure (the hash change re-runs show(), which scrolls)
+        var a = el("a", "ss-card-link", value);
+        a.href = "#statistici?" + sectQuery(sect);
+        a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
+        val.append(a);
+      } else val.textContent = value;
+      c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
-    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme");
     card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"));
     card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
     card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
-      f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"));
+      f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"), f.route ? "rute" : null);
     v.ui.quick.replaceChildren(sec);   // outside .ss-body: „Probleme” stays the first section of the body
   }
 
@@ -1665,6 +1696,19 @@
     load();
   }
 
+  // a click on the „Probleme” / „Ce merge bine” chip keeps the address in step (?sect=), filters untouched
+  function tocSect() {
+    var nav = v.ui.body.__c3nav;
+    if (!nav) return;
+    var map = {};
+    map[tt("charts.toc.problems")] = "probleme";
+    map[tt("charts.toc.good")] = "bune";
+    nav.querySelectorAll(".c3-chip").forEach(function (b) {
+      var k = map[b.textContent];
+      if (k) b.addEventListener("click", function () { v.sect = k; syncHash(v.p); });
+    });
+  }
+
   function render(d) {
     seq = 0;
     v.ui.body.replaceChildren();
@@ -1727,6 +1771,7 @@
     if (C3()) {
       C3().enhance(v.ui.body, { url: chartUrl });
       C3().toc(v.ui.body);
+      tocSect();
     }
   }
 

@@ -66,3 +66,42 @@ def test_reset_clears_filters_and_hash(browser, base_url):
         assert errors == []
     finally:
         ctx.close()
+
+
+def test_deep_link_scrolls_and_highlights_section(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800, "#statistici?sect=probleme", ".ss-problems .ss-prob")
+    try:
+        page.wait_for_selector(".ss-problems.ss-target")
+        page.wait_for_function("window.scrollY > 0")
+        assert page.locator(".ss-target").count() == 1
+        # the filters stay in the address while navigating between sections
+        page.locator(".ss-seg-opt", has_text="7 zile").click()
+        page.wait_for_selector(".ss-quick .ss-card")
+        h = page.evaluate("location.hash")
+        assert "perioada=7" in h and "sect=probleme" in h
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_summary_card_link_sets_sect(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        page.locator(".ss-quick .ss-card-link").first.click()
+        assert "sect=probleme" in page.evaluate("location.hash")
+        page.wait_for_selector(".ss-problems.ss-target")
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_unknown_section_is_ignored(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800, "#statistici?sect=nu-exista")
+    try:
+        page.wait_for_selector(".ss-problems .ss-prob")
+        page.wait_for_timeout(300)
+        assert page.locator(".ss-target").count() == 0
+        assert page.evaluate("window.scrollY") == 0
+        assert errors == []
+    finally:
+        ctx.close()
