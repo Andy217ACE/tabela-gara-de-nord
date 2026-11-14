@@ -176,9 +176,9 @@ def test_theme_button_present_and_labelled():
     assert _ro()["theme.label"] == "Temă: {mode}"
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert "data-theme-toggle" in panel  # reachable in Panou fullscreen too
-    theme = (WEB / "theme-init.js").read_text(encoding="utf-8")
-    for label in ("automată", "luminoasă", "întunecată"):
-        assert label in theme
+    ro = _ro()  # mode labels now live in the dictionary, not in theme-init.js
+    for key, label in (("auto", "automată"), ("light", "luminoasă"), ("dark", "întunecată")):
+        assert ro["theme.mode." + key] == label
 
 
 def test_css_supports_both_forced_themes():

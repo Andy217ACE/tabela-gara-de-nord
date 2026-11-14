@@ -659,7 +659,7 @@
     });
   }
 
-  function renderTrenuri(v, d) {
+  function renderTrains(v, d) {
     var list = Array.isArray(d.trains) ? d.trains : [];
     var params = d.params || {};
     if (!list.length && !v.p.query) {
@@ -751,7 +751,7 @@
       return "/api/trains/stats" + (q ? "?" + q : "");
     },
     errorNode: function (v, e) { return loadFailed(v, tt("stats.err.what_trains"), e); },
-    render: renderTrenuri
+    render: renderTrains
   });
 
   // ---- #tren?nr= ---------------------------------------------------------------------
