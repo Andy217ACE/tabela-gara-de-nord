@@ -104,7 +104,7 @@ def test_readme_lists_every_apt_package_install_sh_installs():
     m = re.search(r"apt-get install -y -q (.+)$", install, re.M)
     assert m
     packages = m.group(1).split()
-    readme = _read(ROOT / "README.md")
+    readme = _read(ROOT / "README.ro.md")  # Romanian authority (README.md is English)
     start = readme.index("Scriptul instalează")
     paragraph = readme[start:readme.index("creează", start)]
     for pkg in packages:

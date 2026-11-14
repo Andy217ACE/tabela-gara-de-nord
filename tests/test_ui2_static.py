@@ -99,7 +99,7 @@ def test_version_and_changelog_1_26():
 
 
 def test_readme_documents_libraries_decision():
-    readme = read_root("README.md")
+    readme = read_root("README.ro.md")  # Romanian authority (README.md is English)
     assert "ui2.js" in readme and "fără biblioteci" in readme.lower()
 
 

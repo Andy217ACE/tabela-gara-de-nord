@@ -147,7 +147,7 @@ def test_service_worker_precaches_weather_files_and_bumped_version():
 
 
 def test_readme_documents_weather():
-    md = (ROOT / "README.md").read_text(encoding="utf-8")
+    md = (ROOT / "README.ro.md").read_text(encoding="utf-8")
     assert "## Meteo" in md
     for needle in ("WEATHER_ENABLED", "WEATHER_INTERVAL_S", "WEATHER_LAT", "WEATHER_LON",
                    "WEATHER_URL", "CC BY 4.0", "Open-Meteo", "model"):
@@ -155,7 +155,7 @@ def test_readme_documents_weather():
 
 
 def test_readme_documents_weather_v2_fields_and_schema_v8():
-    md = (ROOT / "README.md").read_text(encoding="utf-8")
+    md = (ROOT / "README.ro.md").read_text(encoding="utf-8")
     for needle in ("umiditate", "presiune", "rafale", "schema v8", "hourly=temperature_2m",
                    "timezone=UTC", "forecast_days=2", "relative_humidity_pct", "wind_gusts_kmh",
                    "hourly_json", "NULL"):

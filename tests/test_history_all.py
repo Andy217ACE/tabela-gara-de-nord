@@ -5,6 +5,7 @@ from READ delays (missing is never 0) and percentages withheld below the minimum
 from datetime import date
 
 import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app import history_all, stats
@@ -252,7 +253,7 @@ def test_history_js_all_days_mode():
     js = _web("history.js")
     assert 'p.set("all", "1")' in js and 'p.set("cursor", cursor)' in js and "var PAGE = 200" in js
     assert "#tren?nr=" in js and "openJourney(j.id" in js
-    assert "necunoscut, nu 0" in js and "fără procente sub N" in js
+    assert "history.sum.none_read" in js and "necunoscut, nu 0" in __import__("json").loads((Path(__file__).resolve().parent.parent / "web" / "i18n" / "ro.json").read_text(encoding="utf-8"))["history.sum.none_read"]
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", "setAttribute(\"style\""):
         assert bad not in js
 
