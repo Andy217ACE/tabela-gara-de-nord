@@ -47,7 +47,6 @@
   var current = apply(load());
 
   window.TabelaTheme = {
-    LABELS: { auto: "automată", light: "luminoasă", dark: "întunecată" },
     get: function () { return current; },
     set: function (mode) {
       current = apply(mode);
