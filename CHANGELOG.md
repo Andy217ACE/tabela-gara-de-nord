@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.53 — 2026-11-14
+
+### Reparat
+- **Deploy-ul nu mai lasă codul nou cu drepturi care blochează aplicația:** `deploy/update.sh` setează `umask 022` înainte de checkout. La deploy-ul Beta 1.52 (14.11), fișierul `app/fetcher.py` a rămas 640 cu umask-ul 027 al serverului, serviciul `tabela` nu l-a putut citi, iar aplicația a stat oprită câteva minute până la repararea drepturilor.
+- **Test nou:** `tests/test_update_sh.py` verifică fișierele aduse prin checkout cu un umask restrictiv (027), ca cele citite de serviciu să rămână 644.
+
+### Schimbat
+- **Aplicația nu se schimbă:** API-uri, interfață, service worker și `CHARTS_V` rămân la fel, deci e o versiune doar pentru deploy.
+- **Procedură:** la fiecare deploy, `update.sh` afișează versiunea nouă și comiturile aplicate, iar rollback-ul la eșec rămâne neschimbat.
+
+### Notă
+- Fără schimbări în aplicație: API-uri, interfață, service worker și `CHARTS_V` rămân la fel.
+
 ## Beta 1.52 — 2026-11-14
 
 ### Reparat

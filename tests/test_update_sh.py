@@ -150,6 +150,18 @@ def test_happy_path_migrates_env_and_backs_up_db(server):
     assert server.env_file.read_text().count("CAPTURE_DIR=") == 1
 
 
+def test_checked_out_files_readable_under_restrictive_umask(server):
+    # the caller (e.g. root's shell or a sudo policy) has umask 027: the script must not
+    # leave the new code 640, or the service user cannot import it
+    commit(server.work, 3, '{"ok":true}', "v3 healthy")
+    git(server.work, "push", "-q", "origin", "main")
+    r = subprocess.run([BASH, "-c", 'umask 027; exec bash "$0" main', posix(SCRIPT)],
+                       env=server.env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+    mode = (server.app / "app" / "store.py").stat().st_mode & 0o777
+    assert mode & 0o044 == 0o044, oct(mode)
+
+
 def test_rolls_back_when_new_commit_is_unhealthy(server):
     commit(server.work, 2, "boom", "broken")
     git(server.work, "push", "-q", "origin", "main")
