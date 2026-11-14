@@ -171,3 +171,51 @@ def test_presets_disabled_without_storage(browser, base_url):
         assert not [e for e in errors if "blocked" in e and "statistici" in e.lower()]
     finally:
         ctx.close()
+
+
+def test_mobile_filters_collapse_into_panel(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 360, 740, "#statistici?board=arrival&doar_confirmate=1")
+    try:
+        toggle = page.locator(".ss-filters-toggle")
+        expect(toggle).to_be_visible()
+        expect(toggle).to_have_text("Filtre (2)")
+        expect(page.locator(".ss-seg").first).to_be_hidden()
+        expect(page.locator("#ss-operator")).to_be_hidden()
+        toggle.click()
+        expect(page.locator(".ss-seg").first).to_be_visible()
+        expect(page.locator("#ss-operator")).to_be_visible()
+        page.select_option("#ss-operator", "Transferoviar")
+        expect(toggle).to_have_text("Filtre (3)")
+        page.locator(".ss-reset").click()
+        expect(toggle).to_have_text("Filtre (0)")
+        toggle.click()
+        expect(page.locator(".ss-seg").first).to_be_hidden()
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_wide_screen_keeps_filters_open_without_toggle(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        expect(page.locator(".ss-filters-toggle")).to_be_hidden()
+        expect(page.locator(".ss-seg").first).to_be_visible()
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_no_horizontal_scroll_at_360(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 360, 740, "#statistici?perioada=7")
+    try:
+        assert page.evaluate("document.documentElement.scrollWidth") <= 360
+        page.locator(".ss-filters-toggle").click()
+        assert page.evaluate("document.documentElement.scrollWidth") <= 360
+        page.locator(".ss-presets-toggle").click()
+        expect(page.locator(".ss-presets-menu")).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth") <= 360
+        rect = page.evaluate("(() => { const r = document.querySelector('.ss-presets-menu').getBoundingClientRect(); return [r.left, r.right]; })()")
+        assert rect[0] >= 0 and rect[1] <= 360
+        assert errors == []
+    finally:
+        ctx.close()

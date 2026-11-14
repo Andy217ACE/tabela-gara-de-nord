@@ -7,6 +7,7 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 PARAM = re.compile(r"\{(\w+)\}")
+FILES = ("statistici.js", "stat_presets.js")
 PREFIXES = ("stats.sum.", "stats.reset", "stats.preset.", "stats.mobile.")
 
 
@@ -28,7 +29,7 @@ def test_new_keys_in_both_languages_and_contiguous():
 
 
 def test_used_keys_exist():
-    js = (WEB / "statistici.js").read_text(encoding="utf-8")
+    js = "".join((WEB / n).read_text(encoding="utf-8") for n in FILES)
     ro = _dict("ro")
     used = set(re.findall(r'"(stats\.(?:sum|reset|preset|mobile)[\w.]*)"', js))
     assert used, "no sub-project 1 keys used"
@@ -36,6 +37,15 @@ def test_used_keys_exist():
 
 
 def test_no_unsafe_dom_in_statistici_js():
-    js = (WEB / "statistici.js").read_text(encoding="utf-8")
-    for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "window.prompt", "prompt("):
-        assert bad not in js, bad
+    for name in FILES:
+        js = (WEB / name).read_text(encoding="utf-8")
+        for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function",
+                    "window.prompt", "prompt(", 'setAttribute("style"', "cssText"):
+            assert bad not in js, (name, bad)
+        assert js.startswith("// © 2026 Andy217Ace"), name
+
+
+def test_presets_layer_is_lazy_not_in_shell():
+    sw = (WEB / "sw.js").read_text(encoding="utf-8")
+    assert "stat_presets" not in sw and "stat_presets" not in (WEB / "index.html").read_text(encoding="utf-8")
+    assert "stat_presets.js" in (WEB / "statistici.js").read_text(encoding="utf-8")

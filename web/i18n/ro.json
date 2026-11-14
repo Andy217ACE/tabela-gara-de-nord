@@ -964,6 +964,7 @@
   "stats.stp.top_desc": "Numărul de treceri de la o valoare de întârziere la alta.",
   "stats.stp.typical": "Treapta tipică: {size} · timp median între două modificări: {gap}{pairs} · {up}, {down}{downmed}.",
   "stats.stt.cap": "Trenuri — {board} {dir} {name}",
+  "stats.mobile.filters": "Filtre ({n})",
   "stats.preset.button": "Presetări",
   "stats.preset.delete": "Șterge presetarea {name}",
   "stats.preset.full": "Maximum {max} presetări: șterge una înainte să salvezi alta.",

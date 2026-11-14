@@ -964,6 +964,7 @@
   "stats.stp.top_desc": "The number of transitions from one delay value to another.",
   "stats.stp.typical": "Typical step: {size} · median time between two changes: {gap}{pairs} · {up}, {down}{downmed}.",
   "stats.stt.cap": "Trains — {board} {dir} {name}",
+  "stats.mobile.filters": "Filters ({n})",
   "stats.preset.button": "Presets",
   "stats.preset.delete": "Delete preset {name}",
   "stats.preset.full": "At most {max} presets: delete one before saving another.",

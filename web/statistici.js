@@ -95,7 +95,7 @@
     return q.toString();
   }
 
-  // section ids for ?sect= (not a filter: never in FIELDS, never sent to the API)
+  // ?sect= names (not a filter: not in FIELDS)
   var SECTS = { sumar: ".ss-summary", probleme: ".ss-problems", bune: ".ss-good", glosar: ".ss-glossary",
     rute: '[data-key="ce-rute-intarzie-cel-mai-mult-si-c"]', operatori: '[data-key="care-operatori-sunt-cei-mai-punctu"]' };
   function cleanSect(raw) {
@@ -110,49 +110,9 @@
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
 
-  // ---- saved filter presets: up to 5 named sets in localStorage (this device only) -------------
+  // ---- saved presets: list + menu in stat_presets.js (lazy) ----
 
-  var PRESET_KEY = "tabela.statsPresets";
-  var PRESET_MAX = 5;
-
-  // the list, or null when localStorage is unavailable (blocked, private mode, quota…)
-  function presetsLoad() {
-    try {
-      var raw = window.localStorage.getItem(PRESET_KEY);
-      var arr = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(arr)) return [];
-      return arr.filter(function (x) { return x && typeof x.name === "string" && x.name && x.filters && typeof x.filters === "object"; })
-        .slice(0, PRESET_MAX);
-    } catch (e) { return null; }
-  }
-
-  function presetsWrite(list) {
-    try {
-      window.localStorage.setItem(PRESET_KEY, JSON.stringify(list));
-      return true;
-    } catch (e) { return false; }
-  }
-
-  // "ok", "full" (5 already and a new name) or "unavailable"
-  function presetsSave(name, filters) {
-    var list = presetsLoad();
-    if (!list) return "unavailable";
-    var at = -1;
-    list.forEach(function (x, i) { if (x.name === name) at = i; });
-    if (at < 0 && list.length >= PRESET_MAX) return "full";
-    var entry = { name: name, filters: filters };
-    if (at >= 0) list[at] = entry; else list.push(entry);
-    return presetsWrite(list) ? "ok" : "unavailable";
-  }
-
-  function presetsDelete(i) {
-    var list = presetsLoad();
-    if (!list) return;
-    list.splice(i, 1);
-    presetsWrite(list);
-  }
-
-  // only the fields that still exist and still have a valid value (a deleted operator, an unknown key: dropped)
+  // only fields that still exist with a valid value (deleted operator, unknown key: dropped)
   function presetsApply(filters) {
     var opts = (v.data && v.data.options) || {};
     function known(list, val) { return (list || []).some(function (o) { return o.name === val; }); }
@@ -169,6 +129,19 @@
     load();
   }
 
+  var presetsP = null;
+  function presetsLayer() {
+    if (App.statPresets) return Promise.resolve();
+    if (!presetsP) presetsP = new Promise(function (resolve) {
+      var sc = document.createElement("script");
+      sc.src = "stat_presets.js?v=1";
+      sc.onload = resolve;
+      sc.onerror = function () { presetsP = null; resolve(); };
+      document.head.append(sc);
+    });
+    return presetsP;
+  }
+
   function presetsMenu() {
     var box = el("div", "ss-presets");
     var tog = el("button", "btn btn-ghost btn-sm ss-presets-toggle", tt("stats.preset.button"));
@@ -181,58 +154,20 @@
     var msg = el("p", "ss-preset-msg");
     msg.setAttribute("role", "status");
     function close() { menu.hidden = true; tog.setAttribute("aria-expanded", "false"); }
-    function fill() {
-      var list = presetsLoad();
-      var nodes = [];
-      if (!list) {
-        msg.textContent = tt("stats.preset.unavailable");
-        menu.replaceChildren(msg);
-        return;
-      }
-      if (!list.length) nodes.push(el("p", "ss-preset-empty", tt("stats.preset.none")));
-      else {
-        var ul = el("ul", "ss-preset-list");
-        list.forEach(function (x, i) {
-          var li = el("li", "ss-preset-item");
-          var ap = el("button", "btn btn-ghost btn-sm ss-preset-apply", x.name);
-          ap.type = "button";
-          ap.addEventListener("click", function () { presetsApply(x.filters); close(); });
-          var del = el("button", "btn btn-ghost btn-sm ss-preset-del", "×");
-          del.type = "button";
-          del.setAttribute("aria-label", tt("stats.preset.delete", { name: x.name }));
-          del.addEventListener("click", function () { presetsDelete(i); msg.textContent = ""; fill(); });
-          li.append(ap, del);
-          ul.append(li);
-        });
-        nodes.push(ul);
-      }
-      var row = el("div", "ss-preset-new");
-      var inp = el("input", "ss-preset-name");
-      inp.type = "text";
-      inp.maxLength = 30;
-      inp.placeholder = tt("stats.preset.name");
-      inp.setAttribute("aria-label", tt("stats.preset.name"));
-      var sv = el("button", "btn btn-sm ss-preset-save", tt("stats.preset.save"));
-      sv.type = "button";
-      function save() {
-        var name = inp.value.trim();
-        if (!name) { msg.textContent = tt("stats.preset.need_name"); return; }
-        var r = presetsSave(name, Object.assign({}, v.p));
-        if (r === "full") { msg.textContent = tt("stats.preset.full", { max: PRESET_MAX }); return; }
-        fill();
-        if (r === "ok") msg.textContent = tt("stats.preset.saved", { name: name });
-      }
-      sv.addEventListener("click", save);
-      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
-      row.append(inp, sv);
-      nodes.push(row, msg);
-      menu.replaceChildren.apply(menu, nodes);
-    }
     tog.addEventListener("click", function () {
-      var open = menu.hidden;
-      if (open) { msg.textContent = ""; fill(); }
-      menu.hidden = !open;
-      tog.setAttribute("aria-expanded", open ? "true" : "false");
+      if (!menu.hidden) { close(); return; }
+      menu.hidden = false;
+      tog.setAttribute("aria-expanded", "true");
+      msg.textContent = "";
+      presetsLayer().then(function () {
+        if (App.statPresets) {
+          App.statPresets.fill(menu, msg, { el: el, tt: tt, close: close, apply: presetsApply,
+            current: function () { return Object.assign({}, v.p); } });
+        } else {   // the layer could not be loaded: same message as a blocked localStorage
+          msg.textContent = tt("stats.preset.unavailable");
+          menu.replaceChildren(msg);
+        }
+      });
     });
     return box;
   }
@@ -306,7 +241,29 @@
     rs.type = "button";
     rs.hidden = true;
     rs.addEventListener("click", function () { resetFilters(); });
-    form.append(per.node, brd.node, op.node, tp.node, chk, rs, presetsMenu());
+    // < 600 px: fields collapse behind „Filtre (n)”
+    var fields = el("div", "ss-fields");
+    fields.append(per.node, brd.node, op.node, tp.node, chk);
+    var ft = el("button", "btn btn-ghost btn-sm ss-filters-toggle", "");
+    ft.type = "button";
+    ft.setAttribute("aria-expanded", "false");
+    ft.hidden = true;
+    form.append(ft, fields, rs, presetsMenu());
+    var mq = window.matchMedia ? window.matchMedia("(max-width: 599px)") : null;
+    var panelOpen = false;
+    function applyPanel() {
+      var small = !!(mq && mq.matches);
+      ft.hidden = !small;
+      fields.hidden = small && !panelOpen;
+      ft.setAttribute("aria-expanded", panelOpen ? "true" : "false");
+      form.classList.toggle("ss-panel-open", small && panelOpen);
+      syncFiltersH();
+    }
+    ft.addEventListener("click", function () { panelOpen = !panelOpen; applyPanel(); });
+    if (mq) {
+      if (mq.addEventListener) mq.addEventListener("change", applyPanel);
+      else if (mq.addListener) mq.addListener(applyPanel);
+    }
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
                tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "" };
@@ -321,7 +278,7 @@
     var body = el("div", "ss-body");
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
-    v.ui = { form: form, quick: quick, body: body, reset: rs, per: per, brd: brd, op: op, tp: tp, ci: ci };
+    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci };
     window.addEventListener("resize", debounce(function () {
       if (!v.data || $("view-statistici").hidden) return;
       syncFiltersH();
@@ -348,15 +305,23 @@
   function isDefault(p) {
     return !p || (p.perioada === "all" && !p.board && !p.operator && !p.tip && !p.doar_confirmate);
   }
+  function activeCount(p) {
+    if (!p) return 0;
+    return (p.perioada && p.perioada !== "all" ? 1 : 0) + (p.board ? 1 : 0) + (p.operator ? 1 : 0) + (p.tip ? 1 : 0) + (p.doar_confirmate ? 1 : 0);
+  }
   function syncReset() {
     if (v.ui && v.ui.reset) v.ui.reset.hidden = isDefault(v.p);
+    if (v.ui && v.ui.toggle) {
+      v.ui.toggle.textContent = tt("stats.mobile.filters", { n: activeCount(v.p) });
+      v.ui.applyPanel();
+    }
     syncFiltersH();
   }
-  // the section chips (charts3) stick right under the sticky filters
+  // the charts3 chips stick under the filters
   function syncFiltersH() {
     if (!v.ui) return;
     var h = v.ui.form.offsetHeight;
-    var cssom = document.documentElement.style;   // CSSOM custom property (CSP-safe, like charts3.js --c3-nav-h)
+    var cssom = document.documentElement.style;   // CSSOM property, CSP-safe (as charts3.js)
     cssom.setProperty("--ss-filters-h", (h ? h + 10 : 0) + "px");
   }
 
@@ -427,7 +392,7 @@
     v.focus = null;
   }
 
-  // ?sect=: scroll to the section and highlight it for 2 s; an unknown or missing name is ignored
+  // ?sect=: scroll + highlight 2 s; unknown name ignored
   function applySect() {
     if (!v.sectPending || !v.data || !v.ui) return;
     v.sectPending = false;
@@ -850,7 +815,7 @@
     function card(title, value, sub, sect) {
       var c = el("div", "ss-card");
       var val = el("p", "ss-card-v");
-      if (sect) {   // a direct link to the section behind the figure (the hash change re-runs show(), which scrolls)
+      if (sect) {   // link to the section behind the figure
         var a = el("a", "ss-card-link", value);
         a.href = "#statistici?" + sectQuery(sect);
         a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
@@ -864,7 +829,7 @@
     card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
     card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
       f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"), f.route ? "rute" : null);
-    v.ui.quick.replaceChildren(sec);   // outside .ss-body: „Probleme” stays the first section of the body
+    v.ui.quick.replaceChildren(sec);   // outside .ss-body: „Probleme” stays its first section
   }
 
   function summary(d) {
@@ -1823,7 +1788,7 @@
     load();
   }
 
-  // a click on the „Probleme” / „Ce merge bine” chip keeps the address in step (?sect=), filters untouched
+  // chip click -> ?sect= in the address
   function tocSect() {
     var nav = v.ui.body.__c3nav;
     if (!nav) return;

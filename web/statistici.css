@@ -14,7 +14,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
-  /* stays under the sticky main menu bar while the page scrolls (Statistici v3) */
+  /* sticky under the main menu bar */
   position: sticky;
   top: var(--topnav-h, 57px);
   z-index: 5;
@@ -392,7 +392,7 @@
   .ss-quick { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-/* the section chips (charts3) stick under the sticky filters; --ss-filters-h is set by statistici.js */
+/* chips stick under the filters; --ss-filters-h set by statistici.js */
 .st-root .c3-toc { top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px)); }
 
 /* ---------- direct links to sections (?sect=) ---------- */
@@ -426,3 +426,15 @@
 .ss-preset-name { flex: 1 1 10rem; min-width: 0; }
 .ss-preset-msg, .ss-preset-empty { margin: 0; font-size: 0.8125rem; color: var(--text-2); }
 .ss-preset-msg:empty { display: none; }
+
+/* ---------- mobile: the filter fields collapse into a panel (Filtre (n)) ---------- */
+.ss-fields { display: contents; }
+.ss-fields[hidden], .ss-filters-toggle[hidden] { display: none; }
+@media (max-width: 599px) {
+  .ss-filters-toggle { flex: 1 1 auto; justify-content: center; }
+  .ss-fields { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 10px 14px; min-width: 0; }
+  .ss-fields[hidden] { display: none; }
+  .ss-field { max-width: none; }
+  /* open panel: scrolls with the page */
+  .ss-filters.ss-panel-open { position: static; }
+}
