@@ -32,6 +32,10 @@ def extract_image(html: str) -> bytes:
         raise ValueError("invalid base64 image") from e
     if not (data.startswith(b"\xff\xd8") or data.startswith(b"\x89PNG")):
         raise ValueError("image is not a JPEG/PNG")
+    # A JPEG cut short by the source still starts with FF D8 and decodes as base64;
+    # only the end-of-image marker FF D9 shows it is complete.
+    if data.startswith(b"\xff\xd8") and not data.rstrip(b"\x00\r\n\t ").endswith(b"\xff\xd9"):
+        raise ValueError("image is truncated (no JPEG end marker)")
     return data
 
 
