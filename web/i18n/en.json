@@ -1671,5 +1671,11 @@
   "versions.showAll": "Show all {n} items",
   "versions.since": "since {v}",
   "versions.tag": "current",
-  "versions.unavailable": "The version history is not available."
+  "versions.unavailable": "The version history is not available.",
+  "meta.title": "Tabela Gara de Nord",
+  "meta.description": "Arrivals and departures at Bucharest Gara de Nord, updated in real time: times, delays and platforms. Independent project, with data taken from CFR.",
+  "meta.ogTitle": "Tabela Gara de Nord — live arrivals and departures",
+  "meta.ogDescription": "Arrivals and departures at Bucharest Gara de Nord: times, delays and platforms, read from the CFR board. Independent project, not affiliated with CFR.",
+  "meta.ogLocale": "en_GB",
+  "meta.twitterDescription": "Arrivals and departures at Bucharest Gara de Nord, read from the CFR board. Independent project."
 }

@@ -73,7 +73,8 @@ def test_footer_links_to_versions_screen():
     for bad in ("innerHTML", ".style.", "cssText", "insertAdjacentHTML"):
         assert bad not in js
     assert '"#versiuni": "versiuni"' in (WEB / "app.js").read_text(encoding="utf-8")
-    assert '"/versions.js"' in (WEB / "sw.js").read_text(encoding="utf-8")
+    # versions.js is no longer precached (Beta 1.55): it is cached at runtime, network-first
+    assert "runtimeNetworkFirst" in (WEB / "sw.js").read_text(encoding="utf-8")
 
 
 def test_deploy_docs_require_version_bump():

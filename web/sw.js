@@ -9,7 +9,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v40";
+var VERSION = "v41";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -29,7 +29,6 @@ var SHELL = [
   "/panel.js",
   "/weather.css",
   "/weather.js",
-  "/versions.js",
   "/stats.css",
   "/stats.js",
   "/statistici.css",
@@ -120,6 +119,21 @@ function dictFromNetwork(event) {
   });
 }
 
+// any other same-origin static GET (admin/ocr/sistem/setari/sezoane/versions pages, lazy chunks): network-first,
+// cached on first use so the page works offline once it has been opened (keeps the precache small)
+function runtimeNetworkFirst(event) {
+  return fetch(event.request).then(function (resp) {
+    if (resp && resp.ok && resp.type === "basic") {
+      var copy = resp.clone();
+      event.waitUntil(caches.open(SHELL_CACHE).then(function (c) { return c.put(event.request.url, copy); }));
+    }
+    return resp;
+  }).catch(function (err) {
+    return caches.open(SHELL_CACHE).then(function (c) { return c.match(event.request.url, { ignoreSearch: true }); })
+      .then(function (hit) { if (hit) return hit; throw err; });
+  });
+}
+
 function shellNetworkFirst(request, fallbackUrl, lastResort) {
   return fetch(request).catch(function (err) {
     return caches.open(SHELL_CACHE).then(function (c) {
@@ -154,6 +168,10 @@ self.addEventListener("fetch", function (event) {
   }
   if (SHELL.indexOf(url.pathname) >= 0) {
     event.respondWith(shellNetworkFirst(req));
+    return;
+  }
+  if (/\.(?:js|css|json|png|jpg|svg|ico|woff2?|webmanifest)$/.test(url.pathname)) {
+    event.respondWith(runtimeNetworkFirst(event));
   }
 });
 
