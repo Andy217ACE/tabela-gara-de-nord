@@ -8,14 +8,11 @@
   function norm(v) { return LANGS.indexOf(v) >= 0 ? v : null; }
 
   function resolve() {
-    var fromUrl = null, fromStore = null;
-    try { fromUrl = norm(new URLSearchParams(location.search).get("lang")); } catch (e) { /* ignore */ }
-    if (fromUrl) {
-      try { localStorage.setItem(KEY, fromUrl); } catch (e) { /* ignore */ }
-      return fromUrl;
-    }
-    try { fromStore = norm(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
-    return fromStore || "ro";
+    var raw = null;
+    try { raw = new URLSearchParams(location.search).get("lang"); } catch (e) { /* ignore */ }
+    // Parametrul prezent dar invalid (inclusiv gol) merge direct pe ro, fără fallback la stocare.
+    if (raw !== null) return norm(raw) || "ro";
+    try { return norm(localStorage.getItem(KEY)) || "ro"; } catch (e) { return "ro"; }
   }
 
   var active = resolve();
@@ -44,8 +41,18 @@
   var jobs = [load("ro")];
   if (active === "en") jobs.push(load("en"));
 
+  function setLang(code) {
+    var c = norm(code) || "ro";
+    active = c;
+    try { localStorage.setItem(KEY, c); } catch (e) { /* stocare indisponibilă: limba rămâne pe sesiune */ }
+    var p = c === "ro" ? Promise.resolve() : load(c);
+    window.I18N.ready = p.then(function () { /* void */ });
+    return window.I18N.ready;
+  }
+
   window.I18N = {
     t: t,
+    setLang: setLang,
     lang: function () { return active; },
     ready: Promise.all(jobs).then(function () { /* void */ })
   };
