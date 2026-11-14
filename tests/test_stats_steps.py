@@ -142,6 +142,7 @@ def test_stat_steps_js_wired_and_csp_safe():
     web = Path(__file__).resolve().parent.parent / "web"
     js = (web / "stat_steps.js").read_text(encoding="utf-8")
     assert js.startswith("// © 2026 Andy217Ace")
+    js += (web / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
                 "new Function", ".style.", 'setAttribute("style"', "cssText"):
         assert bad not in js, bad
