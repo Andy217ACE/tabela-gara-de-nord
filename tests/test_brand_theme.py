@@ -332,7 +332,8 @@ def test_icon_weights_and_precache_budget(client):
     # Task 9: ro.json (~83 KB, ~20 KB gzip) is precached so the default language works offline;
     # en.json is NOT (cached by the service worker on first use) -> ~800 KB (budget 800000)
     assert "/i18n/en.json" not in paths
-    assert total <= 800_000, total
+    # Beta 1.55: measured 785642 B (was 792280 B before versions.js left the precache); budget 795_000 (~9 KB margin; +15 KB would exceed the old 800_000)
+    assert total <= 795_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():
