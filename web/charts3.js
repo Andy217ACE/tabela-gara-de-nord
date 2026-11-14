@@ -20,7 +20,14 @@
   var App = window.TabelaApp = window.TabelaApp || {};
   var SVG_NS = "http://www.w3.org/2000/svg";
   var mq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-  var nf = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 1 });
+  // numbers follow the chosen language (English 12.5, Romanian 12,5); one Intl formatter per language
+  var nfCache = {};
+  var nf = { format: function (x) {
+    var l = window.I18N.lang();
+    nfCache[l] = nfCache[l] || new Intl.NumberFormat(l, { maximumFractionDigits: 1 });
+    return nfCache[l].format(x);
+  } };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
   var seq = 0;
 
   function reduced() { return !!(mq && mq.matches); }
@@ -90,10 +97,11 @@
     return liveEl;
   }
 
-  // "Sosiri, 13:00–13:59: mediana 3 min, N = 12" → {series:"Sosiri", head:"13:00–13:59", body:"mediana 3 min, N = 12"}
+  // "Arrivals, 13:00–13:59: median 3 min, N = 12" → {series:"Arrivals", head:"13:00–13:59", body:"median 3 min, N = 12"} (board names in the chosen language)
   function parseTip(text) {
     var t = String(text || "");
-    var m = /^(Sosiri|Plecări), (.*?): (.*)$/.exec(t);
+    var a = tt("stats.board.arrival"), dp = tt("stats.board.departure");
+    var m = t.indexOf(a + ", ") === 0 || t.indexOf(dp + ", ") === 0 ? /^(.*?), (.*?): (.*)$/.exec(t) : null;
     if (m) return { series: m[1], head: m[2], body: m[3] };
     m = /^(.*?): (.*)$/.exec(t);
     if (m) return { series: null, head: m[1], body: m[2] };
@@ -214,7 +222,7 @@
                   i: g.hasAttribute("data-i") ? Number(g.getAttribute("data-i")) : null });
     });
     var d = svg.querySelector("desc");
-    if (d && recs.length) d.textContent += " Grafic interactiv: cu tastatura, săgețile schimbă valoarea, Esc închide.";
+    if (d && recs.length) d.textContent += tt("charts.interactive");
     if (!recs.length) return svg;
 
     var kind = svg.getAttribute("data-kind") || "unit";
@@ -534,12 +542,12 @@
     dlg.setAttribute("aria-labelledby", tid);
     var box = h("div", "c3-dlg-box");
     var head = h("div", "c3-dlg-head");
-    var h2 = h("h2", "c3-dlg-title", title ? title.textContent : "Grafic");
+    var h2 = h("h2", "c3-dlg-title", title ? title.textContent : tt("charts.dlg.chart"));
     h2.id = tid;
     var close = h("button", "btn btn-ghost c3-dlg-close");
     close.type = "button";
-    close.setAttribute("aria-label", "Închide ecranul complet");
-    close.append(icon("close"), h("span", "c3-dlg-close-t", "Închide"));
+    close.setAttribute("aria-label", tt("charts.dlg.close_aria"));
+    close.append(icon("close"), h("span", "c3-dlg-close-t", tt("charts.dlg.close")));
     head.append(h2, close);
     var body = h("div", "c3-dlg-body");
     var left = h("div", "c3-dlg-chart");
@@ -553,7 +561,7 @@
     var det = sec.querySelector("details.ss-data");
     if (det) {
       var data = h("div", "c3-dlg-data");
-      data.append(h("h3", "c3-dlg-h3", "Datele (tabel)"));
+      data.append(h("h3", "c3-dlg-h3", tt("charts.dlg.data")));
       [].forEach.call(det.children, function (n) { if (n.nodeName !== "SUMMARY") data.append(n.cloneNode(true)); });
       right.append(data);
     }
@@ -627,21 +635,21 @@
     var box = h("div", "c3-tools");
     var link = h("button", "btn btn-ghost btn-sm c3-tool");
     link.type = "button";
-    link.setAttribute("aria-label", "Copiază linkul către acest grafic");
-    link.title = "Copiază linkul către acest grafic";
+    link.setAttribute("aria-label", tt("charts.tool.copy"));
+    link.title = tt("charts.tool.copy");
     link.append(icon("link"));
     link.addEventListener("click", function () {
       var url = o && o.url ? o.url(o.key) : location.href;
       Promise.resolve(copyText(url)).then(function (ok) {
-        toast(ok ? "Link copiat: graficul se deschide direct la locul lui." : "Nu am putut copia linkul. Copiază-l din bara de adrese.");
+        toast(ok ? tt("charts.tool.copied") : tt("charts.tool.copy_failed"));
       });
     });
     box.append(link);
     if (sec.querySelector("svg.ss-svg") && typeof HTMLDialogElement !== "undefined") {
       var full = h("button", "btn btn-ghost btn-sm c3-tool c3-full");
       full.type = "button";
-      full.setAttribute("aria-label", "Deschide graficul pe tot ecranul, cu tabelul alături");
-      full.title = "Ecran complet";
+      full.setAttribute("aria-label", tt("charts.tool.full_aria"));
+      full.title = tt("charts.tool.full");
       full.append(icon("full"));
       full.addEventListener("click", function () { openFullscreen(sec, full); });
       box.append(full);
@@ -673,7 +681,7 @@
     items = items.filter(function (it) { return it.el && it.el.isConnected !== false; });
     if (items.length < 3) return null;
     var nav = h("nav", "c3-toc");
-    nav.setAttribute("aria-label", "Secțiunile paginii");
+    nav.setAttribute("aria-label", tt("charts.toc.aria"));
     var list = h("ul", "c3-toc-list");
     var chips = items.map(function (it) {
       var li = h("li");
@@ -931,8 +939,13 @@
 
   // ---- calendar heat-map (GitHub-style day grid) --------------------------------------------
 
-  var MONTHS = ["ian.", "feb.", "mar.", "apr.", "mai", "iun.", "iul.", "aug.", "sept.", "oct.", "nov.", "dec."];
-  var WD = ["L", "", "Mi", "", "V", "", "D"];
+  var monthFmt = {};
+  function monthName(i) {   // short month name from Intl in the chosen language
+    var l = window.I18N.lang();
+    monthFmt[l] = monthFmt[l] || new Intl.DateTimeFormat(l, { month: "short", timeZone: "UTC" });
+    return monthFmt[l].format(new Date(Date.UTC(2000, i, 1)));
+  }
+  function weekdayRows() { return [0, 1, 2, 3, 4, 5, 6].map(function (i) { return i % 2 ? "" : tt("stats.wds." + i); }); }   // Mon, Wed, Fri, Sun labelled
 
   function isoDate(d) {
     return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
@@ -962,7 +975,7 @@
                           "aria-labelledby": id + "-t " + id + "-d", "data-kind": "unit" });
     root.append(s("title", { id: id + "-t" }, o.title));
     root.append(s("desc", { id: id + "-d" }, o.desc));
-    WD.forEach(function (t, r) {
+    weekdayRows().forEach(function (t, r) {
       if (t) root.append(s("text", { x: L - 5, y: (T + r * pitch + size / 2 + 3.5).toFixed(1), class: "ss-tick ss-tick-y" }, t));
     });
     var lastMonth = -1;
@@ -975,7 +988,7 @@
         if (dt.getDate() <= 7 && r === 0 || (w === 0 && r === wd0 && dt.getMonth() !== lastMonth)) {
           if (dt.getMonth() !== lastMonth) {
             lastMonth = dt.getMonth();
-            root.append(s("text", { x: x.toFixed(1), y: 11, class: "ss-tick c3-month" }, MONTHS[lastMonth]));
+            root.append(s("text", { x: x.toFixed(1), y: 11, class: "ss-tick c3-month" }, monthName(lastMonth)));
           }
         }
         var day = byKey[key] || null;
@@ -998,10 +1011,8 @@
     var keys = {};
     boards.forEach(function (b) { (d.daily[b] || []).forEach(function (r) { keys[r.key] = true; }); });
     if (Object.keys(keys).length < 7) return;
-    var f = x.figure({ title: "Cum arată fiecare zi?", set: "daily", wide: true, key: "calendar", legend: x.legend,
-      how: "fiecare pătrat este o zi de serviciu, pe coloane de câte o săptămână (luni sus, duminică jos); cu cât culoarea e mai " +
-        "închisă, cu atât întârzierea medie citită în ziua aceea a fost mai mare. Pătratele gri au sub " + p.min_sample +
-        " călătorii cu întârziere citită; cele cu contur au călătorii, dar fără întârziere citită; cele goale n-au nicio călătorie." });
+    var f = x.figure({ title: tt("charts.cal.title"), set: "daily", wide: true, key: "calendar", legend: x.legend,
+      how: tt("charts.cal.how", { min: p.min_sample }) });
     var cells = x.multiples(f.host, boards.length);
     var rows = [];
     boards.forEach(function (b, bi) {
@@ -1010,26 +1021,27 @@
       hd.append(x.el("span", "ss-key " + (b === "arrival" ? "ss-arr" : "ss-dep")), document.createTextNode(x.BOARD_PL[b]));
       cell.append(hd);
       var list = d.daily[b] || [];
-      if (!list.length) { cell.append(x.el("p", "ss-empty", "Nicio zi cu date.")); return; }
+      if (!list.length) { cell.append(x.el("p", "ss-empty", tt("charts.cal.no_day"))); return; }
       calendar(cell, { days: list, width: x.width(cell),
-        title: "Întârzierea medie pe zile — " + x.BOARD_PL[b],
-        desc: "Calendar: câte un pătrat pe zi de serviciu, colorat după întârzierea medie citită; pătratele gri au eșantion mic.",
+        title: tt("charts.cal.chart", { board: x.BOARD_PL[b] }),
+        desc: tt("charts.cal.desc"),
         cellClass: x.heatClass,
         tipOf: function (r, key) {
-          return x.BOARD_PL[b] + ", " + x.dayText(key) + ": " + (!r ? "nicio călătorie" : !r.n ?
-            x.plural(r.journeys, "călătorie", "călătorii") + ", nicio întârziere citită (N = 0)" :
-            "medie " + x.minutes(r.mean) + ", mediana " + x.minutes(r.median) + ", N = " + r.n +
-            (r.sufficient ? ", la timp " + x.pct(r.on_time_pct) : " (eșantion mic)"));
+          return x.BOARD_PL[b] + ", " + x.dayText(key) + ": " + (!r ? tt("charts.cal.tip_none") : !r.n ?
+            tt("charts.cal.tip_unread", { j: x.pl(r.journeys, "stats.w.journey") }) :
+            tt("charts.cal.tip", { mean: x.minutes(r.mean), median: x.minutes(r.median), n: r.n }) +
+            (r.sufficient ? tt("charts.cal.tip_ontime", { pct: x.pct(r.on_time_pct) }) : tt("charts.cal.small")));
         } });
       list.forEach(function (r) { rows.push([x.BOARD_PL[b] + ", " + x.dayText(r.key), r.journeys, r.n, x.minutes(r.mean), x.minutes(r.median), x.pct(r.on_time_pct)]); });
     });
-    f.foot.append(x.nLine("Fiecare zi apare în tabel (" + rows.length + " rânduri); procentele lipsesc sub " + p.min_sample + " călătorii."));
-    f.foot.append(x.dataTable("Întârzierea pe zile (calendar)", ["Panou, ziua", "Călătorii", "N", "Medie", "Mediană", "% la timp"], rows));
+    f.foot.append(x.nLine(tt("charts.cal.foot", { n: rows.length, min: p.min_sample })));
+    f.foot.append(x.dataTable(tt("charts.cal.table"), tt("charts.cal.cols").split("|"), rows));
   }
 
   // Default chips for #statistici: one per main block, in page order
   function statisticiItems(body) {
-    var figBy = function (txt) {
+    var figBy = function (key) {
+      var txt = tt(key);
       return [].filter.call(body.querySelectorAll(".ss-fig"), function (f) {
         var t = f.querySelector(".ss-fig-title");
         return t && t.textContent.indexOf(txt) === 0;
@@ -1037,12 +1049,12 @@
     };
     var parts = body.querySelectorAll(".ss-part");
     var list = [
-      ["Probleme", body.querySelector(".ss-problems")], ["Ce merge bine", body.querySelector(".ss-good")],
-      ["În detaliu", parts[0]], ["Cifre", body.querySelector(".ss-hero-strip")],
-      ["Distribuție", figBy("Cât de mult")], ["Împărțire", figBy("Cum se împart")], ["Zile", figBy("Cum a evoluat")],
-      ["Calendar", figBy("Cum arată")], ["Ore", figBy("La ce oră")], ["Hartă", figBy("Ce zile și ore")],
-      ["Operatori", figBy("Care operatori")], ["Rute", figBy("Ce rute")], ["Vreme", figBy("Vremea")],
-      ["Trafic", figBy("Când e gara")], ["Calitate", figBy("Cât de bune")]];
+      [tt("charts.toc.problems"), body.querySelector(".ss-problems")], [tt("charts.toc.good"), body.querySelector(".ss-good")],
+      [tt("charts.toc.details"), parts[0]], [tt("charts.toc.figures"), body.querySelector(".ss-hero-strip")],
+      [tt("charts.toc.distribution"), figBy("stats.fig.distribution")], [tt("charts.toc.split"), figBy("stats.fig.share")], [tt("charts.toc.days"), figBy("stats.fig.daily")],
+      [tt("charts.toc.calendar"), figBy("charts.cal.title")], [tt("charts.toc.hours"), figBy("stats.fig.hourly")], [tt("charts.toc.map"), figBy("stats.fig.heatmap")],
+      [tt("charts.toc.operators"), figBy("stats.fig.operators")], [tt("charts.toc.routes"), figBy("stats.fig.routes")], [tt("charts.toc.weather"), figBy("stats.fig.weather")],
+      [tt("charts.toc.traffic"), figBy("stats.fig.traffic")], [tt("charts.toc.quality"), figBy("stats.fig.quality")]];
     return list.filter(function (r) { return r[1]; }).map(function (r) { return { label: r[0], el: r[1] }; })
       .sort(function (a, b) { return a.el.compareDocumentPosition(b.el) & 4 ? -1 : 1; });
   }

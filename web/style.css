@@ -600,6 +600,26 @@ svg { flex: none; }
   backdrop-filter: blur(14px) saturate(140%);
 }
 
+.navbar { display: flex; align-items: center; }
+.navbar .mainnav { flex: 1 1 auto; min-width: 0; }
+.lang-toggle {
+  flex: 0 0 auto;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin-right: max(var(--gutter), env(safe-area-inset-right, 0px));
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.lang-toggle:hover { color: var(--text); background: var(--surface); }
+
 .mainnav {
   display: flex;
   gap: 4px;

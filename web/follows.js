@@ -10,8 +10,19 @@
   var TZ = "Europe/Bucharest";
   var EP_KEY = "tabela.push.endpoint";
   var TIMEOUT_MS = 10000;
-  var MSG_UNSUPPORTED = "Notificările necesită conexiune sigură (HTTPS) și un browser compatibil.";
-  var MSG_IOS = "Pe iPhone, adaugă mai întâi aplicația pe ecranul principal.";
+  var I = window.I18N;
+  function T(k, p) { return I ? I.t(k, p) : k; }
+  // plural by Intl.PluralRules(lang): base.one | base.other
+  function tp(base, n) {
+    var cat = "other";
+    try { cat = new Intl.PluralRules(I ? I.lang() : "ro").select(n); } catch (e) { /* ignore */ }
+    return T(base + (cat === "one" ? ".one" : ".other"), { n: n });
+  }
+  // reason codes; the text is looked up when shown (so a language switch applies)
+  var MSG_UNSUPPORTED = "unsupported";
+  var MSG_IOS = "ios";
+  var MSG_PAST = "past";
+  function reasonText(code) { return T("follows.reason." + code); }
 
   var $ = function (id) { return document.getElementById(id); };
   var state = {
@@ -78,14 +89,14 @@
       return r.json().catch(function () { return null; }).then(function (data) {
         if (!r.ok) {
           var err = new Error((data && typeof data.detail === "string" && data.detail) ||
-                              "Eroare la server (" + r.status + ").");
+                              T("follows.err.server", { status: r.status }));
           err.status = r.status;
           throw err;
         }
         return data;
       });
     }, function () {
-      throw new Error(navigator.onLine === false ? "Ești offline." : "Serverul nu a răspuns. Încearcă din nou.");
+      throw new Error(navigator.onLine === false ? T("follows.err.offline") : T("follows.err.no_response"));
     }).finally(function () { clearTimeout(to); });
   }
 
@@ -103,7 +114,7 @@
 
   function registration() {
     var p = App.registerSW && App.registerSW();
-    if (!p) return Promise.reject(new Error(MSG_UNSUPPORTED));
+    if (!p) return Promise.reject(new Error(reasonText(MSG_UNSUPPORTED)));
     return p.then(function () { return navigator.serviceWorker.ready; });
   }
 
@@ -117,20 +128,20 @@
   // Ask permission (first use), subscribe the browser and register it with the server.
   function ensureSubscription() {
     var reason = unsupportedReason();
-    if (reason) return Promise.reject(new Error(reason));
+    if (reason) return Promise.reject(new Error(reasonText(reason)));
     if (Notification.permission === "denied") {
-      return Promise.reject(new Error("Notificările sunt blocate pentru acest site. Activează-le din setările browserului."));
+      return Promise.reject(new Error(T("follows.err.blocked")));
     }
     var perm = Notification.permission === "granted"
       ? Promise.resolve("granted") : Promise.resolve(Notification.requestPermission());
     return perm.then(function (p) {
-      if (p !== "granted") throw new Error("Fără permisiunea pentru notificări nu pot urmări trenuri.");
+      if (p !== "granted") throw new Error(T("follows.err.no_permission"));
       return registration();
     }).then(function (reg) {
       return reg.pushManager.getSubscription().then(function (sub) {
         if (sub) return sub;
         return api("GET", "/api/push/key").catch(function (e) {
-          if (e.status === 404) throw new Error("Notificările nu sunt încă activate pe server.");
+          if (e.status === 404) throw new Error(T("follows.err.not_enabled"));
           throw e;
         }).then(function (data) {
           return reg.pushManager.subscribe({ userVisibleOnly: true,
@@ -170,8 +181,6 @@
     return state.follows.some(function (f) { return key(f.train_no, f.date) === key(no, date); });
   }
 
-  var MSG_PAST = "Trenul aparține unei zile trecute; se pot urmări doar trenurile de azi sau de mai târziu.";
-
   function trainDate(train) {
     return train.service_date || todayBucharest();
   }
@@ -210,12 +219,13 @@
 
   // ---- UI -------------------------------------------------------------------------------------
 
-  var dayFmt = new Intl.DateTimeFormat("ro-RO", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
   function dayLabel(iso) {
     var t = todayBucharest();
-    if (iso === t) return "azi";
+    if (iso === t) return T("follows.today");
     var d = new Date(iso + "T12:00:00Z");
-    return isNaN(d.getTime()) ? iso : dayFmt.format(d);
+    var fmt = new Intl.DateTimeFormat(I && I.lang() === "en" ? "en-GB" : "ro-RO",
+      { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+    return isNaN(d.getTime()) ? iso : fmt.format(d);
   }
 
   function titleCase(x) {
@@ -234,13 +244,14 @@
     var box = $("f-hero");
     var U = App.ui2;
     if (!box || !U) return;
-    var key = count + "|" + (state.endpoint ? 1 : 0);
+    var key = count + "|" + (state.endpoint ? 1 : 0) + "|" + (I ? I.lang() : "ro");
     if (key === heroKey) return;
     heroKey = key;
     box.replaceChildren(U.hero([
-      { label: "Trenuri urmărite", value: count, sub: count ? "pe acest dispozitiv" : "niciunul încă" },
-      { label: "Notificări", text: state.endpoint ? "Active" : "Oprite", tone: state.endpoint ? "ok" : "",
-        cls: "ui-stat-name", sub: state.endpoint ? "primești alerte la schimbări" : "pornește comutatorul de mai jos" }]));
+      { label: T("follows.hero.trains"), value: count, sub: count ? T("follows.hero.on_device") : T("follows.hero.none_yet") },
+      { label: T("follows.hero.notifications"), text: state.endpoint ? T("follows.hero.on") : T("follows.hero.off"),
+        tone: state.endpoint ? "ok" : "",
+        cls: "ui-stat-name", sub: state.endpoint ? T("follows.hero.alerts") : T("follows.hero.switch_hint") }]));
   }
 
   function renderList() {
@@ -252,11 +263,11 @@
       return a.date < b.date ? -1 : a.date > b.date ? 1 : a.train_no - b.train_no;
     });
     $("f-count").textContent = state.endpoint
-      ? (items.length === 1 ? "1 tren urmărit" : items.length + " trenuri urmărite") : "";
+      ? tp("follows.count", items.length) : "";
     $("f-empty").hidden = items.length > 0 || !state.loaded;
     $("f-empty").textContent = state.endpoint
-      ? "Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă."
-      : "Nicio urmărire pe acest dispozitiv. Apasă „urmărește” pe un tren din tabelă pentru a activa notificările.";
+      ? T("follows.empty.enabled")
+      : T("follows.empty.disabled");
     if (App.ui2) $("f-empty").prepend(App.ui2.art("bell"));
     renderHero(items.length);
     items.forEach(function (f) {
@@ -270,37 +281,37 @@
       title.append(el("span", "t-no", String(f.train_no)));
       var sub = el("p", "f-sub");
       var parts = [dayLabel(f.date)];
-      if (f.date < today) parts.push("zi trecută");
+      if (f.date < today) parts.push(T("follows.past_day"));
       seen.forEach(function (t) {
         var d = Math.max(0, t.delay_min | 0);
         parts.push((t.sched_time || "") + " " + titleCase(t.station));
         // never "la timp" unless the delay cell was actually read (API delay_read)
         if (t.delay_read !== true) {
-          var nr = el("span", "delay-unread", "necitit");
-          nr.title = "Celula de întârziere nu a putut fi citită de pe tabela CFR";
+          var nr = el("span", "delay-unread", T("follows.unread"));
+          nr.title = T("follows.unread_title");
           parts.push(nr);
         } else {
-          parts.push(d ? "+" + d + " min" : "la timp");
+          parts.push(d ? "+" + d + " min" : T("follows.on_time"));
         }
-        if (t.platform != null && t.platform !== "") parts.push("linia " + t.platform);
+        if (t.platform != null && t.platform !== "") parts.push(T("follows.platform", { platform: t.platform }));
       });
-      if (f.date <= today && !seen.length) parts.push("nu e pe tabelă acum");
+      if (f.date <= today && !seen.length) parts.push(T("follows.not_on_board"));
       sub.replaceChildren();
       parts.forEach(function (p, i) {
         if (i) sub.append(" · ");
         sub.append(p);
       });
       info.append(title, sub);
-      var hist = el("a", "f-link", "Istoric");
+      var hist = el("a", "f-link", T("follows.history"));
       hist.href = "#istoric?date=" + encodeURIComponent(f.date <= today ? f.date : today) +
         "&train=" + encodeURIComponent(f.train_no);
-      var btn = el("button", "btn btn-ghost btn-sm", "Nu mai urmări");
+      var btn = el("button", "btn btn-ghost btn-sm", T("follows.unfollow"));
       btn.type = "button";
-      btn.setAttribute("aria-label", "Nu mai urmări trenul " + f.train_no + " (" + dayLabel(f.date) + ")");
+      btn.setAttribute("aria-label", T("follows.unfollow_aria", { no: f.train_no, day: dayLabel(f.date) }));
       btn.addEventListener("click", function () {
         btn.disabled = true;
         unfollow(f.train_no, f.date).then(function () {
-          App.toast("Nu mai urmărești trenul " + f.train_no + ".");
+          App.toast(T("follows.toast.unfollowed", { no: f.train_no }));
           renderAll();
         }, function (e) {
           btn.disabled = false;
@@ -321,22 +332,33 @@
     var reason = unsupportedReason();
     var support = $("f-support"), ios = $("f-ios");
     support.hidden = !reason || reason === MSG_IOS;
-    support.textContent = reason && reason !== MSG_IOS ? reason : "";
+    support.textContent = reason && reason !== MSG_IOS ? reasonText(reason) : "";
     ios.hidden = reason !== MSG_IOS;
-    ios.textContent = reason === MSG_IOS ? MSG_IOS : "";
+    ios.textContent = reason === MSG_IOS ? reasonText(MSG_IOS) : "";
     sw.disabled = !!reason || state.busy;
     sw.checked = !!state.endpoint;
     var status = $("f-status");
-    if (reason) status.textContent = "Notificări indisponibile pe acest dispozitiv.";
-    else if (state.busy) status.textContent = "Se actualizează…";
+    if (reason) status.textContent = T("follows.status.unavailable");
+    else if (state.busy) status.textContent = T("follows.status.updating");
     else if ("Notification" in window && Notification.permission === "denied") {
-      status.textContent = "Notificările sunt blocate pentru acest site din setările browserului.";
+      status.textContent = T("follows.status.blocked");
     } else status.textContent = state.endpoint
-      ? "Activate. Primești notificări pentru trenurile urmărite."
-      : "Dezactivate. Se activează automat când urmărești primul tren.";
+      ? T("follows.status.on")
+      : T("follows.status.off");
+  }
+
+  // Static markup of the view: set from the dictionary.
+  function applyStatic() {
+    var n = $("urmarite-heading");
+    if (n) n.textContent = T("follows.title");
+    n = document.querySelector("#view-urmarite .page-sub");
+    if (n) n.textContent = T("follows.sub");
+    n = document.querySelector("#view-urmarite .switch-label");
+    if (n) n.textContent = T("follows.switch_label");
   }
 
   function renderAll() {
+    applyStatic();
     renderSwitch();
     renderList();
     App.refreshFollowButtons();
@@ -346,7 +368,7 @@
   function onFollow(train, button) {
     var reason = unsupportedReason() || (pastTrain(train) ? MSG_PAST : null);
     if (reason) {
-      App.toast(reason);
+      App.toast(reasonText(reason));
       return;
     }
     if (state.busy) return;
@@ -356,10 +378,9 @@
     state.busy = true;
     if (button) button.setAttribute("aria-busy", "true");
     (was ? unfollow(no, date) : follow(no, date)).then(function () {
-      App.toast(was ? "Nu mai urmărești trenul " + no + "."
-                    : "Urmărești trenul " + no + ". Primești notificare la schimbări.");
+      App.toast(was ? T("follows.toast.unfollowed", { no: no }) : T("follows.toast.followed", { no: no }));
     }, function (e) {
-      App.toast(e.message || "Nu am putut actualiza urmărirea.");
+      App.toast(e.message || T("follows.err.update_follow"));
     }).then(function () {
       state.busy = false;
       state.loaded = true;
@@ -371,7 +392,7 @@
   function followState(train) {
     var reason = unsupportedReason() || (pastTrain(train) ? MSG_PAST : null);
     return { followed: !reason && isFollowed(train.train_no, trainDate(train)),
-             unsupported: !!reason, reason: reason || "" };
+             unsupported: !!reason, reason: reason ? reasonText(reason) : "" };
   }
 
   function refresh() {
@@ -384,7 +405,7 @@
       return loadFollows();
     }).catch(function (e) {
       if (e && e.status === 422) { state.endpoint = null; saveEndpoint(null); }
-      else App.toast("Nu am putut încărca trenurile urmărite. " + (e && e.message ? e.message : ""));
+      else App.toast(T("follows.err.load") + " " + (e && e.message ? e.message : ""));
     }).then(function () {
       state.loaded = true;
       renderAll();
@@ -397,9 +418,9 @@
     state.busy = true;
     renderSwitch();
     (want ? ensureSubscription().then(loadFollows) : disableNotifications()).then(function () {
-      App.toast(want ? "Notificări activate." : "Notificări dezactivate. Urmăririle au fost șterse.");
+      App.toast(want ? T("follows.toast.enabled") : T("follows.toast.disabled"));
     }, function (e) {
-      App.toast(e.message || "Nu am putut schimba setarea.");
+      App.toast(e.message || T("follows.err.setting"));
     }).then(function () {
       state.busy = false;
       renderAll();
@@ -420,7 +441,10 @@
 
   App.onFollow = onFollow;
   App.followState = followState;
-  App.follows = { urlBase64ToUint8Array: urlBase64ToUint8Array, refresh: refresh };
+  App.follows = { urlBase64ToUint8Array: urlBase64ToUint8Array, refresh: refresh,
+                  countLabel: function (n) { return tp("follows.count", n); } };
   App.views.urmarite = { show: function () { if (supported()) refresh(); else renderAll(); } };
-  init();
+  document.addEventListener("i18n:change", function () { renderAll(); });
+  // dictionaries first, so no key shows up instead of text
+  (I ? I.ready : Promise.resolve()).then(init);
 })();

@@ -18,17 +18,22 @@
   var SVG_NS = "http://www.w3.org/2000/svg";
   var API = "/api/stats/overview";
   var BOARDS = ["arrival", "departure"];
-  var BOARD_PL = { arrival: "Sosiri", departure: "Plecări" };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
+  var pl = function (n, base) { return S.pl(n, base); };   // "1 journey" / "3 journeys" from stats.w.*.one / .many
+  function lazy(prefix, keys) {   // getters: the text follows the language chosen at the time it is read
+    var o = {};
+    keys.forEach(function (k) { Object.defineProperty(o, k, { enumerable: true, get: function () { return tt(prefix + k); } }); });
+    return o;
+  }
+  var BOARD_PL = lazy("stats.board.", ["arrival", "departure"]);
   var BOARD_CLS = { arrival: "ss-arr", departure: "ss-dep" };
-  var WEEKDAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
-  var WD_SHORT = ["L", "Ma", "Mi", "J", "V", "S", "D"];
-  var PERIODS = [["all", "Tot istoricul"], ["30", "30 de zile"], ["7", "7 zile"], ["1", "Azi"]];
-  var BOARD_OPTS = [["", "Ambele"], ["arrival", "Sosiri"], ["departure", "Plecări"]];
+  function wd(i) { return tt("stats.wd." + i); }
+  function wdShort(i) { return tt("stats.wds." + i); }
+  function periods() { return ["all", "30", "7", "1"].map(function (k) { return [k, tt("stats.period." + k)]; }); }
+  function boardOpts() { return [["", tt("stats.board.both")], ["arrival", tt("stats.board.arrival")], ["departure", tt("stats.board.departure")]]; }
   var FIELDS = ["perioada", "board", "operator", "tip", "doar_confirmate"];
-  var STATE_TEXT = { confirmed: "Confirmat", unconfirmed: "Neconfirmat",
-                     unknown: "Necunoscută", in_progress: "Încă pe tabelă" };
-  var OBS_TEXT = { ok: "Completă", uncertain: "Nesigură",
-                   rejected_low_conf: "Respinsă", incomplete: "Incompletă" };
+  var STATE_TEXT = lazy("stats.state.", ["confirmed", "unconfirmed", "unknown", "in_progress"]);
+  var OBS_TEXT = lazy("stats.obs.", ["ok", "uncertain", "rejected_low_conf", "incomplete"]);
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var $ = function (id) { return document.getElementById(id); };
@@ -36,11 +41,10 @@
   var seq = 0;
 
   function num(v) { return v == null ? "—" : nf.format(v); }
-  function minutes(v) { return v == null ? "—" : nf.format(v) + " min"; }
-  function pct(v) { return v == null ? "—" : nf.format(v) + " %"; }
+  function minutes(v) { return v == null ? "—" : tt("stats.fmt.min", { v: nf.format(v) }); }
+  function pct(v) { return v == null ? "—" : tt("stats.fmt.pct", { v: nf.format(v) }); }
   function hh(h) { return (h < 10 ? "0" : "") + h; }
   function hourRange(h) { return hh(h) + ":00–" + hh(h) + ":59"; }
-  function plural(n, one, many) { return S.plural(n, one, many); }
   function nid(prefix) { seq += 1; return "ss-" + prefix + "-" + seq; }
 
   function shortDay(iso) {
@@ -151,17 +155,17 @@
     var root = $("st-statistici");
     var form = el("form", "ss-filters");
     form.setAttribute("role", "search");
-    form.setAttribute("aria-label", "Filtre statistici");
+    form.setAttribute("aria-label", tt("stats.filters.aria"));
     form.noValidate = true;
-    var per = segmented("perioada", "Perioada", PERIODS);
-    var brd = segmented("board", "Panou", BOARD_OPTS);
-    var op = selectField("operator", "Operator", "Toți operatorii");
-    var tp = selectField("tip", "Tip de tren", "Toate tipurile");
+    var per = segmented("perioada", tt("stats.filters.period"), periods());
+    var brd = segmented("board", tt("stats.filters.board"), boardOpts());
+    var op = selectField("operator", tt("stats.filters.operator"), tt("stats.filters.all_operators"));
+    var tp = selectField("tip", tt("stats.filters.train_type"), tt("stats.filters.all_types"));
     var chk = el("label", "ss-check");
     var ci = el("input");
     ci.type = "checkbox";
     ci.id = "ss-confirmate";
-    chk.append(ci, el("span", null, "Doar rezultate confirmate"));
+    chk.append(ci, el("span", null, tt("stats.filters.confirmed_only")));
     form.append(per.node, brd.node, op.node, tp.node, chk);
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
@@ -223,7 +227,7 @@
     root.classList.add("is-loading");
     root.setAttribute("aria-busy", "true");
     if (!v.data) {
-      var wait = el("p", "sr-only", "Se încarcă statisticile…");
+      var wait = el("p", "sr-only", tt("stats.loading"));
       v.ui.body.replaceChildren(wait);
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
@@ -262,12 +266,14 @@
   }
 
   function show(params) {
-    ensure();
-    v.focus = params && params.get ? (params.get("grafic") || "").slice(0, 40) : "";
-    v.p = readParams(params);
-    setForm(v.p);
-    load();
-    if (v.data && !v.ctrl) focusChart();
+    window.I18N.ready.then(function () {   // the dictionary must be loaded before the first labels are drawn
+      ensure();
+      v.focus = params && params.get ? (params.get("grafic") || "").slice(0, 40) : "";
+      v.p = readParams(params);
+      setForm(v.p);
+      load();
+      if (v.data && !v.ctrl) focusChart();
+    });
   }
 
   // ---- building blocks ---------------------------------------------------------------
@@ -312,7 +318,7 @@
     sec.append(head);
     if (o.how) {
       var how = el("p", "ss-how");
-      how.append(el("strong", null, "Cum se citește: "), document.createTextNode(o.how));
+      how.append(el("strong", null, tt("stats.how_label")), document.createTextNode(o.how));
       sec.append(how);
     }
     if (o.legend) sec.append(o.legend);
@@ -342,7 +348,7 @@
   // „Vezi datele”: the chart as an accessible table.
   function dataTable(caption, cols, rows) {
     var det = el("details", "ss-data");
-    det.append(el("summary", null, "Vezi datele (tabel)"));
+    det.append(el("summary", null, tt("stats.view_data")));
     var wrap = el("div", "st-scroll");
     wrap.tabIndex = 0;
     wrap.setAttribute("role", "region");
@@ -634,9 +640,9 @@
 
   function periodText(d) {
     var c = d.coverage || {};
-    if (!c.first) return "nicio zi cu date";
+    if (!c.first) return tt("stats.period_none");
     var span = c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last);
-    return span + " (" + plural(c.days || 0, "zi cu date", "zile cu date") + ")";
+    return span + " (" + pl(c.days || 0, "stats.w.day_data") + ")";
   }
 
   function summary(d) {
@@ -646,11 +652,11 @@
     var sec = el("section", "ss-summary");
     sec.setAttribute("aria-labelledby", "ss-sum-h");
     var head = el("div", "ss-fig-head");
-    var t = el("h2", "ss-fig-title", "Pe scurt");
+    var t = el("h2", "ss-fig-title", tt("stats.summary.title"));
     t.id = "ss-sum-h";
     head.append(t);
     var exp = el("div", "st-exports");
-    var j = el("a", "btn btn-ghost btn-sm ss-csv", "Toate datele (JSON)");
+    var j = el("a", "btn btn-ghost btn-sm ss-csv", tt("stats.summary.json"));
     j.href = API + (query(v.p) ? "?" + query(v.p) : "");
     j.target = "_blank";
     j.rel = "noopener";
@@ -660,21 +666,18 @@
 
     var cov = el("p", "ss-coverage");
     var ex = c.excluded || {};
-    cov.textContent = "Perioada: " + periodText(d) + " · " +
-      plural(c.journeys || 0, "călătorie", "călătorii") + " (" + plural(c.trains || 0, "tren", "trenuri") + ") · " +
-      plural(c.observations || 0, "observație OCR", "observații OCR") + " · excluse: " +
-      plural(ex.ghost || 0, "fantomă", "fantome") + ", " + (ex.low_quality || 0) + " din perioada de calitate redusă" +
-      (p.operator ? " · operator: " + p.operator : "") + (p.tip ? " · tip: " + p.tip : "") +
-      (p.confirmed_only ? " · doar rezultate confirmate" : "");
+    cov.textContent = tt("stats.summary.coverage", { period: periodText(d), journeys: pl(c.journeys || 0, "stats.w.journey"),
+      trains: pl(c.trains || 0, "stats.w.train"), obs: pl(c.observations || 0, "stats.w.obs_ocr"),
+      ghost: pl(ex.ghost || 0, "stats.w.ghost"), low: ex.low_quality || 0 }) +
+      (p.operator ? tt("stats.summary.operator", { v: p.operator }) : "") + (p.tip ? tt("stats.summary.type", { v: p.tip }) : "") +
+      (p.confirmed_only ? tt("stats.summary.confirmed_only") : "");
     sec.append(cov);
 
     if (!h.sufficient) {
       var w = el("p", "st-warn ss-history");
       w.setAttribute("role", "note");
-      w.append(el("strong", null, "Date insuficiente încă — " + plural(h.days || 0, "zi", "zile") + " de istoric. "),
-        document.createTextNode("Cifrele de mai jos sunt reale (citite de pe tabelă), dar tendințele pe ore, zile " +
-          "și operatori devin sigure abia după cel puțin " + (h.needed_days || 7) + " zile; se vor schimba pe " +
-          "măsură ce se adună date."));
+      w.append(el("strong", null, tt("stats.summary.insufficient_h", { days: pl(h.days || 0, "stats.w.day") })),
+        document.createTextNode(tt("stats.summary.insufficient_b", { n: h.needed_days || 7 })));
       sec.append(w);
     }
     var ul = el("ul", "ss-insights");
@@ -682,9 +685,8 @@
     sec.append(ul);
     var when = el("p", "ss-generated");
     var g = d.generated_at ? new Date(d.generated_at) : null;
-    when.textContent = "Calculat la " + (g && !isNaN(g) ? g.toLocaleTimeString("ro-RO", { timeZone: "Europe/Bucharest" }) : "—") +
-      " · se recalculează cel mult o dată la " + (d.cache_ttl_s || 60) + " s · „la timp” = întârziere citită ≤ " +
-      p.on_time_max_min + " min · eșantion minim " + p.min_sample + " călătorii";
+    when.textContent = tt("stats.summary.generated", { time: g && !isNaN(g) ? new Intl.DateTimeFormat(window.I18N.lang(), { timeStyle: "medium", timeZone: "Europe/Bucharest" }).format(g) : "—",
+      ttl: d.cache_ttl_s || 60, max: p.on_time_max_min, min: p.min_sample });
     sec.append(when);
     v.ui.body.append(sec);
   }
@@ -694,20 +696,20 @@
     var c = d.coverage || {};
     var p = d.params || {};
     var sec = el("section", "ss-hero-strip");
-    sec.setAttribute("aria-label", "Cifre principale");
+    sec.setAttribute("aria-label", tt("stats.hero.aria"));
     var items = boards.map(function (b) {
       var s = d.boards[b];
       var ok = s.n && s.sufficient;
-      return { label: BOARD_PL[b] + " · la timp", tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v",
+      return { label: tt("stats.hero.on_time", { board: BOARD_PL[b] }), tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v",
         value: ok ? s.on_time_pct : null, unit: ok ? " %" : "", fmt: function (x) { return nf.format(Math.round(x * 10) / 10); },
-        sub: ok ? s.on_time + " din " + s.n + " călătorii cu întârziere citită (≤ " + p.on_time_max_min + " min)"
-          : (s.n ? "N = " + s.n + " < " + p.min_sample + ": fără procent" : "N = 0: nicio întârziere citită"),
+        sub: ok ? tt("stats.hero.on_time_sub", { ok: s.on_time, n: s.n, max: p.on_time_max_min })
+          : (s.n ? tt("stats.hero.small_sub", { n: s.n, min: p.min_sample }) : tt("stats.hero.none_sub")),
         meter: ok ? s.on_time_pct : null, gauge: true };
     });
-    items.push({ label: "Călătorii analizate", cls: "ss-hero-v", value: c.journeys || 0,
-      sub: plural(c.trains || 0, "tren", "trenuri") + " · " + plural(c.observations || 0, "observație OCR", "observații OCR") });
-    items.push({ label: "Zile cu date", cls: "ss-hero-v", value: c.days || 0,
-      sub: c.first ? (c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last)) : "nicio zi" });
+    items.push({ label: tt("stats.hero.analysed"), cls: "ss-hero-v", value: c.journeys || 0,
+      sub: pl(c.trains || 0, "stats.w.train") + " · " + pl(c.observations || 0, "stats.w.obs_ocr") });
+    items.push({ label: tt("stats.hero.days"), cls: "ss-hero-v", value: c.days || 0,
+      sub: c.first ? (c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last)) : tt("stats.hero.no_day") });
     sec.append(U().hero(items));
     v.ui.body.append(sec);
   }
@@ -726,10 +728,10 @@
       card.append(h);
       var hero = el("p", "ss-hero");
       if (s.n && s.sufficient) {
-        hero.append(el("span", "ss-hero-l", pct(s.on_time_pct) + " la timp (≤ " + p.on_time_max_min + " min)"));
+        hero.append(el("span", "ss-hero-l", tt("stats.kpi.on_time", { pct: pct(s.on_time_pct), max: p.on_time_max_min })));
       } else {
         hero.append(el("span", "ss-hero-v ss-muted", "—"),
-                    el("span", "ss-hero-l", s.n ? " eșantion mic: procentul nu se afișează" : " nicio călătorie cu întârziere citită"));
+                    el("span", "ss-hero-l", s.n ? tt("stats.kpi.small") : tt("stats.kpi.none")));
       }
       card.append(hero);
       if (s.n && U()) {
@@ -737,46 +739,42 @@
         onTimeDonut(dn, s, p, b);
         card.append(dn);
       }
-      card.append(nLine(s.n ? s.on_time + " din " + s.n + " călătorii încheiate cu întârziere citită (N = " + s.n + ")" +
-        " · " + plural(s.journeys || 0, "călătorie observată", "călătorii observate") : "N = 0 · " +
-        plural(s.journeys || 0, "călătorie observată", "călătorii observate")));
+      card.append(nLine(s.n ? tt("stats.kpi.line", { ok: s.on_time, n: s.n, obs: pl(s.journeys || 0, "stats.w.journey_obs") })
+        : tt("stats.kpi.line0", { obs: pl(s.journeys || 0, "stats.w.journey_obs") })));
       var dl = el("dl", "ss-kpi-grid");
-      [["Mediană", minutes(s.median)], ["Medie", minutes(s.mean)], ["p90", minutes(s.p90)],
-       ["Peste 30 min", s.n ? s.over_30 + (s.over_30_pct != null ? " (" + pct(s.over_30_pct) + ")" : "") : "—"],
-       ["Maxim", minutes(s.max)]].forEach(function (x) {
+      [[tt("stats.kpi.median"), minutes(s.median)], [tt("stats.kpi.mean"), minutes(s.mean)], ["p90", minutes(s.p90)],
+       [tt("stats.kpi.over30"), s.n ? s.over_30 + (s.over_30_pct != null ? " (" + pct(s.over_30_pct) + ")" : "") : "—"],
+       [tt("stats.kpi.max"), minutes(s.max)]].forEach(function (x) {
         var it = el("div", "ss-kpi-item");
         it.append(el("dt", null, x[0]), el("dd", null, x[1]));
         dl.append(it);
       });
       card.append(dl);
-      if (s.n && !s.sufficient) card.append(warn("Eșantion mic (N = " + s.n + " < " + p.min_sample + "): doar cifre brute, fără procente."));
+      if (s.n && !s.sufficient) card.append(warn(tt("stats.warn.small_raw", { n: s.n, min: p.min_sample })));
       box.append(card);
     });
     v.ui.body.append(box);
   }
 
   function smallNote(n, min) {
-    return n > 0 && n < min ? "Eșantion mic (N = " + n + " < " + min + "): procentele nu se afișează." : null;
+    return n > 0 && n < min ? tt("stats.warn.small_pct", { n: n, min: min }) : null;
   }
 
   function distributionSection(d, boards) {
     var p = d.params;
     var usePct = boards.every(function (b) { return d.boards[b].sufficient; });
-    var f = figure({ title: "Cât de mult întârzie trenurile?", set: "distribution", legend: legend(boards),
-      how: "fiecare coloană arată " + (usePct ? "ce procent din" : "câte dintre") + " călătoriile încheiate cu " +
-        "întârziere citită au avut întârzierea în intervalul de minute de sub ea." +
-        (p.on_time_max_min === 5 ? " Primele două intervale (0 și 1–5 min) înseamnă „la timp”." :
-          " „La timp” înseamnă acum cel mult " + p.on_time_max_min + " min.") });
+    var f = figure({ title: tt("stats.fig.distribution"), key: "cat-de-mult-intarzie-trenurile", set: "distribution", legend: legend(boards),
+      how: tt(usePct ? "stats.fig.distribution.how_pct" : "stats.fig.distribution.how_n") +
+        (p.on_time_max_min === 5 ? tt("stats.fig.distribution.on_time5") : tt("stats.fig.distribution.on_timeN", { max: p.on_time_max_min })) });
     var cats = (d.distribution[boards[0]] || []).map(function (x) { return x.label; });
-    columns(f.host, { cats: cats, unit: usePct ? "%" : "călătorii",
-      title: "Distribuția întârzierilor citite", desc: "Coloane grupate pe intervale de întârziere, pentru " +
-        boards.map(function (b) { return BOARD_PL[b].toLowerCase(); }).join(" și ") + ".",
+    columns(f.host, { cats: cats, unit: usePct ? "%" : tt("stats.unit.journeys"),
+      title: tt("stats.fig.distribution.chart"), desc: tt("stats.fig.distribution.desc", { boards: boards.map(function (b) { return BOARD_PL[b].toLowerCase(); }).join(tt("stats.and")) }),
       series: boards.map(function (b) {
         var items = d.distribution[b];
         return { board: b,
           values: items.map(function (x) { return usePct ? x.pct : x.n; }),
           labels: items.map(function (x) { return usePct ? (x.pct == null ? null : nf.format(Math.round(x.pct)) + "%") : String(x.n); }),
-          tips: items.map(function (x) { return BOARD_PL[b] + ", " + x.label + " min: " + x.n + " călătorii" + (x.pct != null ? " (" + pct(x.pct) + ")" : "") + " din N = " + d.boards[b].n; }) };
+          tips: items.map(function (x) { return tt("stats.tip.dist", { board: BOARD_PL[b], label: x.label, n: x.n, pct: x.pct != null ? " (" + pct(x.pct) + ")" : "", total: d.boards[b].n }); }) };
       }) });
     f.foot.append(nLine(boards.map(function (b) { return BOARD_PL[b] + ": N = " + d.boards[b].n; }).join(" · ")));
     boards.forEach(function (b) { var w = smallNote(d.boards[b].n, p.min_sample); if (w) f.foot.append(warn(BOARD_PL[b] + " — " + w)); });
@@ -786,9 +784,9 @@
       boards.forEach(function (b) { var x = d.distribution[b][i]; r.push(x.n, x.pct == null ? "—" : pct(x.pct)); });
       rows.push(r);
     });
-    var cols = ["Întârziere"];
-    boards.forEach(function (b) { cols.push(BOARD_PL[b] + " (călătorii)", BOARD_PL[b] + " (%)"); });
-    f.foot.append(dataTable("Distribuția întârzierilor citite", cols, rows));
+    var cols = [tt("stats.col.delay")];
+    boards.forEach(function (b) { cols.push(tt("stats.col.journeys_sfx", { board: BOARD_PL[b] }), tt("stats.col.pct_sfx", { board: BOARD_PL[b] })); });
+    f.foot.append(dataTable(tt("stats.fig.distribution.chart"), cols, rows));
   }
 
   // ---- Beta 1.26: part-to-whole figure — donuts (few categories, shares of one total) ----
@@ -805,17 +803,14 @@
       if (i < max) segs.push({ label: x.key, value: x.journeys, slot: slotOf(x, i) });
       else rest += x.journeys;
     });
-    if (rest) segs.push({ label: "Altele", value: rest, slot: "other" });
+    if (rest) segs.push({ label: tt("stats.share.other"), value: rest, slot: "other" });
     return segs;
   }
 
   function shareSection(d, boards) {
     var p = d.params;
-    var f = figure({ title: "Cum se împart călătoriile?", set: "types", wide: true,
-      how: "fiecare felie este partea unei categorii din călătoriile observate (cu sau fără întârziere citită): " +
-        "mai întâi sosiri față de plecări, apoi pe tip de tren și pe operator. Treci cu mouse-ul sau cu tastatura peste " +
-        "o felie ori peste legendă ca să vezi cifrele; culoarea se repetă în legendă împreună cu numele și cu un model " +
-        "(linii, puncte, hașură). Sub " + p.min_sample + " călătorii arătăm doar cifrele brute, fără procente." });
+    var f = figure({ title: tt("stats.fig.share"), key: "cum-se-impart-calatoriile", set: "types", wide: true,
+      how: tt("stats.fig.share.how", { min: p.min_sample }) });
     var rows = [];
     var any = false;
     function addRows(group, segs, total) {
@@ -835,15 +830,15 @@
       var tot = segs.reduce(function (a, x) { return a + x.value; }, 0);
       if (tot) {
         any = true;
-        f.host.append(el("h3", "ss-rank-h", "Sosiri și plecări"));
-        U().donut(f.host, { title: "Sosiri și plecări: partea din călătorii", valueUnit: "călătorii", showPct: tot >= p.min_sample,
-          desc: segs.map(function (x) { return x.label + " " + x.value; }).join(", ") + " (N = " + tot + ").",
-          centerValue: nf.format(tot), centerLabel: "călătorii", segments: segs });
-        addRows("Panou", segs, tot);
+        f.host.append(el("h3", "ss-rank-h", tt("stats.share.arr_dep")));
+        U().donut(f.host, { title: tt("stats.share.arr_dep_title"), valueUnit: tt("stats.unit.journeys"), showPct: tot >= p.min_sample,
+          desc: segs.map(function (x) { return x.label + " " + x.value; }).join(", ") + " " + tt("stats.share.n_total", { n: tot }),
+          centerValue: nf.format(tot), centerLabel: tt("stats.unit.journeys"), segments: segs });
+        addRows(tt("stats.share.board"), segs, tot);
       }
     }
-    [["Pe tip de tren", "types", function (x) { return TYPE_SLOT[String(x.key).toUpperCase()] || "other"; }, 6, "Tip"],
-     ["Pe operator", "operators", function (x, i) { return i + 1; }, 5, "Operator"]].forEach(function (g) {
+    [[tt("stats.share.by_type"), "types", function (x) { return TYPE_SLOT[String(x.key).toUpperCase()] || "other"; }, 6, tt("stats.share.type")],
+     [tt("stats.share.by_operator"), "operators", function (x, i) { return i + 1; }, 5, tt("stats.share.operator")]].forEach(function (g) {
       var pair = el("div", "ss-donut-pair");
       var made = 0;
       boards.forEach(function (b) {
@@ -853,42 +848,39 @@
         made += 1;
         any = true;
         var cell = cellFor(pair, b, BOARD_PL[b]);
-        U().donut(cell, { title: g[0] + " — " + BOARD_PL[b], valueUnit: "călătorii", showPct: tot >= p.min_sample,
-          desc: segs.map(function (x) { return x.label + " " + x.value; }).join(", ") + " (N = " + tot + ").",
-          centerValue: nf.format(tot), centerLabel: "călătorii (N)", segments: segs });
+        U().donut(cell, { title: g[0] + " — " + BOARD_PL[b], valueUnit: tt("stats.unit.journeys"), showPct: tot >= p.min_sample,
+          desc: segs.map(function (x) { return x.label + " " + x.value; }).join(", ") + " " + tt("stats.share.n_total", { n: tot }),
+          centerValue: nf.format(tot), centerLabel: tt("stats.share.total_n"), segments: segs });
         cell.append(nLine("N = " + tot));
         addRows(g[4] + " — " + BOARD_PL[b], segs, tot);
       });
       if (made) { f.host.append(el("h3", "ss-rank-h", g[0])); f.host.append(pair); }
     });
-    if (!any) { f.foot.append(el("p", "ss-empty", "Nicio călătorie pentru filtrele alese.")); return; }
-    f.foot.append(csvLink("operators", "CSV operatori"));
-    f.foot.append(dataTable("Cum se împart călătoriile", ["Categorie", "Călătorii", "Parte din total"], rows));
+    if (!any) { f.foot.append(el("p", "ss-empty", tt("stats.empty.no_journeys_filters"))); return; }
+    f.foot.append(csvLink("operators", tt("stats.share.csv_operators")));
+    f.foot.append(dataTable(tt("stats.share.table"), tt("stats.share.cols").split("|"), rows));
   }
 
   function hourlySection(d, boards) {
     var p = d.params;
     var cats = [];
     for (var h = 0; h < 24; h++) cats.push(hh(h));
-    var f = figure({ title: "La ce oră întârzie cel mai mult?", set: "hourly", wide: true,
-      legend: legend(boards, [["ss-key-hollow", "eșantion mic (N < " + p.min_sample + ")"]]),
-      how: "pe orizontală e ora programată (00–23); punctul arată mediana întârzierii citite pentru trenurile " +
-        "din acea oră — jumătate dintre ele au întârziat mai puțin, jumătate mai mult. Cercurile goale au prea puține " +
-        "călătorii: cifra e reală, dar nesigură, și nu e legată în linie. Banda de dedesubt arată câte călătorii (N) " +
-        "stau în spatele fiecărei ore." });
+    var f = figure({ title: tt("stats.fig.hourly"), key: "la-ce-ora-intarzie-cel-mai-mult", set: "hourly", wide: true,
+      legend: legend(boards, [["ss-key-hollow", tt("stats.legend.small", { min: p.min_sample })]]),
+      how: tt("stats.fig.hourly.how") });
     lines(f.host, { cats: cats, unit: "min", extFmt: function (q) { return nf.format(q) + " min"; },
-      refR: 78, refs: [{ value: p.on_time_max_min, label: "la timp ≤ " + p.on_time_max_min + " min", short: "≤ " + p.on_time_max_min + " min = la timp" }],
-      title: "Mediana întârzierii pe ora programată", desc: "Mediana întârzierii citite pe fiecare oră din zi, pe panou.",
+      refR: 78, refs: [{ value: p.on_time_max_min, label: tt("stats.ref.on_time", { max: p.on_time_max_min }), short: tt("stats.ref.on_time_short", { max: p.on_time_max_min }) }],
+      title: tt("stats.fig.hourly.chart"), desc: tt("stats.fig.hourly.desc"),
       series: boards.map(function (b) {
         var hs = d.hourly[b];
         return { board: b, values: hs.map(function (x) { return x.median; }),
           low: hs.map(function (x) { return !x.sufficient; }),
           tips: hs.map(function (x) {
-            return BOARD_PL[b] + ", " + hourRange(x.key) + ": mediana " + minutes(x.median) + ", medie " + minutes(x.mean) +
-              ", N = " + x.n + (x.n && !x.sufficient ? " (eșantion mic)" : "");
+            return tt("stats.tip.hour", { board: BOARD_PL[b], hour: hourRange(x.key), median: minutes(x.median), mean: minutes(x.mean),
+              n: x.n, small: x.n && !x.sufficient ? tt("stats.small_paren") : "" });
           }) };
       }) });
-    nStrip(f.host, { right: function (w) { return w >= 520 ? 78 : 12; }, cats: cats, title: "N pe oră", desc: "Numărul de călătorii cu întârziere citită pe fiecare oră.",
+    nStrip(f.host, { right: function (w) { return w >= 520 ? 78 : 12; }, cats: cats, title: tt("stats.fig.hourly.nstrip"), desc: tt("stats.fig.hourly.nstrip_desc"),
       series: boards.map(function (b) { return { board: b, values: d.hourly[b].map(function (x) { return x.n; }) }; }) });
     var rows = [];
     for (var i = 0; i < 24; i++) {
@@ -896,9 +888,9 @@
       boards.forEach(function (b) { var x = d.hourly[b][i]; r.push(x.n, minutes(x.median), minutes(x.mean), pct(x.on_time_pct)); });
       rows.push(r);
     }
-    var cols = ["Ora programată"];
-    boards.forEach(function (b) { var L = BOARD_PL[b]; cols.push(L + " N", L + " mediană", L + " medie", L + " % la timp"); });
-    f.foot.append(dataTable("Întârzierea pe ora programată", cols, rows));
+    var cols = [tt("stats.col.sched_hour")];
+    boards.forEach(function (b) { var L = BOARD_PL[b]; cols.push(tt("stats.col.board_n", { board: L }), tt("stats.col.board_median", { board: L }), tt("stats.col.board_mean", { board: L }), tt("stats.col.board_ontime", { board: L })); });
+    f.foot.append(dataTable(tt("stats.fig.hourly.table"), cols, rows));
   }
 
   var HEAT_BINS = [[2, "≤ 2 min"], [5, "2–5 min"], [10, "5–10 min"], [20, "10–20 min"], [Infinity, "> 20 min"]];
@@ -918,8 +910,8 @@
       it.append(el("span", "ss-key ss-key-sq ss-q" + i), document.createTextNode(b[1]));
       lg.append(it);
     });
-    [["ss-cell-low", "N < " + p.min_sample], ["ss-cell-unread", "întârziere necitită"],
-     ["ss-cell-none", "nicio călătorie"]].forEach(function (x) {
+    [["ss-cell-low", "N < " + p.min_sample], ["ss-cell-unread", tt("stats.heat.unread")],
+     ["ss-cell-none", tt("stats.heat.none")]].forEach(function (x) {
       var it = el("span", "ss-legend-item");
       it.append(el("span", "ss-key ss-key-sq " + x[0]), document.createTextNode(x[1]));
       lg.append(it);
@@ -931,21 +923,17 @@
   function calendarSection(d, boards) {
     if (!C3()) return;
     C3().calendarFigure({ d: d, boards: boards, figure: figure, multiples: multiples, legend: heatLegend(d.params),
-      heatClass: heatClass, width: chartWidth, dataTable: dataTable, nLine: nLine, dayText: S.dayText, plural: plural,
+      heatClass: heatClass, width: chartWidth, dataTable: dataTable, nLine: nLine, dayText: S.dayText, pl: pl,
       minutes: minutes, pct: pct, BOARD_PL: BOARD_PL, el: el });
   }
 
   function heatmapSection(d, boards) {
     var p = d.params;
     var lg = heatLegend(p);
-    var f = figure({ title: "Ce zile și ore sunt cele mai problematice?", set: "heatmap", wide: true, legend: lg,
-      how: "fiecare pătrat este o oră (pe orizontală) dintr-o zi a săptămânii (pe verticală); cu cât culoarea e mai " +
-        "închisă, cu atât întârzierea medie citită e mai mare. Pătratele gri au sub " + p.min_sample +
-        " călătorii (prea puține pentru o concluzie); cele cu contur au călătorii, dar fără întârziere citită; cele goale " +
-        "n-au nicio călătorie. Cifrele exacte: treci cu mouse-ul peste un pătrat sau deschide tabelul de mai jos." });
+    var f = figure({ title: tt("stats.fig.heatmap"), key: "ce-zile-si-ore-sunt-cele-mai-probl", set: "heatmap", wide: true, legend: lg,
+      how: tt("stats.fig.heatmap.how", { min: p.min_sample }) });
     if (d.history && !d.history.sufficient) {
-      f.foot.append(warn("Istoric scurt (" + plural(d.history.days || 0, "zi", "zile") + "): fiecare zi a săptămânii " +
-        "are acum cel mult o dată calendaristică, deci harta arată zile anume, nu încă un tipar săptămânal."));
+      f.foot.append(warn(tt("stats.fig.heatmap.short_history", { days: pl(d.history.days || 0, "stats.w.day") })));
     }
     var cells = multiples(f.host, boards.length);
     boards.forEach(function (b, bi) {
@@ -960,20 +948,19 @@
       var cw = (W - L - 2) / 24;
       var ch = Math.max(14, Math.min(26, cw));
       var H = T + 7 * ch + B;
-      var root = svgRoot(W, H, "Întârzierea medie pe oră și zi — " + BOARD_PL[b],
-                         "Hartă de căldură: 7 zile × 24 de ore; celulele cu eșantion mic sunt gri.");
+      var root = svgRoot(W, H, tt("stats.fig.heatmap.title", { board: BOARD_PL[b] }), tt("stats.fig.heatmap.desc"));
       for (var dd = 0; dd < 7; dd++) {
-        root.append(svg("text", { x: L - 4, y: (T + dd * ch + ch / 2 + 4).toFixed(1), class: "ss-tick ss-tick-y" }, WD_SHORT[dd]));
+        root.append(svg("text", { x: L - 4, y: (T + dd * ch + ch / 2 + 4).toFixed(1), class: "ss-tick ss-tick-y" }, wdShort(dd)));
         for (var hr = 0; hr < 24; hr++) {
           var c = map[dd + "-" + hr];
           var g = svg("g", { class: "ss-mark" });
           g.append(svg("rect", { x: (L + hr * cw + 1).toFixed(1), y: (T + dd * ch + 1).toFixed(1),
                                  width: Math.max(1, cw - 2).toFixed(1), height: Math.max(1, ch - 2).toFixed(1), rx: 2,
                                  class: "ss-cell " + heatClass(c), "data-m": dd + "-" + hr }));
-          tip(g, WEEKDAYS[dd] + ", " + hourRange(hr) + ": " + (!c ? "nicio călătorie" : !c.n ?
-            plural(c.journeys, "călătorie", "călătorii") + ", nicio întârziere citită (N = 0)" :
-            "medie " + minutes(c.mean) + ", mediana " + minutes(c.median) + ", N = " + c.n +
-            (c.sufficient ? ", la timp " + pct(c.on_time_pct) : " (eșantion mic)")));
+          tip(g, wd(dd) + ", " + hourRange(hr) + ": " + (!c ? tt("stats.tip.heat_none") : !c.n ?
+            tt("stats.tip.heat_unread", { journeys: pl(c.journeys, "stats.w.journey") }) :
+            tt("stats.tip.heat_cell", { mean: minutes(c.mean), median: minutes(c.median), n: c.n }) +
+            (c.sufficient ? tt("stats.tip.heat_ontime", { pct: pct(c.on_time_pct) }) : tt("stats.small_paren"))));
           root.append(g);
         }
       }
@@ -986,11 +973,11 @@
     var rows = [];
     boards.forEach(function (b) {
       (d.heatmap[b] || []).forEach(function (c) {
-        rows.push([BOARD_PL[b] + ", " + WEEKDAYS[c.d] + " " + hourRange(c.h), c.journeys, c.n, minutes(c.mean), minutes(c.median), pct(c.on_time_pct)]);
+        rows.push([BOARD_PL[b] + ", " + wd(c.d) + " " + hourRange(c.h), c.journeys, c.n, minutes(c.mean), minutes(c.median), pct(c.on_time_pct)]);
       });
     });
-    f.foot.append(nLine("Doar celulele cu cel puțin o călătorie apar în tabel (" + rows.length + ")."));
-    f.foot.append(dataTable("Întârzierea pe zi a săptămânii și oră", ["Panou, zi, oră", "Călătorii", "N", "Medie", "Mediană", "% la timp"], rows));
+    f.foot.append(nLine(tt("stats.fig.heatmap.only_cells", { n: rows.length })));
+    f.foot.append(dataTable(tt("stats.fig.heatmap.table"), tt("stats.col.board_day_hour").split("|"), rows));
   }
 
   function dailySection(d, boards) {
@@ -998,13 +985,12 @@
     var keys = {};
     boards.forEach(function (b) { (d.daily[b] || []).forEach(function (x) { keys[x.key] = true; }); });
     var days = Object.keys(keys).sort();
-    var f = figure({ title: "Cum a evoluat punctualitatea de la o zi la alta?", set: "daily",
+    var f = figure({ title: tt("stats.fig.daily"), key: "cum-a-evoluat-punctualitatea-de-la", set: "daily",
       legend: legend(boards),
-      how: "fiecare punct este procentul călătoriilor la timp (≤ " + p.on_time_max_min + " min) dintr-o zi de serviciu. " +
-        "Zilele cu prea puține călătorii (N < " + p.min_sample + ") nu au procent și lipsesc din linie. Banda arată N pe zi. Linia punctată: media perioadei." });
+      how: tt("stats.fig.daily.how", { max: p.on_time_max_min, min: p.min_sample }) });
     if (days.length < 2) {
-      f.foot.append(el("p", "ss-empty", days.length ? "O singură zi cu date — evoluția apare de la a doua zi." :
-        "Nicio zi cu date pentru filtrele alese."));
+      f.foot.append(el("p", "ss-empty", days.length ? tt("stats.fig.daily.one_day") :
+        tt("stats.fig.daily.no_day")));
     }
     if (days.length) {
       var byKey = {};
@@ -1012,30 +998,30 @@
       lines(f.host, { cats: days.map(shortDay), unit: "%", yMax: 100, yStep: 25,
         yFmt: function (t) { return t + "%"; },
         refs: boards.filter(function (b) { return d.boards[b].sufficient && d.boards[b].on_time_pct != null; }).map(function (b) {
-          return { value: d.boards[b].on_time_pct, cls: BOARD_CLS[b], label: BOARD_PL[b] + ": medie " + pct(d.boards[b].on_time_pct), short: BOARD_PL[b] + " " + Math.round(d.boards[b].on_time_pct) + "%" };
+          return { value: d.boards[b].on_time_pct, cls: BOARD_CLS[b], label: tt("stats.ref.mean", { board: BOARD_PL[b], pct: pct(d.boards[b].on_time_pct) }), short: BOARD_PL[b] + " " + Math.round(d.boards[b].on_time_pct) + "%" };
         }),
-        title: "Procentul la timp pe zile", desc: "Procentul călătoriilor la timp pe fiecare zi de serviciu.",
+        title: tt("stats.fig.daily.chart"), desc: tt("stats.fig.daily.desc"),
         series: boards.map(function (b) {
           return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.on_time_pct : null; }),
             tips: days.map(function (k) { var x = byKey[b][k];
-              return BOARD_PL[b] + ", " + S.dayText(k) + ": " + (x ? "la timp " + pct(x.on_time_pct) + ", mediana " + minutes(x.median) + ", N = " + x.n : "nicio călătorie"); }) };
+              return tt("stats.tip.daily", { board: BOARD_PL[b], day: S.dayText(k), rest: x ? tt("stats.tip.daily_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n }) : tt("stats.tip.heat_none") }); }) };
         }) });
-      nStrip(f.host, { right: function (w) { return w >= 520 && C3() && boards.some(function (b) { return d.boards[b].sufficient && d.boards[b].on_time_pct != null; }) ? 68 : 12; }, cats: days.map(shortDay), title: "N pe zi", desc: "Călătorii cu întârziere citită pe zi.",
+      nStrip(f.host, { right: function (w) { return w >= 520 && C3() && boards.some(function (b) { return d.boards[b].sufficient && d.boards[b].on_time_pct != null; }) ? 68 : 12; }, cats: days.map(shortDay), title: tt("stats.fig.daily.nstrip"), desc: tt("stats.fig.daily.nstrip_desc"),
         series: boards.map(function (b) { return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.n : 0; }) }; }) });
       var rows = days.map(function (k) {
         var r = [S.dayText(k)];
         boards.forEach(function (b) { var x = byKey[b][k]; r.push(x ? x.journeys : 0, x ? x.n : 0, x ? pct(x.on_time_pct) : "—", x ? minutes(x.median) : "—"); });
         return r;
       });
-      var cols = ["Ziua"];
-      boards.forEach(function (b) { var L = BOARD_PL[b]; cols.push(L + " călătorii", L + " N", L + " % la timp", L + " mediană"); });
-      f.foot.append(dataTable("Punctualitatea pe zile", cols, rows));
+      var cols = [tt("stats.col.day")];
+      boards.forEach(function (b) { var L = BOARD_PL[b]; cols.push(tt("stats.col.board_journeys", { board: L }), tt("stats.col.board_n", { board: L }), tt("stats.col.board_ontime2", { board: L }), tt("stats.col.board_median2", { board: L })); });
+      f.foot.append(dataTable(tt("stats.punctuality_by_day"), cols, rows));
     }
   }
 
-  function rankedSection(d, boards, key, title, how, setName, firstCol) {
+  function rankedSection(d, boards, key, title, how, setName, firstCol, figKey) {
     var p = d.params;
-    var f = figure({ title: title, set: setName, how: how });
+    var f = figure({ title: title, key: figKey, set: setName, how: how });
     var cells = multiples(f.host, boards.length);
     var rows = [];
     boards.forEach(function (b, bi) {
@@ -1044,61 +1030,56 @@
       var h = el("h3", "ss-mult-h");
       h.append(el("span", "ss-key " + BOARD_CLS[b]), document.createTextNode(BOARD_PL[b]));
       cell.append(h);
-      if (!list.length) { cell.append(el("p", "ss-empty", "Nicio călătorie.")); return; }
+      if (!list.length) { cell.append(el("p", "ss-empty", tt("stats.ranked.no_journey"))); return; }
       hbars(cell, { board: b, max: 100, title: title + " — " + BOARD_PL[b],
-        desc: "Procentul la timp pe " + firstCol.toLowerCase() + "; rândurile fără bară au eșantion mic.",
+        desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
           return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient,
             valueText: x.sufficient ? pct(x.on_time_pct) + " · N = " + x.n : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"),
-            tip: x.sufficient ? pct(x.on_time_pct) + " la timp, mediana " + minutes(x.median) + ", N = " + x.n
-              : "N = " + x.n + " (prea puține pentru procent), medie " + minutes(x.mean) };
+            tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
+              : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
         }) });
       list.forEach(function (x) { rows.push([BOARD_PL[b] + " — " + x.key, x.journeys, x.n, pct(x.on_time_pct), minutes(x.median), minutes(x.mean)]); });
     });
-    f.foot.append(nLine("Bară = % la timp (≤ " + p.on_time_max_min + " min), doar cu N ≥ " + p.min_sample +
-      ". Fără bară = eșantion mic, cu cifrele brute în tabel."));
-    f.foot.append(dataTable(title, [firstCol, "Călătorii", "N", "% la timp", "Mediană", "Medie"], rows));
+    f.foot.append(nLine(tt("stats.ranked.foot", { max: p.on_time_max_min, min: p.min_sample })));
+    f.foot.append(dataTable(title, [firstCol].concat(tt("stats.col.ranked").split("|")), rows));
   }
 
   function routesSection(d, boards) {
     var p = d.params;
-    var f = figure({ title: "Ce rute întârzie cel mai mult — și care sunt cele mai punctuale?", set: "routes",
-      how: "stația este originea trenului (la sosiri) sau destinația lui (la plecări), cum apare pe tabelă. " +
-        "Întârzierea e tot cea citită la București Nord, nu la stație. Intră doar stațiile cu cel puțin " +
-        p.min_sample + " călătorii cu întârziere citită; cele întârziate sunt ordonate după mediană (un singur " +
-        "caz extrem nu mută clasamentul). Apasă pe o stație pentru pagina ei." });
+    var f = figure({ title: tt("stats.fig.routes"), key: "ce-rute-intarzie-cel-mai-mult-si-c", set: "routes",
+      how: tt("stats.fig.routes.how", { min: p.min_sample }) });
     var cells = multiples(f.host, boards.length);
     var rows = [];
     boards.forEach(function (b, bi) {
       var r = d.routes[b];
       var cell = cells[bi];
       var h = el("h3", "ss-mult-h");
-      h.append(el("span", "ss-key " + BOARD_CLS[b]), document.createTextNode(BOARD_PL[b] + (b === "arrival" ? " — din" : " — spre")));
+      h.append(el("span", "ss-key " + BOARD_CLS[b]), document.createTextNode(BOARD_PL[b] + (b === "arrival" ? tt("stats.dir.from") : tt("stats.dir.to"))));
       cell.append(h);
       if (!r.eligible) {
-        cell.append(el("p", "ss-empty", "Nicio stație cu N ≥ " + p.min_sample + " încă (" +
-          plural(r.below_min || 0, "stație are", "stații au") + " date sub prag)."));
+        cell.append(el("p", "ss-empty", tt("stats.fig.routes.no_station", { min: p.min_sample, has: pl(r.below_min || 0, "stats.w.station_has") })));
         return;
       }
-      [["Cele mai întârziate (medie)", r.most_delayed, "mean"], ["Cele mai punctuale (% la timp)", r.most_punctual, "pct"]].forEach(function (L) {
+      [[tt("stats.fig.routes.most_delayed"), r.most_delayed, "mean"], [tt("stats.fig.routes.most_punctual"), r.most_punctual, "pct"]].forEach(function (L) {
         cell.append(el("h4", "ss-rank-h", L[0]));
         var ol = el("ol", "ss-rank");
         L[1].forEach(function (x) {
           var li = el("li");
           li.append(S.stationLink(x.key));
-          li.append(el("span", "ss-rank-v", L[2] === "mean" ? minutes(x.mean) + " medie" : pct(x.on_time_pct) + " la timp"));
+          li.append(el("span", "ss-rank-v", L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
           li.append(el("span", "ss-rank-n", "N = " + x.n));
           ol.append(li);
           rows.push([BOARD_PL[b] + " — " + S.titleCase(x.key), L[0], x.n, minutes(x.mean), minutes(x.median), pct(x.on_time_pct)]);
         });
         cell.append(ol);
       });
-      if (r.below_min) cell.append(nLine(plural(r.below_min, "stație", "stații") + " sub prag nu sunt clasate."));
+      if (r.below_min) cell.append(nLine(tt("stats.fig.routes.below", { n: pl(r.below_min, "stats.w.station") })));
     });
-    var more = el("a", "st-back", "Clasamentul complet al trenurilor și stațiilor →");
+    var more = el("a", "st-back", tt("stats.fig.routes.full"));
     more.href = "#clasamente";
     f.foot.append(more);
-    f.foot.append(dataTable("Rute: cele mai întârziate și cele mai punctuale", ["Stație", "Listă", "N", "Medie", "Mediană", "% la timp"], rows));
+    f.foot.append(dataTable(tt("stats.fig.routes.table"), tt("stats.col.routes").split("|"), rows));
   }
 
   function trafficSection(d, boards) {
@@ -1106,75 +1087,69 @@
     var days = t.days || 0;
     var cats = [];
     for (var h = 0; h < 24; h++) cats.push(hh(h));
-    var f = figure({ title: "Când e gara cea mai aglomerată?", set: "traffic", wide: true, legend: legend(boards),
-      how: "câte călătorii sunt programate în fiecare oră, în medie pe o zi cu date (" + plural(days, "zi", "zile") +
-        "). Se numără toate călătoriile observate, cu sau fără întârziere citită." });
-    if (!days) { f.foot.append(el("p", "ss-empty", "Nicio călătorie pentru filtrele alese.")); return; }
-    columns(f.host, { cats: cats, unit: "pe zi", title: "Călătorii programate pe oră (medie pe zi)",
-      desc: "Coloane grupate: sosiri și plecări programate pe fiecare oră, medie pe zi.",
+    var f = figure({ title: tt("stats.fig.traffic"), key: "cand-e-gara-cea-mai-aglomerata", set: "traffic", wide: true, legend: legend(boards),
+      how: tt("stats.fig.traffic.how", { days: pl(days, "stats.w.day") }) });
+    if (!days) { f.foot.append(el("p", "ss-empty", tt("stats.empty.no_journeys_filters"))); return; }
+    columns(f.host, { cats: cats, unit: tt("stats.unit.per_day"), title: tt("stats.fig.traffic.chart"),
+      desc: tt("stats.fig.traffic.desc"),
       series: boards.map(function (b) {
         return { board: b, values: t[b].map(function (x) { return x / days; }),
-          tips: t[b].map(function (x, i) { return BOARD_PL[b] + ", " + hourRange(i) + ": " + x + " călătorii în " +
-            plural(days, "zi", "zile") + " (≈ " + nf.format(x / days) + " pe zi)"; }) };
+          tips: t[b].map(function (x, i) { return tt("stats.fig.traffic.tip", { board: BOARD_PL[b], hour: hourRange(i), x: x, days: pl(days, "stats.w.day"), avg: nf.format(x / days) }); }) };
       }) });
     var tot = boards.map(function (b) { return BOARD_PL[b] + ": " + t[b].reduce(function (a, x) { return a + x; }, 0); });
-    f.foot.append(nLine("Total călătorii observate — " + tot.join(" · ") + " (în " + plural(days, "zi", "zile") + " cu date)."));
+    f.foot.append(nLine(tt("stats.fig.traffic.total", { list: tot.join(" · "), days: pl(days, "stats.w.day") })));
     var rows = [];
     for (var i = 0; i < 24; i++) {
       var r = [hourRange(i)];
       boards.forEach(function (b) { r.push(t[b][i], nf.format(t[b][i] / days)); });
       rows.push(r);
     }
-    var cols = ["Ora programată"];
-    boards.forEach(function (b) { cols.push(BOARD_PL[b] + " (total)", BOARD_PL[b] + " (pe zi)"); });
-    f.foot.append(dataTable("Călătorii programate pe oră", cols, rows));
+    var cols = [tt("stats.col.sched_hour")];
+    boards.forEach(function (b) { cols.push(tt("stats.col.board_total", { board: BOARD_PL[b] }), tt("stats.col.board_perday", { board: BOARD_PL[b] })); });
+    f.foot.append(dataTable(tt("stats.fig.traffic.table"), cols, rows));
   }
 
   function platformsSection(d, boards) {
-    var pl = d.platforms || {};
+    var platf = d.platforms || {};
     var seen = {};
-    boards.forEach(function (b) { (pl[b].lines || []).forEach(function (x) { seen[x.line] = true; }); });
+    boards.forEach(function (b) { (platf[b].lines || []).forEach(function (x) { seen[x.line] = true; }); });
     var lineKeys = Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
-    var f = figure({ title: "Ce linii (peroane) se folosesc cel mai des?", set: "platforms", wide: true, legend: legend(boards),
-      how: "câte călătorii au avut fiecare linie, după ultima linie citită pe tabelă. Călătoriile fără linie citită " +
-        "sunt numărate separat („linie necitită”), nu ca linia 0." });
-    if (!lineKeys.length) { f.foot.append(el("p", "ss-empty", "Nicio linie citită pentru filtrele alese.")); }
+    var f = figure({ title: tt("stats.fig.platforms"), key: "ce-linii-peroane-se-folosesc-cel-m", set: "platforms", wide: true, legend: legend(boards),
+      how: tt("stats.fig.platforms.how") });
+    if (!lineKeys.length) { f.foot.append(el("p", "ss-empty", tt("stats.fig.platforms.none"))); }
     else {
       var cats = lineKeys.map(String);
       var by = {};
-      boards.forEach(function (b) { by[b] = {}; pl[b].lines.forEach(function (x) { by[b][x.line] = x.n; }); });
-      columns(f.host, { cats: cats, unit: "călătorii", title: "Călătorii pe linie",
-        desc: "Coloane grupate: câte sosiri și plecări au folosit fiecare linie.",
+      boards.forEach(function (b) { by[b] = {}; platf[b].lines.forEach(function (x) { by[b][x.line] = x.n; }); });
+      columns(f.host, { cats: cats, unit: tt("stats.unit.journeys"), title: tt("stats.fig.platforms.chart"),
+        desc: tt("stats.fig.platforms.desc"),
         series: boards.map(function (b) {
           return { board: b, values: cats.map(function (c) { return by[b][c] || 0; }),
-            tips: cats.map(function (c) { return BOARD_PL[b] + ", linia " + c + ": " + (by[b][c] || 0) + " călătorii"; }) };
+            tips: cats.map(function (c) { return tt("stats.fig.platforms.tip", { board: BOARD_PL[b], c: c, n: by[b][c] || 0 }); }) };
         }) });
-      var rows = cats.map(function (c) { var r = ["Linia " + c]; boards.forEach(function (b) { r.push(by[b][c] || 0); }); return r; });
-      var miss = ["Linie necitită"];
-      boards.forEach(function (b) { miss.push(pl[b].missing); });
+      var rows = cats.map(function (c) { var r = [tt("stats.fig.platforms.row", { c: c })]; boards.forEach(function (b) { r.push(by[b][c] || 0); }); return r; });
+      var miss = [tt("stats.fig.platforms.missing")];
+      boards.forEach(function (b) { miss.push(platf[b].missing); });
       rows.push(miss);
-      f.foot.append(dataTable("Călătorii pe linie", ["Linia"].concat(boards.map(function (b) { return BOARD_PL[b]; })), rows));
+      f.foot.append(dataTable(tt("stats.fig.platforms.chart"), [tt("stats.fig.platforms.col")].concat(boards.map(function (b) { return BOARD_PL[b]; })), rows));
     }
-    f.foot.append(nLine(boards.map(function (b) { return BOARD_PL[b] + ": " + pl[b].missing + " cu linie necitită"; }).join(" · ")));
+    f.foot.append(nLine(boards.map(function (b) { return tt("stats.fig.platforms.missing_n", { board: BOARD_PL[b], n: platf[b].missing }); }).join(" · ")));
   }
 
   function weatherSection(d) {
     var w = d.weather || {};
     var p = d.params;
-    var f = figure({ title: "Vremea și întârzierile", set: w.status === "ok" ? "weather" : null,
-      how: "compară întârzierea citită în grupe după vremea (model Open-Meteo, ±30 min față de ora programată). " +
-        "Arată doar o asociere." });
-    var note = warn(w.note || "Corelație, nu cauzalitate.");
+    var f = figure({ title: tt("stats.fig.weather"), key: "vremea-si-intarzierile", set: w.status === "ok" ? "weather" : null,
+      how: tt("stats.fig.weather.how") });
+    var note = warn(w.note || tt("stats.fig.weather.note"));
     note.classList.add("ss-weather-note");
     note.setAttribute("role", "note");
     f.foot.append(note);
     if (w.status !== "ok") {
       var box = el("div", "ss-collect");
-      box.append(el("p", "ss-collect-h", "Analiza meteo este în curs de adunare."));
-      box.append(el("p", null, plural(w.matched || 0, "călătorie are", "călătorii au") + " deja vremea asociată, în " +
-        plural(w.days || 0, "zi", "zile") + " (" + plural(w.observations || 0, "observație meteo", "observații meteo") +
-        "). Graficele apar după cel puțin " + (w.needed_days || 7) + " zile și minimum două grupe cu N ≥ " + p.min_sample +
-        " — altfel diferențele ar ține mai mult de ora din zi decât de vreme."));
+      box.append(el("p", "ss-collect-h", tt("stats.fig.weather.collecting")));
+      box.append(el("p", null, tt("stats.fig.weather.collecting_b", { matched: pl(w.matched || 0, "stats.w.journey_has"), days: pl(w.days || 0, "stats.w.day"),
+        obs: pl(w.observations || 0, "stats.w.weather_obs"), needed: w.needed_days || 7, min: p.min_sample })));
       f.host.append(box);
       return;
     }
@@ -1188,11 +1163,10 @@
       h.append(el("span", "ss-key " + BOARD_CLS[b]), document.createTextNode(BOARD_PL[b]));
       cell.append(h);
       if (wb[b].status !== "ok") {
-        cell.append(el("p", "ss-empty", "Încă în curs de adunare (" + plural(wb[b].matched || 0, "călătorie", "călătorii") +
-          " în " + plural(wb[b].days || 0, "zi", "zile") + ")."));
+        cell.append(el("p", "ss-empty", tt("stats.fig.weather.board_collecting", { journeys: pl(wb[b].matched || 0, "stats.w.journey"), days: pl(wb[b].days || 0, "stats.w.day") })));
         return;
       }
-      [["precip", "Precipitații"], ["temp", "Temperatură"]].forEach(function (dim) {
+      [["precip", tt("stats.weather.precip")], ["temp", tt("stats.weather.temp")]].forEach(function (dim) {
         var gs = (wb[b].groups && wb[b].groups[dim[0]]) || [];
         if (!gs.length) return;
         cell.append(el("h4", "ss-rank-h", dim[1]));
@@ -1201,19 +1175,18 @@
         weatherBars(host, b, dim, gs, rows);
       });
     });
-    f.foot.append(nLine("Sosirile și plecările sunt analizate separat; " +
-      plural(w.matched || 0, "călătorie", "călătorii") + " cu vremea asociată, în " + plural(w.days || 0, "zi", "zile") + "."));
-    f.foot.append(dataTable("Întârzierea după vreme", ["Panou, grupa", "N", "Medie", "Mediană", "% la timp"], rows));
+    f.foot.append(nLine(tt("stats.fig.weather.foot", { matched: pl(w.matched || 0, "stats.w.journey"), days: pl(w.days || 0, "stats.w.day") })));
+    f.foot.append(dataTable(tt("stats.fig.weather.table"), tt("stats.col.weather").split("|"), rows));
   }
 
   function weatherBars(cell, b, dim, gs, rows) {
     var mx = Math.max.apply(null, gs.map(function (g) { return g.mean || 0; }).concat([1]));
-    hbars(cell, { board: b, max: mx, title: "Întârzierea medie după " + dim[1].toLowerCase() + " — " + BOARD_PL[b],
-      desc: "Întârzierea medie citită pe grupe meteo.",
+    hbars(cell, { board: b, max: mx, title: tt("stats.fig.weather.bars", { dim: dim[1].toLowerCase(), board: BOARD_PL[b] }),
+      desc: tt("stats.fig.weather.bars_desc"),
       rows: gs.map(function (g) {
         return { label: g.label, value: g.sufficient ? g.mean : null, low: !g.sufficient,
           valueText: (g.sufficient ? minutes(g.mean) + " · " : "") + "N = " + g.n,
-          tip: "medie " + minutes(g.mean) + ", mediana " + minutes(g.median) + ", N = " + g.n };
+          tip: tt("stats.fig.weather.bar_tip", { mean: minutes(g.mean), median: minutes(g.median), n: g.n }) };
       }) });
     gs.forEach(function (g) {
       rows.push([BOARD_PL[b] + ", " + dim[1].toLowerCase() + ": " + g.label, g.n, minutes(g.mean), minutes(g.median), pct(g.on_time_pct)]);
@@ -1226,64 +1199,50 @@
     var st = q.states || {};
     var obs = q.observations || {};
     var ex = q.excluded || {};
-    var f = figure({ title: "Cât de bune sunt datele?", wide: true,
-      how: "câte călătorii au un rezultat sigur și cât de reușite au fost citirile automate (OCR) ale tabelei. " +
-        "Doar călătoriile încheiate cu întârzierea citită intră în statistici; „necunoscut” nu înseamnă 0." });
+    var f = figure({ title: tt("stats.fig.quality"), key: "cat-de-bune-sunt-datele", wide: true,
+      how: tt("stats.fig.quality.how") });
     var cells = multiples(f.host, 2);
     var nb = 0;
     function block(title, items, total, slots) {
       var cell = cells[nb++];
       cell.append(el("h3", "ss-mult-h", title));
-      if (!total) { cell.append(el("p", "ss-empty", "Nimic de numărat.")); return; }
+      if (!total) { cell.append(el("p", "ss-empty", tt("stats.fig.quality.nothing"))); return; }
       if (U()) {
-        U().donut(cell, { title: title, desc: title + ": numărători și părți din total.", valueUnit: "", showPct: total >= minS,
-          centerValue: nf.format(total), centerLabel: "în total",
+        U().donut(cell, { title: title, desc: tt("stats.fig.quality.block_desc", { title: title }), valueUnit: "", showPct: total >= minS,
+          centerValue: nf.format(total), centerLabel: tt("stats.fig.quality.in_total"),
           segments: items.map(function (x, i) { return { label: x[0], value: x[1], slot: slots[i] }; }) });
       } else {
-        hbars(cell, { board: "arrival", max: total, title: title, desc: title + ": numărători și procente din total.",
+        hbars(cell, { board: "arrival", max: total, title: title, desc: tt("stats.fig.quality.block_desc2", { title: title }),
           rows: items.map(function (x) { return { label: x[0], value: x[1], cls: "ss-neutral", valueText: nf.format(x[1]), tip: x[1] + " din " + total }; }) });
       }
-      cell.append(nLine("Total: " + nf.format(total)));
+      cell.append(nLine(tt("stats.fig.quality.total", { n: nf.format(total) })));
     }
     var jt = (st.confirmed || 0) + (st.unconfirmed || 0) + (st.unknown || 0) + (st.in_progress || 0);
-    block("Călătorii (rezultat)", ["confirmed", "unconfirmed", "unknown", "in_progress"].map(function (k) {
+    block(tt("stats.fig.quality.journeys"), ["confirmed", "unconfirmed", "unknown", "in_progress"].map(function (k) {
       return [STATE_TEXT[k], st[k] || 0]; }), jt, [1, 5, "mute", 4]);
     var ot = 0;
     Object.keys(obs).forEach(function (k) { ot += obs[k] || 0; });
-    block("Citiri OCR (observații)" + (q.counters_scope === "all" ? " — toți operatorii" : ""), ["ok", "uncertain", "rejected_low_conf", "incomplete"].map(function (k) {
+    block(tt("stats.fig.quality.ocr") + (q.counters_scope === "all" ? tt("stats.fig.quality.all_ops") : ""), ["ok", "uncertain", "rejected_low_conf", "incomplete"].map(function (k) {
       return [OBS_TEXT[k], obs[k] || 0]; }), ot, [1, 5, 2, "mute"]);
-    f.foot.append(nLine("Excluse din toate statisticile" + (q.counters_scope === "all" ? " (numărate pentru toți operatorii și tipurile)" : "") +
-      ": " + plural(ex.ghost || 0, "fantomă", "fantome") +
-      " (rânduri citite greșit, fără tren real) și " + (ex.low_quality || 0) +
-      " călătorii din perioada de calitate redusă (primele ore de funcționare, cu citirea veche). " +
-      (q.uncertain_names || 0) + " călătorii au numele stației sau al operatorului citit nesigur."));
-    f.foot.append(dataTable("Calitatea datelor", ["Categoria", "Număr"],
-      ["confirmed", "unconfirmed", "unknown", "in_progress"].map(function (k) { return ["Călătorii — " + STATE_TEXT[k], st[k] || 0]; })
-        .concat(["ok", "uncertain", "rejected_low_conf", "incomplete"].map(function (k) { return ["Observații — " + OBS_TEXT[k], obs[k] || 0]; }))
-        .concat([["Excluse — fantome", ex.ghost || 0], ["Excluse — calitate redusă", ex.low_quality || 0]])));
+    f.foot.append(nLine(tt("stats.fig.quality.excluded", { scope: q.counters_scope === "all" ? tt("stats.fig.quality.scope") : "",
+      ghost: pl(ex.ghost || 0, "stats.w.ghost"), low: ex.low_quality || 0, unc: q.uncertain_names || 0 })));
+    f.foot.append(dataTable(tt("stats.fig.quality.table"), tt("stats.col.quality").split("|"),
+      ["confirmed", "unconfirmed", "unknown", "in_progress"].map(function (k) { return [tt("stats.fig.quality.row_j", { s: STATE_TEXT[k] }), st[k] || 0]; })
+        .concat(["ok", "uncertain", "rejected_low_conf", "incomplete"].map(function (k) { return [tt("stats.fig.quality.row_o", { s: OBS_TEXT[k] }), obs[k] || 0]; }))
+        .concat([[tt("stats.fig.quality.row_ghost"), ex.ghost || 0], [tt("stats.fig.quality.row_low"), ex.low_quality || 0]])));
   }
 
   function glossary(d) {
     var p = d.params || {};
     var sec = el("section", "ss-glossary");
     sec.setAttribute("aria-labelledby", "ss-glos-h");
-    var h = el("h2", "ss-fig-title", "Glosar");
+    var h = el("h2", "ss-fig-title", tt("stats.gl.title"));
     h.id = "ss-glos-h";
     sec.append(h);
     var dl = el("dl", "ss-gl");
-    [["Întârziere citită", "Întârzierea afișată pe tabela CFR din București Nord, citită automat (OCR). Nu este ora reală de sosire sau plecare și nici întârzierea din alte stații."],
-     ["La timp", "Întârziere citită de cel mult " + p.on_time_max_min + " minute."],
-     ["Călătorie", "O apariție a unui tren pe un panou (sosiri sau plecări) într-o zi de serviciu. Un tren (număr) are de obicei câte o călătorie pe zi."],
-     ["Tren · călătorie · observație", "Tren = numărul trenului; călătorie = trenul într-o anumită zi; observație = o citire a tabelei (la fiecare câteva zeci de secunde), deci o călătorie are multe observații."],
-     ["Rezultat confirmat", "Trenul a dispărut de pe tabelă după ora estimată (programat + întârziere), iar întârzierea fusese citită cu cel mult " +
-       (p.final_read_max_gap_min || 15) + " min înainte."],
-     ["Rezultat neconfirmat", "Avem o întârziere citită, dar dispariția n-a fost observată la momentul potrivit (de ex. citirea tabelei a fost întreruptă). Intră în statistici, dacă nu bifezi „Doar rezultate confirmate”."],
-     ["Necunoscut", "Întârzierea nu a fost citită niciodată. Nu este tratată ca 0 și nu intră în statistici."],
-     ["N", "Numărul de călătorii încheiate cu întârziere citită din spatele unei cifre."],
-     ["Eșantion mic", "Sub " + p.min_sample + " călătorii: arătăm doar cifrele brute (medie, mediană, maxim), fără procente."],
-     ["Mediană · p90", "Mediana: jumătate dintre călătorii au întârziat mai puțin. p90: 90% au întârziat cel mult atât."],
-     ["Fantomă", "Un rând citit greșit de OCR care n-a corespuns unui tren real; exclus din tot."]].forEach(function (x) {
-      dl.append(el("dt", null, x[0]), el("dd", null, x[1]));
+    [["delay", {}], ["ontime", { max: p.on_time_max_min }], ["journey", {}], ["tjo", {}], ["confirmed", { gap: p.final_read_max_gap_min || 15 }],
+     ["unconfirmed", {}], ["unknown", {}], ["n", {}], ["small", { min: p.min_sample }], ["median", {}], ["ghost", {}]].forEach(function (x) {
+      dl.append(el("dt", null, tt("stats.gl." + x[0] + ".t")), el("dd", null, tt("stats.gl." + x[0] + ".d", x[1])));
     });
     sec.append(dl);
     v.ui.body.append(sec);
@@ -1293,6 +1252,8 @@
 
   var SEV_KEY = { "mare": "mare", "medie": "medie", "mică": "mica" };
   var LEVEL_KEY = { "insuficientă": "low", "parțială": "mid", "bună": "ok" };
+  var CONF_KEY = { "ridicată": "ridicata", "medie": "medie", "scăzută": "scazuta" };
+  function srv(map, prefix, val) { return map[val] ? tt(prefix + map[val]) : val; }   // known server words follow the language; anything else stays as sent
 
   function hashLink(l, cls) {
     var a = el("a", cls || "btn btn-ghost btn-sm ss-plink", l.label);
@@ -1317,28 +1278,22 @@
     box.setAttribute("role", "note");
     var top = el("p", "ss-cov-h");
     var span = c.first ? (c.first === c.last ? shortDay(c.first) : shortDay(c.first) + "–" + shortDay(c.last)) : "";
-    top.append(el("strong", null, "Acoperirea datelor: " + c.level),
-      document.createTextNode(" · " + plural(c.days || 0, "zi", "zile") + " de istoric" + (span ? " (" + span + ")" : "") +
-        "; tendințele cer cel puțin " + c.needed_days + " zile."));
+    top.append(el("strong", null, tt("stats.cov.title", { level: srv(LEVEL_KEY, "stats.level.", c.level) })),
+      document.createTextNode(tt("stats.cov.days", { days: pl(c.days || 0, "stats.w.day"), span: span ? " (" + span + ")" : "", n: c.needed_days })));
     box.append(top);
     var ul = el("ul", "ss-cov-list");
     if (c.partial && c.partial.length) {
-      ul.append(el("li", null, "Zile parțiale: " + c.partial.map(function (x) { return shortDay(x.date) + " (" + x.why + ")"; }).join("; ") + "."));
+      ul.append(el("li", null, tt("stats.cov.partial", { list: c.partial.map(function (x) { return shortDay(x.date) + " (" + x.why + ")"; }).join("; ") })));
     }
     if (c.gaps_count) {
       var longest = c.gaps.reduce(function (m, g) { return g.minutes > m.minutes ? g : m; }, c.gaps[0]);
-      ul.append(el("li", null, "Pauze în citirea tabelei (peste " + c.gap_threshold_min + " min): " + c.gaps_count +
-        ", în total " + c.gap_minutes + " min; cea mai lungă: " + shortDay(longest.start.slice(0, 10)) + " " +
-        longest.start.slice(11, 16) + "–" + longest.end.slice(11, 16) + " (" + longest.minutes + " min). Trenurile din pauze pot lipsi."));
+      ul.append(el("li", null, tt("stats.cov.gaps", { thr: c.gap_threshold_min, count: c.gaps_count, total: c.gap_minutes, min: longest.minutes,
+        when: shortDay(longest.start.slice(0, 10)) + " " + longest.start.slice(11, 16) + "–" + longest.end.slice(11, 16) })));
     } else {
-      ul.append(el("li", null, "Nicio pauză mai lungă de " + c.gap_threshold_min + " min în citirea tabelei."));
+      ul.append(el("li", null, tt("stats.cov.no_gaps", { thr: c.gap_threshold_min })));
     }
-    ul.append(el("li", null, "Rezultate: " + plural(c.finished || 0, "călătorie încheiată", "călătorii încheiate") + ", dintre care " +
-      (c.unconfirmed || 0) + " neconfirmate și " + (c.unknown || 0) + " cu întârzierea necunoscută (nu 0, nu intră în calcul); " +
-      (c.in_progress || 0) + " încă pe tabelă."));
-    ul.append(el("li", null, "Ce nu se poate concluziona încă: " + ((c.days || 0) < c.needed_days ? "tendința de la o zi la alta, " : "") +
-      "efectul vremii, schimbările de linie (citirea confundă cifre ca 5/6 sau 3/8) și „cel mai bun operator” — " +
-      "operatorii au rute diferite (corelație, nu cauzalitate)."));
+    ul.append(el("li", null, tt("stats.cov.results", { done: pl(c.finished || 0, "stats.w.journey_done"), unc: c.unconfirmed || 0, unk: c.unknown || 0, prog: c.in_progress || 0 })));
+    ul.append(el("li", null, tt("stats.cov.cannot", { trend: (c.days || 0) < c.needed_days ? tt("stats.cov.trend") : "" })));
     box.append(ul);
     return box;
   }
@@ -1353,12 +1308,12 @@
     head.append(t);
     li.append(head);
     var b = el("p", "ss-badges");
-    b.append(badge("Gravitate: " + it.severity, "ss-badge-sev"), badge("Încredere: " + it.confidence, "ss-badge-conf"),
+    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev"), badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf"),
       badge("N = " + it.n, "ss-badge-n"));
     li.append(b);
     li.append(el("p", "ss-prob-fig", it.figures));
     var why = el("p", "ss-prob-why");
-    why.append(el("strong", null, "De ce contează: "), document.createTextNode(it.why));
+    why.append(el("strong", null, tt("stats.prob.why")), document.createTextNode(it.why));
     li.append(why);
     if (it.links && it.links.length) {
       var links = el("div", "ss-prob-links");
@@ -1374,18 +1329,16 @@
     var sec = el("section", "ss-problems");
     sec.setAttribute("aria-labelledby", "ss-prob-h");
     var head = el("div", "ss-fig-head");
-    var h = el("h2", "ss-fig-title ss-prob-h1", "Probleme");
+    var h = el("h2", "ss-fig-title ss-prob-h1", tt("stats.fig.problems"));
     h.id = "ss-prob-h";
     head.append(h);
     sec.append(head);
-    sec.append(el("p", "ss-how", "Ce iese în evidență în întârzierile citite pe tabelă, clasat după gravitate × câte călătorii " +
-      "afectează × încrederea în cifre. Calcul determinist din date (fără AI). „La timp” = cel mult " + p.on_time_max_min +
-      " min; grupele se compară după mediană, nu după medie; sub " + p.min_sample + " călătorii nu apar procente."));
+    sec.append(el("p", "ss-how", tt("stats.fig.problems.how", { max: p.on_time_max_min, min: p.min_sample })));
     sec.append(coverageBox(pr.coverage, d));
     if (pr.status !== "ok") {
       sec.append(warn(pr.message));
     } else if (!pr.items.length) {
-      sec.append(el("p", "ss-empty", "Nicio problemă clară în datele filtrate."));
+      sec.append(el("p", "ss-empty", tt("stats.fig.problems.none")));
     } else {
       var ol = el("ol", "ss-prob-list");
       pr.items.forEach(function (it) { ol.append(problemItem(it)); });
@@ -1399,7 +1352,7 @@
     if (!good.length) return;
     var sec = el("section", "ss-good");
     sec.setAttribute("aria-labelledby", "ss-good-h");
-    var h = el("h2", "ss-fig-title", "Ce merge bine");
+    var h = el("h2", "ss-fig-title", tt("stats.fig.good"));
     h.id = "ss-good-h";
     sec.append(h);
     var ul = el("ul", "ss-good-list");
@@ -1410,13 +1363,10 @@
 
   function recurrentSection(d) {
     var pr = d.problems, rec = pr.recurrent, p = d.params;
-    var f = figure({ title: "Ce trenuri întârzie zi de zi?", wide: true,
-      how: "un tren intră aici dacă a fost văzut în cel puțin " + rec.min_days + " zile și a întârziat (peste " +
-        p.on_time_max_min + " min) în fiecare dintre ele (de la 5 zile, una poate lipsi). Pentru un tren avem doar câteva " +
-        "zile, deci arătăm cifrele brute pe zile, nu procente." });
+    var f = figure({ title: tt("stats.fig.recurrent"), key: "ce-trenuri-intarzie-zi-de-zi", wide: true,
+      how: tt("stats.fig.recurrent.how", { days: rec.min_days, max: p.on_time_max_min }) });
     if (!rec.count) {
-      f.host.append(el("p", "ss-empty", "Niciun tren întârziat în toate zilele în care a fost văzut (" +
-        plural(rec.seen, "tren văzut", "trenuri văzute") + " în cel puțin " + rec.min_days + " zile)."));
+      f.host.append(el("p", "ss-empty", tt("stats.fig.recurrent.none", { seen: pl(rec.seen, "stats.w.train_seen"), days: rec.min_days })));
       return;
     }
     var ul = el("ul", "ss-ptrains");
@@ -1424,32 +1374,28 @@
       var li = el("li", "ss-ptrain");
       var top = el("div", "ss-ptrain-top");
       top.append(hashLink({ label: t.train_type + " " + t.train_no, href: "#tren?nr=" + t.train_no }, "ss-ptrain-no"),
-        el("span", "ss-ptrain-route", (t.board === "arrival" ? "din " : "spre ") + S.titleCase(t.station) + " · " + t.sched_time),
+        el("span", "ss-ptrain-route", (t.board === "arrival" ? tt("stats.fig.recurrent.from") : tt("stats.fig.recurrent.to")) + S.titleCase(t.station) + " · " + t.sched_time),
         el("span", "ss-ptrain-board", BOARD_PL[t.board]));
       li.append(top);
-      li.append(el("p", "ss-ptrain-stat", t.late_days + " din " + t.days + " zile întârziat · " + t.over_15_days +
-        " peste 15 min · mediana " + minutes(t.median) + " · maxim " + minutes(t.max)));
+      li.append(el("p", "ss-ptrain-stat", tt("stats.fig.recurrent.stat", { late: t.late_days, days: t.days, o15: t.over_15_days, median: minutes(t.median), max: minutes(t.max) })));
       if (U()) {
         var sp = el("div", "ss-ptrain-spark");
         sp.append(U().spark(t.delays.map(function (x) { return x.delay; }), { tone: "bad",
-          label: "Întârzierea pe zile, " + t.train_type + " " + t.train_no + ": " + t.delays.map(function (x) { return x.delay + " min"; }).join(", ") }));
+          label: tt("stats.fig.recurrent.spark", { train: t.train_type + " " + t.train_no, list: t.delays.map(function (x) { return minutes(x.delay); }).join(", ") }) }));
         li.append(sp);
       }
       li.append(el("p", "ss-ptrain-days", t.delays.map(function (x) { return shortDay(x.date) + ": " + x.delay + " min"; }).join(" · ")));
       ul.append(li);
     });
     f.host.append(ul);
-    f.foot.append(nLine("Afișate " + rec.trains.length + " din " + plural(rec.count, "tren", "trenuri") + " întârziate în fiecare zi; " +
-      rec.over_15_every_day + " au depășit 15 min în fiecare zi; " + plural(rec.seen, "tren văzut", "trenuri văzute") +
-      " în cel puțin " + rec.min_days + " zile."));
+    f.foot.append(nLine(tt("stats.fig.recurrent.foot", { shown: rec.trains.length, count: pl(rec.count, "stats.w.train"), o15: rec.over_15_every_day,
+      seen: pl(rec.seen, "stats.w.train_seen"), days: rec.min_days })));
   }
 
   function windowsSection(d, boards) {
     var pr = d.problems, p = d.params;
-    var f = figure({ title: "La ce ore și în ce zile se adună întârzierile?", wide: true,
-      how: "fiecare bară este o fereastră de 3 ore (ora programată) și arată ce procent din călătorii au întârziat peste " +
-        "15 min. „Critică” = mult peste restul panoului și în cel puțin 2 zile diferite. Un „episod” e o singură zi " +
-        "cu multe întârzieri peste 30 min — un incident, nu un tipar." });
+    var f = figure({ title: tt("stats.fig.windows"), key: "la-ce-ore-si-in-ce-zile-se-aduna-i", wide: true,
+      how: tt("stats.fig.windows.how") });
     var cells = multiples(f.host, boards.length);
     boards.forEach(function (b, bi) {
       var cell = cells[bi];
@@ -1457,29 +1403,29 @@
       h.append(boardKey(b), document.createTextNode(BOARD_PL[b]));
       cell.append(h);
       var ws = pr.windows[b] || [];
-      hbars(cell, { board: b, max: 100, title: "Întârzieri peste 15 min pe ferestre de 3 ore — " + BOARD_PL[b],
-        desc: "Procentul călătoriilor cu peste 15 min, pe fereastra orei programate; fără bară = eșantion mic.",
+      hbars(cell, { board: b, max: 100, title: tt("stats.fig.windows.bars", { board: BOARD_PL[b] }),
+        desc: tt("stats.fig.windows.bars_desc"),
         rows: ws.map(function (w) {
           return { label: w.label, value: w.over_15_pct, low: !w.sufficient,
             valueText: (w.critical ? "! " : "") + (w.sufficient ? pct(w.over_15_pct) + " · " + w.over_15 + "/" + w.n : (w.n ? w.over_15 + "/" + w.n + " (N < " + p.min_sample + ")" : "N = 0")),
-            tip: w.over_15 + " din " + w.n + " peste 15 min" + (w.critical ? " — fereastră critică" : "") + ", în " + w.late_days + " din " + w.days + " zile" };
+            tip: tt("stats.fig.windows.tip", { o15: w.over_15, n: w.n, crit: w.critical ? tt("stats.fig.windows.crit") : "", late: w.late_days, days: w.days }) };
         }) });
       var crit = ws.filter(function (w) { return w.critical; });
-      cell.append(nLine(crit.length ? "Critice (marcate cu „!”): " + crit.map(function (w) { return w.label; }).join(", ") + "." :
-        "Nicio fereastră critică."));
+      cell.append(nLine(crit.length ? tt("stats.fig.windows.crit_list", { list: crit.map(function (w) { return w.label; }).join(", ") }) :
+        tt("stats.fig.windows.no_crit")));
     });
     var eps = pr.episodes || [];
-    var eh = el("h3", "ss-rank-h", "Episoade de o zi");
+    var eh = el("h3", "ss-rank-h", tt("stats.fig.windows.episodes"));
     f.foot.append(eh);
     if (!eps.length) {
-      f.foot.append(el("p", "ss-empty", "Niciun episod (o zi cu cel puțin 3 întârzieri peste 30 min într-o fereastră de 3 ore, de două ori peste rata obișnuită)."));
+      f.foot.append(el("p", "ss-empty", tt("stats.fig.windows.no_episode")));
     } else {
       var ul = el("ul", "ss-episodes");
       eps.forEach(function (e) {
         var li = el("li");
         li.append(hashLink({ label: shortDay(e.date) + ", " + e.label, href: "#istoric?date=" + e.date + "&board=" + e.board }, "ss-ep-link"),
-          document.createTextNode(" — " + BOARD_PL[e.board].toLowerCase() + ": " + e.over_30 + " din " + e.n + " peste 30 min (de obicei " +
-            pct(e.base_pct) + "), " + plural(e.stations, "direcție", "direcții") + ", " + e.unconfirmed + " neconfirmate."));
+          document.createTextNode(tt("stats.fig.windows.ep", { board: BOARD_PL[e.board].toLowerCase(), o30: e.over_30, n: e.n, base: pct(e.base_pct),
+            dirs: pl(e.stations, "stats.w.direction"), unc: e.unconfirmed })));
         ul.append(li);
       });
       f.foot.append(ul);
@@ -1488,15 +1434,14 @@
 
   function compareSection(d, boards) {
     var pr = d.problems, p = d.params;
-    var f = figure({ title: "Sosiri și plecări, față în față",
-      how: "aceleași măsuri pe cele două panouri. La sosiri întârzierea s-a acumulat pe drum; la plecări tabela arată " +
-        "întârzierea anunțată înainte de plecare, nu ora reală." });
+    var f = figure({ title: tt("stats.fig.compare"), key: "sosiri-si-plecari-fata-in-fata",
+      how: tt("stats.fig.compare.how") });
     var t = el("table", "ss-cmp");
-    var cap = el("caption", "sr-only", "Sosiri și plecări");
+    var cap = el("caption", "sr-only", tt("stats.share.arr_dep"));
     t.append(cap);
     var thead = el("thead");
     var hr = el("tr");
-    hr.append(el("th", null, "Măsura"));
+    hr.append(el("th", null, tt("stats.fig.compare.measure")));
     boards.forEach(function (b) { var th = el("th"); th.append(boardKey(b), document.createTextNode(BOARD_PL[b])); th.scope = "col"; hr.append(th); });
     thead.append(hr);
     t.append(thead);
@@ -1509,12 +1454,12 @@
       boards.forEach(function (b) { r.append(el("td", null, fn(pr.boards[b]))); });
       tb.append(r);
     }
-    row("La timp", function (s) { return s.n ? s.on_time + " din " + s.n + (s.on_time_pct != null ? " (" + pct(s.on_time_pct) + ")" : "") : "—"; });
-    row("Mediană", function (s) { return minutes(s.median); });
-    row("Peste 15 min", function (s) { return s.n ? String(s.over_15) : "—"; });
-    row("Peste 30 min", function (s) { return s.n ? String(s.over_30) : "—"; });
-    row("Peste 60 min", function (s) { return s.n ? String(s.over_60) : "—"; });
-    row("Trenuri · zile", function (s) { return s.trains + " · " + s.days; });
+    row(tt("stats.fig.compare.ontime"), function (s) { return s.n ? tt("stats.fig.compare.of", { a: s.on_time, n: s.n }) + (s.on_time_pct != null ? " (" + pct(s.on_time_pct) + ")" : "") : "—"; });
+    row(tt("stats.kpi.median"), function (s) { return minutes(s.median); });
+    row(tt("stats.fig.compare.over15"), function (s) { return s.n ? String(s.over_15) : "—"; });
+    row(tt("stats.kpi.over30"), function (s) { return s.n ? String(s.over_30) : "—"; });
+    row(tt("stats.fig.compare.over60"), function (s) { return s.n ? String(s.over_60) : "—"; });
+    row(tt("stats.fig.compare.trains_days"), function (s) { return s.trains + " · " + s.days; });
     t.append(tb);
     var wrap = el("div", "ss-cmp-wrap");
     wrap.append(t);
@@ -1522,30 +1467,29 @@
     boards.forEach(function (b) {
       var m = pr.boards[b].mix;
       if (m) {
-        f.foot.append(nLine(BOARD_PL[b] + ": " + S.titleCase(m.station) + " trage cifra " + (m.on_time_pct > m.rest_on_time_pct ? "în sus" : "în jos") +
-          " (" + m.on_time + " din " + m.n + " la timp, " + pct(m.on_time_pct) + "); fără ea: " + m.rest_on_time + " din " + m.rest_n +
-          " (" + pct(m.rest_on_time_pct) + ")."));
+        f.foot.append(nLine(tt("stats.fig.compare.mix", { board: BOARD_PL[b], station: S.titleCase(m.station),
+          dir: m.on_time_pct > m.rest_on_time_pct ? tt("stats.fig.compare.up") : tt("stats.fig.compare.down"), a: m.on_time, n: m.n, pct: pct(m.on_time_pct),
+          ra: m.rest_on_time, rn: m.rest_n, rpct: pct(m.rest_on_time_pct) })));
       }
     });
-    f.foot.append(nLine("N = călătorii încheiate cu întârziere citită; „la timp” ≤ " + p.on_time_max_min + " min."));
+    f.foot.append(nLine(tt("stats.fig.compare.foot", { max: p.on_time_max_min })));
   }
 
   function bigSection(d, boards) {
     var pr = d.problems;
-    var f = figure({ title: "Cât de des apar întârzieri foarte mari?",
-      how: "numărul călătoriilor cu peste 30 și peste 60 de minute și cele mai mari cazuri. „Neconfirmat” = trenul a " +
-        "dispărut de pe tabelă înainte de ora estimată, deci cifra e orientativă." });
+    var f = figure({ title: tt("stats.fig.big"), key: "cat-de-des-apar-intarzieri-foarte-",
+      how: tt("stats.fig.big.how") });
     boards.forEach(function (b) {
       var g = pr.big[b];
       var h = el("h3", "ss-mult-h");
-      h.append(boardKey(b), document.createTextNode(BOARD_PL[b] + ": " + g.over_30 + " peste 30 min, " + g.over_60 + " peste 60 min (N = " + g.n + ")"));
+      h.append(boardKey(b), document.createTextNode(tt("stats.fig.big.head", { board: BOARD_PL[b], o30: g.over_30, o60: g.over_60, n: g.n })));
       f.host.append(h);
-      if (!g.top.length) { f.host.append(el("p", "ss-empty", "Niciuna peste 30 min.")); return; }
+      if (!g.top.length) { f.host.append(el("p", "ss-empty", tt("stats.fig.big.none"))); return; }
       var ol = el("ol", "ss-rank");
       g.top.forEach(function (x) {
         var li = el("li");
         li.append(hashLink({ label: x.train_type + " " + x.train_no, href: "#tren?nr=" + x.train_no }, "ss-rank-link"),
-          el("span", null, S.titleCase(x.station) + ", " + shortDay(x.date) + " " + x.sched_time + (x.state === "unconfirmed" ? " (neconfirmat)" : "")),
+          el("span", null, S.titleCase(x.station) + ", " + shortDay(x.date) + " " + x.sched_time + (x.state === "unconfirmed" ? tt("stats.fig.big.unconfirmed") : "")),
           el("span", "ss-rank-v", minutes(x.delay)));
         ol.append(li);
       });
@@ -1555,82 +1499,77 @@
 
   function problemRoutesSection(d, boards) {
     var pr = d.problems, p = d.params;
-    var f = figure({ title: "Ce direcții au cele mai multe întârzieri?",
-      how: "stația de origine (sosiri) sau de destinație (plecări), ordonate după mediană. Intră doar cele cu cel puțin " +
-        p.min_sample + " călătorii și cel puțin 2 trenuri diferite (altfel ar fi un singur tren, nu o direcție)." });
+    var f = figure({ title: tt("stats.fig.proutes"), key: "ce-directii-au-cele-mai-multe-inta",
+      how: tt("stats.fig.proutes.how", { min: p.min_sample }) });
     boards.forEach(function (b) {
       var r = pr.routes[b];
       var h = el("h3", "ss-mult-h");
-      h.append(boardKey(b), document.createTextNode(BOARD_PL[b] + (b === "arrival" ? " — din" : " — spre")));
+      h.append(boardKey(b), document.createTextNode(BOARD_PL[b] + (b === "arrival" ? tt("stats.dir.from") : tt("stats.dir.to"))));
       f.host.append(h);
       var list = (r.worst || []).filter(function (x) { return x.median > p.on_time_max_min; });
       if (!list.length) {
-        f.host.append(el("p", "ss-empty", r.eligible ? "Nicio direcție cu mediana peste " + p.on_time_max_min + " min." :
-          "Date insuficiente: nicio direcție cu destule călătorii."));
+        f.host.append(el("p", "ss-empty", r.eligible ? tt("stats.fig.proutes.none", { max: p.on_time_max_min }) :
+          tt("stats.fig.proutes.insufficient")));
       } else {
         var ol = el("ol", "ss-rank");
         list.forEach(function (x) {
           var li = el("li");
           li.append(hashLink({ label: S.titleCase(x.key), href: "#statie?nume=" + encodeURIComponent(x.key) + "&board=" + b }, "ss-rank-link"),
-            el("span", "ss-rank-n", x.on_time + " din " + x.n + " la timp · " + plural(x.trains, "tren", "trenuri")),
-            el("span", "ss-rank-v", "mediana " + minutes(x.median)));
+            el("span", "ss-rank-n", tt("stats.fig.proutes.row", { a: x.on_time, n: x.n, trains: pl(x.trains, "stats.w.train") })),
+            el("span", "ss-rank-v", tt("stats.fig.proutes.median", { v: minutes(x.median) })));
           ol.append(li);
         });
         f.host.append(ol);
       }
-      f.host.append(nLine(r.eligible + " direcții comparabile · " + r.single_train + " cu un singur tren · " + r.below_min +
-        " cu sub " + p.min_sample + " călătorii (date insuficiente)."));
+      f.host.append(nLine(tt("stats.fig.proutes.foot", { elig: r.eligible, single: r.single_train, below: r.below_min, min: p.min_sample })));
     });
   }
 
   function growthSection(d, boards) {
     var pr = d.problems, p = d.params;
-    var f = figure({ title: "Crește întârzierea după primul anunț?",
-      how: "pentru călătoriile la care tabela a afișat la un moment dat o întârziere (peste 0): comparăm prima valoare " +
-        "afișată cu cea finală. Doar citiri confirmate; citirile greșite (de ex. „+” citit „4”) sunt scoase." });
+    var f = figure({ title: tt("stats.fig.growth"), key: "creste-intarzierea-dupa-primul-anu",
+      how: tt("stats.fig.growth.how") });
     var cells = multiples(f.host, boards.length);
     boards.forEach(function (b, bi) {
       var g = pr.growth[b], cell = cells[bi];
       var h = el("h3", "ss-mult-h");
       h.append(boardKey(b), document.createTextNode(BOARD_PL[b] + " (N = " + g.n + ")"));
       cell.append(h);
-      if (!g.n) { cell.append(el("p", "ss-empty", "Nicio întârziere anunțată.")); return; }
-      hbars(cell, { board: b, max: g.n, title: "Prima întârziere anunțată față de cea finală — " + BOARD_PL[b],
-        desc: "Câte au crescut, au rămas la fel sau au scăzut după primul anunț.",
-        rows: [["a crescut", g.grew, g.grew_median != null ? "mediana +" + nf.format(g.grew_median) + " min" : ""],
-               ["la fel", g.same, ""], ["a scăzut", g.recovered, g.recovered_median != null ? "mediana −" + nf.format(g.recovered_median) + " min" : ""]]
+      if (!g.n) { cell.append(el("p", "ss-empty", tt("stats.fig.growth.none"))); return; }
+      hbars(cell, { board: b, max: g.n, title: tt("stats.fig.growth.bars", { board: BOARD_PL[b] }),
+        desc: tt("stats.fig.growth.bars_desc"),
+        rows: [[tt("stats.fig.growth.grew"), g.grew, g.grew_median != null ? tt("stats.fig.growth.median_up", { v: nf.format(g.grew_median) }) : ""],
+               [tt("stats.fig.growth.same"), g.same, ""], [tt("stats.fig.growth.fell"), g.recovered, g.recovered_median != null ? tt("stats.fig.growth.median_down", { v: nf.format(g.recovered_median) }) : ""]]
           .map(function (x) {
             return { label: x[0], value: x[1], low: !g.sufficient,
               valueText: x[1] + (g.sufficient ? " (" + nf.format(Math.round(1000 * x[1] / g.n) / 10) + " %)" : ""),
-              tip: x[1] + " din " + g.n + (x[2] ? ", " + x[2] : "") };
+              tip: tt("stats.fig.growth.tip", { a: x[1], n: g.n, extra: x[2] ? ", " + x[2] : "" }) };
           }) });
-      if (!g.sufficient) cell.append(warn("Eșantion mic (N = " + g.n + " < " + p.min_sample + "): doar cifre brute."));
+      if (!g.sufficient) cell.append(warn(tt("stats.warn.small_raw2", { n: g.n, min: p.min_sample })));
     });
   }
 
   function trendSection(d, boards) {
     var tr = d.problems.trend, p = d.params;
-    var f = figure({ title: "Se îmbunătățește sau se înrăutățește?",
-      how: "punctualitatea pe fiecare zi de serviciu. O tendință se trage abia cu cel puțin " + tr.needed_days +
-        " zile de istoric; zilele parțiale (ziua în curs, ore excluse, pauze lungi de citire) nu intră în comparație." });
+    var f = figure({ title: tt("stats.fig.trend"), key: "se-imbunatateste-sau-se-inrautates",
+      how: tt("stats.fig.trend.how", { n: tr.needed_days }) });
     if (tr.status !== "ok") {
-      f.host.append(warn("Istoric insuficient: " + tr.days + " din " + tr.needed_days + " zile. Nu tragem încă o concluzie " +
-        "despre creștere sau scădere — mai jos sunt doar cifrele brute pe zile."));
+      f.host.append(warn(tt("stats.fig.trend.insufficient", { days: tr.days, n: tr.needed_days })));
     } else {
       boards.forEach(function (b) {
         var dir = tr.direction[b];
-        f.host.append(nLine(BOARD_PL[b] + ": " + (dir ? dir.label + " (" + (dir.diff_pp > 0 ? "+" : "") + nf.format(dir.diff_pp) +
-          " puncte procentuale la timp, a doua jumătate față de prima)" : "prea puține zile complete pentru o comparație")));
+        f.host.append(nLine(dir ? tt("stats.fig.trend.dir", { board: BOARD_PL[b], label: dir.label, sign: dir.diff_pp > 0 ? "+" : "", diff: nf.format(dir.diff_pp) })
+          : tt("stats.fig.trend.few", { board: BOARD_PL[b] })));
       });
     }
     var byDate = {};
     boards.forEach(function (b) { (tr.boards[b] || []).forEach(function (r) { (byDate[r.date] = byDate[r.date] || {})[b] = r; }); });
     var dates = Object.keys(byDate).sort();
     var t = el("table", "ss-cmp ss-trend");
-    t.append(el("caption", "sr-only", "Punctualitatea pe zile"));
+    t.append(el("caption", "sr-only", tt("stats.punctuality_by_day")));
     var hr = el("tr");
-    hr.append(el("th", null, "Ziua"));
-    boards.forEach(function (b) { var th = el("th"); th.scope = "col"; th.append(boardKey(b), document.createTextNode(BOARD_PL[b] + " la timp")); hr.append(th); });
+    hr.append(el("th", null, tt("stats.col.day")));
+    boards.forEach(function (b) { var th = el("th"); th.scope = "col"; th.append(boardKey(b), document.createTextNode(tt("stats.fig.trend.board_ontime", { board: BOARD_PL[b] }))); hr.append(th); });
     var thead = el("thead");
     thead.append(hr);
     t.append(thead);
@@ -1638,12 +1577,12 @@
     dates.forEach(function (k) {
       var r = el("tr");
       var partial = boards.some(function (b) { return byDate[k][b] && byDate[k][b].partial; });
-      var th = el("th", null, shortDay(k) + (partial ? " (parțială)" : ""));
+      var th = el("th", null, shortDay(k) + (partial ? tt("stats.fig.trend.partial") : ""));
       th.scope = "row";
       r.append(th);
       boards.forEach(function (b) {
         var x = byDate[k][b];
-        r.append(el("td", null, x ? x.on_time + " din " + x.n + (x.on_time_pct != null ? " (" + pct(x.on_time_pct) + ")" : "") : "—"));
+        r.append(el("td", null, x ? tt("stats.fig.compare.of", { a: x.on_time, n: x.n }) + (x.on_time_pct != null ? " (" + pct(x.on_time_pct) + ")" : "") : "—"));
       });
       tb.append(r);
     });
@@ -1651,7 +1590,7 @@
     var wrap = el("div", "ss-cmp-wrap");
     wrap.append(t);
     f.foot.append(wrap);
-    f.foot.append(nLine("Sub " + p.min_sample + " călătorii pe zi: fără procent."));
+    f.foot.append(nLine(tt("stats.fig.trend.foot", { min: p.min_sample })));
   }
 
   function resetFilters() {
@@ -1668,11 +1607,11 @@
     var boards = boardsOf(d);
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
-      var msg = "Nu există încă date pentru filtrele alese. Încearcă „Tot istoricul” sau alt operator.";
+      var msg = tt("stats.empty.none");
       var filtered = !!(v.p && (v.p.perioada !== "all" || v.p.board || v.p.operator || v.p.tip || v.p.doar_confirmate));
       if (U() && U().empty) {
-        v.ui.body.append(U().empty({ art: "search", title: "Nicio călătorie de arătat", text: msg,
-          action: filtered ? { label: "Șterge filtrele", run: resetFilters } : null }));
+        v.ui.body.append(U().empty({ art: "search", title: tt("stats.empty.title"), text: msg,
+          action: filtered ? { label: tt("stats.empty.clear"), run: resetFilters } : null }));
       } else v.ui.body.append(el("p", "empty ss-empty", msg));
       glossary(d);
       return;
@@ -1681,7 +1620,7 @@
       problemsSection(d);
       goodSection(d);
       if (d.problems.status === "ok") {
-        sectionHeading("Problemele în detaliu", "Trenurile, orele, zilele și direcțiile din spatele listei de mai sus.");
+        sectionHeading(tt("stats.part.details"), tt("stats.part.details_sub"));
         recurrentSection(d);
         windowsSection(d, boards);
         compareSection(d, boards);
@@ -1691,7 +1630,7 @@
         if (App.statSteps) App.statSteps.render(d, boards, { el: el, nf: nf, figure: figure, multiples: multiples, hbars: hbars, nLine: nLine, warn: warn, boardKey: boardKey, hashLink: hashLink, dataTable: dataTable });
         trendSection(d, boards);
       }
-      sectionHeading("Grafice de detaliu", "Toate cifrele, pe întrebări: distribuție, zile, ore, operatori, rute, linii, vreme și calitatea datelor.");
+      sectionHeading(tt("stats.part.charts"), tt("stats.part.charts_sub"));
     }
     if (d.coverage.journeys && U()) heroStrip(d, boards);
     summary(d);
@@ -1703,13 +1642,10 @@
     hourlySection(d, boards);
     heatmapSection(d, boards);
     if (App.statWeekdays) App.statWeekdays.section(d, boards, { figure: figure, el: el, nLine: nLine });
-    rankedSection(d, boards, "operators", "Care operatori sunt cei mai punctuali?",
-      "fiecare rând este un operator, cum apare scris pe tabelă; bara arată ce procent din călătoriile lui au fost " +
-      "la timp. Operatorii cu prea puține călătorii apar fără bară, doar cu N.", "operators", "Operator");
-    rankedSection(d, boards, "types", "Ce tipuri de tren sunt mai punctuale?",
-      "R = Regio, RM = Regio Metropolitan, RE = Regio Expres, IR = InterRegio, IRN = InterRegio de noapte, " +
-      "IC = InterCity (tipul afișat pe " +
-      "tabelă). Bara = procentul la timp; fără bară = eșantion mic.", "types", "Tip de tren");
+    rankedSection(d, boards, "operators", tt("stats.fig.operators"), tt("stats.fig.operators.how"), "operators", tt("stats.share.operator"),
+      "care-operatori-sunt-cei-mai-punctu");
+    rankedSection(d, boards, "types", tt("stats.fig.types"), tt("stats.fig.types.how"), "types", tt("stats.filters.train_type"),
+      "ce-tipuri-de-tren-sunt-mai-punctua");
     routesSection(d, boards);
     weatherSection(d);
     trafficSection(d, boards);
@@ -1726,6 +1662,17 @@
       C3().toc(v.ui.body);
     }
   }
+
+  // RO/EN switch: the filter labels and every chart are drawn again in the new language
+  document.addEventListener("i18n:change", function () {
+    if (!v.ui) return;
+    var p = v.p, wasShown = !!($("view-statistici") && !$("view-statistici").hidden);
+    v.ui = null;
+    v.data = null;
+    v.key = null;
+    if (v.ctrl) { v.ctrl.abort(); v.ctrl = null; }
+    if (wasShown && p) show(new URLSearchParams(query(p)));
+  });
 
   App.views.statistici = { show: show };
 })();

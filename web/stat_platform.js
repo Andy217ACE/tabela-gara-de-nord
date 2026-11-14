@@ -13,12 +13,16 @@
   var S = App.stats;
   var el = App.el;
   var API = "/api/stats/platform-changes";
-  var BOARD_PL = { arrival: "Sosiri", departure: "Plecări" };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
+  var BOARD_PL = {};   // getters: the text follows the language chosen at the time it is read
+  ["arrival", "departure"].forEach(function (k) {
+    Object.defineProperty(BOARD_PL, k, { enumerable: true, get: function () { return tt("stats.board." + k); } });
+  });
   var cache = { key: null, at: 0, data: null };
   var TTL = 60000;
 
   function num(v) { return v == null ? "—" : S.numFmt.format(v); }
-  function pct(v) { return v == null ? "—" : S.numFmt.format(v) + " %"; }
+  function pct(v) { return v == null ? "—" : tt("stats.fmt.pct", { v: S.numFmt.format(v) }); }
 
   function table(caption, cols, rows) {
     var wrap = el("div", "ss-cmp-wrap");
@@ -45,69 +49,63 @@
     return wrap;
   }
 
-  function pairText(p) { return "peron " + p.from + " → " + p.to; }
+  function pairText(p) { return tt("stats.pc.pair", { a: p.from, b: p.to }); }
 
   function fill(sec, d) {
     sec.replaceChildren();
-    var h = el("h2", "ss-fig-title", "Peroane schimbate după anunț");
+    var h = el("h2", "ss-fig-title", tt("stats.pc.title"));
     var head = el("div", "ss-fig-head");
     head.append(h);
     sec.append(head);
     var how = el("p", "ss-how");
-    how.append(el("strong", null, "Cum se citește: "), document.createTextNode(
-      "un tren e „schimbat” când panoul i-a afișat cel puțin două peroane diferite (de exemplu 6 apoi 4). " +
-      "Se numără doar serviciile cu un peron citit; valorile care nu sunt un peron real (1–" + d.platform_max +
-      ") sunt citiri greșite și se ignoră."));
+    how.append(el("strong", null, tt("stats.how_label")), document.createTextNode(
+      tt("stats.pc.how", { max: d.platform_max })));
     sec.append(how);
     if (!d.n_with_platform) {
-      sec.append(el("p", "ss-n", "Nu există încă servicii cu peron citit pentru filtrele alese."));
+      sec.append(el("p", "ss-n", tt("stats.pc.none")));
       return;
     }
-    var line = num(d.n_changed) + " din " + num(d.n_with_platform) + " servicii cu peron și-au schimbat peronul" +
-      (d.pct_changed != null ? " (" + pct(d.pct_changed) + ")." : ".");
+    var line = tt("stats.pc.line", { a: num(d.n_changed), n: num(d.n_with_platform), pct: d.pct_changed != null ? " (" + pct(d.pct_changed) + ")." : "." });
     sec.append(el("p", "ss-n", line));
     Object.keys(BOARD_PL).forEach(function (b) {
       var x = d.boards && d.boards[b];
-      if (x && x.n) sec.append(el("p", "ss-n", BOARD_PL[b] + ": " + num(x.changed) + " din " + num(x.n) +
-        (x.pct != null ? " (" + pct(x.pct) + ")" : " — fără procent, eșantion mic")));
+      if (x && x.n) sec.append(el("p", "ss-n", tt("stats.pc.board", { board: BOARD_PL[b], a: num(x.changed), n: num(x.n), pct: x.pct != null ? " (" + pct(x.pct) + ")" : tt("stats.pc.no_pct") })));
     });
     if (d.small_sample) {
-      sec.append(el("p", "st-warn ss-warn", "Date puține (N = " + d.n_with_platform + ", schimbări = " +
-        d.n_changed + "): cifrele sunt orientative și se pot schimba mult pe măsură ce se adună istoric."));
+      sec.append(el("p", "st-warn ss-warn", tt("stats.pc.few", { n: d.n_with_platform, c: d.n_changed })));
     }
     if (d.pairs.length) {
-      sec.append(el("h3", "ss-sub-title", "Cele mai frecvente schimbări"));
-      sec.append(table("Perechi de peroane din → în", ["Schimbare", "Cazuri"],
+      sec.append(el("h3", "ss-sub-title", tt("stats.pc.common")));
+      sec.append(table(tt("stats.pc.pairs_t"), tt("stats.pc.pairs_c").split("|"),
         d.pairs.map(function (p) { return [pairText(p), num(p.n)]; })));
     }
     if (d.trains.length) {
-      sec.append(el("h3", "ss-sub-title", "Trenuri care își schimbă peronul"));
-      sec.append(table("Trenuri cu peron schimbat", ["Tren", "Stația", "Schimbat / văzut", "Cea mai frecventă"],
+      sec.append(el("h3", "ss-sub-title", tt("stats.pc.trains_h")));
+      sec.append(table(tt("stats.pc.trains_t"), tt("stats.pc.trains_c").split("|"),
         d.trains.map(function (t) {
           var a = el("a", null, (t.train_type ? t.train_type + " " : "") + t.train_no);
           a.href = "#tren?nr=" + t.train_no;
           return [a, S.titleCase ? S.titleCase(t.station) : t.station,
-                  num(t.changed) + " din " + num(t.seen) + " (" + (BOARD_PL[t.board] || "").toLowerCase() + ")",
+                  tt("stats.fig.compare.of", { a: num(t.changed), n: num(t.seen) }) + " (" + (BOARD_PL[t.board] || "").toLowerCase() + ")",
                   pairText(t.pair)];
         })));
     }
     if (d.stations.length) {
-      sec.append(el("h3", "ss-sub-title", "Stații cu cele mai multe schimbări"));
-      sec.append(table("Stații cu peron schimbat", ["Stația", "Schimbate / văzute", "Procent"],
+      sec.append(el("h3", "ss-sub-title", tt("stats.pc.st_h")));
+      sec.append(table(tt("stats.pc.st_t"), tt("stats.pc.st_c").split("|"),
         d.stations.map(function (s) {
           return [S.titleCase ? S.titleCase(s.station) : s.station,
-                  num(s.changed) + " din " + num(s.seen), pct(s.pct)];
+                  tt("stats.fig.compare.of", { a: num(s.changed), n: num(s.seen) }), pct(s.pct)];
         })));
     }
-    sec.append(el("p", "ss-n", "Peronul se citește de pe panoul București Nord; o schimbare poate fi și o " +
-      "corectare a unei citiri nesigure (" + num(d.ignored_values) + " valori ignorate)."));
+    sec.append(el("p", "ss-n", tt("stats.pc.foot", { n: num(d.ignored_values) })));
   }
 
   function render(body, p) {
     var sec = el("section", "ss-fig ss-fig-wide");
     sec.setAttribute("data-key", "peroane-schimbate");
     sec.setAttribute("aria-busy", "true");
-    sec.append(el("p", "ss-n", "Se încarcă peroanele schimbate…"));
+    sec.append(el("p", "ss-n", tt("stats.pc.loading")));
     body.append(sec);
     var q = "perioada=" + encodeURIComponent((p && p.perioada) || "all") +
       (p && p.board ? "&board=" + encodeURIComponent(p.board) : "");

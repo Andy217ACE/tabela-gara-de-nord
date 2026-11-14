@@ -31,7 +31,7 @@ def test_ocr_js_served_and_safe(client):
         assert bad not in js, bad
     assert "/api/admin/" in js and "credentials" in js
     assert "TabelaApp.views.ocr" in js
-    assert "Capturi OCR" in js
+    assert 'T("ocr.title")' in js
 
 
 def test_ocr_css_served_and_themed(client):

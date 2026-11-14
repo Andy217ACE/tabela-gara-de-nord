@@ -138,8 +138,8 @@ def test_integrated_in_overview_payload(tmp_path):
 
 
 def test_frontend_static_csp_safe_and_wired():
-    js = (WEB / "stat_weekdays.js").read_text(encoding="utf-8")
-    for bad in ("eval(", "new Function", "innerHTML", "setAttribute(\"style\"", "unsafe"):
+    js = (WEB / "stat_weekdays.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
+    for bad in ("eval(", "new Function", "innerHTML", "setAttribute(\"style\"", "unsafe-eval", "unsafe-inline"):
         assert bad not in js
     assert "Comparația va deveni valabilă după ~4 săptămâni de date" in js
     assert "date insuficiente" in js

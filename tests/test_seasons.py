@@ -213,4 +213,4 @@ def test_sezoane_js_is_csp_safe_and_has_header():
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
                 "new Function", ".style."):
         assert bad not in js, bad
-    assert "date insuficiente (N=" in js
+    assert "seasons.insufficient" in js

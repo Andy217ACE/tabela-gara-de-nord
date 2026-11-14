@@ -13,7 +13,10 @@ def test_peron_est_js_static_rules():
                 "new Function", ".style.", 'setAttribute("style"', "cssText"):
         assert bad not in js, bad
     assert "/api/predict/peron" in js and "textContent" in js and "try {" in js
-    assert "nu informație oficială CFR" in js
+    # the Romanian text lives in the dictionary (i18n); the code only references the key
+    assert '"peron.notice"' in js
+    ro = (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")
+    assert "nu informație oficială CFR" in ro
 
 
 def test_index_has_off_by_default_toggle_and_lazy_layer():

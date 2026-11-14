@@ -11,6 +11,8 @@ from app.api import create_app
 from app.config import Settings
 
 WEB = Path(__file__).resolve().parent.parent / "web"
+import json as _json
+_RO_VALUES = set(_json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8")).values())
 
 
 @pytest.fixture
@@ -33,7 +35,7 @@ def test_stats_js_served_and_safe(client):
 
 
 def test_stats_js_uses_api_and_rules():
-    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    js = (WEB / "stats.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
     for needle in ("/api/trains/stats", "/api/trains/", "/journeys", "/api/stats",
                    "/api/stats/rankings", '"format", "csv"', "doar_confirmate", "prag",
                    "App.views.trenuri", "App.views.tren",
@@ -69,7 +71,7 @@ def test_index_has_stats_views_nav_and_assets():
                          ("clasamente", "Clasamente")):
         assert re.search(rf'<a class="nav-item" href="#{route}" data-route="{route}">\s*<svg class="nav-icon"',
                          html), route
-        assert f"<span>{label}</span>" in html
+        assert f">{label}</span>" in html and label in _RO_VALUES, label
     assert 'id="rank-stations"' in html
     assert html.count("<footer") == 1
 
@@ -77,8 +79,8 @@ def test_index_has_stats_views_nav_and_assets():
 def test_app_routes_for_stats_views():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     for needle in ('"#trenuri": "trenuri"', '"#tren": "tren"', '"#statistici": "statistici"',
-                   '"#clasamente": "clasamente"', 'tren: "trenuri"', 'statistici: "Statistici"',
-                   'clasamente: "Clasamente"'):
+                   '"#clasamente": "clasamente"', 'tren: "trenuri"', 'statistici',
+                   '"#statii": "statii"'):
         assert needle in js, needle
 
 
@@ -99,7 +101,7 @@ def test_mobile_nav_scrolls_inside_not_page():
 # ---- D2: station pages (#statii, #statie?nume=), station links, station ranking ----------
 
 def test_station_views_wired():
-    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    js = (WEB / "stats.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
     for needle in ("App.views.statii", "App.views.statie", "/api/stations", "/journeys?",
                    "next_before", '"before"', "Mai multe călătorii", "Ultimele călătorii",
                    "Sosiri dinspre stație", "Plecări înspre stație", "Stația nu a fost observată pe tabelă",

@@ -1,406 +1,410 @@
-<p align="center"><img src="web/icons/logo.png" alt="Sigla Tabela Gara de Nord" width="96" height="96"></p>
+<p align="center"><img src="web/icons/logo.png" alt="Tabela Gara de Nord logo" width="96" height="96"></p>
+
+**English** · [Română](README.ro.md)
 
 # Tabela Gara de Nord
 
-Aplicație web (PWA) care citește prin OCR clasic (OpenCV + Tesseract, fără AI) tabela de sosiri/plecări din Gara de Nord București, urmărește trenurile, trimite notificări push la întârzieri sau schimbări de linie și păstrează un istoric căutabil.
+A web application (PWA) that uses classic OCR (OpenCV + Tesseract, no AI) to read the arrivals/departures board at Gara de Nord in Bucharest, tracks trains, sends push notifications on delays or platform changes, and keeps a searchable history.
 
 Live: https://tabelacfr.ddns.net
 
-Stare: **Beta** — versiuni și note în [Releases](https://github.com/Andy217ACE/tabela-gara-de-nord/releases)
-și în `CHANGELOG.md`. Datele sunt citite prin OCR de pe imaginea camerei web CFR și pot conține erori;
-valorile necitite apar ca „—”, nu ca 0.
+Status: **Beta** — versions and notes in [Releases](https://github.com/Andy217ACE/tabela-gara-de-nord/releases)
+and in `CHANGELOG.md`. The data is read by OCR from the CFR webcam image and may contain errors;
+values that could not be read appear as "—", not as 0.
 
-## Documentație detaliată
+## Detailed documentation
 
-Paginile de mai jos descriu fiecare subsistem în detaliu, cu diagrame Mermaid (se văd direct pe GitHub).
-README-ul de mai jos rămâne rezumatul; paginile sunt sursa completă.
+The pages below describe each subsystem in detail, with Mermaid diagrams (rendered directly on GitHub).
+The README below stays a summary; the pages are the complete source. The English pages are in
+[docs/en/](docs/en/); the Romanian originals are in `docs/`.
 
-| Pagină | Ce acoperă |
+| Page | What it covers |
 |---|---|
-| [Arhitectura](docs/arhitectura.md) | Procesele, modulele din `app/`, unitățile systemd, nginx, calea datelor pe server |
-| [Date și schema bazei](docs/date-si-schema.md) | Fiecare tabel și coloană, migrările v0–v9, ingestul, identitatea serviciilor, retenția, arhivele și restaurarea |
-| [API](docs/api.md) | Toate rutele publice și de administrare: parametri, răspunsuri, erori, cache, limite, modelul de securitate |
-| [Interfața](docs/interfata.md) | Paginile și rutele (#…), navigarea, tema, service worker, CSP, grafice, accesibilitate |
-| [OCR](docs/ocr.md) | Pipeline-ul de citire pas cu pas, constantele reale, regulile întârzierii, măsurarea, problemele deschise |
-| [Capturi și confidențialitate](docs/capturi-si-confidentialitate.md) | Ce e o captură, retenția, ce e ignorat de git, regula de confidențialitate, datele personale |
-| [Statistici, călătorii, calitate](docs/statistici-calatorii-calitate.md) | Catalog, călătorii, stații, formule și praguri, predicție, consens, calitatea datelor |
-| [Meteo](docs/meteo.md) | Sursa Open-Meteo, stocarea, frecvența, eșecurile |
-| [Administrare și operare](docs/administrare-operare.md) | Pagina #admin, corecții, fuziuni, purjare, backup și restaurare, Telegram, push, watchdog, runbook-uri |
-| [Deploy și configurare](docs/deploy-si-configurare.md) | Variabilele de mediu, install.sh, update.sh, systemd, nginx, certificate, procesul de release, rollback |
-| [Testare](docs/testare.md) | Cum rulezi suita, straturile de teste, testele care depind de capturi, cum adaugi un test |
-| [Rotația cheii de administrare](docs/admin-rotatie-cheie.md) | Pașii pentru schimbarea `ADMIN_TOKEN` |
+| [Architecture](docs/en/arhitectura.md) | Processes, the modules in `app/`, systemd units, nginx, the data path on the server |
+| [Data and database schema](docs/en/date-si-schema.md) | Every table and column, migrations v0–v9, ingest, service identity, retention, archives and restore |
+| [API](docs/en/api.md) | All public and admin routes: parameters, responses, errors, cache, limits, the security model |
+| [Interface](docs/en/interfata.md) | Pages and routes (#…), navigation, theme, service worker, CSP, charts, accessibility |
+| [OCR](docs/en/ocr.md) | The reading pipeline step by step, the real constants, delay rules, measurement, open problems |
+| [Captures and privacy](docs/en/capturi-si-confidentialitate.md) | What a capture is, retention, what git ignores, the privacy rule, personal data |
+| [Statistics, journeys, quality](docs/en/statistici-calatorii-calitate.md) | Catalog, journeys, stations, formulas and thresholds, prediction, consensus, data quality |
+| [Weather](docs/en/meteo.md) | The Open-Meteo source, storage, frequency, failures |
+| [Administration and operations](docs/en/administrare-operare.md) | The #admin page, corrections, merges, purge, backup and restore, Telegram, push, watchdog, runbooks |
+| [Deploy and configuration](docs/en/deploy-si-configurare.md) | Environment variables, install.sh, update.sh, systemd, nginx, certificates, the release process, rollback |
+| [Testing](docs/en/testare.md) | How to run the suite, the test layers, tests that depend on captures, how to add a test |
+| [Admin key rotation](docs/en/admin-rotatie-cheie.md) | Steps for changing `ADMIN_TOKEN` |
+| [Glossary](docs/en/glosar.md) | Romanian terms used in the code and data, with English equivalents |
 
-## Ce face
+## What it does
 
-- **Tabelă (Carduri)** — sosiri și plecări cu ora programată, întârzierea citită, linia,
-  operatorul; implicit pe telefon. Valorile lipsă apar ca „—”, nu ca 0.
-- **Panou** — afișaj de gară (implicit de la 1024 px): Sosiri / Plecări / Toate, ceas,
-  starea datelor (ACTUALIZAT / DATE VECHI / INDISPONIBIL), căutare, filtre (întârziere,
-  operator, linie, Favorite (local)), sortare, coloane configurabile, ecran complet,
-  detaliu pe tren cu link către Istoric și buton „Urmărește (notificări)”. Culorile
-  întârzierii vin din `/api/config`; datele vechi trec pe gri.
-- **Istoric** — ce a afișat tabela într-o zi (filtre: zi, tren, stație, interval, panou),
-  cu detaliul evenimentelor și graficul întârzierii observate. Link direct:
+- **Board (Cards)** — arrivals and departures with the scheduled time, the delay as read, the platform,
+  the operator; the default on phones. Missing values appear as "—", not as 0.
+- **Panel** — station-style display (default from 1024 px): Arrivals / Departures / All, clock,
+  data status (UP TO DATE / STALE DATA / UNAVAILABLE), search, filters (delay,
+  operator, platform, Favorites (local)), sorting, configurable columns, full screen,
+  per-train detail with a link to History and a "Follow (notifications)" button. Delay colors
+  come from `/api/config`; stale data turns grey.
+- **History** — what the board showed on a given day (filters: day, train, station, time range, panel),
+  with the event details and the chart of the observed delay. Direct link:
   `#istoric?train=1636&date=2026-10-21`.
-- **Statistici** — punctualitate, întârzieri, clasamente și hărți de căldură pe perioadă, cu numărul de
-  călătorii (N) și eșantion minim afișate; export CSV. Istoricul poate fi văzut pe toate zilele.
-- **Urmărite** — notificări Web Push la schimbări de întârziere/linie sau la dispariția
-  trenului de pe tabelă (necesită HTTPS; pe iPhone, aplicația adăugată pe ecranul principal).
-- **PWA** — instalabilă, funcționează offline cu ultima tabelă (marcată „date vechi”) și o
-  pagină offline cu sigla.
-- **Temă** — buton în antet (și în Panou, inclusiv în ecran complet): Auto → Luminoasă →
-  Întunecată; alegerea se păstrează în browser.
-- **Nume canonice** — operatorul și stația citite prin OCR sunt aduse la forma cunoscută;
-  o potrivire nesigură e subliniată punctat, cu titlul „citire nesigură”.
+- **Statistics** — punctuality, delays, rankings and heat maps over a period, with the number of
+  journeys (N) and the minimum sample shown; CSV export. History can be viewed across all days.
+- **Followed** — Web Push notifications on delay/platform changes or when the train
+  disappears from the board (requires HTTPS; on iPhone, the app added to the home screen).
+- **PWA** — installable, works offline with the last board (marked "stale data") and an
+  offline page with the logo.
+- **Theme** — button in the header (and in the Panel, including full screen): Auto → Light →
+  Dark; the choice is kept in the browser.
+- **Canonical names** — the operator and station read by OCR are brought to the known form;
+  an uncertain match is underlined with dots, with the title "uncertain reading".
 
-### Grafica paginilor (Beta 1.26)
+### Page graphics (Beta 1.26)
 
-Paginile din afara Tabelei (Istoric, Urmărite, Trenuri, Tren, Statistici, Clasamente, Stații,
-Stație, Versiuni) folosesc un strat vizual comun: `web/ui2.css` + `web/ui2.js` (donut/pie, cifre
-care numără, bare de proporție, minigrafice, schelete de încărcare, tranziții). **Fără biblioteci
-externe**: graficele sunt SVG + CSS desenate de cod propriu, ca să respecte politica de securitate
-(`script-src 'self'`, fără stiluri inline), să urmeze temele luminoasă/întunecată, să aibă
-alternativă accesibilă (legendă, tabel, CSV) și să nu mărească precache-ul cu o bibliotecă.
-Dacă pe viitor se adaugă una, se pune sub `web/vendor/<nume>-<versiune>/` cu fișierul de licență,
-se încarcă la cerere (doar pe paginile care o folosesc) și **nu** intră în `SHELL` din `sw.js`.
-Tabela (Carduri / Panou / Ecran complet) nu folosește acest strat.
+The pages outside the Board (History, Followed, Trains, Train, Statistics, Rankings, Stations,
+Station, Versions) use a shared visual layer: `web/ui2.css` + `web/ui2.js` (donut/pie, counting
+numbers, proportion bars, mini charts, loading skeletons, transitions). **No external
+libraries**: the charts are SVG + CSS drawn by our own code, to respect the security policy
+(`script-src 'self'`, no inline styles), to follow the light/dark themes, to have an accessible
+alternative (legend, table, CSV) and not to grow the precache with a library.
+If one is added in the future, it goes under `web/vendor/<name>-<version>/` with its license file,
+is loaded on demand (only on the pages that use it) and does **not** go into `SHELL` in `sw.js`.
+The Board (Cards / Panel / Full screen) does not use this layer.
 
-**Beta 1.28 (UI v3):** straturile interactive ale graficelor (tooltip comun pentru bare / linii / coloane / hărți,
-legendă cu hover și comutare, ecran complet cu tabelul alături, „Copiază linkul”, chips de secțiuni, calendar,
-alunecarea datelor la schimbarea unui filtru) sunt în `web/charts3.js` + `web/charts3.css`, **încărcate la cerere**
-(`App.ui2.charts()`) doar pe Statistici, Tren, Clasamente și Stație, deci în afara `SHELL`-ului din `sw.js`.
-Tot fără bibliotecă: o bibliotecă de tooltip sau de grafice ar cere stiluri inline / canvas (CSP, teme, accesibilitate
-pe fiecare valoare) și ar fi mai grea decât ~18 KB gzip cât are codul propriu.
+**Beta 1.28 (UI v3):** the interactive chart layers (a shared tooltip for bars / lines / columns / heat maps,
+a legend with hover and toggling, full screen with the table alongside, "Copy link", section chips, calendar,
+data sliding when a filter changes) are in `web/charts3.js` + `web/charts3.css`, **loaded on demand**
+(`App.ui2.charts()`) only on Statistics, Train, Rankings and Station, so outside the `SHELL` in `sw.js`.
+Again without a library: a tooltip or chart library would require inline styles / canvas (CSP, themes, accessibility
+on every value) and would be heavier than the ~18 KB gzip of our own code.
 
-### Sigla
+### The logo
 
-Originalul e în `docs/brand/logo-source.png`. Toate variantele (antet, favicon 16/32/48,
-iconițe PWA 192/512 + maskable, apple-touch-icon, imaginea `og:image` 1200×630) se
-regenerează cu `python scripts/make_icons.py`. La 16–32 px se folosește un decupaj
-simplificat din aceeași grafică (fața trenului), pentru lizibilitate în taburi.
+The original is in `docs/brand/logo-source.png`. All variants (header, favicon 16/32/48,
+PWA icons 192/512 + maskable, apple-touch-icon, the 1200×630 `og:image`) are
+regenerated with `python scripts/make_icons.py`. At 16–32 px a simplified crop of the
+same artwork is used (the train's face), for legibility in tabs.
 
-## Rulare (dezvoltare)
+## Running (development)
 
     python -m venv .venv
     .venv\Scripts\pip install -r requirements-dev.txt
     .venv\Scripts\python -m pytest
 
-## Cerințe pentru deploy
+## Deploy requirements
 
-- Tesseract 5 cu limbile `eng` și `ron` instalat pe server; dacă nu e în `PATH`,
-  setați `TESSERACT_CMD` cu calea către executabil.
-- Fișierul `app/ocr/digit_templates.npz` (șabloanele de cifre ale fontului tabelei)
-  trebuie livrat împreună cu codul, lângă `app/ocr/digits.py`. Fără el aplicația
-  pornește, dar scrie un avertisment în log și precizia pe numere/ore scade
-  (rămâne doar Tesseract). Se regenerează cu
+- Tesseract 5 with the `eng` and `ron` languages installed on the server; if it is not in `PATH`,
+  set `TESSERACT_CMD` to the path of the executable.
+- The file `app/ocr/digit_templates.npz` (the digit templates of the board's font)
+  must be shipped together with the code, next to `app/ocr/digits.py`. Without it the application
+  starts, but writes a warning to the log and the accuracy on numbers/times drops
+  (only Tesseract remains). It is regenerated with
   `python -m app.ocr.digits tests/fixtures/board_1.jpg tests/fixtures/board_1.json`
-  (implicit doar panoul de sosiri, ca plecările să rămână verificare independentă).
+  (by default only the arrivals panel, so that departures stay an independent check).
 
-## OCR și canonicalizare
+## OCR and canonicalization
 
-- Apelul OCR trece prin interfața `OcrEngine` (`app/ocr/engine.py`); implementarea
-  folosită e `TesseractEngine` (timeout 10 s, `OcrError` la eșec). Preprocesarea și
-  interpretarea rândurilor nu depind de motor: `read_board(imagine, engine=...)`.
-- Operatorul și stația citite sunt aduse la forma canonică (`app/canonical.py`, potrivire
-  `difflib`, prag implicit 0,82): ex. „Transferovlar” → „Transferoviar”, „CFR Calatorl” →
-  „CFR Calatori”. Operatorii cunoscuți sunt în `data/operators.txt`, stațiile în
-  `data/stations_seed.txt` plus cele învățate din istoric (stații văzute în cel puțin
-  2 trenuri distincte, în cel puțin 2 zile de serviciu distincte). Listele conțin doar nume văzute efectiv pe tabelă — se completează manual.
-- Sub prag se păstrează textul citit și rândul e marcat `uncertain` (expus în `/api/board`
-  și `/api/history`). Textul brut se păstrează mereu în `operator_raw`/`station_raw`
-  (schema bazei de date v3); identitatea serviciului (panou, dată, tren, oră) nu se schimbă.
+- The OCR call goes through the `OcrEngine` interface (`app/ocr/engine.py`); the implementation
+  in use is `TesseractEngine` (10 s timeout, `OcrError` on failure). Preprocessing and
+  row interpretation do not depend on the engine: `read_board(image, engine=...)`.
+- The operator and station read are brought to the canonical form (`app/canonical.py`, `difflib`
+  matching, default threshold 0.82): e.g. "Transferovlar" → "Transferoviar", "CFR Calatorl" →
+  "CFR Calatori". The known operators are in `data/operators.txt`, the stations in
+  `data/stations_seed.txt` plus those learned from history (stations seen on at least
+  2 distinct trains, on at least 2 distinct service days). The lists contain only names actually seen on the board — they are completed by hand.
+- Below the threshold the text as read is kept and the row is marked `uncertain` (exposed in `/api/board`
+  and `/api/history`). The raw text is always kept in `operator_raw`/`station_raw`
+  (database schema v3); the service identity (panel, date, train, time) does not change.
 
-## 12 rânduri pe panou (4 × 3) și recitirea rândurilor necitite
+## 12 rows per panel (4 × 3) and re-reading unread rows
 
-- Tabela CFR are pe fiecare panou 4 grupuri albastre a câte 3 rânduri. Benzile de text
-  găsite prin proiecție sunt verificate pe grupuri (`preprocess.structured_bands`): un
-  grup cu alt număr de rânduri decât 3 primește grila lui fixă (derivată din imagine, nu
-  din text), așa că un rând slab sau gol nu dispare și nu se lipește de vecin.
-- Un rând cu text, dar fără tip/număr/oră citibile, e recitit automat doar pe coloanele
-  tip, număr și oră, cu preprocesări alternative (`preprocess.VARIANTS`: fără liniile
-  verticale de reflexie, prag mai mic/mai mare, ×4, prag adaptiv, decupaj mai larg), până
-  reușește sau se termină bugetul cadrului (`OCR_FRAME_BUDGET_S`, implicit 8 s, recitiri
-  incluse). Un panou cu mai mult de 4 rânduri necitite e considerat cadru stricat și nu
-  se recitește (nu se inventează trenuri).
-- Rândurile rămân `necitit` (nu 0, nu tren ghicit); un rând fără text e `rând gol`.
-  Versiunea de procesare a fiecărei observații (ex. `ocr-tess-grid-5`) are sufixe:
-  `+empty`, `+unread`, `+retry:<variantă>:<încercări>`.
-- `/api/health` → `ocr`: rândurile pe panou din ultimul cadru, recitirile, durata, și
-  pe ultimele 60 de cadre câte au avut 12/12. Pagina „Capturi OCR” arată „S 12 · P 11”
-  și recitirile pe fiecare captură.
+- The CFR board has 4 blue groups of 3 rows on each panel. The text bands
+  found by projection are checked per group (`preprocess.structured_bands`): a
+  group with a number of rows other than 3 gets its fixed grid (derived from the image, not
+  from the text), so a weak or empty row does not disappear and does not stick to its neighbor.
+- A row with text but without a readable type/number/time is automatically re-read only on the
+  type, number and time columns, with alternative preprocessing (`preprocess.VARIANTS`: without the
+  vertical reflection lines, lower/higher threshold, ×4, adaptive threshold, wider crop), until it
+  succeeds or the frame budget runs out (`OCR_FRAME_BUDGET_S`, default 8 s, re-reads
+  included). A panel with more than 4 unread rows is considered a broken frame and is not
+  re-read (trains are not invented).
+- Rows stay `necitit` (unread) (not 0, not a guessed train); a row without text is `rând gol` (empty row).
+  The processing version of each observation (e.g. `ocr-tess-grid-5`) has suffixes:
+  `+empty`, `+unread`, `+retry:<variant>:<attempts>`.
+- `/api/health` → `ocr`: rows per panel from the last frame, re-reads, duration, and
+  over the last 60 frames how many had 12/12. The "OCR captures" page shows "S 12 · P 11"
+  and the re-reads for each capture.
 
-## Capturi și retenție
+## Captures and retention
 
-- Schema v5 (migrare automată, fără ștergeri; din v1/v2/v3/v4): `captures` (o imagine
-  nouă a tabelei: oră UTC, hash, cale relativă, dimensiuni, durata OCR, eroare,
-  `processing_version`), `observations` (o linie OCR: textul brut complet, pe fiecare
-  câmp text brut / valoare normalizată / încredere / dreptunghi, stare de validare
-  `ok | uncertain | rejected_low_conf | incomplete`, legătura cu călătoria) și `trains`
-  (catalogul numerelor de tren: `journeys` = călătorii/servicii, `observations` = citiri
-  OCR utilizabile — două numere distincte; istoricul de dinainte de v5 are 0 observații).
-- Fiecare imagine nouă se salvează **nemodificată** în `CAPTURE_DIR/AAAA/LL/ZZ/HHMMSS-<hash8>.jpg`
-  (UTC); aceeași imagine (același hash) nu creează o captură nouă. Liniile incomplete sau
-  cu încredere mică se păstrează și ele, marcate. O eroare la înregistrare nu oprește
-  niciodată tabela (doar se scrie în jurnal).
-- Variabile: `CAPTURE_ENABLED` (implicit 1), `CAPTURE_DIR` (implicit
-  `/var/lib/tabela/captures` pe server, `data/captures` local), `CAPTURE_RETENTION_DAYS`
-  (implicit 7). O dată pe zi se șterg doar **fișierele** imagine mai vechi decât retenția
-  (rândurile rămân, `path` devine NULL); nu se atinge nimic în afara `CAPTURE_DIR`.
-  `CAPTURE_RETENTION_DAYS=0` nu mai scrie deloc imagini. Sub `CAPTURE_MIN_FREE_MB`
-  (implicit 2048) spațiu liber pe disc nu se mai scriu imagini (doar metadatele), ca baza
-  de date și tabela LIVE să nu rămână fără spațiu; `GET /api/admin/stats` arată spațiul liber.
-  Observațiile rămân în baza de date (~30–40 MB/zi) — de urmărit; compactarea câmpurilor
-  `fields_json` vechi e planificată (fără ștergerea rândurilor).
-- Catalogul `trains` se actualizează la fiecare citire a tabelei (și la fiecare captură).
-- Capturile brute CFR sunt **private**: se văd doar din administrare și nu se redistribuie.
-- Catalog public (fără imagini): `GET /api/trains?query=&limit=` și `GET /api/trains/{nr}`.
-- Dezvoltare: `python scripts/dev_seed.py dev.db --capture-dir data/captures` adaugă și o captură.
+- Schema v5 (automatic migration, no deletions; from v1/v2/v3/v4): `captures` (a new
+  image of the board: UTC time, hash, relative path, dimensions, OCR duration, error,
+  `processing_version`), `observations` (one OCR line: the full raw text, per
+  field raw text / normalized value / confidence / rectangle, validation state
+  `ok | uncertain | rejected_low_conf | incomplete`, the link to the journey) and `trains`
+  (the catalog of train numbers: `journeys` = journeys/services, `observations` = usable OCR
+  readings — two distinct numbers; history from before v5 has 0 observations).
+- Every new image is saved **unmodified** to `CAPTURE_DIR/YYYY/MM/DD/HHMMSS-<hash8>.jpg`
+  (UTC); the same image (same hash) does not create a new capture. Incomplete or
+  low-confidence lines are kept too, marked. An error while recording never
+  stops the board (it is only written to the log).
+- Variables: `CAPTURE_ENABLED` (default 1), `CAPTURE_DIR` (default
+  `/var/lib/tabela/captures` on the server, `data/captures` locally), `CAPTURE_RETENTION_DAYS`
+  (default 7). Once a day only the image **files** older than the retention are deleted
+  (the rows stay, `path` becomes NULL); nothing outside `CAPTURE_DIR` is touched.
+  `CAPTURE_RETENTION_DAYS=0` stops writing images altogether. Below `CAPTURE_MIN_FREE_MB`
+  (default 2048) of free disk space no more images are written (only the metadata), so that the database
+  and the LIVE board do not run out of space; `GET /api/admin/stats` shows the free space.
+  Observations stay in the database (~30–40 MB/day) — to be watched; compacting the old
+  `fields_json` fields is planned (without deleting rows).
+- The `trains` catalog is updated on every board read (and on every capture).
+- The raw CFR captures are **private**: they are visible only from administration and are not redistributed.
+- Public catalog (no images): `GET /api/trains?query=&limit=` and `GET /api/trains/{nr}`.
+- Development: `python scripts/dev_seed.py dev.db --capture-dir data/captures` also adds a capture.
 
-## Administrare
+## Administration
 
-- Pagina „Capturi OCR” e la `/#ocr` (nu apare în meniu): listă capturi, imagine cu
-  dreptunghiurile OCR (verde ≥ 80, galben 50–79, roșu < 50), text brut vs normalizat pe
-  câmp, „Copiază JSON”, plus starea sistemului (`GET /api/admin/stats`).
-- Se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 12 caractere; recomandat un șir aleator lung; fără el toate
-  `/api/admin/*` răspund 503 „Administrare dezactivată”). Generare:
+- The "OCR captures" page is at `/#ocr` (it does not appear in the menu): list of captures, image with
+  the OCR rectangles (green ≥ 80, yellow 50–79, red < 50), raw vs normalized text per
+  field, "Copy JSON", plus the system state (`GET /api/admin/stats`).
+- It is enabled with `ADMIN_TOKEN` in `/etc/tabela.env` (at least 12 characters; a long random string is recommended; without it all
+  `/api/admin/*` answer 503 "Administration disabled"). Generation:
   `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
-- Autentificare: `Authorization: Bearer <token>` sau formularul din pagină (cookie
-  HttpOnly, Secure, SameSite=Strict, 12 h; cookie-ul nu conține tokenul). 5 încercări
-  greșite/minut/IP → 429 (și 30/minut în total, pentru toți); nginx limitează în plus `POST /api/admin/login` la 5/min
-  (zona `tabela_admin_login` din `deploy/tabela-limits.conf`). Răspunsurile admin au
-  `Cache-Control: private, no-store` și nu trec prin cache-ul service worker-ului.
-  Schimbarea `ADMIN_TOKEN` invalidează toate sesiunile.
+- Authentication: `Authorization: Bearer <token>` or the form on the page (cookie
+  HttpOnly, Secure, SameSite=Strict, 12 h; the cookie does not contain the token). 5 wrong
+  attempts/minute/IP → 429 (and 30/minute in total, for everyone); nginx additionally limits `POST /api/admin/login` to 5/min
+  (zone `tabela_admin_login` in `deploy/tabela-limits.conf`). Admin responses have
+  `Cache-Control: private, no-store` and do not go through the service worker's cache.
+  Changing `ADMIN_TOKEN` invalidates all sessions.
 
-## Călătorii, statistici, stații
+## Journeys, statistics, stations
 
-- **Călătorie** = o apariție a unui tren pe un panou (sosiri sau plecări din București Nord) într-o
-  *zi de serviciu* (ziua orei programate; 00:05 citit la 23:58 aparține zilei următoare).
-  **Tren** = număr de tren. **Observație** = o linie citită dintr-o captură OCR. Se raportează separat.
-- **Întârzierea** folosită este ultima valoare CITITĂ pe tabela din București Nord, doar cu dovada
-  citirii (`services.delay_read_at`, schema v6). Datele de dinainte de v6 au dovada doar din
-  observații (v5); restul rămân „întârziere necunoscută” (nu 0). Un salt de peste 30 min într-un
-  singur cadru se aplică doar după a doua citire identică (misread de tip „15” → „945”).
-- **Rezultat final** (`app/journeys.py`): `confirmed` doar cu dispariție observată după ora estimată
-  (programat + întârziere) și întârziere citită cu cel mult `FINAL_READ_MAX_GAP_MIN` înainte;
-  altfel `unconfirmed` (cu motiv) sau `unknown`; `in_progress` cât e pe tabelă.
-- **Statistici** (`app/stats.py`): N, medie, mediană, p90, max, % la timp (≤ prag), > 30 min; sub
-  eșantionul minim procentele și p90 nu se afișează. Sosiri și plecări mereu separat.
-- **API** (JSON, `format=csv` pentru export): `/api/journeys`, `/api/journeys/{id}`,
+- **Journey** = one appearance of a train on a panel (arrivals or departures at București Nord) on one
+  *service day* (the day of the scheduled time; 00:05 read at 23:58 belongs to the next day).
+  **Train** = a train number. **Observation** = one line read from an OCR capture. They are reported separately.
+- The **delay** used is the last value READ on the board at București Nord, only with proof
+  of the reading (`services.delay_read_at`, schema v6). Data from before v6 has proof only from
+  observations (v5); the rest stay "unknown delay" (not 0). A jump of over 30 min in a
+  single frame is applied only after the second identical reading (a misread of the "15" → "945" kind).
+- **Final result** (`app/journeys.py`): `confirmed` only with a disappearance observed after the estimated time
+  (scheduled + delay) and a delay read at most `FINAL_READ_MAX_GAP_MIN` before;
+  otherwise `unconfirmed` (with a reason) or `unknown`; `in_progress` while it is on the board.
+- **Statistics** (`app/stats.py`): N, mean, median, p90, max, % on time (≤ threshold), > 30 min; below
+  the minimum sample the percentages and p90 are not shown. Arrivals and departures always separate.
+- **API** (JSON, `format=csv` for export): `/api/journeys`, `/api/journeys/{id}`,
   `/api/trains/stats`, `/api/trains/{nr}/journeys`, `/api/stats`, `/api/stats/rankings`,
-  `/api/stations`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys`. Parametri: `prag`,
-  `min`, `board`, `from`, `to` (AAAA-LL-ZZ), `doar_confirmate=1`. Și: `/api/stats/overview` (tot ce arată
-  pagina Statistici), `/api/stats/seasons` (comparație pe sezoane și meteo), `/api/export/history.csv`
-  (export CSV al istoricului pe interval) și `/api/system` (starea sistemului; detalii doar pentru admin).
-  Lista completă, cu parametri, răspunsuri și erori: [docs/api.md](docs/api.md).
-- **Istoric pe toate zilele**: `/api/history?all=1` = toate trenurile, toate zilele;
-  `train=N` restrânge la un tren (opțional `date`,
-  `station`, `from`/`to` HH:MM, `board`, `limit` 1–200, `cursor` din răspunsul anterior,
-  `min`, `prag`, `doar_confirmate`). Călătoriile, cele mai noi primele, fără fantome; perioada
-  de calitate redusă apare marcată (`low_quality`) și nu intră în rezumat. `total`, `period` și
-  `summary` (pe panou, doar întârzieri citite) descriu tot rezultatul, nu doar pagina (fără
-  tren, `summary`/`quality` sunt calculate o dată la cel mult 60 s, `total`/`period` mereu
-  la zi). Pagina Istoric pornește fără zi aleasă = toate zilele. Fără
-  `all=1`, `/api/history` rămâne pe o singură zi (`date`, implicit azi).
-- **Env** (opționale): `ON_TIME_MAX_MIN` (implicit 5), `STATS_MIN_SAMPLE` (5),
+  `/api/stations`, `/api/stations/{name}`, `/api/stations/{name}/journeys`. Parameters: `prag`,
+  `min`, `board`, `from`, `to` (YYYY-MM-DD), `doar_confirmate=1`. And: `/api/stats/overview` (everything the
+  Statistics page shows), `/api/stats/seasons` (comparison by season and weather), `/api/export/history.csv`
+  (CSV export of the history over a range) and `/api/system` (system state; details only for admin).
+  The full list, with parameters, responses and errors: [docs/en/api.md](docs/en/api.md).
+- **History across all days**: `/api/history?all=1` = all trains, all days;
+  `train=N` restricts to one train (optional `date`,
+  `station`, `from`/`to` HH:MM, `board`, `limit` 1–200, `cursor` from the previous response,
+  `min`, `prag`, `doar_confirmate`). Journeys, newest first, without ghosts; the low-quality
+  period appears marked (`low_quality`) and does not enter the summary. `total`, `period` and
+  `summary` (per panel, only delays read) describe the whole result, not just the page (without
+  a train, `summary`/`quality` are computed at most once every 60 s, `total`/`period` always
+  live). The History page starts with no day chosen = all days. Without
+  `all=1`, `/api/history` stays on a single day (`date`, default today).
+- **Env** (optional): `ON_TIME_MAX_MIN` (default 5), `STATS_MIN_SAMPLE` (5),
   `FINAL_READ_MAX_GAP_MIN` (15).
-- Pe paginile de stație întârzierea este cea de la București Nord, nu de la stația respectivă.
+- On the station pages the delay is the one at București Nord, not at the station in question.
 
-## Calitatea datelor (schema v7)
+## Data quality (schema v7)
 
-Ce se citește de pe tabelă rămâne în baza de date exact cum a fost citit. Verdictele de calitate
-stau în tabele separate (`app/quality.py`, fiecare regulă e testată pe cazuri reale):
+What is read from the board stays in the database exactly as it was read. The quality verdicts
+live in separate tables (`app/quality.py`, each rule is tested on real cases):
 
-- **Validarea la citire:** o schimbare de întârziere se aplică la a doua citire identică
-  consecutivă. Un salt mare (cel puțin 60 de minute, la peste 100 de minute) se aplică la a
-  treia. O valoare care pare semnul „+” citit ca cifră (25 → 425) se aplică abia la a cincea.
-  Pentru linie e nevoie de 2 citiri; pentru cifrele confundate (5/6, 1/4/11/14, 3/8), de 3.
-  Un tren e considerat plecat (GONE) după 3 citiri lipsă. Dacă revine în cel mult 10 minute,
-  nu se înregistrează o apariție nouă.
-- **Fantome** (`service_quality.ghost`): un serviciu văzut mai puțin de 2 minute, sau o
-  variantă la un caracter a altui serviciu mai longeviv (cu cel mult o observație).
-  Tot fantomă e și varianta minoritară a unui rând pe care OCR-ul îl citește alternativ:
-  trenul real trebuie să aibă cel puțin dublul observațiilor ei. Citirile unui astfel de rând
-  merg la serviciul majoritar. Redenumirea unui serviciu se face prin vot: cel puțin 3 citiri
-  și 70% din ultimele 10.
-  Fantomele nu apar în Panou, Istoric, catalog, statistici sau pagini de stații.
-- **Perioada de calitate redusă** (`quality_periods`, 21.10.2026 00:00–11:31) e exclusă
-  implicit din statistici. Pentru a o include: `STATS_INCLUDE_LOW_QUALITY=1`.
-- **Corecția retroactivă** (idempotentă; se rulează cu serviciul oprit):
+- **Validation at read time:** a delay change is applied at the second consecutive
+  identical reading. A large jump (at least 60 minutes, at over 100 minutes) is applied at the
+  third. A value that looks like the "+" sign read as a digit (25 → 425) is applied only at the fifth.
+  For the platform 2 readings are needed; for confused digits (5/6, 1/4/11/14, 3/8), 3.
+  A train is considered gone (GONE) after 3 missing readings. If it comes back within 10 minutes,
+  no new appearance is recorded.
+- **Ghosts** (`service_quality.ghost`): a service seen for less than 2 minutes, or a
+  one-character variant of another, longer-lived service (with at most one observation).
+  A minority variant of a row that OCR reads alternately is also a ghost:
+  the real train must have at least double its observations. The readings of such a row
+  go to the majority service. Renaming a service is done by vote: at least 3 readings
+  and 70% of the last 10.
+  Ghosts do not appear in the Panel, History, catalog, statistics or station pages.
+- **The low-quality period** (`quality_periods`, 21.10.2026 00:00–11:31) is excluded
+  by default from the statistics. To include it: `STATS_INCLUDE_LOW_QUALITY=1`.
+- **Retroactive correction** (idempotent; run with the service stopped):
 
       sudo systemctl stop tabela
       sudo -u tabela env DB_PATH=/var/lib/tabela/tabela.db /opt/tabela/venv/bin/python -m app.quality --dry-run
       sudo -u tabela env DB_PATH=/var/lib/tabela/tabela.db /opt/tabela/venv/bin/python -m app.quality
       sudo systemctl start tabela
 
-  Comenzile `python` se rulează din `/opt/tabela/app`.
-- **Eliminarea fantomelor** (opțională, decizia administratorului): `scripts/purge_ghosts.py`.
-  Implicit face doar un dry run, care afișează numărul de rânduri și 20 de exemple. Cu
-  `--apply --backup-dir DIR` face întâi o copie completă a bazei, apoi arhivează reversibil
-  rândurile în `purged_rows`. Cu `--restore` le pune la loc.
+  The `python` commands are run from `/opt/tabela/app`.
+- **Removing ghosts** (optional, the administrator's decision): `scripts/purge_ghosts.py`.
+  By default it does only a dry run, which prints the number of rows and 20 examples. With
+  `--apply --backup-dir DIR` it first makes a full copy of the database, then reversibly archives
+  the rows in `purged_rows`. With `--restore` it puts them back.
 
-## Deploy (server Ubuntu 24.04)
+## Deploy (Ubuntu 24.04 server)
 
-Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).
+Live: https://tabelacfr.ddns.net (nginx + Let's Encrypt certificate, renewed by `certbot.timer`).
 
-Fișiere în `deploy/`: `install.sh` (instalare idempotentă), `update.sh` (actualizare),
-`tabela.service` (unit systemd), `nginx-tabela.conf` (site-ul nginx, cu liniile certbot),
-`tabela-limits.conf` (zona `limit_req`, 10 cereri/s pe IP, burst 20, pe `/api/`).
+Files in `deploy/`: `install.sh` (idempotent install), `update.sh` (update),
+`tabela.service` (systemd unit), `nginx-tabela.conf` (the nginx site, with the certbot lines),
+`tabela-limits.conf` (the `limit_req` zone, 10 requests/s per IP, burst 20, on `/api/`).
 
-Prima instalare (pe server, cu sudo):
+First install (on the server, with sudo):
 
     git clone --branch feat/app https://github.com/Andy217Ace/tabela-gara-de-nord.git /tmp/tabela
     sudo bash /tmp/tabela/deploy/install.sh feat/app   # branch obligatoriu la prima instalare
 
-Scriptul instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`, `curl`, `sqlite3`; creează
-utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, venv în
-`/opt/tabela/venv`, datele în `/var/lib/tabela`, fișierul de configurare `/etc/tabela.env`
-(root, `chmod 600`), pornește serviciul `tabela` (un singur worker uvicorn pe
-`127.0.0.1:8000` — poller-ul rulează în proces) și configurează nginx (cu `nginx -t` înainte
-de reload; copia anterioară a site-ului ajunge în `/root/backup-<data>/tabela.site.bak` și
-e restaurată automat dacă testul eșuează). `ufw` nu se activează în script. Serverul de producție este acum serverul de acasă, nu o mașină Azure,
-  iar firewall-ul lui efectiv nu e descris în repo: de verificat pe server (vezi
-  [docs/deploy-si-configurare.md](docs/deploy-si-configurare.md), secțiunea 7).
+The script installs `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`, `curl`, `sqlite3`; creates the
+system user `tabela` (no login), the code in `/opt/tabela/app`, the venv in
+`/opt/tabela/venv`, the data in `/var/lib/tabela`, the configuration file `/etc/tabela.env`
+(root, `chmod 600`), starts the `tabela` service (a single uvicorn worker on
+`127.0.0.1:8000` — the poller runs in-process) and configures nginx (with `nginx -t` before
+the reload; the previous copy of the site ends up in `/root/backup-<date>/tabela.site.bak` and
+is restored automatically if the test fails). `ufw` is not enabled by the script. The production server is now the home server, not an Azure machine,
+  and its effective firewall is not described in the repo: to be checked on the server (see
+  [docs/en/deploy-si-configurare.md](docs/en/deploy-si-configurare.md), section 7).
 
-**La fiecare deploy crește versiunea și completează istoricul:** în `VERSION` se trece
-`Beta 1.NN` cu NN mărit cu 1 (ex. `Beta 1.01` → `Beta 1.02`), iar în `CHANGELOG.md` se
-adaugă sus o secțiune `## Beta 1.NN — AAAA-LL-ZZ` cu `### Adăugat` / `### Reparat` (în
-română). Versiunea apare în footer (link spre ecranul „Versiuni”, `#versiuni`), în
-`/api/health` (câmpul `version`) și în `/api/changelog`; `update.sh` o afișează la final.
+**On every deploy, bump the version and fill in the history:** in `VERSION` put
+`Beta 1.NN` with NN increased by 1 (e.g. `Beta 1.01` → `Beta 1.02`), and in `CHANGELOG.md`
+add at the top a section `## Beta 1.NN — YYYY-MM-DD` with `### Adăugat` / `### Reparat` (in
+Romanian, with an English twin as an `### English` sub-heading). The version appears in the footer (a link to the "Versions" screen, `#versiuni`), in
+`/api/health` (the `version` field) and in `/api/changelog`; `update.sh` prints it at the end.
 
-Actualizare (după `git push` pe branch):
+Update (after `git push` on the branch):
 
     sudo bash /opt/tabela/app/deploy/update.sh
 
-face, în ordine:
+it does, in order:
 
-1. notează commit-ul curent (PREV) și refuză clar un HEAD detașat (dați branch-ul explicit);
-2. `git fetch` + checkout pe branch, apoi `pip install -r requirements.txt` — dacă pip eșuează,
-   pune înapoi codul vechi și **nu** repornește serviciul;
-3. completează `/etc/tabela.env` cu setările noi lipsă (ex. `LAST_IMAGE_PATH`, `CAPTURE_DIR`)
-   și creează `CAPTURE_DIR` (proprietar `tabela`); `ADMIN_TOKEN` se pune manual (secret);
-4. dacă noul cod are o versiune de schemă mai mare decât baza de date (`PRAGMA user_version`),
-   face întâi un backup online SQLite (`sqlite3 .backup`) în `/var/lib/tabela/backups/`
-   (se păstrează ultimele 5);
-5. repornește și așteaptă `/api/health` (max. 3 minute); dacă nu devine sănătos, face
-   **rollback** automat la PREV pe branch-ul inițial (checkout, pip install, restart,
-   așteaptă) și iese cu cod 1.
+1. notes the current commit (PREV) and clearly refuses a detached HEAD (give the branch explicitly);
+2. `git fetch` + checkout on the branch, then `pip install -r requirements.txt` — if pip fails,
+   it puts the old code back and does **not** restart the service;
+3. completes `/etc/tabela.env` with the missing new settings (e.g. `LAST_IMAGE_PATH`, `CAPTURE_DIR`)
+   and creates `CAPTURE_DIR` (owner `tabela`); `ADMIN_TOKEN` is set manually (secret);
+4. if the new code has a higher schema version than the database (`PRAGMA user_version`),
+   it first makes an online SQLite backup (`sqlite3 .backup`) in `/var/lib/tabela/backups/`
+   (the last 5 are kept);
+5. restarts and waits for `/api/health` (max. 3 minutes); if it does not become healthy, it does an
+   automatic **rollback** to PREV on the original branch (checkout, pip install, restart,
+   wait) and exits with code 1.
 
-Poarta de sănătate implicită (`HEALTH_MODE=strict`) cere `"ok":true`, adică aplicația a citit
-tabela CFR recent. Dacă CFR însuși nu răspunde, poarta nu poate trece (scriptul avertizează
-înainte); pentru o redistribuire de urgență: `sudo HEALTH_MODE=up bash .../update.sh <branch>`
-(ajunge HTTP 200 de la `/api/health`). Scriptul rulează dintr-o copie temporară a lui însuși
-(checkout-ul îl înlocuiește). Simularea lui (git temporar, comenzi false) e în
+The default health gate (`HEALTH_MODE=strict`) requires `"ok":true`, i.e. the application has read
+the CFR board recently. If CFR itself does not respond, the gate cannot pass (the script warns
+beforehand); for an emergency redeploy: `sudo HEALTH_MODE=up bash .../update.sh <branch>`
+(an HTTP 200 from `/api/health` is enough). The script runs from a temporary copy of itself
+(the checkout replaces it). Its simulation (temporary git, fake commands) is in
 `tests/test_update_sh.py`.
 
-**Restaurarea bazei de date** dintr-un backup (baza e în modul WAL — nu copiați fișierul peste
-o bază deschisă și nu lăsați fișierele `-wal`/`-shm` vechi lângă ea):
+**Restoring the database** from a backup (the database is in WAL mode — do not copy the file over
+an open database and do not leave old `-wal`/`-shm` files next to it):
 
     sudo systemctl stop tabela && \
     sudo rm -f /var/lib/tabela/tabela.db-wal /var/lib/tabela/tabela.db-shm && \
     sudo install -o tabela -g tabela -m 640 <backup.db> /var/lib/tabela/tabela.db && \
     sudo systemctl start tabela
 
-După un rollback de cod de la o versiune care a migrat schema, codul vechi ignoră coloanele
-noi; restaurarea de mai sus e necesară doar dacă vreți și datele de dinainte de migrare.
+After a code rollback from a version that migrated the schema, the old code ignores the new
+columns; the restore above is needed only if you also want the data from before the migration.
 
-`install.sh` fără argument rămâne pe branch-ul deja scos în `/opt/tabela/app` (ca
-`update.sh`); la prima instalare branch-ul e obligatoriu. Schimbările din
-`deploy/nginx-tabela.conf`, `tabela-limits.conf` sau pachetele apt se aplică rulând din nou
-`install.sh <branch>` (idempotent; nu regenerează cheile VAPID, iar dacă lipsește doar cheia
-publică o derivă din cea privată).
+`install.sh` without an argument stays on the branch already checked out in `/opt/tabela/app` (like
+`update.sh`); on the first install the branch is mandatory. Changes to
+`deploy/nginx-tabela.conf`, `tabela-limits.conf` or the apt packages are applied by running
+`install.sh <branch>` again (idempotent; it does not regenerate the VAPID keys, and if only the
+public key is missing it derives it from the private one).
 
-### Primul deploy al valului 1 (schema v3) — procedură
+### The first deploy of wave 1 (schema v3) — procedure
 
-Serverul are încă `update.sh`/`install.sh` vechi: **nu le rulați** (cel vechi nu face backup și
-poate fi stricat de propriul `git checkout`). Pași (cu sudo, `B` = branch-ul de livrat):
+The server still has the old `update.sh`/`install.sh`: **do not run them** (the old one does not make a backup and
+can be broken by its own `git checkout`). Steps (with sudo, `B` = the branch to deliver):
 
-1. Verificări: `curl -s http://127.0.0.1:8000/api/health` (ok=true), `df -h /var/lib/tabela /opt`,
-   `git -C /opt/tabela/app status --porcelain` (gol); notați `git -C /opt/tabela/app rev-parse HEAD`.
-2. Backup manual online + verificare:
+1. Checks: `curl -s http://127.0.0.1:8000/api/health` (ok=true), `df -h /var/lib/tabela /opt`,
+   `git -C /opt/tabela/app status --porcelain` (empty); note `git -C /opt/tabela/app rev-parse HEAD`.
+2. Manual online backup + verification:
 
        sudo install -d -m 700 /root/tabela-predeploy
        sudo /opt/tabela/venv/bin/python -c 'import sqlite3; s=sqlite3.connect("file:/var/lib/tabela/tabela.db?mode=ro", uri=True); d=sqlite3.connect("/root/tabela-predeploy/tabela.db"); s.backup(d); print(d.execute("PRAGMA integrity_check").fetchone()[0], d.execute("PRAGMA user_version").fetchone()[0], d.execute("SELECT COUNT(*) FROM services").fetchone()[0])'
 
-   (trebuie să afișeze `ok 2 <număr servicii>`).
-3. Scriptul NOU, rulat din `/tmp`:
+   (it must print `ok 2 <number of services>`).
+3. The NEW script, run from `/tmp`:
 
        sudo git -C /opt/tabela/app fetch origin "$B"
        sudo git -C /opt/tabela/app show "origin/$B:deploy/update.sh" > /tmp/update-new.sh
        sudo bash /tmp/update-new.sh "$B"
 
-4. Verificare: `PRAGMA user_version` = 3 și aceleași numere de servicii/evenimente (cu
-   `mode=ro` ca mai sus), `/api/health` ok, `/api/board` are `uncertain` și `delay_read`.
-5. `sudo bash /opt/tabela/app/deploy/install.sh "$B"` (explicit: pachetul sqlite3 și
+4. Verification: `PRAGMA user_version` = 3 and the same numbers of services/events (with
+   `mode=ro` as above), `/api/health` ok, `/api/board` has `uncertain` and `delay_read`.
+5. `sudo bash /opt/tabela/app/deploy/install.sh "$B"` (explicitly: the sqlite3 package and
    `limit_req_log_level`).
-6. Rollback (dacă e nevoie): doar cod — `git -C /opt/tabela/app checkout -B <branch-vechi>
-   <SHA notat>`, `/opt/tabela/venv/bin/pip install -r /opt/tabela/app/requirements.txt`,
-   `systemctl restart tabela`; baza de date — restaurarea de mai sus cu
+6. Rollback (if needed): code only — `git -C /opt/tabela/app checkout -B <old-branch>
+   <noted SHA>`, `/opt/tabela/venv/bin/pip install -r /opt/tabela/app/requirements.txt`,
+   `systemctl restart tabela`; database — the restore above with
    `/root/tabela-predeploy/tabela.db`.
 
-Trecerea pe `main` după merge-ul PR-ului: `sudo bash /opt/tabela/app/deploy/update.sh main`
-(de atunci `update.sh` fără argument rămâne pe `main`).
+Switching to `main` after the PR is merged: `sudo bash /opt/tabela/app/deploy/update.sh main`
+(from then on `update.sh` without an argument stays on `main`).
 
-- Log-uri: `journalctl -u tabela -f` (aplicația), `/var/log/nginx/access.log` (cererile;
-  `/api/follows` nu se loghează, pentru că endpoint-ul push e în query string).
-  Atenție: o cerere respinsă de `limit_req` (429) poate scrie totuși linia cererii (cu query
-  string-ul) în `/var/log/nginx/error.log`. De aceea `tabela-limits.conf` setează
-  `limit_req_log_level warn`, sub nivelul implicit `error` al `error_log` — nu coborâți
-  nivelul `error_log` la `warn`/`info` fără să țineți cont de asta.
-- Configurare UI: `GET /api/config` (pragurile de culoare `DELAY_THRESHOLDS="5,15,30"` din env,
-  `refresh_s`, `stale_after_s`) — sursa unică pentru intervalul de reîmprospătare și culori.
-- Date: `/var/lib/tabela/tabela.db` (SQLite, istoric + abonări) și
-  `/var/lib/tabela/last.jpg` (ultima imagine a tabelei, utilă la depanarea OCR).
-- Variabile în `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
+- Logs: `journalctl -u tabela -f` (the application), `/var/log/nginx/access.log` (requests;
+  `/api/follows` is not logged, because the push endpoint is in the query string).
+  Note: a request rejected by `limit_req` (429) may still write the request line (with the query
+  string) to `/var/log/nginx/error.log`. That is why `tabela-limits.conf` sets
+  `limit_req_log_level warn`, below the default `error` level of `error_log` — do not lower the
+  `error_log` level to `warn`/`info` without taking this into account.
+- UI configuration: `GET /api/config` (the color thresholds `DELAY_THRESHOLDS="5,15,30"` from env,
+  `refresh_s`, `stale_after_s`) — the single source for the refresh interval and colors.
+- Data: `/var/lib/tabela/tabela.db` (SQLite, history + subscriptions) and
+  `/var/lib/tabela/last.jpg` (the last image of the board, useful when debugging OCR).
+- Variables in `/etc/tabela.env`: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED`,
   `VAPID_SUBJECT`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `CAPTURE_DIR`, `ADMIN_TOKEN`
-  (opțional `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`, `TELEGRAM_BOT_TOKEN`,
-  `TELEGRAM_CHAT_ID`, `TELEGRAM_STATE_PATH`); model fără valori
-  reale în `.env.example`.
-- Chei VAPID: generate o singură dată de `install.sh` (dacă lipsesc din `/etc/tabela.env`);
-  nu se regenerează niciodată, altfel toate abonările push existente devin invalide.
-  Cheia privată nu iese din `/etc/tabela.env`; subiectul VAPID e URL-ul site-ului.
-- Politețe față de CFR: aplicația cere imaginea tabelei sincronizat cu momentul în care se
-  schimbă (de obicei 1–4 cereri/minut, plafon fix de 10/minut, backoff la erori) și se
-  identifică prin User-Agent. Nu rulați mai multe instanțe/workeri pe aceeași sursă.
+  (optionally `TESSERACT_CMD`, `CAPTURE_RETENTION_DAYS`, `WEATHER_*`, `TELEGRAM_BOT_TOKEN`,
+  `TELEGRAM_CHAT_ID`, `TELEGRAM_STATE_PATH`); a template without real values
+  in `.env.example`.
+- VAPID keys: generated once by `install.sh` (if missing from `/etc/tabela.env`);
+  never regenerated, otherwise all existing push subscriptions become invalid.
+  The private key does not leave `/etc/tabela.env`; the VAPID subject is the site's URL.
+- Politeness toward CFR: the application requests the board image synchronized with the moment it
+  changes (usually 1–4 requests/minute, a fixed cap of 10/minute, backoff on errors) and
+  identifies itself through the User-Agent. Do not run several instances/workers against the same source.
 
-## Meteo
+## Weather
 
-Lângă ceas (în antetul vizualizării Carduri și în bara de titlu a Panoului) apare un widget
-mic cu vremea din București: pictogramă după `weather_code` (variantă zi/noapte după `is_day`),
-temperatură și „se simte"; la apăsare/hover un popover cu detalii: umiditate, presiune (hPa),
-vânt (viteză + direcție în cuvinte, ex. „SV", + rafale), precipitații (totalul; ploaie / averse
-/ zăpadă doar când sunt > 0; 0,0 mm e o valoare reală), un grafic SVG al temperaturii din
-următoarele 24 h cu minim, maxim și marcajul „acum", ora observației și sursa.
+Next to the clock (in the header of the Cards view and in the title bar of the Panel) a small
+widget with the weather in Bucharest appears: an icon by `weather_code` (day/night variant by `is_day`),
+temperature and "feels like"; on press/hover a popover with details: humidity, pressure (hPa),
+wind (speed + direction in words, e.g. "SW", + gusts), precipitation (the total; rain / showers
+/ snow only when > 0; 0.0 mm is a real value), an SVG chart of the temperature over the
+next 24 h with minimum, maximum and the "now" marker, the observation time and the source.
 
-- Serverul (nu browserul — CSP rămâne `connect-src 'self'`) face **o singură cerere** către
+- The server (not the browser — CSP stays `connect-src 'self'`) makes **a single request** to
   Open-Meteo: `current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,
   precipitation,rain,showers,snowfall,weather_code,surface_pressure,wind_speed_10m,
-  wind_direction_10m,wind_gusts_10m` + `hourly=temperature_2m`, cu `timezone=UTC` (la fel ca
-  stocarea) și `forecast_days=2`, la fiecare 15 minute, într-o sarcină proprie,
-  independentă de poller-ul CFR: o eroare meteo nu afectează tabela și nici `ok` din
-  `/api/health` (care primește doar `weather_age_s`). Backoff la erori (5 → 30 min), niciodată
-  mai mult de o cerere la 5 minute, nici după repornire.
-- Etichetare onestă: valorile `current` sunt **date de model** pentru celula de grilă a
-  coordonatelor, nu măsurătorile unei stații meteo. Se salvează cu `kind = model_current` și
-  se afișează „Condiții curente (model Open-Meteo)". Valoare lipsă = `NULL`/„—", niciodată 0
-  (0,0 mm precipitații e o valoare reală). Peste 45 de minute datele apar gri, „date vechi".
-- Stocare: tabelul `weather_observations` (schema v4; **schema v8** adaugă, aditiv și nullable,
+  wind_direction_10m,wind_gusts_10m` + `hourly=temperature_2m`, with `timezone=UTC` (the same as
+  the storage) and `forecast_days=2`, every 15 minutes, in its own task,
+  independent of the CFR poller: a weather error does not affect the board nor the `ok` in
+  `/api/health` (which receives only `weather_age_s`). Backoff on errors (5 → 30 min), never
+  more than one request every 5 minutes, not even after a restart.
+- Honest labeling: the `current` values are **model data** for the grid cell of the
+  coordinates, not the measurements of a weather station. They are saved with `kind = model_current` and
+  displayed as "Current conditions (Open-Meteo model)". Missing value = `NULL`/"—", never 0
+  (0.0 mm precipitation is a real value). After 45 minutes the data appears grey, "stale data".
+- Storage: the `weather_observations` table (schema v4; **schema v8** adds, additively and nullable,
   `relative_humidity_pct, is_day, rain_mm, showers_mm, snowfall_cm, surface_pressure_hpa,
-  wind_gusts_kmh, hourly_json`; rândurile vechi rămân neatinse, cu `NULL` în coloanele noi),
-  un rând per observație (la fiecare 15 minute, UTC, `observed_at` unic), istoric permanent (~96 rânduri/zi)
-  pentru analiza „Meteo și trenuri". Seria orară (25 de puncte din ora observației, JSON
-  compact) se păstrează doar pe cea mai nouă observație: e o prognoză, nu istoric. API:
-  `GET /api/weather` (câmpurile noi + `hourly`); `GET /api/config` → `weather`.
-- Variabile (opționale) în `/etc/tabela.env`: `WEATHER_ENABLED` (implicit `1`; `0` oprește
-  serviciul și ascunde widgetul), `WEATHER_INTERVAL_S` (implicit `900`, minim `300`),
-  `WEATHER_LAT` / `WEATHER_LON` (implicit `44.4323` / `26.1063`), `WEATHER_URL` (implicit
+  wind_gusts_kmh, hourly_json`; old rows stay untouched, with `NULL` in the new columns),
+  one row per observation (every 15 minutes, UTC, unique `observed_at`), permanent history (~96 rows/day)
+  for the "Weather and trains" analysis. The hourly series (25 points from the observation hour, compact
+  JSON) is kept only on the newest observation: it is a forecast, not history. API:
+  `GET /api/weather` (the new fields + `hourly`); `GET /api/config` → `weather`.
+- Variables (optional) in `/etc/tabela.env`: `WEATHER_ENABLED` (default `1`; `0` stops
+  the service and hides the widget), `WEATHER_INTERVAL_S` (default `900`, minimum `300`),
+  `WEATHER_LAT` / `WEATHER_LON` (default `44.4323` / `26.1063`), `WEATHER_URL` (default
   `https://api.open-meteo.com/v1/forecast`).
-- Licență și atribuire: datele meteo sunt de la [Open-Meteo.com](https://open-meteo.com/),
-  sub licența **CC BY 4.0** (API-ul gratuit este pentru uz necomercial); atribuirea apare în
-  popover, în subsolul paginii și în creditul Panoului (vizibil și în ecran complet).
+- License and attribution: the weather data is from [Open-Meteo.com](https://open-meteo.com/),
+  under the **CC BY 4.0** license (the free API is for non-commercial use); the attribution appears in the
+  popover, in the page footer and in the Panel's credit (also visible in full screen).
 
-## Atribuire
+## Attribution
 
-Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: https://cfr.ro. © 2026 Andy217Ace.
-Meteo: Open-Meteo.com (CC BY 4.0), valori de model.
+Data taken from CFR (cfr.ro) — an independent project, not affiliated with CFR. The official board: https://cfr.ro. © 2026 Andy217Ace.
+Weather: Open-Meteo.com (CC BY 4.0), model values.
 
-Licență: MIT (vezi `LICENSE`).
+License: MIT (see `LICENSE`).

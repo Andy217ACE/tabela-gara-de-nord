@@ -26,7 +26,19 @@
   };
 
   var $ = function (id) { return document.getElementById(id); };
-  var UNSURE = "citire nesigură";
+
+  // ---- i18n (web/i18n/i18n.js): active language, plural and number helpers ----------
+
+  function T(key, params) { return window.I18N ? window.I18N.t(key, params) : key; }
+  function loc() { return window.I18N && window.I18N.lang() === "en" ? "en-GB" : "ro-RO"; }
+  // Plural form by the active language's Intl.PluralRules; keys base.one / base.few / base.other
+  function plural(base, n, params) {
+    var cat = "other";
+    try { cat = new Intl.PluralRules(loc()).select(Math.abs(n)); } catch (e) { /* ignore */ }
+    var k = base + "." + cat, s = T(k, params);
+    return s === k ? T(base + ".other", params) : s;
+  }
+  function unsureText() { return T("board.unsure"); }
 
   // ---- small DOM helpers (shared with history.js / follows.js) ----------------
 
@@ -67,14 +79,16 @@
     return (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm;
   }
 
-  function ago(sec) {
+  // duration without the "ago" wording: 12 s / 5 min / 3 h
+  function dur(sec) {
     sec = Math.max(0, Math.round(sec));
-    if (sec < 60) return "acum " + sec + " s";
+    if (sec < 60) return T("time.s", { n: sec });
     var min = Math.floor(sec / 60);
-    if (min < 60) return "acum " + min + " min";
-    var h = Math.floor(min / 60);
-    return "acum " + h + " h";
+    if (min < 60) return T("time.min", { n: min });
+    return T("time.h", { n: Math.floor(min / 60) });
   }
+
+  function ago(sec) { return T("time.ago", { age: dur(sec) }); }
 
   function delayLevel(d) {
     if (!d || d <= 0) return "ok";
@@ -136,8 +150,8 @@
     var type = el("span", "type");
     var no = el("span", "t-no");
     var flag = el("span", "t-flag");
-    flag.title = "Marcat cu * pe tabela CFR";
-    flag.append(el("span", null, "*"), el("span", "sr-only", "marcat cu asterisc pe tabela CFR"));
+    flag.title = T("board.flagTitle");
+    flag.append(el("span", null, "*"), el("span", "sr-only", T("board.flagSr")));
     flag.firstChild.setAttribute("aria-hidden", "true");
     var op = el("span", "t-op");
     meta.append(type, no, flag, op);
@@ -146,14 +160,14 @@
     var delay = el("span", "delay");
     var follow = el("button", "follow");
     follow.type = "button";
-    var followText = el("span", null, "urmărește");
+    var followText = el("span", null, T("board.follow"));
     follow.append(icon(ICONS.bell), followText);
     row.append(delay, follow);
     main.append(station, meta);
 
     var platWrap = el("div", "t-plat");
     var plat = el("span", "plat");
-    platWrap.append(plat, el("span", "plat-label", "linia"));
+    platWrap.append(plat, el("span", "plat-label", T("board.platformLabel")));
 
     li.append(time, main, platWrap, row);
 
@@ -176,7 +190,8 @@
     var lastAge = !read && typeof t.delay_last_read_age_s === "number" ? t.delay_last_read_age_s : null;
     var lastRead = lastAge !== null;
     var level = read || lastRead ? delayLevel(d) : "unread";
-    var where = c.board === "arrivals" ? "din " : "spre ";
+    var fromBoard = c.board === "arrivals";
+    var where = T(fromBoard ? "board.from" : "board.to");
     c.train = t;
     c.li.dataset.delay = level;
 
@@ -188,7 +203,7 @@
     } else {
       c.est.hidden = false;
       c.est.textContent = addMinutes(t.sched_time, d);
-      c.sched.setAttribute("aria-label", "programat " + t.sched_time);
+      c.sched.setAttribute("aria-label", T("board.scheduled", { time: t.sched_time }));
     }
 
     // A2 canonicalisation: `uncertain` = station/operator did not match a known name
@@ -197,49 +212,50 @@
     if (t.station) {
       var href = "#statie?nume=" + encodeURIComponent(t.station);
       if (c.stationLink.getAttribute("href") !== href) c.stationLink.setAttribute("href", href);
-      c.stationLink.setAttribute("aria-label", where + t.station + (unsure ? " (citire nesigură)" : "") +
-        " — pagina stației");
+      c.stationLink.setAttribute("aria-label", T(fromBoard ? "board.stationPageFrom" : "board.stationPageTo",
+        { name: t.station + (unsure ? " (" + unsureText() + ")" : "") }));
       c.station.removeAttribute("aria-label");
     } else {
       c.stationLink.removeAttribute("href");
       c.stationLink.removeAttribute("aria-label");
-      c.station.setAttribute("aria-label", where + "stație necunoscută");
+      c.station.setAttribute("aria-label", where + " " + T("board.stationUnknown"));
     }
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
     // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
-    c.station.title = t.station ? t.station + (unsure ? " (" + UNSURE + ")" : "") : "";
+    c.station.title = t.station ? t.station + (unsure ? " (" + unsureText() + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = t.train_type || "?";
-    c.type.title = "Tip tren " + (t.train_type || "necunoscut");
+    c.type.title = T("board.typeTitle", { type: t.train_type || T("board.typeUnknown") });
     c.no.textContent = String(t.train_no);
     c.flag.hidden = !t.flagged;
     c.op.textContent = t.operator || "";
     c.op.hidden = !t.operator;
     c.op.classList.toggle("is-uncertain", unsure && !!t.operator);
-    c.op.title = t.operator ? t.operator + (unsure ? " (" + UNSURE + ")" : "") : "";
+    c.op.title = t.operator ? t.operator + (unsure ? " (" + unsureText() + ")" : "") : "";
 
     c.delay.className = "delay delay-" + level;
     var ageMin = lastRead ? Math.max(0, Math.round(lastAge / 60)) : 0;
-    var ageTxt = ageMin < 1 ? "acum sub 1 min" : "acum " + ageMin + " min";
-    var valTxt = level === "unread" ? "necitit" : level === "ok" ? "la timp" : "+" + d + " min";
+    var ageTxt = ageMin < 1 ? T("time.agoUnder") : T("time.ago", { age: T("time.min", { n: ageMin }) });
+    var valTxt = level === "unread" ? T("board.unread") : level === "ok" ? T("board.onTime") : "+" + d + " min";
     c.delay.replaceChildren(
       icon(level === "ok" ? ICONS.ok : level === "minor" || level === "unread" ? ICONS.clock : ICONS.alert),
       document.createTextNode(valTxt)
     );
     if (lastRead) {
-      c.delay.append(document.createTextNode(" (ultima citire " + ageTxt + ")"));
+      c.delay.append(document.createTextNode(" (" + T("board.lastRead", { age: ageTxt }) + ")"));
       c.delay.classList.add("delay-last");
     }
-    c.delay.setAttribute("aria-label", level === "unread" ? "Întârziere necitită"
-      : (level === "ok" ? "La timp" : "Întârziere " + d + " minute") + (lastRead ? ", ultima citire " + ageTxt : ""));
-    c.delay.title = level === "unread" ? "Celula de întârziere nu a putut fi citită de pe tabela CFR"
-      : lastRead ? "Reflexie pe rând: afișăm ultima întârziere citită sigur, " + ageTxt : "";
+    c.delay.setAttribute("aria-label", level === "unread" ? T("board.delayAria.unread")
+      : (level === "ok" ? T("board.delayAria.onTime") : plural("board.delayAria.late", d, { n: d })) +
+        (lastRead ? ", " + T("board.lastRead", { age: ageTxt }) : ""));
+    c.delay.title = level === "unread" ? T("board.delayTitle.unread")
+      : lastRead ? T("board.delayTitle.glare", { age: ageTxt }) : "";
 
     var known = t.platform != null && t.platform !== "";
     c.plat.className = known ? "plat" : "plat plat-unknown";
     c.plat.textContent = known ? String(t.platform) : "—";
-    c.plat.setAttribute("aria-label", known ? "Linia " + t.platform : "Linie neanunțată");
-    c.plat.title = known ? "Linia " + t.platform : "Linia nu a fost anunțată";
+    c.plat.setAttribute("aria-label", known ? T("board.platAria", { p: t.platform }) : T("board.platNone"));
+    c.plat.title = known ? T("board.platAria", { p: t.platform }) : T("board.platNoneTitle");
 
     c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + (t.station || "");
     applyFollow(c);
@@ -266,9 +282,9 @@
     if (off) c.follow.setAttribute("aria-disabled", "true");
     else c.follow.removeAttribute("aria-disabled");
     c.follow.title = off ? st.reason : "";
-    c.followText.textContent = on ? "urmărit" : "urmărește";
-    c.follow.setAttribute("aria-label", (on ? "Nu mai urmări trenul " : "Urmărește trenul ") +
-      c.followLabel + (off ? ". " + st.reason : ""));
+    c.followText.textContent = T(on ? "board.followed" : "board.follow");
+    c.follow.setAttribute("aria-label", T(on ? "board.unfollowTrain" : "board.followTrain", { label: c.followLabel }) +
+      (off ? ". " + st.reason : ""));
   }
 
   function refreshFollowButtons() {
@@ -308,7 +324,7 @@
       }
     });
 
-    empty.textContent = EMPTY_TEXT;
+    empty.textContent = T("app.empty");
     empty.hidden = trains.length > 0;
     list.hidden = trains.length === 0;
     $("count-" + board).textContent = trains.length ? String(trains.length) : "";
@@ -340,8 +356,8 @@
     [$("panel-" + b), $("tab-" + b)].forEach(function (node) {
       if (!node) return;
       node.dataset.stale = stale ? "true" : "false";
-      node.title = stale ? "Date vechi pentru acest panou — ultima citire bună " +
-        (p.age_s == null ? "necunoscută" : ago(p.age_s)) : "";
+      node.title = stale ? (p.age_s == null ? T("app.panelStaleUnknown")
+        : T("app.panelStale", { age: ago(p.age_s) })) : "";
     });
   }
 
@@ -355,10 +371,12 @@
     if (!state.data) {
       if (state.failed) {
         live.dataset.state = "offline";
-        text.textContent = "fără conexiune";
-        bannerText.textContent = "Conexiune pierdută — nu am putut încărca tabela. Reîncerc automat.";
+        text.textContent = T("app.live.noConn");
+        bannerText.textContent = T("app.banner.lostLoad");
         banner.hidden = false;
-        announce("Conexiune pierdută.");
+        announce(T("app.announce.lost"));
+      } else {
+        text.textContent = T("app.loading");
       }
       return;
     }
@@ -366,24 +384,23 @@
     var stale = age == null || age > cfg.stale_after_s;
     if (state.failed) {
       live.dataset.state = "offline";
-      text.textContent = age == null ? "date vechi" : "date vechi · " + ago(age);
-      bannerText.textContent = "Conexiune pierdută — afișez ultimele date.";
+      text.textContent = age == null ? T("app.live.stale") : T("app.live.staleAge", { age: ago(age) });
+      bannerText.textContent = T("app.banner.lostShowing");
       banner.hidden = false;
-      announce("Conexiune pierdută — afișez ultimele date.");
+      announce(T("app.banner.lostShowing"));
     } else if (stale) {
       live.dataset.state = "stale";
-      text.textContent = age == null ? "fără date încă" : "date vechi · " + ago(age);
+      text.textContent = age == null ? T("app.live.noData") : T("app.live.staleAge", { age: ago(age) });
       bannerText.textContent = age == null
-        ? "Tabela CFR nu a fost încă citită — datele pot lipsi."
-        : "Datele nu s-au mai actualizat de " + ago(age).replace("acum ", "") +
-          " — tabela poate fi depășită. Verifică și cfr.ro.";
+        ? T("app.banner.neverRead")
+        : T("app.banner.outdated", { age: dur(age) });
       banner.hidden = false;
-      announce("Date vechi.");
+      announce(T("app.announce.stale"));
     } else {
       live.dataset.state = "live";
-      text.textContent = "actualizat " + ago(age);
+      text.textContent = T("app.live.updated", { age: ago(age) });
       banner.hidden = true;
-      announce("Tabela este actualizată.");
+      announce(T("app.announce.ok"));
     }
   }
 
@@ -394,8 +411,6 @@
     state.timer = setTimeout(refresh, ms);
   }
 
-  var EMPTY_TEXT = "Momentan nu sunt trenuri afișate.";
-
   // First fetch failed: swap the skeleton cards for a message and drop aria-busy.
   function showLoadFailure() {
     BOARDS.forEach(function (b) {
@@ -404,7 +419,7 @@
       list.removeAttribute("aria-busy");
       list.hidden = true;
       var empty = $("panel-" + b).querySelector(".empty");
-      empty.textContent = "Nu am putut încărca tabela. Reîncerc automat.";
+      empty.textContent = T("app.loadFail");
       empty.hidden = false;
     });
   }
@@ -422,7 +437,7 @@
       })
       .then(function (data) {
         if (!data || !Array.isArray(data.arrivals) || !Array.isArray(data.departures)) {
-          throw new Error("răspuns invalid");
+          throw new Error("invalid response");
         }
         if (data.sw_offline && state.data && !state.data.sw_offline) {
           // offline: the in-memory copy is at least as new as the cached one
@@ -492,9 +507,9 @@
     "#sistem": "sistem", "#setari": "setari" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
     "clasamente", "statii", "statie", "sistem", "setari"];
-  var TITLES = { istoric: "Istoric", ocr: "Capturi OCR", admin: "Administrare", versiuni: "Versiuni", urmarite: "Urmărite",
-    trenuri: "Trenuri", tren: "Tren", statistici: "Statistici", clasamente: "Clasamente",
-    statii: "Stații", statie: "Stație", sistem: "Sistem", setari: "Setări" };
+  // routes with a page title: i18n key title.<route>
+  var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
+    "clasamente", "statii", "statie", "sistem", "setari"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;
@@ -571,6 +586,11 @@
     else if (ar.right > nr.right - pad) nav.scrollLeft += ar.right - (nr.right - pad);
   }
 
+  function setTitle(name) {
+    document.title = name === "tabela" ? "Tabela Gara de Nord"
+      : (TITLES.indexOf(name) >= 0 ? T("title." + name) : "Tabela Gara de Nord") + " · Tabela Gara de Nord";
+  }
+
   function route() {
     var r = parseHash();
     var name = r.name;
@@ -591,8 +611,7 @@
     revealActiveNav();
     document.body.setAttribute("data-route", name);   // Beta 1.26: page canvas (ui2.css)
     // a view may refine the title later (stats.js: „Tren 1636 · …”)
-    document.title = name === "tabela" ? "Tabela Gara de Nord"
-      : (TITLES[name] || "Tabela Gara de Nord") + " · Tabela Gara de Nord";
+    setTitle(name);
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);
     if (changed) {
@@ -625,12 +644,13 @@
   };
   if (typeof window.TabelaApp.onFollow !== "function") {
     window.TabelaApp.onFollow = function () {
-      toast("Urmărirea trenurilor vine în curând.");
+      toast(T("app.followSoon"));
     };
   }
   window.TabelaApp.toast = toast;
   window.TabelaApp.config = loadConfig;   // Promise of the validated /api/config
-  window.TabelaApp.UNSURE = UNSURE;
+  // the "uncertain reading" marker follows the active language
+  Object.defineProperty(window.TabelaApp, "UNSURE", { get: unsureText, configurable: true, enumerable: true });
   window.TabelaApp.refresh = refresh;
   window.TabelaApp.el = el;
   window.TabelaApp.icon = icon;
@@ -657,17 +677,17 @@
   var THEME_NEXT = { auto: "light", light: "dark", dark: "auto" };
 
   function renderThemeButtons() {
-    var T = window.TabelaTheme;
+    var T = window.TabelaTheme, T_ = window.I18N ? window.I18N.t : function (k) { return k; };
     if (!T) return;
     var mode = T.get();
     document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
-      var label = "Temă: " + T.LABELS[mode];
+      var label = T_("theme.label", { mode: T_("theme.mode." + mode) });
       b.dataset.mode = mode;
       b.setAttribute("aria-label", label);
       var txt = b.querySelector(".pnl-btn-text"); // the Panou copy has visible text
       if (txt) txt.textContent = label;
-      b.title = label + (mode === "auto" ? " (urmează sistemul)" : "") +
-        ". Apasă pentru " + T.LABELS[THEME_NEXT[mode]] + ".";
+      b.title = label + (mode === "auto" ? " (" + T_("theme.followsSystem") + ")" : "") +
+        ". " + T_("theme.pressFor", { next: T_("theme.mode." + THEME_NEXT[mode]) });
     });
   }
 
@@ -717,7 +737,61 @@
 
   // ---- boot ------------------------------------------------------------------------
 
+  // Text next to a link (data-i18n would wipe the link): replace only the text node at one edge.
+  function setEdge(node, last, text) {
+    var n = node && (last ? node.lastChild : node.firstChild);
+    if (n && n.nodeType === 3) n.nodeValue = text;
+  }
+
+  function applyShellText() {
+    setEdge(document.querySelector(".live-src"), false, T("app.sourceLabel") + " ");
+    setEdge(document.querySelector(".footer p"), false, "© 2026 Andy217Ace · " + T("footer.credit") + " ");
+    var fm = document.querySelector(".footer-meteo");
+    setEdge(fm, false, T("footer.meteo") + " ");
+    setEdge(fm, true, " " + T("footer.meteoTail"));
+  }
+
+  // Every dynamic string is rebuilt from the data already in memory, in the active language.
+  function relocalize() {
+    if (window.I18N) window.I18N.applyDom(document);
+    applyShellText();
+    if (state.data) {
+      BOARDS.forEach(function (b) { renderBoard(b, state.data[b]); markPanelStale(b, state.data); });
+    } else if (state.failed) {
+      showLoadFailure();
+    }
+    renderLive();
+    renderThemeButtons();
+    setTitle(currentRoute || "tabela");
+  }
+  document.addEventListener("i18n:change", relocalize);
+
+  // Comutator RO/EN: butonul arată limba la care se trece; după setLang reaplicăm textele data-i18n.
+  function initLang() {
+    var I = window.I18N, btn = document.querySelector("[data-lang-toggle]");
+    if (!I) return;
+    function sync() {
+      document.documentElement.lang = I.lang();
+      relocalize();
+      if (btn) btn.textContent = I.lang() === "en" ? "RO" : "EN";
+    }
+    I.ready.then(sync);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var next = I.lang() === "en" ? "ro" : "en";
+      I.setLang(next).then(function () {
+        try {
+          var u = new URL(location.href);
+          u.searchParams.set("lang", next);
+          history.replaceState(null, "", u.pathname + u.search + u.hash);
+        } catch (e) { /* ignore */ }
+        sync();
+      });
+    });
+  }
+
   function init() {
+    initLang();
     initPeronEst();
     loadConfig();
     initTheme();
@@ -743,6 +817,8 @@
 
   // Deferred scripts (history.js, follows.js) run before DOMContentLoaded and register
   // their views first, so the initial route can show them.
-  if (document.readyState === "complete") init();
-  else document.addEventListener("DOMContentLoaded", init);
+  // The dictionaries must be loaded before the first render (t() returns the key until then).
+  function boot() { (window.I18N ? window.I18N.ready : Promise.resolve()).then(init); }
+  if (document.readyState === "complete") boot();
+  else document.addEventListener("DOMContentLoaded", boot);
 })();

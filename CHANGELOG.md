@@ -5,6 +5,28 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.54 — 2026-11-14
+
+### Adăugat
+- **Interfață în engleză, cu comutator RO/EN:** butonul de limbă din antet schimbă limba imediat, fără reîncărcare. Alegerea se păstrează în browser (`tabela-lang`), iar un link cu `?lang=en` deschide direct varianta în engleză (orice alt cod revine la română).
+- **Pagina offline în engleză:** pagina afișată fără rețea respectă limba aleasă, după ce aplicația a fost deschisă o dată în engleză.
+- **Documentație în engleză:** ghidurile din `docs/` au traducere completă în `docs/en/`, iar `README.md` este acum în engleză, cu varianta românească în `README.ro.md`.
+
+### Schimbat
+- **Statistici, istoric, administrare, capturi OCR și ecranul Sistem sunt traduse** (texte, etichete, date și numere formatate după limbă); textele venite din server (observații, motive de probleme) rămân în română.
+- **Service worker v40:** dicționarul românesc (`ro.json`) intră în precache, iar cel englezesc (`en.json`) se salvează la prima utilizare, deci româna merge offline de la prima instalare.
+
+### Reparat
+- **Textele rămase în română în ecranele traduse** au fost mutate în dicționare, iar un test nou (paritate RO/EN și scanare de texte) împiedică reapariția lor.
+
+### English
+- **English interface with an RO/EN switch:** the language button in the header changes the language instantly, with no reload. The choice is remembered in the browser (`tabela-lang`), and a link with `?lang=en` opens the English version directly (any other code falls back to Romanian).
+- **Offline page in English:** the page shown without a network follows the chosen language, once the app has been opened in English at least once.
+- **English documentation:** the guides in `docs/` are fully translated in `docs/en/`, and `README.md` is now in English, with the Romanian version in `README.ro.md`.
+- **Statistics, history, admin, OCR captures and the System screen are translated** (texts, labels, dates and numbers formatted per language); text coming from the server (notes, problem reasons) stays in Romanian.
+- **Service worker v40:** the Romanian dictionary (`ro.json`) is precached, and the English one (`en.json`) is cached on first use, so Romanian works offline from the first install.
+- **Strings left in Romanian on the translated screens** were moved into dictionaries, and a new RO/EN parity test checks that the two dictionaries match. A text scan for remaining Romanian literals exists but is not yet enforced.
+
 ## Beta 1.53 — 2026-11-14
 
 ### Reparat
