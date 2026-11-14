@@ -110,6 +110,133 @@
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
 
+  // ---- saved filter presets: up to 5 named sets in localStorage (this device only) -------------
+
+  var PRESET_KEY = "tabela.statsPresets";
+  var PRESET_MAX = 5;
+
+  // the list, or null when localStorage is unavailable (blocked, private mode, quota…)
+  function presetsLoad() {
+    try {
+      var raw = window.localStorage.getItem(PRESET_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(function (x) { return x && typeof x.name === "string" && x.name && x.filters && typeof x.filters === "object"; })
+        .slice(0, PRESET_MAX);
+    } catch (e) { return null; }
+  }
+
+  function presetsWrite(list) {
+    try {
+      window.localStorage.setItem(PRESET_KEY, JSON.stringify(list));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // "ok", "full" (5 already and a new name) or "unavailable"
+  function presetsSave(name, filters) {
+    var list = presetsLoad();
+    if (!list) return "unavailable";
+    var at = -1;
+    list.forEach(function (x, i) { if (x.name === name) at = i; });
+    if (at < 0 && list.length >= PRESET_MAX) return "full";
+    var entry = { name: name, filters: filters };
+    if (at >= 0) list[at] = entry; else list.push(entry);
+    return presetsWrite(list) ? "ok" : "unavailable";
+  }
+
+  function presetsDelete(i) {
+    var list = presetsLoad();
+    if (!list) return;
+    list.splice(i, 1);
+    presetsWrite(list);
+  }
+
+  // only the fields that still exist and still have a valid value (a deleted operator, an unknown key: dropped)
+  function presetsApply(filters) {
+    var opts = (v.data && v.data.options) || {};
+    function known(list, val) { return (list || []).some(function (o) { return o.name === val; }); }
+    var p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    FIELDS.forEach(function (f) {
+      var val = clean(f, filters[f]);
+      if (f === "operator" && !known(opts.operators, val)) val = "";
+      if (f === "tip" && !known(opts.types, val)) val = "";
+      p[f] = val;
+    });
+    v.p = p;
+    setForm(p);
+    syncHash(p);
+    load();
+  }
+
+  function presetsMenu() {
+    var box = el("div", "ss-presets");
+    var tog = el("button", "btn btn-ghost btn-sm ss-presets-toggle", tt("stats.preset.button"));
+    tog.type = "button";
+    tog.setAttribute("aria-expanded", "false");
+    var menu = el("div", "ss-presets-menu");
+    menu.hidden = true;
+    menu.addEventListener("change", function (e) { e.stopPropagation(); });   // the name field is not a filter
+    box.append(tog, menu);
+    var msg = el("p", "ss-preset-msg");
+    msg.setAttribute("role", "status");
+    function close() { menu.hidden = true; tog.setAttribute("aria-expanded", "false"); }
+    function fill() {
+      var list = presetsLoad();
+      var nodes = [];
+      if (!list) {
+        msg.textContent = tt("stats.preset.unavailable");
+        menu.replaceChildren(msg);
+        return;
+      }
+      if (!list.length) nodes.push(el("p", "ss-preset-empty", tt("stats.preset.none")));
+      else {
+        var ul = el("ul", "ss-preset-list");
+        list.forEach(function (x, i) {
+          var li = el("li", "ss-preset-item");
+          var ap = el("button", "btn btn-ghost btn-sm ss-preset-apply", x.name);
+          ap.type = "button";
+          ap.addEventListener("click", function () { presetsApply(x.filters); close(); });
+          var del = el("button", "btn btn-ghost btn-sm ss-preset-del", "×");
+          del.type = "button";
+          del.setAttribute("aria-label", tt("stats.preset.delete", { name: x.name }));
+          del.addEventListener("click", function () { presetsDelete(i); msg.textContent = ""; fill(); });
+          li.append(ap, del);
+          ul.append(li);
+        });
+        nodes.push(ul);
+      }
+      var row = el("div", "ss-preset-new");
+      var inp = el("input", "ss-preset-name");
+      inp.type = "text";
+      inp.maxLength = 30;
+      inp.placeholder = tt("stats.preset.name");
+      inp.setAttribute("aria-label", tt("stats.preset.name"));
+      var sv = el("button", "btn btn-sm ss-preset-save", tt("stats.preset.save"));
+      sv.type = "button";
+      function save() {
+        var name = inp.value.trim();
+        if (!name) { msg.textContent = tt("stats.preset.need_name"); return; }
+        var r = presetsSave(name, Object.assign({}, v.p));
+        if (r === "full") { msg.textContent = tt("stats.preset.full", { max: PRESET_MAX }); return; }
+        fill();
+        if (r === "ok") msg.textContent = tt("stats.preset.saved", { name: name });
+      }
+      sv.addEventListener("click", save);
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
+      row.append(inp, sv);
+      nodes.push(row, msg);
+      menu.replaceChildren.apply(menu, nodes);
+    }
+    tog.addEventListener("click", function () {
+      var open = menu.hidden;
+      if (open) { msg.textContent = ""; fill(); }
+      menu.hidden = !open;
+      tog.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    return box;
+  }
+
   // ---- shell: filters + body ---------------------------------------------------------
 
   var v = { sect: "", sectPending: false, p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
@@ -179,7 +306,7 @@
     rs.type = "button";
     rs.hidden = true;
     rs.addEventListener("click", function () { resetFilters(); });
-    form.append(per.node, brd.node, op.node, tp.node, chk, rs);
+    form.append(per.node, brd.node, op.node, tp.node, chk, rs, presetsMenu());
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
                tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "" };

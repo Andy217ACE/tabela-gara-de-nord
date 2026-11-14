@@ -105,3 +105,69 @@ def test_unknown_section_is_ignored(browser, base_url):
         assert errors == []
     finally:
         ctx.close()
+
+
+def _reload(page, base_url, n):
+    """A real reload (new query string), so the page starts from localStorage only."""
+    page.goto(f"{base_url}/?r={n}#statistici")
+    page.wait_for_selector(".ss-quick .ss-card")
+
+
+def test_preset_saves_and_restores_filters(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        page.select_option("#ss-operator", "Transferoviar")
+        page.locator(".ss-seg-opt", has_text="7 zile").click()
+        page.locator(".ss-presets-toggle").click()
+        page.fill(".ss-preset-name", "Test")
+        page.locator(".ss-preset-save").click()
+        expect(page.locator(".ss-preset-apply", has_text="Test")).to_be_visible()
+        _reload(page, base_url, 1)
+        page.locator(".ss-presets-toggle").click()
+        page.locator(".ss-preset-apply", has_text="Test").click()
+        expect(page.locator("#ss-operator")).to_have_value("Transferoviar")
+        expect(page.locator("input[name=ss-perioada][value='7']")).to_be_checked()
+        assert "operator=Transferoviar" in page.evaluate("location.hash")
+        # delete it again
+        page.locator(".ss-presets-toggle").click()
+        page.locator(".ss-preset-del").first.click()
+        expect(page.locator(".ss-preset-apply")).to_have_count(0)
+        assert page.evaluate("JSON.parse(localStorage.getItem('tabela.statsPresets')).length") == 0
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_preset_with_missing_field_applies_valid_fields_only(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        page.evaluate("""localStorage.setItem('tabela.statsPresets', JSON.stringify([
+            {name: 'Vechi', filters: {perioada: '7', operator: 'Operator Sters', tip: 'ZZ', camp_vechi: 'x'}}]))""")
+        _reload(page, base_url, 2)
+        page.locator(".ss-presets-toggle").click()
+        page.locator(".ss-preset-apply", has_text="Vechi").click()
+        expect(page.locator("input[name=ss-perioada][value='7']")).to_be_checked()
+        assert page.locator("#ss-operator").input_value() == ""
+        assert page.locator("#ss-tip").input_value() == ""
+        assert "operator=" not in page.evaluate("location.hash")
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_presets_disabled_without_storage(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        ctx.add_init_script("""const blocked = () => { throw new Error('blocked'); };
+            Storage.prototype.getItem = blocked; Storage.prototype.setItem = blocked;
+            Storage.prototype.removeItem = blocked;""")
+        _reload(page, base_url, 3)
+        page.locator(".ss-presets-toggle").click()
+        expect(page.locator(".ss-preset-msg")).to_contain_text("indisponibile")
+        expect(page.locator(".ss-preset-save")).to_have_count(0)
+        # the filters themselves keep working
+        page.locator(".ss-seg-opt", has_text="7 zile").click()
+        assert "perioada=7" in page.evaluate("location.hash")
+        assert not [e for e in errors if "blocked" in e and "statistici" in e.lower()]
+    finally:
+        ctx.close()
