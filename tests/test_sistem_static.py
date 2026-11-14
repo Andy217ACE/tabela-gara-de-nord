@@ -2,6 +2,7 @@
 """Pagina „Sistem” (web/sistem.js, web/sistem.css): static rules (CSP, „necunoscut” for
 missing values) and a real-browser check at 390 px (no horizontal scroll). The browser
 part is skipped when Playwright or its Chromium is unavailable."""
+import json
 import re
 import socket
 import threading
@@ -37,14 +38,16 @@ def test_only_the_status_endpoints_are_read():
 
 def test_missing_values_are_necunoscut_not_zero():
     # every displayed value goes through num() or ago(), which turn null into "necunoscut"
-    assert 'v == null ? "necunoscut"' in JS
-    assert 'if (s == null) return "necunoscut"' in JS
+    assert 'v == null ? T("sistem.unknown")' in JS
+    assert 'if (s == null) return T("sistem.unknown")' in JS
     assert 'o.unread_rate_1h == null' in JS
 
 
 def test_states_have_their_romanian_labels():
-    for label in ("LIVE", "Date vechi", "Necunoscut"):
-        assert label in JS
+    ro = json.loads((ROOT / "web" / "i18n" / "ro.json").read_text(encoding="utf-8"))
+    for key, label in (("sistem.state.live", "LIVE"), ("sistem.state.old", "Date vechi"),
+                       ("sistem.state.unknown", "Necunoscut")):
+        assert key in JS and ro[key] == label
 
 
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -56,6 +59,7 @@ PAGE = """<!doctype html><html lang="ro"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/web/sistem.css"></head>
 <body><main id="main" tabindex="-1"></main>
+<script src="/web/i18n/i18n.js"></script>
 <script src="/web/sistem.js"></script></body></html>"""
 
 
@@ -73,6 +77,7 @@ def base_url(tmp_path_factory):
     app.state.settings = SimpleNamespace(db_path=str(db))
     (tmp / "index.html").write_text(PAGE, encoding="utf-8")
     app.mount("/web", StaticFiles(directory=str(ROOT / "web")), name="web")
+    app.mount("/i18n", StaticFiles(directory=str(ROOT / "web" / "i18n")), name="i18n")  # i18n.js fetches /i18n/*.json
     app.mount("/", StaticFiles(directory=str(tmp), html=True), name="page")
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -106,6 +111,7 @@ def test_sistem_page_at_390px_live_and_no_horizontal_scroll(browser, base_url):
     try:
         page.goto(base_url + "/")
         page.wait_for_function("() => window.TabelaApp && TabelaApp.views.sistem")
+        page.evaluate("() => I18N.ready")
         page.evaluate("() => TabelaApp.views.sistem.show()")
         page.wait_for_selector(".sys-badge")
         assert page.inner_text(".sys-badge") == "LIVE"

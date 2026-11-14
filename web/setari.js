@@ -1,14 +1,14 @@
 // © 2026 Andy217Ace
-// „Setări" din admin: retenția capturilor și pragul de spațiu liber. Cheia de administrare
-// NU apare aici (rămâne în /etc/tabela.env). Încărcat la cerere; DOM doar cu createElement/textContent (CSP).
+// "Settings" from admin: capture retention and the free-space threshold. The admin key
+// does NOT appear here (it stays in /etc/tabela.env). Loaded on demand; DOM only via createElement/textContent (CSP).
 (function () {
   "use strict";
 
+  function T(k, p) { return window.I18N.t(k, p); }
+
   var FIELDS = [
-    ["capture_retention_days", "Retenția imaginilor capturate (zile)",
-      "Imaginile mai vechi se șterg; metadatele rămân."],
-    ["capture_min_free_mb", "Spațiu liber minim pe disc (MB)",
-      "Sub acest prag, capturile noi se salvează doar ca metadate."]
+    ["capture_retention_days", "settings.retention.label", "settings.retention.hint"],
+    ["capture_min_free_mb", "settings.minFree.label", "settings.minFree.hint"]
   ];
 
   function el(tag, cls, text) {
@@ -56,13 +56,16 @@
   function message(r) {
     var d = r.data && r.data.detail;
     if (typeof d === "string") return d;
-    return "Eroare (" + r.status + ").";
+    return T("settings.error", { status: r.status });
   }
 
   // mount(container): builds the settings form inside `container`
+  var lastContainer = null;
+
   function mount(container) {
+    lastContainer = container;
     clear(container);
-    container.appendChild(el("h2", "setari-title", "Setări"));
+    container.appendChild(el("h2", "setari-title", T("settings.title")));
     var status = el("p", "setari-status", "");
     status.setAttribute("role", "status");
     container.appendChild(status);
@@ -72,21 +75,21 @@
     FIELDS.forEach(function (f) {
       var key = f[0];
       var wrap = el("div", "setari-field");
-      var label = el("label", null, f[1]);
+      var label = el("label", null, T(f[1]));
       var input = el("input");
       input.type = "number";
       input.step = "1";
       input.name = key;
       input.id = "setari-" + key;
       label.setAttribute("for", input.id);
-      var hint = el("p", "setari-hint", f[2]);
+      var hint = el("p", "setari-hint", T(f[2]));
       wrap.appendChild(label);
       wrap.appendChild(input);
       wrap.appendChild(hint);
       form.appendChild(wrap);
       inputs[key] = input;
     });
-    var btn = el("button", "setari-save", "Salvează");
+    var btn = el("button", "setari-save", T("settings.save"));
     btn.type = "submit";
     form.appendChild(btn);
     container.appendChild(form);
@@ -104,7 +107,7 @@
     api("/api/admin/settings").then(function (r) {
       if (r.status === 200) { fill(r.data); return; }
       status.textContent = r.status === 401 || r.status === 503
-        ? "Autentificare necesară pentru setări." : message(r);
+        ? T("settings.authNeeded") : message(r);
       btn.disabled = true;
     });
 
@@ -115,15 +118,20 @@
         var raw = inputs[f[0]].value.trim();
         body[f[0]] = /^-?\d+$/.test(raw) ? parseInt(raw, 10) : raw;
       });
-      status.textContent = "Se salvează…";
+      status.textContent = T("settings.saving");
       save(body).then(function (r) {
-        if (r.status === 200) { fill(r.data); status.textContent = "Setările au fost salvate."; return; }
+        if (r.status === 200) { fill(r.data); status.textContent = T("settings.saved"); return; }
         status.textContent = r.status === 422
-          ? "Valoare în afara intervalului permis. Nu s-a modificat nimic."
+          ? T("settings.outOfRange")
           : message(r);
       });
     });
   }
+
+  // language switch: rebuild the form in the new language
+  document.addEventListener("i18n:change", function () {
+    if (lastContainer && document.body.contains(lastContainer)) mount(lastContainer);
+  });
 
   window.TabelaSetari = { mount: mount };
 })();

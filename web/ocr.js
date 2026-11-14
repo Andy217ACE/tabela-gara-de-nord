@@ -5,23 +5,29 @@
 (function () {
   "use strict";
 
-  var FIELDS = [
-    ["type", "Tip"], ["no", "Nr."], ["station", "Stație"], ["operator", "Operator"],
-    ["time", "Ora"], ["delay", "Întârziere"], ["platform", "Linie"]
-  ];
-  var STATE_LABEL = {
-    ok: "valid", uncertain: "nesigur", rejected_low_conf: "respins (încredere mică)",
-    incomplete: "incomplet"
-  };
-  var BOARD_LABEL = { arrival: "Sosiri", departure: "Plecări" };
-  var LINE_LABEL = { empty: "rând gol", unread: "rând necitit" };
+  function T(k, p) { return window.I18N.t(k, p); }
 
-  // "S 12 · P 11" (+ re-reads) from the per-panel counts of a capture
+  var FIELDS = [
+    ["type", "ocr.field.type"], ["no", "ocr.field.no"], ["station", "ocr.field.station"],
+    ["operator", "ocr.field.operator"], ["time", "ocr.field.time"], ["delay", "ocr.field.delay"],
+    ["platform", "ocr.field.platform"]
+  ];
+  var STATE_KEY = {
+    ok: "ocr.state.ok", uncertain: "ocr.state.uncertain", rejected_low_conf: "ocr.state.rejected",
+    incomplete: "ocr.state.incomplete"
+  };
+  var BOARD_KEY = { arrival: "ocr.board.arrival", departure: "ocr.board.departure" };
+  var LINE_KEY = { empty: "ocr.line.empty", unread: "ocr.line.unread" };
+
+  function keyLabel(map, k) { return map[k] ? T(map[k]) : undefined; }
+  function boardLabel(b) { return keyLabel(BOARD_KEY, b); }
+
+  // "S 12 · P 11" (ro) / "A 12 · D 11" (en), plus re-reads, from the per-panel counts of a capture
   function boardsText(b) {
     if (!b || !b.arrivals) return "—";
-    var t = "S " + b.arrivals.rows + " · P " + b.departures.rows;
+    var t = T("ocr.boards.arrShort") + " " + b.arrivals.rows + " · " + T("ocr.boards.depShort") + " " + b.departures.rows;
     var re = b.arrivals.retried + b.departures.retried;
-    if (re) t += " · recitite " + re + " (+" + (b.arrivals.recovered + b.departures.recovered) + ")";
+    if (re) t += " · " + T("ocr.boards.reread") + " " + re + " (+" + (b.arrivals.recovered + b.departures.recovered) + ")";
     return t;
   }
 
@@ -56,15 +62,22 @@
     });
   }
 
-  var fmtTime = new Intl.DateTimeFormat("ro-RO", {
-    timeZone: "Europe/Bucharest", day: "2-digit", month: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit"
-  });
+  var fmtCache = {};
+  function fmtTime() {
+    var loc = window.I18N.lang() === "en" ? "en-GB" : "ro-RO";
+    if (!fmtCache[loc]) {
+      fmtCache[loc] = new Intl.DateTimeFormat(loc, {
+        timeZone: "Europe/Bucharest", day: "2-digit", month: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit"
+      });
+    }
+    return fmtCache[loc];
+  }
 
   function when(iso) {
     if (!iso) return "—";
     var d = new Date(iso);
-    return isNaN(d) ? iso : fmtTime.format(d);
+    return isNaN(d) ? iso : fmtTime().format(d);
   }
 
   function bytes(n) {
@@ -95,12 +108,10 @@
     clear(root);
     root.setAttribute("aria-labelledby", "ocr-heading");
     var head = el("div", "page-head ocr-head");
-    var h = el("h1", null, "Capturi OCR");
+    var h = el("h1", null, T("ocr.title"));
     h.id = "ocr-heading";
     head.appendChild(h);
-    head.appendChild(el("p", "page-sub",
-      "Diagnostic intern: imaginea tabelei, dreptunghiurile citite și încrederea pe câmp. " +
-      "Capturile CFR sunt private și nu se redistribuie."));
+    head.appendChild(el("p", "page-sub", T("ocr.subtitle")));
     root.appendChild(head);
     var msg = el("p", "notice", "");
     msg.id = "ocr-msg";
@@ -125,9 +136,9 @@
     var body = document.getElementById("ocr-body");
     clear(body);
     var form = el("form", "ocr-login panel");
-    form.setAttribute("aria-label", "Autentificare administrare");
+    form.setAttribute("aria-label", T("ocr.login.aria"));
     var label = el("label", "field");
-    label.appendChild(el("span", "field-label", "Cheie de administrare"));
+    label.appendChild(el("span", "field-label", T("ocr.login.key")));
     var input = el("input");
     input.type = "password";
     input.id = "ocr-token";
@@ -137,7 +148,7 @@
     input.maxLength = 200;
     label.appendChild(input);
     form.appendChild(label);
-    var btn = el("button", "btn", "Autentificare");
+    var btn = el("button", "btn", T("ocr.login.submit"));
     btn.type = "submit";
     form.appendChild(btn);
     body.appendChild(form);
@@ -152,13 +163,13 @@
         btn.disabled = false;
         input.value = "";
         if (r.status === 200) { message(""); loadAll(); return; }
-        if (r.status === 429) message("Prea multe încercări. Reîncearcă peste un minut.", true);
+        if (r.status === 429) message(T("ocr.msg.tooMany"), true);
         else if (r.status === 503) disabled();
-        else message("Cheie greșită.", true);
+        else message(T("ocr.msg.wrongKey"), true);
         input.focus();
       }).catch(function () {
         btn.disabled = false;
-        message("Serverul nu răspunde.", true);
+        message(T("ocr.msg.noServer"), true);
       });
     });
     input.focus();
@@ -166,14 +177,14 @@
 
   function disabled() {
     clear(document.getElementById("ocr-body"));
-    message("Administrarea este dezactivată pe acest server (ADMIN_TOKEN nesetat).", true);
+    message(T("ocr.msg.disabled"), true);
   }
 
   function logout() {
     api("/api/admin/logout", { method: "POST" }).finally(function () {
       state.detail = null;
       showLogin();
-      message("Ai ieșit din administrare.");
+      message(T("ocr.msg.loggedOut"));
     });
   }
 
@@ -183,10 +194,10 @@
     var body = document.getElementById("ocr-body");
     clear(body);
     var bar = el("div", "ocr-bar");
-    var refresh = el("button", "btn btn-ghost btn-sm", "Reîncarcă");
+    var refresh = el("button", "btn btn-ghost btn-sm", T("ocr.reload"));
     refresh.type = "button";
     refresh.addEventListener("click", loadAll);
-    var out = el("button", "btn btn-ghost btn-sm", "Ieșire");
+    var out = el("button", "btn btn-ghost btn-sm", T("ocr.logout"));
     out.type = "button";
     out.addEventListener("click", logout);
     bar.appendChild(refresh);
@@ -197,18 +208,18 @@
     body.appendChild(stats);
     var rulesBox = el("section", "ocr-rules panel");
     rulesBox.id = "ocr-rules";
-    rulesBox.setAttribute("aria-label", "Corecții manuale");
+    rulesBox.setAttribute("aria-label", T("ocr.rules.title"));
     body.appendChild(rulesBox);
     var layout = el("div", "ocr-layout");
     var listBox = el("section", "ocr-list");
-    listBox.setAttribute("aria-label", "Capturi recente");
-    listBox.appendChild(el("h2", "ocr-h2", "Capturi recente"));
+    listBox.setAttribute("aria-label", T("ocr.list.title"));
+    listBox.appendChild(el("h2", "ocr-h2", T("ocr.list.title")));
     var wrap = el("div", "ocr-scroll");
     var table = el("table", "ocr-table");
     var thead = el("thead");
     var tr = el("tr");
-    ["Ora", "Stare", "Rânduri", "Durată", "Mărime", "Hash", "Versiune", "Eroare"].forEach(function (t) {
-      var th = el("th", null, t);
+    ["time", "state", "rows", "duration", "size", "hash", "version", "error"].forEach(function (t) {
+      var th = el("th", null, T("ocr.col." + t));
       th.scope = "col";
       tr.appendChild(th);
     });
@@ -219,7 +230,7 @@
     table.appendChild(tbody);
     wrap.appendChild(table);
     listBox.appendChild(wrap);
-    var more = el("button", "btn btn-ghost btn-sm", "Mai vechi");
+    var more = el("button", "btn btn-ghost btn-sm", T("ocr.list.older"));
     more.type = "button";
     more.id = "ocr-more";
     more.hidden = true;
@@ -228,7 +239,7 @@
     var detail = el("section", "ocr-detail");
     detail.id = "ocr-detail";
     detail.setAttribute("aria-live", "polite");
-    detail.appendChild(el("p", "empty", "Alege o captură din listă."));
+    detail.appendChild(el("p", "empty", T("ocr.list.pick")));
     layout.appendChild(listBox);
     layout.appendChild(detail);
     body.appendChild(layout);
@@ -252,39 +263,39 @@
       if (r.status !== 200 || !r.data) { handleAuth(r); return; }
       var s = r.data;
       clear(dl);
-      stat(dl, "Ultima captură", when(s.last_capture_attempt));
-      stat(dl, "Ultima reușită", when(s.last_capture_ok));
-      stat(dl, "Durată OCR medie / p95",
+      stat(dl, T("ocr.stat.lastCapture"), when(s.last_capture_attempt));
+      stat(dl, T("ocr.stat.lastOk"), when(s.last_capture_ok));
+      stat(dl, T("ocr.stat.duration"),
         ms(s.duration_ms.avg) + " / " + ms(s.duration_ms.p95) + " (N=" + s.duration_ms.n + ")");
-      stat(dl, "Erori 24 h", String(s.errors_24h), s.errors_24h ? "is-bad" : "");
-      stat(dl, "Rânduri 24 h (cu probleme)", s.rows_24h + " (" + s.rows_with_errors_24h + ")");
+      stat(dl, T("ocr.stat.errors24"), String(s.errors_24h), s.errors_24h ? "is-bad" : "");
+      stat(dl, T("ocr.stat.rows24"), s.rows_24h + " (" + s.rows_with_errors_24h + ")");
       if (s.ocr && s.ocr.window) {
         var w = s.ocr.window, last = s.ocr.last;
         if (s.ocr.expected_rows) EXPECTED = s.ocr.expected_rows;
-        stat(dl, "Cadre cu " + EXPECTED + "/" + EXPECTED + " rânduri", w.frames ? w.full_frames + " din " + w.frames + " (de la pornire, max. 60)" : "—",
+        stat(dl, T("ocr.stat.fullFrames", { n: EXPECTED }), w.frames ? T("ocr.stat.fullFramesVal", { a: w.full_frames, b: w.frames }) : "—",
           w.frames && w.full_frames < w.frames ? "is-bad" : "");
-        stat(dl, "Recitiri OCR (rânduri recuperate)", w.lines_retried + " (" + w.lines_recovered + ") · max " + ms(w.retry_ms_max));
+        stat(dl, T("ocr.stat.retries"), w.lines_retried + " (" + w.lines_recovered + ") · max " + ms(w.retry_ms_max));
         if (last && last.boards) {
-          stat(dl, "Ultimul cadru", "S " + (last.boards.arrival || {}).rows + " · P " + (last.boards.departure || {}).rows +
+          stat(dl, T("ocr.stat.lastFrame"), T("ocr.boards.arrShort") + " " + (last.boards.arrival || {}).rows + " · " + T("ocr.boards.depShort") + " " + (last.boards.departure || {}).rows +
             " · " + ms(last.duration_ms));
         }
       }
-      stat(dl, "Vechime LIVE", age(s.live_age_s), s.live_age_s == null || s.live_age_s > 180 ? "is-bad" : "");
-      stat(dl, "Imagini păstrate", s.images.count + " · " + bytes(s.images.bytes) +
-        " · " + s.capture.retention_days + " zile");
-      stat(dl, "Baza de date", bytes(s.db_bytes));
-      stat(dl, "Tesseract", s.tesseract.available ? (s.tesseract.version || "disponibil") : "indisponibil",
+      stat(dl, T("ocr.stat.liveAge"), age(s.live_age_s), s.live_age_s == null || s.live_age_s > 180 ? "is-bad" : "");
+      stat(dl, T("ocr.stat.images"), s.images.count + " · " + bytes(s.images.bytes) +
+        " · " + T("ocr.stat.days", { n: s.capture.retention_days }));
+      stat(dl, T("ocr.stat.db"), bytes(s.db_bytes));
+      stat(dl, "Tesseract", s.tesseract.available ? (s.tesseract.version || T("ocr.stat.available")) : T("ocr.stat.unavailable"),
         s.tesseract.available ? "" : "is-bad");
-      stat(dl, "Sursa CFR", s.source.available ? "disponibilă" : "fără imagini noi",
+      stat(dl, T("ocr.stat.source"), s.source.available ? T("ocr.stat.sourceOk") : T("ocr.stat.sourceNone"),
         s.source.available ? "" : "is-bad");
     });
   }
 
   function handleAuth(r) {
-    if (r.status === 401) showLogin("Sesiunea a expirat. Autentifică-te din nou.");
+    if (r.status === 401) showLogin(T("ocr.msg.expired"));
     else if (r.status === 503) disabled();
-    else if (r.status === 429) message("Prea multe încercări. Reîncearcă peste un minut.", true);
-    else message("Eroare la încărcare (" + r.status + ").", true);
+    else if (r.status === 429) message(T("ocr.msg.tooMany"), true);
+    else message(T("ocr.msg.loadError", { status: r.status }), true);
   }
 
   function loadList(reset) {
@@ -297,7 +308,7 @@
       r.data.captures.forEach(function (c) { tbody.appendChild(captureRow(c)); });
       if (reset && !r.data.captures.length) {
         var tr = el("tr");
-        var td = el("td", "empty", "Nicio captură încă.");
+        var td = el("td", "empty", T("ocr.list.none"));
         td.colSpan = 8;
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -313,11 +324,11 @@
     var td = el("td");
     var b = el("button", "ocr-open", when(c.captured_at));
     b.type = "button";
-    b.setAttribute("aria-label", "Deschide captura din " + when(c.captured_at));
+    b.setAttribute("aria-label", T("ocr.list.open", { time: when(c.captured_at) }));
     b.addEventListener("click", function () { openDetail(c.id); });
     td.appendChild(b);
     tr.appendChild(td);
-    tr.appendChild(el("td", null, c.ok ? "ok" : "eroare"));
+    tr.appendChild(el("td", null, c.ok ? T("ocr.list.ok") : T("ocr.list.err")));
     tr.appendChild(el("td", "num" + (boardsShort(c.boards) ? " is-bad" : ""),
       c.boards ? boardsText(c.boards) : String(c.n_rows)));
     tr.appendChild(el("td", "num", ms(c.duration_ms)));
@@ -347,16 +358,20 @@
     return "/api/admin/captures/" + d.id + (state.overlay ? "/overlay.png" : "/image");
   }
 
+  function imgAlt(d) {
+    return T("ocr.detail.imgAlt", { id: d.id }) + (state.overlay ? T("ocr.detail.imgAltOverlay") : "");
+  }
+
   function renderDetail(d) {
     var box = document.getElementById("ocr-detail");
     clear(box);
-    var h = el("h2", "ocr-h2", "Captura #" + d.id + " · " + when(d.captured_at));
+    var h = el("h2", "ocr-h2", T("ocr.detail.title", { id: d.id }) + " · " + when(d.captured_at));
     h.tabIndex = -1;
     box.appendChild(h);
     var meta = el("p", "ocr-meta",
-      (d.ok ? "OCR reușit" : "OCR eșuat") + " · " + d.n_rows + " rânduri valide (" +
-      boardsText(d.boards) + " din " + EXPECTED + "/" + EXPECTED + ") · " +
-      d.observations.length + " linii citite · " + ms(d.duration_ms) + " · " +
+      T(d.ok ? "ocr.detail.ok" : "ocr.detail.fail") + " · " +
+      T("ocr.detail.validRows", { n: d.n_rows, boards: boardsText(d.boards), exp: EXPECTED }) + " · " +
+      T("ocr.detail.linesRead", { n: d.observations.length }) + " · " + ms(d.duration_ms) + " · " +
       (d.width ? d.width + "×" + d.height + " px · " : "") + bytes(d.bytes) + " · hash " + d.hash8);
     box.appendChild(meta);
     if (d.error) box.appendChild(el("p", "notice notice-error", d.error));
@@ -369,17 +384,17 @@
     var viewable = d.has_image && !!d.width;  // width is null when the bytes did not decode
     cb.disabled = !viewable;
     lab.appendChild(cb);
-    lab.appendChild(el("span", null, "Dreptunghiuri OCR"));
+    lab.appendChild(el("span", null, T("ocr.detail.rects")));
     tools.appendChild(lab);
-    var copy = el("button", "btn btn-ghost btn-sm", "Copiază JSON");
+    var copy = el("button", "btn btn-ghost btn-sm", T("ocr.detail.copy"));
     copy.type = "button";
     copy.addEventListener("click", function () {
       var text = JSON.stringify(d, null, 2);
-      var done = function () { copy.textContent = "Copiat"; setTimeout(function () { copy.textContent = "Copiază JSON"; }, 1500); };
+      var done = function () { copy.textContent = T("ocr.detail.copied"); setTimeout(function () { copy.textContent = T("ocr.detail.copy"); }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () { message("Copierea a eșuat.", true); });
+        navigator.clipboard.writeText(text).then(done, function () { message(T("ocr.detail.copyFail"), true); });
       } else {
-        message("Clipboard indisponibil în acest browser.", true);
+        message(T("ocr.detail.noClipboard"), true);
       }
     });
     tools.appendChild(copy);
@@ -388,39 +403,39 @@
     if (viewable) {
       var fig = el("figure", "ocr-figure");
       var img = el("img", "ocr-img");
-      img.alt = "Imaginea tabelei CFR din captura #" + d.id + (state.overlay ? ", cu dreptunghiurile OCR" : "");
+      img.alt = imgAlt(d);
       img.decoding = "async";
       img.src = imageSrc(d);
-      img.addEventListener("error", function () { message("Imaginea nu a putut fi încărcată.", true); });
+      img.addEventListener("error", function () { message(T("ocr.detail.imgError"), true); });
       fig.appendChild(img);
       var legend = el("figcaption", "ocr-legend");
       [["ocr-conf ocr-conf-hi", "≥ 80"], ["ocr-conf ocr-conf-mid", "50–79"], ["ocr-conf ocr-conf-lo", "< 50"]].forEach(function (p) {
         legend.appendChild(el("span", p[0], p[1]));
       });
-      legend.appendChild(el("span", "ocr-legend-text", "încredere Tesseract pe celulă; numărul = indexul liniei"));
+      legend.appendChild(el("span", "ocr-legend-text", T("ocr.detail.legend")));
       fig.appendChild(legend);
       box.appendChild(fig);
       cb.addEventListener("change", function () {
         state.overlay = cb.checked;
         img.src = imageSrc(d);
-        img.alt = "Imaginea tabelei CFR din captura #" + d.id + (state.overlay ? ", cu dreptunghiurile OCR" : "");
+        img.alt = imgAlt(d);
       });
     } else if (d.has_image) {
-      box.appendChild(el("p", "notice", "Fișierul salvat nu este o imagine validă (de aceea OCR a eșuat)."));
+      box.appendChild(el("p", "notice", T("ocr.detail.badImage")));
     } else {
-      box.appendChild(el("p", "notice", "Imaginea a expirat (retenție); datele structurate rămân."));
+      box.appendChild(el("p", "notice", T("ocr.detail.expired")));
     }
 
     var corrBox = el("section", "ocr-corr-form panel");
     corrBox.id = "ocr-corr-form";
     corrBox.hidden = true;
-    corrBox.setAttribute("aria-label", "Corecție manuală");
+    corrBox.setAttribute("aria-label", T("ocr.corr.title"));
     box.appendChild(corrBox);
 
     ["arrival", "departure"].forEach(function (board) {
       var obs = d.observations.filter(function (o) { return o.board === board; });
       if (!obs.length) return;
-      box.appendChild(el("h3", "ocr-h3", BOARD_LABEL[board] + " (" + obs.length + ")"));
+      box.appendChild(el("h3", "ocr-h3", boardLabel(board) + " (" + obs.length + ")"));
       box.appendChild(obsTable(obs, d));
     });
     h.focus();
@@ -431,7 +446,7 @@
     var t = el("table", "ocr-table ocr-obs");
     var thead = el("thead");
     var tr = el("tr");
-    ["#", "Stare", "Text brut"].concat(FIELDS.map(function (f) { return f[1]; }), ["Corecție"]).forEach(function (x) {
+    ["#", T("ocr.col.state"), T("ocr.col.rawText")].concat(FIELDS.map(function (f) { return T(f[1]); }), [T("ocr.col.correction")]).forEach(function (x) {
       var th = el("th", null, x);
       th.scope = "col";
       tr.appendChild(th);
@@ -444,17 +459,17 @@
       r.appendChild(el("td", "num", String(o.row_index)));
       var st = el("td", "ocr-state");
       var line = o.line || {};
-      var lbl = (line.state && LINE_LABEL[line.state]) || STATE_LABEL[o.validation_state] || o.validation_state;
+      var lbl = (line.state && keyLabel(LINE_KEY, line.state)) || keyLabel(STATE_KEY, o.validation_state) || o.validation_state;
       st.appendChild(el("span", "ocr-badge ocr-badge-" + o.validation_state, lbl));
       if (line.retry) {
         st.appendChild(el("span", "ocr-rowconf", line.retry.variant
-          ? "recitit (" + line.retry.variant + ", " + line.retry.attempts + ")"
-          : "recitit fără succes (" + line.retry.attempts + ")"));
+          ? T("ocr.row.reread", { variant: line.retry.variant, n: line.retry.attempts })
+          : T("ocr.row.rereadFail", { n: line.retry.attempts })));
       }
       if (o.row_conf != null) st.appendChild(el("span", "ocr-rowconf", Math.round(o.row_conf * 100) + "%"));
       (line.corr || []).forEach(function (id) {
-        var b = el("span", "ocr-badge ocr-badge-corr", "corectat #" + id);
-        b.title = "Rândul a fost modificat de regula manuală #" + id + " (valoarea citită de OCR rămâne în text brut)";
+        var b = el("span", "ocr-badge ocr-badge-corr", T("ocr.row.corrected", { id: id }));
+        b.title = T("ocr.row.correctedTitle", { id: id });
         st.appendChild(b);
       });
       r.appendChild(st);
@@ -470,24 +485,24 @@
           td.appendChild(n);
         }
         var c = el("span", confClass(cell.conf), cell.conf == null ? "?" : String(Math.round(cell.conf)));
-        c.title = "Încredere OCR";
+        c.title = T("ocr.row.confidence");
         td.appendChild(c);
         if ((f[0] === "station" || f[0] === "operator") && o.uncertain) {
           var u = el("span", "ocr-unsure", "?");
-          u.title = "Nume nepotrivit cu lista cunoscută (nesigur)";
-          u.setAttribute("aria-label", "nesigur");
+          u.title = T("ocr.row.unsureTitle");
+          u.setAttribute("aria-label", T("ocr.state.uncertain"));
           td.appendChild(u);
         }
         if (f[0] === "delay" && !o.delay_read && o.validation_state !== "incomplete") {
-          var x = el("span", "ocr-unsure", "necitit");
+          var x = el("span", "ocr-unsure", T("ocr.unread"));
           td.appendChild(x);
         }
         r.appendChild(td);
       });
       var act = el("td", "ocr-act");
-      var cbtn = el("button", "btn btn-ghost btn-sm", "Corectează");
+      var cbtn = el("button", "btn btn-ghost btn-sm", T("ocr.row.correct"));
       cbtn.type = "button";
-      cbtn.setAttribute("aria-label", "Corectează rândul " + o.row_index + " (" + BOARD_LABEL[o.board] + ")");
+      cbtn.setAttribute("aria-label", T("ocr.row.correctAria", { n: o.row_index, board: boardLabel(o.board) }));
       cbtn.addEventListener("click", function () { openCorrectionForm(cap, o); });
       act.appendChild(cbtn);
       r.appendChild(act);
@@ -499,13 +514,14 @@
   }
 
 
-  // ---- corecții manuale (schema v9) -----------------------------------------------------
-  // Regulă îngustă (panou, câmp, valoare citită greșit, + stație / oră / interval de zile
-  // opționale) -> valoare corectă. Se aplică pe cadre noi (marcaj +corr:<id>) și, doar după
-  // o previzualizare (dry-run) și confirmare, retroactiv, într-un lot restaurabil.
+  // ---- manual corrections (schema v9) ---------------------------------------------------
+  // A narrow rule (panel, field, wrongly read value, + optional station / time / day range)
+  // -> correct value. It applies to new frames (marker +corr:<id>) and, only after a
+  // preview (dry-run) and confirmation, retroactively, in a restorable batch.
 
-  var CORR_FIELDS = [["no", "Nr. tren"], ["type", "Tip"], ["station", "Stație"],
-    ["operator", "Operator"], ["time", "Ora"], ["platform", "Linie"], ["delay", "Întârziere"]];
+  var CORR_FIELDS = [["no", "ocr.corr.field.no"], ["type", "ocr.field.type"], ["station", "ocr.field.station"],
+    ["operator", "ocr.field.operator"], ["time", "ocr.field.time"], ["platform", "ocr.field.platform"],
+    ["delay", "ocr.field.delay"]];
   var csrf = null;
 
   function csrfToken(force) {
@@ -533,7 +549,7 @@
     var d = r.data && r.data.detail;
     if (typeof d === "string") return d;
     if (d && d.message) return d.message;
-    return "Eroare (" + r.status + ").";
+    return T("ocr.msg.error", { status: r.status });
   }
 
   function rowValue(o, field) {
@@ -568,12 +584,10 @@
     var box = document.getElementById("ocr-corr-form");
     clear(box);
     box.hidden = false;
-    var h = el("h3", "ocr-h3", "Corecție manuală · captura #" + cap.id + " · " + BOARD_LABEL[o.board] + " · rândul " + o.row_index);
+    var h = el("h3", "ocr-h3", T("ocr.corr.heading", { id: cap.id, board: boardLabel(o.board), n: o.row_index }));
     h.tabIndex = -1;
     box.appendChild(h);
-    box.appendChild(el("p", "ocr-meta", "Text brut: " + (o.raw_text || "—") +
-      ". Regula se aplică numai rândurilor care au exact valoarea citită greșit, pe acest panou, " +
-      "și nu modifică imaginea sau textul brut OCR."));
+    box.appendChild(el("p", "ocr-meta", T("ocr.corr.intro", { raw: o.raw_text || "—" })));
     var msg = el("p", "notice", "");
     msg.setAttribute("role", "status");
     msg.hidden = true;
@@ -581,28 +595,28 @@
 
     var sel = el("select");
     sel.id = "corr-field";
-    CORR_FIELDS.forEach(function (f) { var op = el("option", null, f[1]); op.value = f[0]; sel.appendChild(op); });
-    form.appendChild(labeled("Câmp", sel));
+    CORR_FIELDS.forEach(function (f) { var op = el("option", null, T(f[1])); op.value = f[0]; sel.appendChild(op); });
+    form.appendChild(labeled(T("ocr.corr.field"), sel));
     var wrong = input("text", "corr-wrong", 60);
-    form.appendChild(labeled("Valoarea citită (greșită)", wrong));
+    form.appendChild(labeled(T("ocr.corr.wrong"), wrong));
     var wrongHint = el("span", "field-hint", "");
     wrong.parentNode.appendChild(wrongHint);
     var right = input("text", "corr-right", 60);
     right.required = true;
-    form.appendChild(labeled("Valoarea corectă", right));
+    form.appendChild(labeled(T("ocr.corr.right"), right));
 
     var lim = el("fieldset", "ocr-corr-limits");
-    lim.appendChild(el("legend", null, "Limitări (opțional; cu cât mai înguste, cu atât mai sigur)"));
+    lim.appendChild(el("legend", null, T("ocr.corr.limits")));
     var st = input("text", "corr-station", 60);
-    lim.appendChild(labeled("Doar stația", st));
+    lim.appendChild(labeled(T("ocr.corr.onlyStation"), st));
     var tm = input("text", "corr-time", 5);
-    tm.placeholder = "OO:MM";
-    lim.appendChild(labeled("Doar ora programată", tm));
+    tm.placeholder = T("ocr.corr.timePlaceholder");
+    lim.appendChild(labeled(T("ocr.corr.onlyTime"), tm));
     var d1 = input("date", "corr-from");
-    lim.appendChild(labeled("Zile de la", d1));
+    lim.appendChild(labeled(T("ocr.corr.daysFrom"), d1));
     var d2 = input("date", "corr-to");
-    lim.appendChild(labeled("Zile până la", d2));
-    var quick = el("button", "btn btn-ghost btn-sm", "Limitează la stația și ora acestui rând");
+    lim.appendChild(labeled(T("ocr.corr.daysTo"), d2));
+    var quick = el("button", "btn btn-ghost btn-sm", T("ocr.corr.limitHere"));
     quick.type = "button";
     quick.addEventListener("click", function () { st.value = o.station || ""; tm.value = o.sched_time || ""; invalidate(); });
     lim.appendChild(quick);
@@ -613,7 +627,7 @@
     note.rows = 2;
     note.maxLength = 500;
     note.required = true;
-    form.appendChild(labeled("Notă (obligatorie, 3–500 caractere)", note));
+    form.appendChild(labeled(T("ocr.corr.note"), note));
 
     function prefill() {
       var f = sel.value;
@@ -621,7 +635,7 @@
       right.value = "";
       var unreadOk = f === "platform" || f === "delay";
       wrong.required = !unreadOk;
-      wrongHint.textContent = unreadOk ? "Gol = „necitit” (nu 0)." : "";
+      wrongHint.textContent = unreadOk ? T("ocr.corr.emptyUnread") : "";
     }
     sel.addEventListener("change", function () { prefill(); invalidate(); });
     prefill();
@@ -629,12 +643,12 @@
     var out = el("div", "ocr-corr-result");
     out.setAttribute("aria-live", "polite");
     var bar = el("div", "ocr-corr-actions");
-    var prev = el("button", "btn", "Previzualizează");
+    var prev = el("button", "btn", T("ocr.corr.preview"));
     prev.type = "submit";
-    var save = el("button", "btn", "Salvează regula");
+    var save = el("button", "btn", T("ocr.corr.save"));
     save.type = "button";
     save.disabled = true;
-    var cancel = el("button", "btn btn-ghost", "Închide");
+    var cancel = el("button", "btn btn-ghost", T("ocr.corr.close"));
     cancel.type = "button";
     cancel.addEventListener("click", function () { box.hidden = true; clear(box); });
     bar.appendChild(prev); bar.appendChild(save); bar.appendChild(cancel);
@@ -662,9 +676,9 @@
       post("/api/admin/corrections/preview", payload()).then(function (r) {
         prev.disabled = false;
         if (r.status !== 200) { save.disabled = true; say(detailText(r), true); return; }
-        renderPreview(out, r.data.preview, "Previzualizare (nu s-a modificat nimic)");
+        renderPreview(out, r.data.preview, T("ocr.corr.previewTitle"));
         save.disabled = false;
-      }).catch(function () { prev.disabled = false; say("Serverul nu răspunde.", true); });
+      }).catch(function () { prev.disabled = false; say(T("ocr.msg.noServer"), true); });
     });
     save.addEventListener("click", function () {
       say("");
@@ -673,9 +687,9 @@
         if (r.status !== 201) { save.disabled = false; say(detailText(r), true); return; }
         box.hidden = true;
         clear(box);
-        message("Regula #" + r.data.correction.id + " este activă pe cadrele noi. Previzualizează și aplică retroactiv din „Corecții manuale”.");
+        message(T("ocr.corr.saved", { id: r.data.correction.id }));
         loadRules();
-      }).catch(function () { save.disabled = false; say("Serverul nu răspunde.", true); });
+      }).catch(function () { save.disabled = false; say(T("ocr.msg.noServer"), true); });
     });
     h.focus();
     if (box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
@@ -693,14 +707,14 @@
     var w = el("div", "ocr-scroll");
     var t = el("table", "ocr-table");
     var tr = el("tr");
-    ["Serviciu", "Ziua", "Tren", "Ora", "Stația", "Din → în"].concat(extra ? ["Motiv"] : []).forEach(function (x) {
-      var th = el("th", null, x); th.scope = "col"; tr.appendChild(th);
+    ["service", "day", "train", "time", "station", "fromTo"].concat(extra ? ["reason"] : []).forEach(function (x) {
+      var th = el("th", null, T("ocr.prev.col." + x)); th.scope = "col"; tr.appendChild(th);
     });
     var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
     var tb = el("tbody");
     list.forEach(function (s) {
       var r = el("tr");
-      [s.id, s.date, s.train, s.sched_time, s.station, (s.from || "necitit") + " → " + s.to].forEach(function (v) { r.appendChild(el("td", null, String(v))); });
+      [s.id, s.date, s.train, s.sched_time, s.station, (s.from || T("ocr.unread")) + " → " + s.to].forEach(function (v) { r.appendChild(el("td", null, String(v))); });
       if (extra) r.appendChild(el("td", "ocr-raw", s.conflict || ""));
       tb.appendChild(r);
     });
@@ -711,34 +725,34 @@
     clear(out);
     out.appendChild(el("h4", "ocr-h3", title));
     var dl = el("dl", "ocr-stats");
-    dl.appendChild(cnt("Servicii", pv.services.count));
-    dl.appendChild(cnt("Observații (capturi)", pv.observations.count + " (" + pv.observations.captures + ")"));
-    dl.appendChild(cnt("Evenimente", pv.events.count));
-    dl.appendChild(cnt("Conflicte (sărite)", pv.conflicts.count));
+    dl.appendChild(cnt(T("ocr.prev.services"), pv.services.count));
+    dl.appendChild(cnt(T("ocr.prev.observations"), pv.observations.count + " (" + pv.observations.captures + ")"));
+    dl.appendChild(cnt(T("ocr.prev.events"), pv.events.count));
+    dl.appendChild(cnt(T("ocr.prev.conflicts"), pv.conflicts.count));
     out.appendChild(dl);
-    if (pv.empty) out.appendChild(el("p", "notice", "Nicio înregistrare existentă nu se potrivește: regula va acționa doar pe cadrele noi."));
+    if (pv.empty) out.appendChild(el("p", "notice", T("ocr.prev.noMatch")));
     if (pv.services.sample.length) {
-      out.appendChild(el("p", "ocr-meta", "Servicii care s-ar modifica (primele " + pv.services.sample.length + " din " + pv.services.count + "):"));
+      out.appendChild(el("p", "ocr-meta", T("ocr.prev.wouldChange", { n: pv.services.sample.length, total: pv.services.count })));
       previewTable(out, pv.services.sample, false);
     }
     if (pv.conflicts.sample.length) {
-      out.appendChild(el("p", "ocr-meta", "Conflicte (nu se modifică):"));
+      out.appendChild(el("p", "ocr-meta", T("ocr.prev.conflictsList")));
       previewTable(out, pv.conflicts.sample, true);
     }
   }
 
-  // ---- lista regulilor ------------------------------------------------------------------
+  // ---- rules list -----------------------------------------------------------------------
 
   function scopeText(r) {
     var p = [];
-    if (r.station) p.push("stația " + r.station);
-    if (r.sched_time) p.push("ora " + r.sched_time);
-    if (r.date_from || r.date_to) p.push("zilele " + (r.date_from || "…") + " – " + (r.date_to || "…"));
-    return p.length ? p.join(", ") : "fără limitări";
+    if (r.station) p.push(T("ocr.scope.station", { v: r.station }));
+    if (r.sched_time) p.push(T("ocr.scope.time", { v: r.sched_time }));
+    if (r.date_from || r.date_to) p.push(T("ocr.scope.days", { a: r.date_from || "…", b: r.date_to || "…" }));
+    return p.length ? p.join(", ") : T("ocr.scope.none");
   }
 
   function fieldLabel(f) {
-    for (var i = 0; i < CORR_FIELDS.length; i++) if (CORR_FIELDS[i][0] === f) return CORR_FIELDS[i][1];
+    for (var i = 0; i < CORR_FIELDS.length; i++) if (CORR_FIELDS[i][0] === f) return T(CORR_FIELDS[i][1]);
     return f;
   }
 
@@ -749,23 +763,22 @@
       if (r.status !== 200) { handleAuth(r); return; }
       clear(box);
       var head = el("div", "ocr-rules-head");
-      head.appendChild(el("h2", "ocr-h2", "Corecții manuale"));
-      var aud = el("button", "btn btn-ghost btn-sm", "Jurnal de audit");
+      head.appendChild(el("h2", "ocr-h2", T("ocr.rules.title")));
+      var aud = el("button", "btn btn-ghost btn-sm", T("ocr.rules.audit"));
       aud.type = "button";
       aud.addEventListener("click", showAudit);
       head.appendChild(aud);
       box.appendChild(head);
-      box.appendChild(el("p", "ocr-meta",
-        "Se creează din detaliul unei capturi (butonul „Corectează” de pe fiecare rând). O regulă corectează cadrele noi imediat; " +
-        "datele vechi se schimbă numai după previzualizare și confirmare, într-un lot care se poate restaura. Nimic de aici nu apare în API-ul public."));
+      box.appendChild(el("p", "ocr-meta", T("ocr.rules.intro")));
       var list = r.data.corrections;
       if (!list.length) {
-        box.appendChild(el("p", "empty", "Nicio regulă încă."));
+        box.appendChild(el("p", "empty", T("ocr.rules.none")));
       } else {
         var w = el("div", "ocr-scroll");
         var t = el("table", "ocr-table ocr-rule-table");
         var tr = el("tr");
-        ["#", "Panou", "Câmp", "Citit → corect", "Limitări", "Notă", "Stare", "Acțiuni"].forEach(function (x) {
+        ["#", T("ocr.rules.col.board"), T("ocr.corr.field"), T("ocr.rules.col.readCorrect"), T("ocr.rules.col.limits"),
+          T("ocr.rules.col.note"), T("ocr.col.state"), T("ocr.rules.col.actions")].forEach(function (x) {
           var th = el("th", null, x); th.scope = "col"; tr.appendChild(th);
         });
         var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
@@ -785,29 +798,29 @@
   function ruleRow(c) {
     var tr = el("tr", c.status === "deleted" ? "is-deleted" : "");
     tr.appendChild(el("td", "num", String(c.id)));
-    tr.appendChild(el("td", null, BOARD_LABEL[c.board]));
+    tr.appendChild(el("td", null, boardLabel(c.board)));
     tr.appendChild(el("td", null, fieldLabel(c.field)));
-    tr.appendChild(el("td", "mono", (c.wrong_value || "necitit") + " → " + c.correct_value));
+    tr.appendChild(el("td", "mono", (c.wrong_value || T("ocr.unread")) + " → " + c.correct_value));
     tr.appendChild(el("td", "ocr-raw", scopeText(c)));
     tr.appendChild(el("td", "ocr-raw", c.note));
     var live = liveBatches(c);
-    tr.appendChild(el("td", null, c.status === "deleted" ? "ștearsă" :
-      "activă" + (live.length ? " · aplicată retroactiv (" + live.length + " lot)" : "")));
+    tr.appendChild(el("td", null, c.status === "deleted" ? T("ocr.rule.deleted") :
+      T("ocr.rule.active") + (live.length ? " · " + T("ocr.rule.appliedRetro", { n: live.length }) : "")));
     var td = el("td", "ocr-act");
     if (c.status === "active") {
-      var pv = el("button", "btn btn-ghost btn-sm", "Previzualizează retroactiv");
+      var pv = el("button", "btn btn-ghost btn-sm", T("ocr.rule.previewRetro"));
       pv.type = "button";
       pv.addEventListener("click", function () { previewRule(c); });
       td.appendChild(pv);
       live.forEach(function (b) {
-        var rs = el("button", "btn btn-ghost btn-sm", "Restaurează lotul " + b.id);
+        var rs = el("button", "btn btn-ghost btn-sm", T("ocr.rule.restoreBatch", { id: b.id }));
         rs.type = "button";
         rs.addEventListener("click", function () { restoreBatch(b.id); });
         td.appendChild(rs);
       });
-      var del = el("button", "btn btn-ghost btn-sm", "Șterge");
+      var del = el("button", "btn btn-ghost btn-sm", T("ocr.rule.delete"));
       del.type = "button";
-      del.setAttribute("aria-label", "Șterge regula " + c.id);
+      del.setAttribute("aria-label", T("ocr.rule.deleteAria", { id: c.id }));
       del.addEventListener("click", function () { deleteRule(c, live.length > 0); });
       td.appendChild(del);
     }
@@ -822,17 +835,17 @@
     post("/api/admin/corrections/" + c.id + "/preview").then(function (r) {
       if (r.status !== 200) { message(detailText(r), true); return; }
       message("");
-      renderPreview(out, r.data.preview, "Regula #" + c.id + " · previzualizare retroactivă (nu s-a modificat nimic)");
+      renderPreview(out, r.data.preview, T("ocr.rule.previewTitle", { id: c.id }));
       var pv = r.data.preview;
       var bar = el("div", "ocr-corr-actions");
-      var go = el("button", "btn", "Aplică retroactiv (" + pv.services.count + " servicii, " + pv.observations.count + " observații)");
+      var go = el("button", "btn", T("ocr.rule.applyRetro", { s: pv.services.count, o: pv.observations.count }));
       go.type = "button";
       go.disabled = !!pv.empty;
       go.addEventListener("click", function () {
         go.disabled = true;
         post("/api/admin/corrections/" + c.id + "/apply", { plan_hash: pv.plan_hash }).then(function (a) {
           if (a.status !== 200) { go.disabled = false; message(detailText(a), true); return; }
-          message("Aplicat: lotul " + a.data.batch + " (" + a.data.services + " servicii, " + a.data.observations + " observații). Poate fi restaurat.");
+          message(T("ocr.rule.applied", { batch: a.data.batch, s: a.data.services, o: a.data.observations }));
           loadRules();
         });
       });
@@ -843,43 +856,43 @@
   }
 
   function restoreBatch(id) {
-    if (!window.confirm("Restaurezi lotul " + id + "? Valorile vechi revin acolo unde nu s-au schimbat între timp.")) return;
+    if (!window.confirm(T("ocr.rule.restoreConfirm", { id: id }))) return;
     post("/api/admin/corrections/batches/" + encodeURIComponent(id) + "/restore").then(function (r) {
       if (r.status !== 200) { message(detailText(r), true); return; }
-      message("Lot restaurat: " + r.data.services + " servicii, " + r.data.observations + " observații (sărite: " + r.data.skipped + ").");
+      message(T("ocr.rule.restored", { s: r.data.services, o: r.data.observations, k: r.data.skipped }));
       loadRules();
     });
   }
 
   function deleteRule(c, hasBatches) {
     var q = hasBatches
-      ? "Ștergi regula #" + c.id + " ȘI restaurezi lotul aplicat retroactiv?"
-      : "Ștergi regula #" + c.id + "? Nu va mai acționa pe cadrele noi (rămâne în jurnal).";
+      ? T("ocr.rule.deleteRestoreConfirm", { id: c.id })
+      : T("ocr.rule.deleteConfirm", { id: c.id });
     if (!window.confirm(q)) return;
     post("/api/admin/corrections/" + c.id + (hasBatches ? "?restore=1" : ""), undefined, "DELETE").then(function (r) {
       if (r.status !== 200) { message(detailText(r), true); return; }
-      message("Regula #" + c.id + " a fost ștearsă.");
+      message(T("ocr.rule.deletedMsg", { id: c.id }));
       loadRules();
     });
   }
 
-  var ACTION_LABEL = { create: "creată", apply: "aplicată retroactiv", restore: "restaurat lot", delete: "ștearsă" };
+  var ACTION_KEY = { create: "ocr.audit.create", apply: "ocr.audit.apply", restore: "ocr.audit.restore", delete: "ocr.audit.delete" };
 
   function showAudit() {
     var out = ruleResult();
     api("/api/admin/corrections/audit?limit=100").then(function (r) {
       if (r.status !== 200) { handleAuth(r); return; }
       clear(out);
-      out.appendChild(el("h4", "ocr-h3", "Jurnal de audit (ultimele " + r.data.audit.length + ")"));
+      out.appendChild(el("h4", "ocr-h3", T("ocr.audit.title", { n: r.data.audit.length })));
       var w = el("div", "ocr-scroll");
       var t = el("table", "ocr-table");
       var tr = el("tr");
-      ["Ora", "Acțiune", "Regula", "Lot", "IP"].forEach(function (x) { var th = el("th", null, x); th.scope = "col"; tr.appendChild(th); });
+      [T("ocr.col.time"), T("ocr.audit.col.action"), T("ocr.audit.col.rule"), T("ocr.audit.col.batch"), "IP"].forEach(function (x) { var th = el("th", null, x); th.scope = "col"; tr.appendChild(th); });
       var hd = el("thead"); hd.appendChild(tr); t.appendChild(hd);
       var tb = el("tbody");
       r.data.audit.forEach(function (a) {
         var row = el("tr");
-        [when(a.ts), ACTION_LABEL[a.action] || a.action, a.correction_id == null ? "—" : "#" + a.correction_id, a.batch || "—", a.ip || "—"]
+        [when(a.ts), keyLabel(ACTION_KEY, a.action) || a.action, a.correction_id == null ? "—" : "#" + a.correction_id, a.batch || "—", a.ip || "—"]
           .forEach(function (v) { row.appendChild(el("td", null, v)); });
         tb.appendChild(row);
       });
@@ -898,8 +911,16 @@
         message("");
         if (!document.getElementById("ocr-rows")) loadAll();
       } else showLogin();
-    }).catch(function () { message("Serverul nu răspunde.", true); });
+    }).catch(function () { message(T("ocr.msg.noServer"), true); });
   }
+
+  // language switch: rebuild the page in the new language (it is re-shown if it is the current page)
+  document.addEventListener("i18n:change", function () {
+    if (!root) return;
+    root = null;
+    state.detail = null;
+    if (location.hash === "#ocr") show();
+  });
 
   window.TabelaApp = window.TabelaApp || {};
   window.TabelaApp.views = window.TabelaApp.views || {};

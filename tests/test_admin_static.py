@@ -31,7 +31,7 @@ def test_admin_js_served_and_safe(client):
         assert bad not in js, bad
     assert "credentials" in js
     assert "window.TabelaApp.views.admin" in js
-    assert "Administrare" in js
+    assert 'T("admin.title")' in js
 
 
 def test_admin_css_served_and_themed(client):
