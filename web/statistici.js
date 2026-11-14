@@ -178,8 +178,9 @@
     });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
     var body = el("div", "ss-body");
-    root.replaceChildren(form, body);
-    v.ui = { form: form, body: body, per: per, brd: brd, op: op, tp: tp, ci: ci };
+    var quick = el("div", "ss-quick-host");
+    root.replaceChildren(form, quick, body);
+    v.ui = { form: form, quick: quick, body: body, per: per, brd: brd, op: op, tp: tp, ci: ci };
     window.addEventListener("resize", debounce(function () {
       if (!v.data || $("view-statistici").hidden) return;
       var w = v.ui.body.clientWidth;
@@ -249,6 +250,7 @@
         if (v.ctrl !== ctrl || e.aborted) return;
         v.data = null;
         v.key = null;
+        v.ui.quick.replaceChildren();
         v.ui.body.replaceChildren(S.notice(S.errorText(e), "notice-error"));
       })
       .then(function () {
@@ -643,6 +645,45 @@
     if (!c.first) return tt("stats.period_none");
     var span = c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last);
     return span + " (" + pl(c.days || 0, "stats.w.day_data") + ")";
+  }
+
+  // Quick summary (Statistici v3): four cards from the same /api/stats/overview payload. A missing figure is „—”.
+  function quickFigures(d) {
+    var c = d.coverage || {};
+    var p = d.params || {};
+    var n = 0, ok = 0, wsum = 0;
+    var worst = null;
+    BOARDS.forEach(function (b) {
+      var s = d.boards && d.boards[b];
+      if (s && s.n) {
+        n += s.n;
+        ok += s.on_time || 0;
+        if (s.mean != null) wsum += s.mean * s.n;
+      }
+      var r = d.routes && d.routes[b];
+      var top = r && r.eligible && r.most_delayed && r.most_delayed[0];
+      if (top && top.mean != null && (!worst || top.mean > worst.mean)) worst = top;
+    });
+    var enough = n > 0 && n >= (p.min_sample || 1);
+    return { n: n, ok: ok, pct: enough ? Math.round(1000 * ok / n) / 10 : null, mean: n ? Math.round(10 * wsum / n) / 10 : null,
+             trains: c.trains == null ? null : c.trains, journeys: c.journeys || 0, route: worst };
+  }
+
+  function renderSummary(d) {
+    var f = quickFigures(d);
+    var sec = el("section", "ss-quick");
+    sec.setAttribute("aria-label", tt("stats.sum.aria"));
+    function card(title, value, sub) {
+      var c = el("div", "ss-card");
+      c.append(el("h3", "ss-card-t", title), el("p", "ss-card-v", value), el("p", "ss-card-s", sub));
+      sec.append(c);
+    }
+    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
+    card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
+      f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"));
+    v.ui.quick.replaceChildren(sec);   // outside .ss-body: „Probleme” stays the first section of the body
   }
 
   function summary(d) {
@@ -1605,6 +1646,7 @@
     v.ui.body.replaceChildren();
     v.ui.body.classList.toggle("ss-no-motion", !!reduceMotion);
     var boards = boardsOf(d);
+    renderSummary(d);
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
       var msg = tt("stats.empty.none");

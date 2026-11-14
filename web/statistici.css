@@ -367,3 +367,22 @@
 @media (forced-colors: active) {
   .ss-bar, .ss-dot, .ss-cell { forced-color-adjust: none; }
 }
+
+/* ---------- quick summary cards (Statistici v3) ---------- */
+.ss-quick-host { margin-top: 14px; }
+.ss-quick-host:empty { margin: 0; }
+.ss-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ss-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ss-card-t { margin: 0; font-size: 0.8125rem; font-weight: 600; color: var(--text-2); }
+.ss-card-v { margin: 4px 0 2px; font-size: 1.5rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.ss-card-s { margin: 0; font-size: 0.75rem; color: var(--text-2); overflow-wrap: anywhere; }
+@media (min-width: 760px) {
+  .ss-quick { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
