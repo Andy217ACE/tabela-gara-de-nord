@@ -5,6 +5,26 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.55 — 2026-11-14
+
+### Adăugat
+- **Titlu și meta în engleză pentru `?lang=en`:** pentru linkuri și previzualizări, serverul trimite titlul, descrierea și etichetele Open Graph/Twitter în engleză (pagina română rămâne implicită).
+- **Scanarea de text literal trece:** testul nu mai numără comentariile; șirurile rămase s-au mutat în dicționar. Marcajul „în așteptare” a fost scos.
+
+### Schimbat
+- **Precache mai mic:** paginile de administrare, OCR, sistem, setări și sezoane nu mai sunt în precache; se memorează la prima utilizare (rută de runtime, network-first). Bugetul de precache a fost redus.
+- **Service worker v41.**
+
+### Reparat
+- Cod mort eliminat din `theme-init.js`; funcția de afișare pentru stații are nume în engleză.
+
+### English
+- **Server-side English head for `?lang=en`:** link previews and crawlers get the English title, description and Open Graph/Twitter tags (the Romanian page stays the default).
+- **Literal-text scan passes:** comments are ignored; remaining strings moved into dictionaries and the pending marker was removed.
+- **Smaller precache:** administration, OCR, system, settings and sezoane pages are no longer precached; they are cached on first use (runtime network-first). The precache budget was lowered.
+- **Service worker v41.**
+- **Fixed:** dead code removed from `theme-init.js`; the station display function has an English name.
+
 ## Beta 1.54 — 2026-11-14
 
 ### Adăugat
