@@ -1,0 +1,1 @@
+# Format: path:line:reason (path relative to repo root, forward slashes). Lines listed here are CFR data (station/train/operator names) that must stay Romanian.
