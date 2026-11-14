@@ -1671,5 +1671,11 @@
   "versions.showAll": "Arată cele {n} puncte",
   "versions.since": "de la {v}",
   "versions.tag": "curentă",
-  "versions.unavailable": "Istoricul versiunilor nu este disponibil."
+  "versions.unavailable": "Istoricul versiunilor nu este disponibil.",
+  "meta.title": "Tabela Gara de Nord",
+  "meta.description": "Sosirile și plecările din Gara de Nord București, actualizate în timp real: ore, întârzieri și linii. Proiect independent, cu date preluate de la CFR.",
+  "meta.ogTitle": "Tabela Gara de Nord — sosiri și plecări live",
+  "meta.ogDescription": "Sosirile și plecările din Gara de Nord București: ore, întârzieri și linii, citite de pe tabela CFR. Proiect independent, neafiliat CFR.",
+  "meta.ogLocale": "ro_RO",
+  "meta.twitterDescription": "Sosirile și plecările din Gara de Nord București, citite de pe tabela CFR. Proiect independent."
 }
