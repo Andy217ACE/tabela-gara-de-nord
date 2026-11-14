@@ -169,7 +169,11 @@ def test_service_worker_served_as_js_no_cache(client):
     refs = set(re.findall(r'(?:src|href)="((?!https?:|#)[^"]+)"', html))
     refs |= {u.split()[0] for m in re.findall(r'srcset="([^"]+)"', html) for u in m.split(",")}
     precached = set(re.findall(r'"([^"]+)"', shell)) | {"/offline.html"}
+    # versions.js is cached at runtime (network-first), not precached since Beta 1.55
+    runtime_only = {"versions.js"}
     for ref in refs:
+        if ref.lstrip("/") in runtime_only:
+            continue
         assert "/" + ref.lstrip("/") in precached, ref
 
 
