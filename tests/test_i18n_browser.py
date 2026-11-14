@@ -6,6 +6,11 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_footer_browser import base_url, browser  # noqa: E402,F401  (shared fixtures)
+import pytest as _pytest
+from app import stats_overview
+from app.store import Store
+from tests.test_stats_overview import seed, weather
+from tests.test_statistici_browser import _serve
 
 
 def _open(browser, base_url, query="", init=None, ctx=None):  # noqa: F811
@@ -172,5 +177,83 @@ def test_board_english_fits_360(browser, base_url, view):  # noqa: F811
         assert width <= 360
         if view == "carduri":
             assert page.locator(".train:not(.skeleton) .follow span").first.text_content() == "follow"
+    finally:
+        ctx.close()
+
+
+
+RO_DIACRITICS = "ăîâșțĂÎÂȘȚşţŞŢ"
+
+
+@_pytest.fixture(scope="module")
+def stats_url(tmp_path_factory):
+    db = tmp_path_factory.mktemp("i18n_stats") / "s.db"
+    s = Store(str(db))
+    s.migrate()
+    seed(s._conn)
+    for day in range(14, 21):
+        weather(s._conn, day, 12, 9.0, 0.0)
+    s.close()
+    stats_overview.clear_cache()
+    server, t, url = _serve(db)
+    yield url
+    server.should_exit = True
+    t.join(5)
+
+
+def _stats_page(browser, url, lang):
+    stats_overview.clear_cache()
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    page = ctx.new_page()
+    page.goto(url + "/?lang=" + lang + "#statistici")
+    page.wait_for_selector(".ss-fig .ss-fig-title")
+    page.evaluate("() => window.I18N.ready")
+    return ctx, page
+
+
+def test_stats_labels_and_decimal_separator(browser, stats_url):  # noqa: F811
+    ctx, page = _stats_page(browser, stats_url, "en")
+    try:
+        titles = page.eval_on_selector_all(".ss-fig .ss-fig-title", "els => els.map(e => e.textContent.trim())")
+        assert "How late are the trains?" in titles, titles
+        assert "At what hour are trains the most late?" in titles, titles
+        # every chart title that we own is English (server-sent texts stay Romanian, see the spec)
+        own = [t for t in titles if any(c in t for c in RO_DIACRITICS)]
+        assert not own, own
+        assert page.locator(".ss-filters legend").first.text_content().strip() == "Period"
+        assert page.locator(".ss-fig .ss-how strong").first.text_content().strip() == "How to read:"
+        # decimals: English dot, via Intl (statistici formatters + charts3 formatter)
+        assert page.evaluate("TabelaApp.stats.numFmt.format(12.5)") == "12.5"
+        assert page.evaluate("TabelaApp.charts3.fmt.format(12.5)") == "12.5"
+        assert page.evaluate("TabelaApp.stats.pl(1, 'stats.w.journey')") == "1 journey"
+        assert page.evaluate("TabelaApp.stats.pl(3, 'stats.w.journey')") == "3 journeys"
+        # chart-legend / table labels are English too
+        assert "Arrivals" in page.text_content(".ss-legend")
+        assert page.locator(".c3-chip").count() >= 3
+    finally:
+        ctx.close()
+    ctx, page = _stats_page(browser, stats_url, "ro")
+    try:
+        titles = page.eval_on_selector_all(".ss-fig .ss-fig-title", "els => els.map(e => e.textContent.trim())")
+        assert "Cât de mult întârzie trenurile?" in titles, titles
+        assert page.evaluate("TabelaApp.stats.numFmt.format(12.5)") == "12,5"
+        assert page.evaluate("TabelaApp.charts3.fmt.format(12.5)") == "12,5"
+        assert page.evaluate("TabelaApp.stats.pl(1, 'stats.w.journey')") == "1 călătorie"
+        assert "Sosiri" in page.text_content(".ss-legend")
+    finally:
+        ctx.close()
+
+
+def test_stats_switch_language_redraws_charts(browser, stats_url):  # noqa: F811
+    ctx, page = _stats_page(browser, stats_url, "ro")
+    try:
+        assert "Cât de mult întârzie trenurile?" in page.text_content("#st-statistici")
+        page.evaluate("I18N.setLang('en')")
+        page.wait_for_function("() => document.querySelector('.ss-filters legend') && document.querySelector('.ss-filters legend').textContent === 'Period'")
+        page.wait_for_selector(".ss-fig .ss-fig-title")
+        assert "How late are the trains?" in page.text_content("#st-statistici")
+        # the share link of a chart keeps the same (Romanian-derived) key in both languages
+        keys = page.eval_on_selector_all(".ss-fig", "els => els.map(e => e.getAttribute('data-key'))")
+        assert "cat-de-mult-intarzie-trenurile" in keys, keys
     finally:
         ctx.close()

@@ -33,7 +33,7 @@ def test_stats_js_served_and_safe(client):
 
 
 def test_stats_js_uses_api_and_rules():
-    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    js = (WEB / "stats.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
     for needle in ("/api/trains/stats", "/api/trains/", "/journeys", "/api/stats",
                    "/api/stats/rankings", '"format", "csv"', "doar_confirmate", "prag",
                    "App.views.trenuri", "App.views.tren",
@@ -99,7 +99,7 @@ def test_mobile_nav_scrolls_inside_not_page():
 # ---- D2: station pages (#statii, #statie?nume=), station links, station ranking ----------
 
 def test_station_views_wired():
-    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    js = (WEB / "stats.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
     for needle in ("App.views.statii", "App.views.statie", "/api/stations", "/journeys?",
                    "next_before", '"before"', "Mai multe călătorii", "Ultimele călătorii",
                    "Sosiri dinspre stație", "Plecări înspre stație", "Stația nu a fost observată pe tabelă",

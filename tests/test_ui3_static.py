@@ -79,7 +79,7 @@ def test_statistici_and_stats_use_the_chart_layer_with_a_plain_fallback():
                    "data-key", "data-kind", "data-plot", "gauge: true", "chartUrl", "resetFilters"):
         assert needle in js, needle
     assert "App.charts3" in js and "if (c3" in js                 # every enhancement is optional
-    st = read("stats.js")
+    st = read("stats.js") + read("i18n/ro.json")   # texts live in the dictionary since i18n Task 7
     for needle in ("trendCell", "trendMax", "Ultimele 14 zile", "gauge: true", "enhance("):
         assert needle in st, needle
 

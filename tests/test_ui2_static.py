@@ -63,7 +63,7 @@ def test_no_third_party_library_added():
 
 
 def test_statistici_uses_donuts_for_part_to_whole():
-    js = read("statistici.js")
+    js = read("statistici.js") + read("i18n/ro.json")   # texts live in the dictionary since i18n Task 7
     assert js.count("U().donut(") >= 3 and "U().delayDonut(" in js
     for needle in ("Cum se împart", "la timp", "peste 30", "Sosiri și plecări", "Altele"):
         assert needle in js, needle

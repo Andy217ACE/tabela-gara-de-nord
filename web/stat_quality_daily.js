@@ -10,9 +10,14 @@
 (function () {
   var App = window.TabelaApp = window.TabelaApp || {};
   var SVG = "http://www.w3.org/2000/svg";
-  var TREND = {
-    up: "↑ în creștere", down: "↓ în scădere", flat: "→ stabil", unknown: "tendință necunoscută"
-  };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
+  var nfCache = {};
+  function nfmt(v) {   // Intl in the chosen language: English 12.5, Romanian 12,5
+    var l = window.I18N.lang();
+    nfCache[l] = nfCache[l] || new Intl.NumberFormat(l, { maximumFractionDigits: 2 });
+    return nfCache[l].format(v);
+  }
+  var dfCache = {};
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -36,17 +41,18 @@
       });
   }
 
-  function pct(v) { return v == null ? "—" : String(v).replace(".", ",") + " %"; }
+  function pct(v) { return v == null ? "—" : tt("stats.fmt.pct", { v: nfmt(v) }); }
 
-  function dateRo(iso) {  // 2026-10-20 -> 20.10.2026
-    var p = iso.split("-");
-    return p[2] + "." + p[1] + "." + p[0];
+  function dateRo(iso) {  // 2026-10-20 -> 20.10.2026 (ro) / 10/20/2026 (en): Intl in the chosen language
+    var l = window.I18N.lang();
+    dfCache[l] = dfCache[l] || new Intl.DateTimeFormat(l, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+    return dfCache[l].format(new Date(iso + "T00:00:00Z"));
   }
 
   function trendText(t) {
-    if (!t || t.direction === "unknown") return TREND.unknown + " (sub 2 zile complete)";
-    var d = t.delta_pp > 0 ? "+" + t.delta_pp : String(t.delta_pp);
-    return TREND[t.direction] + " (" + d.replace(".", ",") + " puncte procentuale)";
+    if (!t || t.direction === "unknown") return tt("stats.qd.trend.unknown") + tt("stats.qd.trend.few");
+    var d = t.delta_pp > 0 ? "+" + nfmt(t.delta_pp) : nfmt(t.delta_pp);
+    return tt("stats.qd.trend." + t.direction) + tt("stats.qd.trend.pp", { d: d });
   }
 
   function card(title, intro) {
@@ -101,7 +107,7 @@
 
   function dayLabel(d) {
     var s = dateRo(d.date);
-    return d.partial ? s + " (zi parțială)" : s;
+    return d.partial ? s + tt("stats.qd.partial_day") : s;
   }
 
   function note(text, cls) { return el("p", cls || "sqd-note", text); }
@@ -109,11 +115,10 @@
   // -- 1 --------------------------------------------------------------------------
   function renderConfirmation(box, d) {
     box.replaceChildren();
-    box.appendChild(note("Tendință (zile complete): " + trendText(d.trend), "sqd-trend"));
-    if (!d.days.length) { box.appendChild(note("Nu există călătorii în perioada aleasă.")); return; }
+    box.appendChild(note(tt("stats.qd.trend_h", { t: trendText(d.trend) }), "sqd-trend"));
+    if (!d.days.length) { box.appendChild(note(tt("stats.qd.no_j"))); return; }
     var rows = d.days.slice().reverse().map(function (x) {
-      var label = x.confirmed + " confirmate, " + x.unconfirmed + " neconfirmate, " +
-        x.in_progress + " în curs, " + x.unknown + " necunoscute";
+      var label = tt("stats.qd.conf_label", { c: x.confirmed, u: x.unconfirmed, p: x.in_progress, k: x.unknown });
       return {
         cls: x.partial ? "sqd-partial" : null,
         cells: [dayLabel(x), pct(x.pct_confirmed),
@@ -122,20 +127,18 @@
           String(x.confirmed), String(x.unconfirmed), String(x.in_progress), String(x.unknown)]
       };
     });
-    box.appendChild(table(["Ziua", "Confirmate", "Distribuție", "Conf.", "Neconf.", "În curs", "Necun."],
-      rows, "Rata de confirmare pe zi"));
-    box.appendChild(note("Procentul = confirmate din călătoriile încheiate (cele în curs nu au încă " +
-      "rezultat). Ziua curentă și prima zi cu date sunt parțiale."));
+    box.appendChild(table(tt("stats.qd.conf_cols").split("|"),
+      rows, tt("stats.qd.conf_cap")));
+    box.appendChild(note(tt("stats.qd.conf_note")));
   }
 
   // -- 2 --------------------------------------------------------------------------
   function renderReading(box, d) {
     box.replaceChildren();
-    box.appendChild(note("Tendință % citite corect (zile complete): " + trendText(d.trend), "sqd-trend"));
-    if (!d.days.length) { box.appendChild(note("Nu există observații în perioada aleasă.")); return; }
+    box.appendChild(note(tt("stats.qd.read_trend", { t: trendText(d.trend) }), "sqd-trend"));
+    if (!d.days.length) { box.appendChild(note(tt("stats.qd.no_obs"))); return; }
     var rows = d.days.slice().reverse().map(function (x) {
-      var label = x.ok + " ok, " + x.uncertain + " incerte, " + x.incomplete + " incomplete, " +
-        x.rejected + " respinse";
+      var label = tt("stats.qd.read_label", { o: x.ok, u: x.uncertain, i: x.incomplete, r: x.rejected });
       return {
         cls: x.partial ? "sqd-partial" : null,
         cells: [dayLabel(x), pct(x.pct_ok),
@@ -144,8 +147,8 @@
           pct(x.pct_uncertain), pct(x.pct_incomplete), pct(x.pct_rejected), String(x.total)]
       };
     });
-    box.appendChild(table(["Ziua", "Ok", "Distribuție", "Incerte", "Incomplete", "Respinse", "Rânduri"],
-      rows, "Calitatea citirii pe zi"));
+    box.appendChild(table(tt("stats.qd.read_cols").split("|"),
+      rows, tt("stats.qd.read_cap")));
   }
 
   // -- 3 --------------------------------------------------------------------------
@@ -161,7 +164,7 @@
     var by = {};
     d.hours.forEach(function (h) { by[h.date + "|" + h.hour] = h; });
     var s = svg("svg", { viewBox: "0 0 " + (LBL + 24 * 12) + " " + (days.length * 12), role: "img",
-                         "aria-label": "Harta acoperirii pe oră: " + days.length + " zile, 24 ore" },
+                         "aria-label": tt("stats.qd.heat_aria", { n: days.length }) },
                 "sqd-heat");
     days.forEach(function (day, r) {
       var lb = svg("text", { x: 0, y: r * 12 + 9 }, "sqd-heat-lbl");
@@ -172,8 +175,7 @@
         var rect = svg("rect", { x: LBL + hr * 12, y: r * 12, width: 11, height: 11, rx: 2 },
                        h ? level(h) : "sqd-h-none");
         var t = svg("title");
-        t.textContent = dateRo(day) + " ora " + hr + ":00 — " +
-          (h ? h.ok + " din " + h.expected + " capturi (" + pct(h.pct) + ")" : "fără date");
+        t.textContent = tt("stats.qd.heat_tip", { day: dateRo(day), h: hr, rest: h ? tt("stats.qd.heat_cell", { a: h.ok, b: h.expected, pct: pct(h.pct) }) : tt("stats.qd.no_data") });
         rect.appendChild(t);
         s.appendChild(rect);
       }
@@ -183,12 +185,12 @@
 
   function renderCoverage(box, d) {
     box.replaceChildren();
-    box.appendChild(note("Tendință acoperire (zile complete): " + trendText(d.trend), "sqd-trend"));
-    if (!d.days.length) { box.appendChild(note("Nu există capturi în perioada aleasă.")); return; }
+    box.appendChild(note(tt("stats.qd.cov_trend", { t: trendText(d.trend) }), "sqd-trend"));
+    if (!d.days.length) { box.appendChild(note(tt("stats.qd.no_cap"))); return; }
     var thr = Math.round(d.threshold * 100);
     var legend = el("p", "sqd-legend");
-    [["sqd-h-ok", "≥ " + thr + " %"], ["sqd-h-warn", "gol (50–" + (thr - 1) + " %)"],
-     ["sqd-h-bad", "gol sever (< 50 %)"], ["sqd-h-part", "oră parțială"], ["sqd-h-none", "fără date"]]
+    [["sqd-h-ok", "≥ " + thr + " %"], ["sqd-h-warn", tt("stats.qd.lg_gap", { a: 50, b: thr - 1 })],
+     ["sqd-h-bad", tt("stats.qd.lg_bad")], ["sqd-h-part", tt("stats.qd.lg_part")], ["sqd-h-none", tt("stats.qd.no_data")]]
       .forEach(function (p) {
         var item = el("span", "sqd-legend-item");
         var sw = svg("svg", { viewBox: "0 0 10 10", width: 12, height: 12, "aria-hidden": "true" });
@@ -201,49 +203,48 @@
     var wrap = el("div", "sqd-heat-wrap");
     wrap.appendChild(heatmap(d));
     box.appendChild(wrap);
-    box.appendChild(note("Ore 0–23, de la stânga la dreapta; fiecare celulă = capturile reușite din " +
-      "cele " + d.expected_per_hour + " așteptate."));
+    box.appendChild(note(tt("stats.qd.cov_note", { n: d.expected_per_hour })));
 
-    box.appendChild(table(["Ziua", "Acoperire", "Reușite / așteptate", "Eșuate", "Ore cu gol"],
+    box.appendChild(table(tt("stats.qd.cov_cols").split("|"),
       d.days.slice().reverse().map(function (x) {
         return { cls: x.partial ? "sqd-partial" : null,
                  cells: [dayLabel(x), pct(x.pct), x.ok + " / " + x.expected, String(x.failed),
                          String(x.hours_with_gap)] };
-      }), "Acoperirea panoului pe zi"));
+      }), tt("stats.qd.cov_cap")));
 
-    box.appendChild(el("h4", "sqd-sub", "Cele mai recente goluri (sub " + thr + " %)"));
-    if (!d.gaps.length) { box.appendChild(note("Nu sunt goluri în perioada aleasă.")); return; }
-    box.appendChild(table(["Ziua și ora", "Acoperire", "Reușite / așteptate", "Eșuate"],
+    box.appendChild(el("h4", "sqd-sub", tt("stats.qd.gaps_h", { thr: thr })));
+    if (!d.gaps.length) { box.appendChild(note(tt("stats.qd.no_gaps"))); return; }
+    box.appendChild(table(tt("stats.qd.gap_cols").split("|"),
       d.gaps.slice(0, 15).map(function (g) {
         return { cells: [dateRo(g.date) + " " + (g.hour < 10 ? "0" : "") + g.hour + ":00",
                          pct(g.pct), g.ok + " / " + g.expected, String(g.failed)] };
-      }), "Orele cu acoperire sub prag"));
+      }), tt("stats.qd.gap_cap")));
   }
 
   // -- mount ----------------------------------------------------------------------
   function section(parent, title, intro, url, render) {
     var c = card(title, intro);
     var body = el("div", "sqd-body");
-    body.appendChild(note("Se încarcă…"));
+    body.appendChild(note(tt("stats.qd.loading")));
     c.appendChild(body);
     parent.appendChild(c);
     fetchJson(url).then(function (d) { render(body, d); }, function () {
-      body.replaceChildren(note("Nu am putut încărca aceste date.", "sqd-error"));
+      body.replaceChildren(note(tt("stats.qd.failed"), "sqd-error"));
     });
   }
 
   App.statQualityDaily = {
     mount: function (parent) {
       var root = el("div", "sqd");
-      root.appendChild(el("h2", "sqd-heading", "Calitatea datelor pe zi"));
-      section(root, "Rata de confirmare a călătoriilor",
-        "Câte călătorii au rezultat final confirmat, neconfirmat, în curs sau necunoscut, pe zi.",
+      root.appendChild(el("h2", "sqd-heading", tt("stats.qd.h")));
+      section(root, tt("stats.qd.s1"),
+        tt("stats.qd.s1i"),
         "/api/admin/quality-daily/confirmation?days=14", renderConfirmation);
-      section(root, "Calitatea citirii",
-        "Rândurile citite de pe tabelă, după validare: ok, incerte, incomplete, respinse.",
+      section(root, tt("stats.qd.s2"),
+        tt("stats.qd.s2i"),
         "/api/admin/quality-daily/reading?days=14", renderReading);
-      section(root, "Acoperirea panoului pe oră",
-        "Capturi reușite față de cele așteptate (60 pe oră); golurile apar evidențiate.",
+      section(root, tt("stats.qd.s3"),
+        tt("stats.qd.s3i"),
         "/api/admin/quality-daily/coverage?days=7", renderCoverage);
       parent.appendChild(root);
     }
