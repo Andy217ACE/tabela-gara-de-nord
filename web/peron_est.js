@@ -8,7 +8,9 @@
 (function () {
   var KEY = "tabela.peronEst";
   var REFRESH_MS = 300000;
-  var NOTICE = "estimare din istoricul observat, nu informație oficială CFR";
+  var I = window.I18N;
+  function T(k, p) { return I ? I.t(k, p) : k; }
+  function notice() { return T("peron.notice"); }
   var info = new WeakMap();   // li -> { t, board, cell, val }
   var estimates = new Map();  // cheie tren -> { platform, n, share_pct }
   var backtest = null;
@@ -44,13 +46,13 @@
 
   function labelOf(est) {
     return est
-      ? "Peron estimat " + est.platform + ", încredere " + est.share_pct + "% din " + est.n +
-        " observații; " + NOTICE
-      : "Peron estimat indisponibil; " + NOTICE;
+      ? T("peron.label", { platform: est.platform, pct: est.share_pct, n: est.n, notice: notice() })
+      : T("peron.label_unavailable", { notice: notice() });
   }
 
   function render(rec) {
     var cell = rec.cell;
+    rec.name.textContent = T("peron.name");
     cell.hidden = !enabled;
     if (!enabled) return;
     var est = lookup(rec.board, rec.t);
@@ -68,16 +70,16 @@
     });
     var box = $("pe-toggle");
     if (box && box.checked !== enabled) box.checked = enabled;
+    var tl = box && box.parentNode && box.parentNode.querySelector("span");
+    if (tl) tl.textContent = T("peron.toggle");
     var boards = $("boards");
     if (boards) boards.classList.toggle("pe-on", enabled);
     var note = $("pe-note");
     if (note) {
       note.hidden = !enabled;
-      var s = "Peron estimat: " + NOTICE + ".";
+      var s = T("peron.note", { notice: notice() });
       if (backtest) {
-        s += " În testul pe istoric, estimările afișate (cel puțin 5 observații, același peron" +
-          " în cel puțin 80% din ele) au fost corecte în ~" + backtest.accuracy_pct +
-          "% din cazuri (" + backtest.n + " cazuri). Nu e o garanție.";
+        s += " " + T("peron.note_backtest", { pct: backtest.accuracy_pct, n: backtest.n });
       }
       note.textContent = s;
     }
@@ -87,13 +89,13 @@
     var rec = info.get(li);
     if (!rec) {
       var cell = el("div", "pe-cell");
-      var label = el("span", "pe-label", "peron estimat");
+      var label = el("span", "pe-label", T("peron.name"));
       label.setAttribute("aria-hidden", "true");
       var val = el("span", "pe-val", "—");
       cell.append(label, val);
       cell.hidden = true;
       li.append(cell);
-      rec = { t: t, board: board, cell: cell, val: val };
+      rec = { t: t, board: board, cell: cell, val: val, name: label };
       info.set(li, rec);
     }
     rec.t = t;
@@ -146,6 +148,9 @@
     box.addEventListener("change", function () { setEnabled(box.checked); });
     if (box.checked) setEnabled(true);
   }
+
+  document.addEventListener("i18n:change", renderAll);
+  if (I) I.ready.then(renderAll);
 
   window.TabelaApp = window.TabelaApp || {};
   window.TabelaApp.peronEst = {
