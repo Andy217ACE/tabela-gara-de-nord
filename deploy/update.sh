@@ -27,6 +27,10 @@
 # Paths and commands can be overridden through the environment (used by
 # tests/test_update_sh.py to simulate a server); production uses the defaults.
 set -euo pipefail
+# git writes new checkout files with the caller's umask; the service user (tabela) must
+# be able to read the code. A 027 umask made app/fetcher.py 640 and the app stopped
+# (Beta 1.52 deploy, 14.11). Files are 644, directories 755, whatever the caller's umask.
+umask 022
 
 # bash reads a script while running it and `git checkout` below replaces this file:
 # run from a private copy so the rest of the run is not read from the new version.
