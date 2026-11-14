@@ -730,7 +730,12 @@
     var box = $("pe-toggle");
     if (box) {
       box.checked = on;   // at once, before the lazy layer arrives
-      box.addEventListener("change", loadPeronEst);
+      // save the choice here, not in peron_est.js: that listener exists only after the lazy layer loaded,
+      // so a quick tick + reload before that lost the setting (Beta 1.56)
+      box.addEventListener("change", function () {
+        try { localStorage.setItem("tabela.peronEst", box.checked ? "1" : "0"); } catch (e) { /* storage indisponibil */ }
+        loadPeronEst();
+      });
     }
     if (on) loadPeronEst();
   }

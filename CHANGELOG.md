@@ -5,6 +5,19 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.56 — 2026-11-14
+
+### Reparat
+- **Comutatorul „Arată peron estimat” își păstrează alegerea și după o reîncărcare rapidă:** alegerea se salvează imediat la schimbare, nu după ce s-a încărcat stratul lazy (un clic urmat de reîncărcare înainte ca scriptul să ajungă pierdea setarea).
+- **Test stabil:** testul de comutator trece fără așteptări artificiale; înainte pica în una din trei rulări.
+
+### Schimbat
+- Service worker v42 (app.js s-a schimbat).
+
+### English
+- **Peron-estimate toggle keeps its choice after a quick reload:** the choice is saved on change, not only after the lazy layer has loaded.
+- Service worker v42 (app.js changed).
+
 ## Beta 1.55 — 2026-11-14
 
 ### Adăugat
