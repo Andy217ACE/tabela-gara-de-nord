@@ -103,7 +103,7 @@
 
   // ---- shell: filters + body ---------------------------------------------------------
 
-  var v = { p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
+  var v = { sect: "", p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
 
   function segmented(name, label, opts) {
     var fs = el("fieldset", "ss-seg");
@@ -166,7 +166,11 @@
     ci.type = "checkbox";
     ci.id = "ss-confirmate";
     chk.append(ci, el("span", null, tt("stats.filters.confirmed_only")));
-    form.append(per.node, brd.node, op.node, tp.node, chk);
+    var rs = el("button", "btn btn-ghost btn-sm ss-reset", tt("stats.reset"));
+    rs.type = "button";
+    rs.hidden = true;
+    rs.addEventListener("click", function () { resetFilters(); });
+    form.append(per.node, brd.node, op.node, tp.node, chk, rs);
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
                tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "" };
@@ -174,15 +178,17 @@
     form.addEventListener("change", function () {
       v.p = read();
       syncHash(v.p);
+      syncReset();
       load();
     });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
     var body = el("div", "ss-body");
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
-    v.ui = { form: form, quick: quick, body: body, per: per, brd: brd, op: op, tp: tp, ci: ci };
+    v.ui = { form: form, quick: quick, body: body, reset: rs, per: per, brd: brd, op: op, tp: tp, ci: ci };
     window.addEventListener("resize", debounce(function () {
       if (!v.data || $("view-statistici").hidden) return;
+      syncFiltersH();
       var w = v.ui.body.clientWidth;
       if (Math.abs(w - v.width) > 24) render(v.data);
     }, 200));
@@ -199,6 +205,23 @@
     v.ui.op.fill(v.data && v.data.options ? v.data.options.operators : [], p.operator);
     v.ui.tp.fill(v.data && v.data.options ? v.data.options.types : [], p.tip);
     v.ui.ci.checked = p.doar_confirmate === "1";
+    syncReset();
+  }
+
+  // „Resetează filtrele” shows only while a filter differs from its default
+  function isDefault(p) {
+    return !p || (p.perioada === "all" && !p.board && !p.operator && !p.tip && !p.doar_confirmate);
+  }
+  function syncReset() {
+    if (v.ui && v.ui.reset) v.ui.reset.hidden = isDefault(v.p);
+    syncFiltersH();
+  }
+  // the section chips (charts3) stick right under the sticky filters
+  function syncFiltersH() {
+    if (!v.ui) return;
+    var h = v.ui.form.offsetHeight;
+    var cssom = document.documentElement.style;   // CSSOM custom property (CSP-safe, like charts3.js --c3-nav-h)
+    cssom.setProperty("--ss-filters-h", (h ? h + 10 : 0) + "px");
   }
 
   // lazy "steps" layer (stat_steps.js): own file, not in the SW shell (precache budget); resolves even if it fails
@@ -1636,6 +1659,7 @@
 
   function resetFilters() {
     v.p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    v.sect = "";
     setForm(v.p);
     syncHash(v.p);
     load();
@@ -1647,6 +1671,7 @@
     v.ui.body.classList.toggle("ss-no-motion", !!reduceMotion);
     var boards = boardsOf(d);
     renderSummary(d);
+    syncFiltersH();
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
       var msg = tt("stats.empty.none");

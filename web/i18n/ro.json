@@ -964,6 +964,7 @@
   "stats.stp.top_desc": "Numărul de treceri de la o valoare de întârziere la alta.",
   "stats.stp.typical": "Treapta tipică: {size} · timp median între două modificări: {gap}{pairs} · {up}, {down}{downmed}.",
   "stats.stt.cap": "Trenuri — {board} {dir} {name}",
+  "stats.reset": "Resetează filtrele",
   "stats.sum.aria": "Sumar rapid",
   "stats.sum.mean": "Întârziere medie",
   "stats.sum.mean_sub": "media a {n} călătorii cu întârziere citită",

@@ -33,3 +33,36 @@ def test_summary_cards_show_four_metrics(browser, base_url):
         assert errors == []
     finally:
         ctx.close()
+
+
+def test_filters_stay_sticky_after_scroll(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        page.evaluate("window.scrollTo(0, 900)")
+        page.wait_for_timeout(200)
+        assert page.evaluate("window.scrollY") > 300
+        # sticky under the sticky main menu bar, never behind it
+        nav_bottom = page.evaluate("document.querySelector('.navbar').getBoundingClientRect().bottom")
+        top = page.evaluate("document.querySelector('.ss-filters').getBoundingClientRect().top")
+        assert nav_bottom - 1 <= top <= nav_bottom + 1, (top, nav_bottom)
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_reset_clears_filters_and_hash(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, 1280, 800)
+    try:
+        reset = page.locator(".ss-reset")
+        expect(reset).to_be_hidden()
+        page.locator(".ss-seg-opt", has_text="7 zile").click()
+        expect(reset).to_be_visible()
+        assert "perioada=7" in page.evaluate("location.hash")
+        reset.click()
+        expect(reset).to_be_hidden()
+        expect(page.locator("input[name=ss-perioada][value=all]")).to_be_checked()
+        assert "perioada=" not in page.evaluate("location.hash")
+        assert page.evaluate("location.hash") == "#statistici"
+        assert errors == []
+    finally:
+        ctx.close()

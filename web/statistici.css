@@ -14,7 +14,12 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
+  /* stays under the sticky main menu bar while the page scrolls (Statistici v3) */
+  position: sticky;
+  top: var(--topnav-h, 57px);
+  z-index: 5;
 }
+.ss-reset[hidden] { display: none; }
 .ss-seg { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .ss-seg legend { padding: 0; margin-bottom: 4px; }
 .ss-seg-row {
@@ -386,3 +391,6 @@
 @media (min-width: 760px) {
   .ss-quick { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* the section chips (charts3) stick under the sticky filters; --ss-filters-h is set by statistici.js */
+.st-root .c3-toc { top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px)); }

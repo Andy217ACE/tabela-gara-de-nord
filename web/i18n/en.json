@@ -964,6 +964,7 @@
   "stats.stp.top_desc": "The number of transitions from one delay value to another.",
   "stats.stp.typical": "Typical step: {size} · median time between two changes: {gap}{pairs} · {up}, {down}{downmed}.",
   "stats.stt.cap": "Trains — {board} {dir} {name}",
+  "stats.reset": "Reset filters",
   "stats.sum.aria": "Quick summary",
   "stats.sum.mean": "Average delay",
   "stats.sum.mean_sub": "average of {n} journeys with a read delay",
