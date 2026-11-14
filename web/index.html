@@ -58,15 +58,15 @@
   <link rel="stylesheet" href="ui2.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">Sari la tabelă</a>
+  <a class="skip-link" href="#main" data-i18n="app.skip">Sari la tabelă</a>
 
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="#">
-        <img id="logo" class="logo logo-header" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="Sigla Tabela Gara de Nord" width="46" height="46" decoding="async">
+        <img id="logo" class="logo logo-header" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="Sigla Tabela Gara de Nord" data-i18n-attr="alt:app.logoAlt" width="46" height="46" decoding="async">
         <span class="brand-text">
           <span class="brand-title">Gara de Nord</span>
-          <span class="brand-sub">Sosiri și plecări</span>
+          <span class="brand-sub" data-i18n="app.brandSub">Sosiri și plecări</span>
         </span>
       </a>
 
@@ -84,7 +84,7 @@
 
       <div class="live" id="live" data-state="loading">
         <span class="live-dot" aria-hidden="true"></span>
-        <span class="live-text" id="updated">Se încarcă…</span>
+        <span class="live-text" id="updated" data-i18n="app.loading">Se încarcă…</span>
         <span class="live-sep" aria-hidden="true">·</span>
         <span class="live-src">Sursa: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">CFR</a></span>
       </div>
@@ -94,41 +94,41 @@
   <!-- meniul principal: bară proprie, lipită sus la orice lățime (și în „Site pentru desktop”);
        când nu încape, se derulează orizontal în interiorul barei, nu pagina -->
   <div class="navbar">
-    <nav class="mainnav" aria-label="Navigare principală">
+    <nav class="mainnav" aria-label="Navigare principală" data-i18n-attr="aria-label:nav.main">
       <a class="nav-item" href="#" data-route="tabela">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7.5 13h4M7.5 16.5h4M14.5 13h2M14.5 16.5h2"/></svg>
-        <span>Tabelă</span>
+        <span data-i18n="nav.board">Tabelă</span>
       </a>
       <a class="nav-item" href="#istoric" data-route="istoric">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-        <span>Istoric</span>
+        <span data-i18n="nav.history">Istoric</span>
       </a>
       <a class="nav-item" href="#urmarite" data-route="urmarite">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
-        <span>Urmărite</span>
+        <span data-i18n="nav.follows">Urmărite</span>
       </a>
       <a class="nav-item" href="#trenuri" data-route="trenuri">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M9 17l-2.5 4M15 17l2.5 4"/><path d="M8.5 13.5h.01M15.5 13.5h.01"/></svg>
-        <span>Trenuri</span>
+        <span data-i18n="nav.trains">Trenuri</span>
       </a>
       <a class="nav-item" href="#statistici" data-route="statistici">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V6M17 16.5v-8"/></svg>
-        <span>Statistici</span>
+        <span data-i18n="nav.stats">Statistici</span>
       </a>
       <a class="nav-item" href="#clasamente" data-route="clasamente">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7"/></svg>
-        <span>Clasamente</span>
+        <span data-i18n="nav.rankings">Clasamente</span>
       </a>
       <a class="nav-item" href="#statii" data-route="statii">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-        <span>Stații</span>
+        <span data-i18n="nav.stations">Stații</span>
       </a>
       <a class="nav-item" href="#sistem" data-route="sistem">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M9 20h6M12 16v4M7.5 10.5h2l1-2 2 4 1-2h3"/></svg>
-        <span>Sistem</span>
+        <span data-i18n="nav.system">Sistem</span>
       </a>
     </nav>
-    <button type="button" class="lang-toggle" data-lang-toggle aria-label="Switch language / Schimbă limba">EN</button>
+    <button type="button" class="lang-toggle" data-lang-toggle aria-label="Switch language / Schimbă limba" data-i18n-attr="aria-label:nav.langAria">EN</button>
   </div>
 
   <p class="sr-only" id="sr-status" role="status" aria-live="polite"></p>
@@ -145,22 +145,22 @@
       <!-- ecran de încărcare: sigla mică până sosesc primele date (app.js îl ascunde) -->
       <div class="boot" id="boot" aria-hidden="true">
         <img class="logo logo-boot" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="" width="56" height="56" decoding="async">
-        <span class="boot-text">Se încarcă tabela…</span>
+        <span class="boot-text" data-i18n="app.bootText">Se încarcă tabela…</span>
       </div>
 
       <!-- mod „Panou" (web/panel.js): comutator Panou/Carduri + afișajul de gară -->
       <div id="panel-root" class="pnl-root"></div>
 
       <!-- coloana "Peron estimat" (strat lazy, incarcat de app.js): implicit oprita -->
-      <label class="pe-toggle" for="pe-toggle"><input type="checkbox" id="pe-toggle"><span>Arată peron estimat</span></label>
+      <label class="pe-toggle" for="pe-toggle"><input type="checkbox" id="pe-toggle"><span data-i18n="board.peToggle">Arată peron estimat</span></label>
       <p class="pe-note" id="pe-note" hidden></p>
 
-      <div class="tabs" role="tablist" aria-label="Panou">
+      <div class="tabs" role="tablist" aria-label="Panou" data-i18n-attr="aria-label:app.tabsAria">
         <button class="tab" type="button" role="tab" id="tab-arrivals" aria-controls="panel-arrivals" aria-selected="true" data-board="arrivals">
-          <span>Sosiri</span><span class="tab-count" id="count-arrivals"></span>
+          <span data-i18n="board.arrivals">Sosiri</span><span class="tab-count" id="count-arrivals"></span>
         </button>
         <button class="tab" type="button" role="tab" id="tab-departures" aria-controls="panel-departures" aria-selected="false" tabindex="-1" data-board="departures">
-          <span>Plecări</span><span class="tab-count" id="count-departures"></span>
+          <span data-i18n="board.departures">Plecări</span><span class="tab-count" id="count-departures"></span>
         </button>
       </div>
 
@@ -168,7 +168,7 @@
         <section class="board" id="panel-arrivals" role="tabpanel" aria-labelledby="tab-arrivals" data-board="arrivals">
           <h2 class="board-title">
             <svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
-            <span>Sosiri</span>
+            <span data-i18n="board.arrivals">Sosiri</span>
           </h2>
           <ol class="trains" id="list-arrivals" aria-busy="true">
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
@@ -176,13 +176,13 @@
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
           </ol>
-          <p class="empty" hidden>Momentan nu sunt trenuri afișate.</p>
+          <p class="empty" hidden></p>
         </section>
 
         <section class="board" id="panel-departures" role="tabpanel" aria-labelledby="tab-departures" data-board="departures">
           <h2 class="board-title">
             <svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            <span>Plecări</span>
+            <span data-i18n="board.departures">Plecări</span>
           </h2>
           <ol class="trains" id="list-departures" aria-busy="true">
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
@@ -190,51 +190,51 @@
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
             <li class="train skeleton" aria-hidden="true"><span class="sk sk-time"></span><span class="sk sk-lines"></span><span class="sk sk-plat"></span></li>
           </ol>
-          <p class="empty" hidden>Momentan nu sunt trenuri afișate.</p>
+          <p class="empty" hidden></p>
         </section>
       </div>
     </section>
 
     <section class="view view-history" id="view-istoric" aria-labelledby="istoric-heading" hidden>
       <div class="page-head">
-        <h1 id="istoric-heading">Istoric</h1>
-        <p class="page-sub">Tot ce a afișat tabela CFR, din toate zilele (cele mai noi primele): ore programate, întârzieri citite și linii. Alege o zi, un tren, o stație sau un interval orar ca să restrângi lista.</p>
+        <h1 id="istoric-heading" data-i18n="page.history.title">Istoric</h1>
+        <p class="page-sub" data-i18n="page.history.sub">Tot ce a afișat tabela CFR, din toate zilele (cele mai noi primele): ore programate, întârzieri citite și linii. Alege o zi, un tren, o stație sau un interval orar ca să restrângi lista.</p>
       </div>
 
-      <form class="filters" id="h-form" role="search" aria-label="Filtre istoric" novalidate>
+      <form class="filters" id="h-form" role="search" aria-label="Filtre istoric" data-i18n-attr="aria-label:hist.filtersAria" novalidate>
         <div class="field field-date">
-          <label class="field-label" id="h-day-label" for="h-date">Ziua</label>
+          <label class="field-label" id="h-day-label" for="h-date" data-i18n="hist.day">Ziua</label>
           <div class="h-day-pick">
             <input type="date" id="h-date" name="date" aria-describedby="h-day-hint">
-            <button class="btn btn-ghost h-alldays" type="button" id="h-alldays" aria-pressed="true">Toate zilele</button>
+            <button class="btn btn-ghost h-alldays" type="button" id="h-alldays" aria-pressed="true" data-i18n="hist.allDays">Toate zilele</button>
           </div>
-          <span class="sr-only" id="h-day-hint">Lasă ziua necompletată pentru toate zilele.</span>
+          <span class="sr-only" id="h-day-hint" data-i18n="hist.dayHint">Lasă ziua necompletată pentru toate zilele.</span>
         </div>
         <label class="field">
-          <span class="field-label">Nr. tren</span>
-          <input type="text" id="h-train" name="train" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="ex. 1636">
+          <span class="field-label" data-i18n="hist.trainNo">Nr. tren</span>
+          <input type="text" id="h-train" name="train" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="ex. 1636" data-i18n-attr="placeholder:hist.trainPh">
         </label>
         <label class="field field-wide">
-          <span class="field-label">Stație</span>
-          <input type="search" id="h-station" name="station" maxlength="64" autocomplete="off" placeholder="ex. Brașov">
+          <span class="field-label" data-i18n="hist.station">Stație</span>
+          <input type="search" id="h-station" name="station" maxlength="64" autocomplete="off" placeholder="ex. Brașov" data-i18n-attr="placeholder:hist.stationPh">
         </label>
         <label class="field">
-          <span class="field-label">De la</span>
+          <span class="field-label" data-i18n="hist.from">De la</span>
           <input type="time" id="h-from" name="from">
         </label>
         <label class="field">
-          <span class="field-label">Până la</span>
+          <span class="field-label" data-i18n="hist.to">Până la</span>
           <input type="time" id="h-to" name="to">
         </label>
         <label class="field">
-          <span class="field-label">Panou</span>
+          <span class="field-label" data-i18n="hist.board">Panou</span>
           <select id="h-board" name="board">
-            <option value="">Toate</option>
-            <option value="arrival">Sosiri</option>
-            <option value="departure">Plecări</option>
+            <option value="" data-i18n="hist.all">Toate</option>
+            <option value="arrival" data-i18n="board.arrivals">Sosiri</option>
+            <option value="departure" data-i18n="board.departures">Plecări</option>
           </select>
         </label>
-        <button class="btn btn-ghost" type="reset" id="h-reset">Resetează</button>
+        <button class="btn btn-ghost" type="reset" id="h-reset" data-i18n="hist.reset">Resetează</button>
       </form>
 
       <p class="h-count" id="h-count" role="status" aria-live="polite"></p>
@@ -242,12 +242,12 @@
       <div class="h-summary" id="h-summary" hidden></div>
       <div class="h-results" id="h-results"></div>
       <p class="empty" id="h-empty" hidden></p>
-      <button class="btn btn-ghost h-more" type="button" id="h-more" hidden>Încarcă mai multe</button>
+      <button class="btn btn-ghost h-more" type="button" id="h-more" hidden data-i18n="hist.more">Încarcă mai multe</button>
 
       <dialog class="sheet" id="h-detail" aria-labelledby="h-detail-title">
         <div class="sheet-head">
-          <h2 class="sheet-title" id="h-detail-title">Tren</h2>
-          <button class="icon-btn" type="button" id="h-detail-close" aria-label="Închide detaliile">
+          <h2 class="sheet-title" id="h-detail-title" data-i18n="hist.detailTitle">Tren</h2>
+          <button class="icon-btn" type="button" id="h-detail-close" aria-label="Închide detaliile" data-i18n-attr="aria-label:hist.closeAria">
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>
           </button>
         </div>
@@ -258,8 +258,8 @@
 
     <section class="view view-follows" id="view-urmarite" aria-labelledby="urmarite-heading" hidden>
       <div class="page-head">
-        <h1 id="urmarite-heading">Trenuri urmărite</h1>
-        <p class="page-sub">Primești o notificare când unui tren urmărit i se schimbă întârzierea sau linia, ori dispare de pe tabelă.</p>
+        <h1 id="urmarite-heading" data-i18n="page.follows.title">Trenuri urmărite</h1>
+        <p class="page-sub" data-i18n="page.follows.sub">Primești o notificare când unui tren urmărit i se schimbă întârzierea sau linia, ori dispare de pe tabelă.</p>
       </div>
 
       <div class="f-hero" id="f-hero"></div>
@@ -268,7 +268,7 @@
         <label class="switch">
           <input type="checkbox" role="switch" id="f-switch">
           <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-          <span class="switch-label">Notificări pe acest dispozitiv</span>
+          <span class="switch-label" data-i18n="follows.switch">Notificări pe acest dispozitiv</span>
         </label>
         <p class="panel-status" id="f-status" role="status" aria-live="polite"></p>
         <p class="notice" id="f-support" hidden></p>
@@ -277,30 +277,30 @@
 
       <p class="h-count" id="f-count"></p>
       <ul class="f-list" id="f-list"></ul>
-      <p class="empty" id="f-empty" hidden>Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
+      <p class="empty" id="f-empty" hidden data-i18n="follows.empty">Nu urmărești niciun tren. Apasă „urmărește” pe un tren din tabelă.</p>
     </section>
 
     <section class="view view-stats" id="view-trenuri" aria-labelledby="trenuri-heading" hidden>
       <div class="page-head">
-        <h1 id="trenuri-heading">Trenuri</h1>
-        <p class="page-sub">Catalogul trenurilor observate pe tabela din Gara de Nord, cu statistici de întârziere: un rând pentru fiecare număr de tren și panou (sosiri și plecări separat). Întârzierea este cea citită pe tabela de la București Nord.</p>
-        <p class="page-links"><a class="st-back" href="#statii">Stații: de unde vin și unde pleacă trenurile →</a></p>
+        <h1 id="trenuri-heading" data-i18n="page.trains.title">Trenuri</h1>
+        <p class="page-sub" data-i18n="page.trains.sub">Catalogul trenurilor observate pe tabela din Gara de Nord, cu statistici de întârziere: un rând pentru fiecare număr de tren și panou (sosiri și plecări separat). Întârzierea este cea citită pe tabela de la București Nord.</p>
+        <p class="page-links"><a class="st-back" href="#statii" data-i18n="page.trains.link">Stații: de unde vin și unde pleacă trenurile →</a></p>
       </div>
       <div class="st-root" id="st-trenuri"></div>
     </section>
 
     <section class="view view-stats" id="view-statii" aria-labelledby="statii-heading" hidden>
       <div class="page-head">
-        <h1 id="statii-heading">Stații</h1>
-        <p class="page-sub">Stațiile afișate pe tabela din Gara de Nord: originea trenurilor la sosiri și destinația la plecări. Caută o stație și deschide-i pagina cu istoricul trenurilor.</p>
-        <p class="page-links"><a class="st-back" href="#trenuri">← Trenuri</a></p>
+        <h1 id="statii-heading" data-i18n="page.stations.title">Stații</h1>
+        <p class="page-sub" data-i18n="page.stations.sub">Stațiile afișate pe tabela din Gara de Nord: originea trenurilor la sosiri și destinația la plecări. Caută o stație și deschide-i pagina cu istoricul trenurilor.</p>
+        <p class="page-links"><a class="st-back" href="#trenuri" data-i18n="page.stations.back">← Trenuri</a></p>
       </div>
       <div class="st-root" id="st-statii"></div>
     </section>
 
     <section class="view view-stats" id="view-statie" aria-labelledby="statie-heading" hidden>
       <div class="page-head">
-        <h1 id="statie-heading">Stație</h1>
+        <h1 id="statie-heading" data-i18n="page.station.title">Stație</h1>
         <p class="page-sub" id="statie-sub"></p>
       </div>
       <div class="st-root" id="st-statie"></div>
@@ -308,7 +308,7 @@
 
     <section class="view view-stats" id="view-tren" aria-labelledby="tren-heading" hidden>
       <div class="page-head">
-        <h1 id="tren-heading">Tren</h1>
+        <h1 id="tren-heading" data-i18n="page.train.title">Tren</h1>
         <p class="page-sub" id="tren-sub"></p>
       </div>
       <div class="st-root" id="st-tren"></div>
@@ -316,16 +316,16 @@
 
     <section class="view view-stats" id="view-statistici" aria-labelledby="statistici-heading" hidden>
       <div class="page-head">
-        <h1 id="statistici-heading">Statistici</h1>
-        <p class="page-sub">Cât de punctuale sunt trenurile din Gara de Nord: întâi problemele care ies din date (cu N, cifre brute și link spre tren, stație sau zi), apoi ce merge bine și graficele de detaliu. Întârzierea este cea citită pe tabela de la București Nord; sosirile și plecările sunt mereu separate.</p>
+        <h1 id="statistici-heading" data-i18n="page.stats.title">Statistici</h1>
+        <p class="page-sub" data-i18n="page.stats.sub">Cât de punctuale sunt trenurile din Gara de Nord: întâi problemele care ies din date (cu N, cifre brute și link spre tren, stație sau zi), apoi ce merge bine și graficele de detaliu. Întârzierea este cea citită pe tabela de la București Nord; sosirile și plecările sunt mereu separate.</p>
       </div>
       <div class="st-root" id="st-statistici"></div>
     </section>
 
     <section class="view view-stats" id="view-clasamente" aria-labelledby="clasamente-heading" hidden>
       <div class="page-head">
-        <h1 id="clasamente-heading">Clasamente</h1>
-        <p class="page-sub">Cele mai întârziate și cele mai punctuale trenuri (număr de tren × panou), doar cu eșantion suficient. Întârzierea este cea citită pe tabela de la București Nord.</p>
+        <h1 id="clasamente-heading" data-i18n="page.rankings.title">Clasamente</h1>
+        <p class="page-sub" data-i18n="page.rankings.sub">Cele mai întârziate și cele mai punctuale trenuri (număr de tren × panou), doar cu eșantion suficient. Întârzierea este cea citită pe tabela de la București Nord.</p>
       </div>
       <div class="st-root" id="st-clasamente"></div>
       <div class="st-rank-stations" id="rank-stations"></div>
@@ -335,7 +335,7 @@
 
     <section class="view view-versions" id="view-versiuni" aria-labelledby="versiuni-heading" hidden>
       <div class="page-head">
-        <h1 id="versiuni-heading">Versiuni</h1>
+        <h1 id="versiuni-heading" data-i18n="page.versions.title">Versiuni</h1>
         <p class="page-sub" id="v-current"></p>
       </div>
       <p class="notice notice-error" id="v-error" role="alert" hidden></p>
@@ -349,7 +349,7 @@
     <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
     <span class="footer-meteo">Meteo: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> · CC BY 4.0 (valori de model)</span>
-    <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor">Versiuni</a>
+    <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor" data-i18n-attr="title:footer.versionsTitle">Versiuni</a>
   </footer>
 </body>
 </html>

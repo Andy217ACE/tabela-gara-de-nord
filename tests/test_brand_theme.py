@@ -171,8 +171,9 @@ def test_theme_button_present_and_labelled():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     theme_fn = app.split("function renderThemeButtons")[1].split("function initTheme")[0]
     assert "aria-pressed" not in theme_fn
-    for needle in ('"Temă: "', "TabelaTheme"):
+    for needle in ('T_("theme.label"', "TabelaTheme"):
         assert needle in app, needle
+    assert _ro()["theme.label"] == "Temă: {mode}"
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert "data-theme-toggle" in panel  # reachable in Panou fullscreen too
     theme = (WEB / "theme-init.js").read_text(encoding="utf-8")
@@ -248,7 +249,7 @@ def test_panel_follow_button_uses_app_on_follow():
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert "pnl-follow" in panel and "TabelaApp.onFollow(found.t, fol)" in panel
     assert "followState" in panel and "tabela:follows" in panel
-    assert "Favorite (local)" in panel
+    assert "Favorite (local)" in _ro()["panel.favTitle"]
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert 'new CustomEvent("tabela:follows")' in app
 
@@ -291,8 +292,12 @@ def test_cards_never_green_without_read_delay():
     assert 'typeof t.delay_last_read_age_s === "number"' in app  # ultima citire sigură, cu vechime (Beta 1.41)
     panel = (WEB / "panel.js").read_text(encoding="utf-8")
     assert 'if (t.delay_read !== true) return "unknown";' in panel
-    assert "necitit" in panel and "necitit" in app
+    assert 'T("board.unread")' in panel and 'T("board.unread")' in app and _ro()["board.unread"] == "necitit"
     assert "confidence" not in panel  # dead check removed
+
+
+def _ro():
+    return json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
 
 
 def test_icon_weights_and_precache_budget(client):
@@ -322,7 +327,9 @@ def test_icon_weights_and_precache_budget(client):
     # and index.html (+370 B) -> 652.5 KB; Sistem/Setări are no longer in the precache (ab718e5)
     # -> budget 660 KB, ~7 KB headroom
     # statistici: stat_platform.js + stat_dwell.js (~12 KB, secțiunile publice noi) -> 680 KB
-    assert total <= 680_000, total
+    # Beta 1.54 (English version): the texts moved to web/i18n/*.json (not counted here); the shell code
+    # grew ~8 KB for the i18n glue (t()/plural/Intl helpers + data-i18n attributes) -> 700 KB
+    assert total <= 700_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

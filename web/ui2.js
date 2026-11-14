@@ -17,8 +17,24 @@
   var App = window.TabelaApp = window.TabelaApp || {};
   var SVG_NS = "http://www.w3.org/2000/svg";
   var mq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-  var nf1 = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 1 });
-  var nf0 = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 0 });
+  // i18n (web/i18n/i18n.js): numbers follow the active language (created once per locale)
+  function T(key, params) { return window.I18N ? window.I18N.t(key, params) : key; }
+  function loc() { return window.I18N && window.I18N.lang() === "en" ? "en-GB" : "ro-RO"; }
+  function plural(base, n, params) {
+    var cat = "other";
+    try { cat = new Intl.PluralRules(loc()).select(Math.abs(n)); } catch (e) { /* ignore */ }
+    var k = base + "." + cat, v = T(k, params);
+    return v === k ? T(base + ".other", params) : v;
+  }
+  function numFmt(digits) {
+    var cache = {};
+    return { format: function (v) {
+      var l = loc();
+      return (cache[l] || (cache[l] = new Intl.NumberFormat(l, { maximumFractionDigits: digits }))).format(v);
+    } };
+  }
+  var nf1 = numFmt(1);
+  var nf0 = numFmt(0);
   var seq = 0;
 
   function reduced() { return !!(mq && mq.matches); }
@@ -95,7 +111,7 @@
   function fmtPct(v) { return nf1.format(v) + " %"; }
 
   // o: {title, desc, segments:[{key,label,value,slot,sub}], total?, centerValue, centerLabel,
-  //     showPct (default true), valueUnit ("călătorii"), id}
+  //     showPct (default true), valueUnit (e.g. T("ui.trips")), id}
   // slot = categorical slot 1..6 (colour --cat-N), or "other"/"ok"/"mid"/"bad"/"arr"/"dep"/"mute".
   function donut(host, o) {
     var segs = (o.segments || []).map(function (x) { return x; });
@@ -244,7 +260,7 @@
   function meter(pct, o) {
     var op = o || {};
     var root = s("svg", { viewBox: "0 0 100 8", preserveAspectRatio: "none", class: "ui-meter" + (pct == null ? " is-none" : ""),
-                          role: "img", "aria-label": op.label || (pct == null ? "fără valoare" : nf1.format(pct) + " %") });
+                          role: "img", "aria-label": op.label || (pct == null ? T("ui.noValue") : nf1.format(pct) + " %") });
     root.append(s("rect", { class: "ui-meter-track", x: 0, y: 1, width: 100, height: 6, rx: 3 }));
     if (pct != null && pct > 0) {
       root.append(s("rect", { class: "ui-meter-fill ui-t-" + (op.tone || "acc"), x: 0, y: 1,
@@ -259,7 +275,7 @@
     var W = op.w || 120, H = op.h || 32, P = 3;
     var nums = values.filter(function (v) { return v != null; });
     var root = s("svg", { viewBox: "0 0 " + W + " " + H, class: "ui-spark", role: "img",
-                          "aria-label": op.label || "evoluție" });
+                          "aria-label": op.label || T("ui.trend") });
     if (!nums.length) { root.classList.add("is-none"); return root; }
     var lo = op.min != null ? op.min : Math.min.apply(null, nums.concat([0]));
     var hi = op.max != null ? Math.max(op.max, lo + 1) : Math.max.apply(null, nums.concat([lo + 1]));
@@ -289,7 +305,7 @@
     var op = o || {};
     var tot = (a || 0) + (b || 0);
     var root = s("svg", { viewBox: "0 0 100 8", preserveAspectRatio: "none", class: "ui-meter ui-split", role: "img",
-                          "aria-label": op.label || ("sosiri " + (a || 0) + ", plecări " + (b || 0)) });
+                          "aria-label": op.label || T("ui.split", { a: a || 0, b: b || 0 }) });
     root.append(s("rect", { class: "ui-meter-track", x: 0, y: 1, width: 100, height: 6, rx: 3 }));
     if (tot > 0) {
       var wa = (100 * a) / tot;
@@ -305,7 +321,7 @@
   function gauge(pct, o) {
     var op = o || {};
     var root = s("svg", { viewBox: "0 0 56 56", class: "ui-gauge" + (pct == null ? " is-none" : ""), role: "img",
-                          "aria-label": op.label || (pct == null ? "fără valoare" : nf1.format(pct) + " %") });
+                          "aria-label": op.label || (pct == null ? T("ui.noValue") : nf1.format(pct) + " %") });
     var arc = { cx: 28, cy: 28, r: 22, pathLength: 100, transform: "rotate(135 28 28)" };
     root.append(s("circle", Object.assign({ class: "ui-gauge-track", "stroke-dasharray": "75 25" }, arc)));
     if (pct != null && pct > 0) {
@@ -352,9 +368,9 @@
       var tone = it.tone === "dep" ? "dep" : it.tone === "ok" ? "ok" : "arr";
       if (it.meter !== undefined && it.gauge) {
         box.classList.add("has-gauge");
-        box.append(gauge(it.meter, { tone: tone, label: it.label + ": " + (it.meter == null ? "fără valoare" : nf1.format(it.meter) + " %") }));
+        box.append(gauge(it.meter, { tone: tone, label: it.label + ": " + (it.meter == null ? T("ui.noValue") : nf1.format(it.meter) + " %") }));
       } else if (it.meter !== undefined) box.append(meter(it.meter, { tone: it.tone === "dep" ? "dep" : it.tone === "ok" ? "ok" : "arr",
-                                                               label: it.label + ": " + (it.meter == null ? "fără valoare" : nf1.format(it.meter) + " %") }));
+                                                               label: it.label + ": " + (it.meter == null ? T("ui.noValue") : nf1.format(it.meter) + " %") }));
       grid.append(box);
     });
     return grid;
@@ -364,15 +380,15 @@
   function delayDonut(host, st, p, label, idp) {
     var late = Math.max(0, (st.n || 0) - (st.on_time || 0) - (st.over_30 || 0));
     var ok = !!st.sufficient;
-    return donut(host, { id: idp, valueUnit: "călătorii", showPct: ok,
-      title: "La timp, întârziate și peste 30 min — " + label,
-      desc: "Din " + st.n + " călătorii încheiate cu întârziere citită: " + st.on_time + " la timp (cel mult " + p.on_time_max_min +
-        " min), " + late + " întârziate până la 30 min, " + st.over_30 + " peste 30 min.",
-      centerValue: ok ? nf1.format(st.on_time_pct) + " %" : String(st.n), centerLabel: ok ? "la timp" : "călătorii (N)",
+    return donut(host, { id: idp, valueUnit: T("ui.trips"), showPct: ok,
+      title: T("ui.donut.title", { label: label }),
+      desc: plural("ui.donut.desc", st.n || 0, { n: nf0.format(st.n || 0), ok: nf0.format(st.on_time || 0), max: p.on_time_max_min,
+        late: nf0.format(late), over: nf0.format(st.over_30 || 0) }),
+      centerValue: ok ? nf1.format(st.on_time_pct) + " %" : String(st.n), centerLabel: T(ok ? "ui.onTime" : "ui.tripsN"),
       segments: [
-        { label: "la timp (≤ " + p.on_time_max_min + " min)", value: st.on_time || 0, slot: "ok" },
-        { label: "întârziate " + (p.on_time_max_min + 1) + "–30 min", value: late, slot: "mid" },
-        { label: "peste 30 min", value: st.over_30 || 0, slot: "bad" }] });
+        { label: T("ui.seg.onTime", { max: p.on_time_max_min }), value: st.on_time || 0, slot: "ok" },
+        { label: T("ui.seg.late", { from: p.on_time_max_min + 1 }), value: late, slot: "mid" },
+        { label: T("ui.seg.over30"), value: st.over_30 || 0, slot: "bad" }] });
   }
 
   // small line illustrations for empty states (decorative, aria-hidden)

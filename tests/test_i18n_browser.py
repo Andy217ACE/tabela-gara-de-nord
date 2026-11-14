@@ -103,3 +103,74 @@ def test_toggle_switches_language_and_url(browser, base_url):  # noqa: F811
         assert page.evaluate("() => document.documentElement.scrollWidth") <= 360
     finally:
         ctx.close()
+
+
+def _board_page(browser, base_url, query, view="panou", width=1280, height=800):
+    ctx = browser.new_context(viewport={"width": width, "height": height}, service_workers="block")
+    ctx.add_init_script("localStorage.setItem('tabela.view','%s');" % view)
+    page = ctx.new_page()
+    page.goto(base_url + "/" + query)
+    page.wait_for_selector(".pnl-row" if view == "panou" else ".train:not(.skeleton)")
+    return ctx, page
+
+
+def test_board_in_english(browser, base_url):  # noqa: F811
+    ctx, page = _board_page(browser, base_url, "?lang=en")
+    try:
+        assert "ARRIVALS" in page.text_content("#pnl-title")
+        msgs = [m.strip() for m in page.locator(".pnl-row .c-msg").all_text_contents()]
+        assert any(m.startswith("delayed") for m in msgs), msgs
+        labels = page.eval_on_selector_all(".pnl-row .pnl-delay", "els => els.map(e => e.getAttribute('aria-label'))")
+        assert any(l and l.startswith("Delayed ") and l.endswith(" minutes") for l in labels), labels
+        page.click(".pnl-boardseg [data-board=departures]")
+        assert "DEPARTURES" in page.text_content("#pnl-title")
+        assert "trains shown" in page.text_content(".pnl-status")
+        assert page.inner_text(".navbar [data-route=tabela]") == "Board"
+    finally:
+        ctx.close()
+
+
+def test_board_in_romanian(browser, base_url):  # noqa: F811
+    ctx, page = _board_page(browser, base_url, "?lang=ro")
+    try:
+        assert "SOSIRI" in page.text_content("#pnl-title")
+        msgs = [m.strip() for m in page.locator(".pnl-row .c-msg").all_text_contents()]
+        assert any(m.startswith("întârziat") for m in msgs), msgs
+        labels = page.eval_on_selector_all(".pnl-row .pnl-delay", "els => els.map(e => e.getAttribute('aria-label'))")
+        # Romanian plural: 5 -> "minute", 20 -> "de minute"
+        assert any(l == "Întârziere 5 minute" for l in labels), labels
+        assert any(l == "Întârziere 20 de minute" for l in labels), labels
+        assert "trenuri afișate" in page.text_content(".pnl-status")
+    finally:
+        ctx.close()
+
+
+def test_board_rerenders_on_language_change(browser, base_url):  # noqa: F811
+    ctx, page = _board_page(browser, base_url, "?lang=ro")
+    try:
+        assert "SOSIRI" in page.text_content("#pnl-title")
+        page.click(".navbar [data-lang-toggle]")
+        page.wait_for_function("() => document.querySelector('#pnl-title').textContent.includes('ARRIVALS')")
+        assert "Delayed" in page.eval_on_selector_all(
+            ".pnl-row .pnl-delay", "els => els.map(e => e.getAttribute('aria-label')).join('|')")
+        assert page.inner_text("#tab-departures") .strip().startswith("Departures")
+        assert page.get_attribute("#panel-root .pnl-switch", "aria-label") == "Display mode"
+        page.click(".navbar [data-lang-toggle]")
+        page.wait_for_function("() => document.querySelector('#pnl-title').textContent.includes('SOSIRI')")
+        assert page.inner_text("#tab-departures").strip().startswith("Plecări")
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("view", ["panou", "carduri"])
+def test_board_english_fits_360(browser, base_url, view):  # noqa: F811
+    ctx, page = _board_page(browser, base_url, "?lang=en", view=view, width=360, height=740)
+    try:
+        page.wait_for_timeout(300)
+        width = page.evaluate("() => document.documentElement.scrollWidth")
+        print("scrollWidth(en,%s,360px)=%s" % (view, width))
+        assert width <= 360
+        if view == "carduri":
+            assert page.locator(".train:not(.skeleton) .follow span").first.text_content() == "follow"
+    finally:
+        ctx.close()

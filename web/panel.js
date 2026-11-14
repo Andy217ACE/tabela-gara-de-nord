@@ -12,24 +12,19 @@
   var RECENT_S = 120;          // „modificare recentă" (albastru) — observată de această pagină
   var BOARDS = ["arrivals", "departures"];
   var KEYS = { view: "tabela.view", board: "tabela.panel.board", cols: "tabela.panel.cols", fav: "tabela.fav" };
-  var TITLES = {
-    arrivals: "SOSIRI — GARA DE NORD BUCUREȘTI",
-    departures: "PLECĂRI — GARA DE NORD BUCUREȘTI",
-    all: "SOSIRI ȘI PLECĂRI — GARA DE NORD BUCUREȘTI"
-  };
-  // id, antet, se poate ascunde, implicit vizibil, cheie de sortare
+  // titles: i18n keys panel.title.<board>; columns: panel.col.<id>.label / .full (+ .tip), panel.sortBy.<id>
+  // id, se poate ascunde, implicit vizibil, cheie de sortare
   var COLS = [
-    { id: "time", label: "Ora", full: "Ora programată", fixed: true, sort: "time" },
-    { id: "train", label: "Tren", full: "Tren / numărul cursei", fixed: true, sort: "number" },
-    { id: "station", label: "Din / spre", full: "Origine sau destinație" },
-    { id: "op", label: "Operator", full: "Operator" },
-    { id: "delay", label: "Întârziere", full: "Întârziere afișată", sort: "delay" },
-    { id: "plat", label: "Linia", full: "Linia / peronul" },
+    { id: "time", fixed: true, sort: "time" },
+    { id: "train", fixed: true, sort: "number" },
+    { id: "station" },
+    { id: "op" },
+    { id: "delay", sort: "delay" },
+    { id: "plat" },
     // estimare, nu citire: implicit ascunsă; starea e în peron_est.js (cheia tabela.peronEst)
-    { id: "pest", label: "Peron estimat", full: "Arată peron estimat", est: true,
-      tip: "Peron estimat: estimare din istoricul observat, nu informație oficială CFR" },
-    { id: "msg", label: "Stare", full: "Mesaj de stare" },
-    { id: "changed", label: "Modificat", full: "Ultima modificare (observată aici)", off: true }
+    { id: "pest", est: true, tip: true },
+    { id: "msg" },
+    { id: "changed", off: true }
   ];
   var SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -49,6 +44,27 @@
   // ---- helpers ---------------------------------------------------------------------
 
   function $(id) { return document.getElementById(id); }
+
+  // ---- i18n (web/i18n/i18n.js) -------------------------------------------------------
+  function T(key, params) { return window.I18N ? window.I18N.t(key, params) : key; }
+  function loc() { return window.I18N && window.I18N.lang() === "en" ? "en-GB" : "ro-RO"; }
+  // plural form by the active language's Intl.PluralRules: keys base.one / base.few / base.other
+  function plural(base, n, params) {
+    var cat = "other";
+    try { cat = new Intl.PluralRules(loc()).select(Math.abs(n)); } catch (e) { /* ignore */ }
+    var k = base + "." + cat, v = T(k, params);
+    return v === k ? T(base + ".other", params) : v;
+  }
+  // formatters that follow the active language (created once per locale)
+  function dtf(opts) {
+    var cache = {};
+    return { format: function (d) {
+      var l = loc();
+      return (cache[l] || (cache[l] = new Intl.DateTimeFormat(l, opts))).format(d);
+    } };
+  }
+  var nfInt = { format: function (v) { return new Intl.NumberFormat(loc()).format(v); } };
+  function unsureText() { return T("board.unsure"); }
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -83,7 +99,6 @@
     bell: ["M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z", "M10 20.5a2 2 0 0 0 4 0"],
     theme: ["M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16z", "M12 4v16"]
   };
-  var UNSURE = "citire nesigură";
 
   function load(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -93,11 +108,13 @@
   }
 
   // valoare lipsă: nu o inventăm, o arătăm explicit
+  // `what` = key suffix of panel.what.* (delay, time, station, op, plat, route, changed)
   function unknown(what) {
     var s = el("span", "pnl-unk", "—");
+    var label = what ? T("panel.unk", { what: T("panel.what." + what) }) : T("panel.unkBare");
     s.setAttribute("role", "img");
-    s.setAttribute("aria-label", what ? what + " necunoscut" : "necunoscut");
-    s.title = what ? what + ": necunoscut" : "necunoscut";
+    s.setAttribute("aria-label", label);
+    s.title = label;
     return s;
   }
 
@@ -105,17 +122,19 @@
     return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   }
 
-  function ago(sec) {
+  // duration (no "ago" wording): 12 s / 5 min / 2 h 5 min
+  function dur(sec) {
     sec = Math.max(0, Math.round(sec));
-    if (sec < 60) return sec + " s";
+    if (sec < 60) return T("time.s", { n: sec });
     var min = Math.floor(sec / 60);
-    if (min < 60) return min + " min";
-    return Math.floor(min / 60) + " h " + (min % 60) + " min";
+    if (min < 60) return T("time.min", { n: min });
+    return T("time.hm", { h: Math.floor(min / 60), m: min % 60 });
   }
+  function ago(sec) { return T("time.ago", { age: dur(sec) }); }
 
-  var fmtTime = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  var fmtHM = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
-  var fmtDate = new Intl.DateTimeFormat("ro-RO", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  var fmtTime = dtf({ timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  var fmtHM = dtf({ timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  var fmtDate = dtf({ timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" });
   var fmtISO = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 
   function todayISO() { return fmtISO.format(new Date()); }
@@ -239,18 +258,32 @@
 
   // ---- building the panel ----------------------------------------------------------
 
-  function button(cls, label, ico) {
+  // element whose text is an i18n key (re-filled by I18N.applyDom on a language change)
+  function ti(tag, cls, key) {
+    var n = el(tag, cls, T(key));
+    n.setAttribute("data-i18n", key);
+    return n;
+  }
+
+  // attribute (aria-label, title, placeholder) from an i18n key, kept in sync by I18N.applyDom
+  function ta(n, attr, key) {
+    n.setAttribute(attr, T(key));
+    var cur = n.getAttribute("data-i18n-attr");
+    n.setAttribute("data-i18n-attr", (cur ? cur + ";" : "") + attr + ":" + key);
+  }
+
+  function button(cls, key, ico) {
     var b = el("button", "pnl-btn " + (cls || ""));
     b.type = "button";
     if (ico) b.appendChild(icon(ico));
-    b.appendChild(el("span", "pnl-btn-text", label));
+    b.appendChild(ti("span", "pnl-btn-text", key));
     return b;
   }
 
-  function selectField(id, label, options) {
+  function selectField(id, labelKey, options) {
     var wrap = el("label", "pnl-field");
     wrap.htmlFor = id;
-    wrap.appendChild(el("span", "pnl-field-label", label));
+    wrap.appendChild(ti("span", "pnl-field-label", labelKey));
     var s = el("select", "pnl-select");
     s.id = id;
     setOptions(s, options);
@@ -271,8 +304,12 @@
 
   function delayOptions() {
     var th = S.cfg.delay_thresholds;
-    return [["all", "Toate"], ["low", "> " + th.low + " min"], ["mid", "> " + th.mid + " min"],
+    return [["all", T("panel.all")], ["low", "> " + th.low + " min"], ["mid", "> " + th.mid + " min"],
             ["high", "> " + th.high + " min"]];
+  }
+
+  function sortOptions() {
+    return [["time", T("panel.sortTime")], ["delay", T("panel.sortDelay")], ["number", T("panel.sortNumber")]];
   }
 
   function build() {
@@ -283,9 +320,9 @@
     // comutator Panou / Carduri (vizibil în ambele moduri)
     d.switch = el("div", "pnl-switch");
     d.switch.setAttribute("role", "group");
-    d.switch.setAttribute("aria-label", "Mod de afișare");
-    d.btnPanou = button("pnl-seg", "Panou");
-    d.btnCards = button("pnl-seg", "Carduri");
+    ta(d.switch, "aria-label", "panel.modeAria");
+    d.btnPanou = button("pnl-seg", "panel.modePanel");
+    d.btnCards = button("pnl-seg", "panel.modeCards");
     d.btnPanou.addEventListener("click", function () { setView("panou", true); });
     d.btnCards.addEventListener("click", function () { setView("carduri", true); });
     d.switch.append(d.btnPanou, d.btnCards);
@@ -320,7 +357,7 @@
 
     // linia de stare
     var status = el("ul", "pnl-status");
-    status.setAttribute("aria-label", "Starea datelor");
+    ta(status, "aria-label", "panel.statusAria");
     d.stFresh = el("li", "pnl-chip pnl-fresh");
     d.stCapture = el("li", "pnl-chip");
     d.stSystem = el("li", "pnl-chip");
@@ -336,9 +373,9 @@
     var controls = el("div", "pnl-controls");
     var seg = el("div", "pnl-boardseg");
     seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", "Ce afișez");
+    ta(seg, "aria-label", "panel.showAria");
     d.segBtns = {};
-    [["arrivals", "Sosiri"], ["departures", "Plecări"], ["all", "Toate"]].forEach(function (p) {
+    [["arrivals", "board.arrivals"], ["departures", "board.departures"], ["all", "panel.all"]].forEach(function (p) {
       var b = button("pnl-seg", p[1]);
       b.dataset.board = p[0];
       b.addEventListener("click", function () { setBoard(p[0]); });
@@ -348,26 +385,25 @@
 
     var search = el("label", "pnl-field pnl-search");
     search.htmlFor = "pnl-q";
-    search.appendChild(el("span", "pnl-field-label", "Caută"));
+    search.appendChild(ti("span", "pnl-field-label", "panel.search"));
     d.q = el("input", "pnl-input");
     d.q.id = "pnl-q";
     d.q.type = "search";
-    d.q.placeholder = "Nr. tren sau localitate";
+    ta(d.q, "placeholder", "panel.searchPh");
     d.q.autocomplete = "off";
     d.q.addEventListener("input", function () { S.q = d.q.value; render(); });
     search.appendChild(d.q);
 
-    var fDelay = selectField("pnl-f-delay", "Întârziere", delayOptions());
+    var fDelay = selectField("pnl-f-delay", "panel.fDelay", delayOptions());
     d.fDelay = fDelay.select;
     d.fDelay.addEventListener("change", function () { S.fDelay = d.fDelay.value; render(); });
-    var fOp = selectField("pnl-f-op", "Operator", [["", "Toți"]]);
+    var fOp = selectField("pnl-f-op", "panel.fOp", [["", T("panel.allMasc")]]);
     d.fOp = fOp.select;
     d.fOp.addEventListener("change", function () { S.fOp = d.fOp.value; render(); });
-    var fPlat = selectField("pnl-f-plat", "Linia", [["", "Toate"]]);
+    var fPlat = selectField("pnl-f-plat", "panel.fPlat", [["", T("panel.all")]]);
     d.fPlat = fPlat.select;
     d.fPlat.addEventListener("change", function () { S.fPlat = d.fPlat.value; render(); });
-    var fSort = selectField("pnl-sort", "Sortare", [["time", "Oră programată"], ["delay", "Întârziere"],
-                                                    ["number", "Număr tren"]]);
+    var fSort = selectField("pnl-sort", "panel.sort", sortOptions());
     d.sort = fSort.select;
     d.sort.addEventListener("change", function () { S.sort = d.sort.value; S.dir = 1; render(); });
 
@@ -375,18 +411,18 @@
     d.onlyFav = el("input");
     d.onlyFav.type = "checkbox";
     d.onlyFav.addEventListener("change", function () { S.onlyFav = d.onlyFav.checked; render(); });
-    fav.append(d.onlyFav, el("span", null, "Doar Favorite (local)"));
+    fav.append(d.onlyFav, ti("span", null, "panel.onlyFav"));
 
     var actions = el("div", "pnl-actions");
-    d.btnReset = button("", "Resetează", ICONS.reset);
-    d.btnReset.title = "Resetează filtrele și ordinea";
+    d.btnReset = button("", "panel.reset", ICONS.reset);
+    ta(d.btnReset, "title", "panel.resetTitle");
     d.btnReset.addEventListener("click", resetFilters);
 
     d.cols = el("details", "pnl-cols");
     var sum = el("summary", "pnl-btn");
-    sum.append(icon(ICONS.cols), el("span", "pnl-btn-text", "Coloane"));
+    sum.append(icon(ICONS.cols), ti("span", "pnl-btn-text", "panel.columns"));
     var colBox = el("fieldset", "pnl-cols-box");
-    colBox.appendChild(el("legend", null, "Coloane afișate"));
+    colBox.appendChild(ti("legend", null, "panel.columnsShown"));
     COLS.forEach(function (c) {
       if (c.fixed) return;
       var lab = el("label", "pnl-check");
@@ -406,19 +442,19 @@
         save(KEYS.cols, JSON.stringify(Array.from(S.hidden)));
         applyCols();
       });
-      lab.append(cb, el("span", null, c.full));
+      lab.append(cb, ti("span", null, "panel.col." + c.id + ".full"));
       colBox.appendChild(lab);
     });
     d.cols.append(sum, colBox);
 
-    d.btnRefresh = button("", "Reîmprospătează", ICONS.refresh);
+    d.btnRefresh = button("", "panel.refresh", ICONS.refresh);
     d.btnRefresh.addEventListener("click", manualRefresh);
-    d.btnFs = button("", "Ecran complet", ICONS.full);
+    d.btnFs = button("", "panel.fullscreen", ICONS.full);
     d.btnFs.setAttribute("aria-pressed", "false");
     d.btnFs.addEventListener("click", toggleFullscreen);
     // tema (Auto / Luminoasă / Întunecată) — și aici, ca să fie la îndemână în ecran complet
     if (window.TabelaTheme) {
-      d.btnTheme = button("pnl-theme", "Temă", ICONS.theme);
+      d.btnTheme = button("pnl-theme", "panel.theme", ICONS.theme);
       d.btnTheme.setAttribute("data-theme-toggle", "");
       d.btnTheme.addEventListener("click", function () { window.TabelaTheme.next(); });
     }
@@ -428,7 +464,7 @@
     // filtrele: deschise mereu pe ecrane late, pliate implicit pe telefon
     d.filters = el("details", "pnl-filters");
     var fsum = el("summary", "pnl-btn pnl-filters-sum");
-    fsum.append(el("span", "pnl-btn-text", "Caută, filtrează, sortează"));
+    fsum.append(ti("span", "pnl-btn-text", "panel.filtersSummary"));
     var fbox = el("div", "pnl-filters-box");
     fbox.append(search, fDelay.wrap, fOp.wrap, fPlat.wrap, fSort.wrap, fav);
     d.filters.append(fsum, fbox);
@@ -441,7 +477,7 @@
 
     // legendă
     d.legend = el("ul", "pnl-legend");
-    d.legend.setAttribute("aria-label", "Legenda culorilor");
+    ta(d.legend, "aria-label", "panel.legendAria");
 
     // tabele
     d.body = el("div", "pnl-body");
@@ -450,33 +486,33 @@
       var sec = el("section", "pnl-board");
       sec.dataset.board = b;
       var h = el("h3", "pnl-board-title");
-      var hText = el("span", null, b === "arrivals" ? "SOSIRI" : "PLECĂRI");
+      var hText = ti("span", null, b === "arrivals" ? "panel.hdr.arrivals" : "panel.hdr.departures");
       var hCount = el("span", "pnl-board-count");
       h.append(hText, hCount);
       var table = el("table", "pnl-table");
-      var cap = el("caption", "sr-only", b === "arrivals" ? "Sosiri în Gara de Nord" : "Plecări din Gara de Nord");
+      var cap = ti("caption", "sr-only", b === "arrivals" ? "panel.cap.arrivals" : "panel.cap.departures");
       var thead = el("thead");
       var hr = el("tr");
       var thFav = el("th", "c-fav");
       thFav.scope = "col";
-      thFav.appendChild(el("span", "sr-only", "Favorite (local)"));
+      thFav.appendChild(ti("span", "sr-only", "panel.favSr"));
       hr.appendChild(thFav);
       var ths = {};
       COLS.forEach(function (c) {
         var th = el("th", "c-" + c.id);
         th.scope = "col";
-        var label = c.id === "station" ? (b === "arrivals" ? "Din" : "Spre") : c.label;
+        var labelKey = c.id === "station" ? (b === "arrivals" ? "panel.col.from" : "panel.col.to") : "panel.col." + c.id + ".label";
         if (c.sort) {
-          var sb = el("button", "pnl-sortbtn", label);
+          var sb = ti("button", "pnl-sortbtn", labelKey);
           sb.type = "button";
-          sb.title = "Sortează după " + c.full.toLowerCase();
+          ta(sb, "title", "panel.sortBy." + c.id);
           sb.addEventListener("click", function () { sortBy(c.sort); });
           th.appendChild(sb);
         } else {
-          th.appendChild(el("span", "pnl-th-label", label));
+          th.appendChild(ti("span", "pnl-th-label", labelKey));
         }
-        th.title = c.tip || c.full;
-        if (c.tip) th.setAttribute("aria-label", c.tip);
+        ta(th, "title", c.tip ? "panel.col." + c.id + ".tip" : "panel.col." + c.id + ".full");
+        if (c.tip) ta(th, "aria-label", "panel.col." + c.id + ".tip");
         ths[c.id] = th;
         hr.appendChild(th);
       });
@@ -485,7 +521,7 @@
       tbody.addEventListener("click", onRowClick);
       tbody.addEventListener("keydown", onRowKey);
       table.append(cap, thead, tbody);
-      var empty = el("p", "pnl-empty", "Niciun tren nu corespunde filtrelor.");
+      var empty = el("p", "pnl-empty", T("panel.noMatch"));
       empty.hidden = true;
       sec.append(h, table, empty);
       d.body.appendChild(sec);
@@ -504,16 +540,18 @@
     cfr.href = "https://cfr.ro";
     cfr.target = "_blank";
     cfr.rel = "noopener noreferrer";
-    // same text as the page footer
-    credit.append("© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent," +
-                  " neafiliat CFR. Tabela oficială: ", cfr);
+    // same text as the page footer (text nodes kept so a language change can refresh them)
+    d.creditText = document.createTextNode("");
+    credit.append(d.creditText, cfr);
     var om = el("a", null, "Open-Meteo.com");
     om.href = "https://open-meteo.com/";
     om.target = "_blank";
     om.rel = "noopener noreferrer";
     var wxCredit = el("span", "wx-credit");
-    wxCredit.append(" · Meteo: ", om, " · CC BY 4.0");
+    d.wxLead = document.createTextNode("");
+    wxCredit.append(d.wxLead, om, " · CC BY 4.0");
     credit.appendChild(wxCredit);
+    renderCredit();
 
     pnl.append(head, status, d.banner, controls, d.legend, d.body, d.detail, credit);
     root.append(d.switch, pnl);
@@ -522,15 +560,21 @@
 
   // ---- render ----------------------------------------------------------------------
 
+  function renderCredit() {
+    var d = S.dom;
+    if (d.creditText) d.creditText.nodeValue = "© 2026 Andy217Ace · " + T("footer.credit") + " ";
+    if (d.wxLead) d.wxLead.nodeValue = " · " + T("footer.meteo") + " ";
+  }
+
   function renderLegend() {
     var th = S.cfg.delay_thresholds;
     var items = [
-      ["ok", "La timp (0 min citit)"],
+      ["ok", T("panel.legend.ok")],
       ["low", "1–" + th.mid + " min"],
       ["mid", (th.mid + 1) + "–" + th.high + " min"],
       ["high", "> " + th.high + " min"],
-      ["unknown", "Necitit / neconfirmat / vechi"],
-      ["recent", "Modificat recent"]
+      ["unknown", T("panel.legend.unknown")],
+      ["recent", T("panel.legend.recent")]
     ];
     S.dom.legend.replaceChildren();
     items.forEach(function (it) {
@@ -565,18 +609,18 @@
 
   function fullName(text, t) {
     if (!text) return "";
-    return t.uncertain === true ? text + " (" + UNSURE + ")" : text;
+    return t.uncertain === true ? text + " (" + unsureText() + ")" : text;
   }
 
   function message(board, t, lvl, fresh) {
     var parts = [];
-    if (fresh !== "live") parts.push("neconfirmat — date vechi");
-    else if (lvl === "ok") parts.push("la timp");
-    else if (lvl === "unknown") parts.push("întârziere necitită");
-    else parts.push("întârziat");
-    if (t.flagged) parts.push("marcat * pe tabela CFR");
-    if (t.uncertain === true) parts.push("nume: " + UNSURE);
-    if (isRecent(board, t)) parts.push("modificat recent");
+    if (fresh !== "live") parts.push(T("panel.msg.stale"));
+    else if (lvl === "ok") parts.push(T("board.onTime"));
+    else if (lvl === "unknown") parts.push(T("panel.msg.unread"));
+    else parts.push(T("panel.msg.late"));
+    if (t.flagged) parts.push(T("panel.msg.flagged"));
+    if (t.uncertain === true) parts.push(T("panel.msg.uncertain"));
+    if (isRecent(board, t)) parts.push(T("panel.msg.recent"));
     return parts.join(" · ");
   }
 
@@ -584,27 +628,27 @@
     // reflexie pe rând: ultima întârziere citită sigur a trenului, cu vechimea ei
     if (t.delay_read !== true && typeof t.delay_last_read_age_s === "number" &&
         typeof t.delay_min === "number" && t.delay_min >= 0) {
-      var ago = Math.max(0, Math.round(t.delay_last_read_age_s / 60));
-      var ageTxt = ago < 1 ? "acum sub 1 min" : "acum " + ago + " min";
+      var mins = Math.max(0, Math.round(t.delay_last_read_age_s / 60));
+      var ageTxt = mins < 1 ? T("time.agoUnder") : T("time.ago", { age: T("time.min", { n: mins }) });
       var last = el("span", "pnl-delay pnl-last",
-        (t.delay_min === 0 ? "la timp" : "+" + t.delay_min + " min") + " (ultima citire " + ageTxt + ")");
-      last.setAttribute("aria-label", "Ultima întârziere citită " + t.delay_min + " minute, " + ageTxt);
-      last.title = "Celula de întârziere e acoperită de o reflexie; valoarea e ultima citită sigur";
+        (t.delay_min === 0 ? T("board.onTime") : "+" + t.delay_min + " min") + " (" + T("board.lastRead", { age: ageTxt }) + ")");
+      last.setAttribute("aria-label", plural("panel.lastDelayAria", t.delay_min, { n: t.delay_min, age: ageTxt }));
+      last.title = T("panel.lastDelayTitle");
       return last;
     }
     if (t.delay_read !== true) {
-      var nr = el("span", "pnl-delay pnl-unread", "necitit");
-      nr.setAttribute("aria-label", "Întârziere necitită");
-      nr.title = "Celula de întârziere nu a putut fi citită de pe tabela CFR";
+      var nr = el("span", "pnl-delay pnl-unread", T("board.unread"));
+      nr.setAttribute("aria-label", T("board.delayAria.unread"));
+      nr.title = T("board.delayTitle.unread");
       return nr;
     }
     if (lvl === "unknown" && !(typeof t.delay_min === "number" && t.delay_min >= 0)) {
-      return unknown("întârziere");
+      return unknown("delay");
     }
     var d = t.delay_min;
-    var s = el("span", "pnl-delay", d === 0 ? "la timp" : "+" + d + " min");
-    var label = d === 0 ? "La timp" : "Întârziere " + d + " minute";
-    if (fresh !== "live" || lvl === "unknown") label += " (neconfirmat)";
+    var s = el("span", "pnl-delay", d === 0 ? T("board.onTime") : "+" + d + " min");
+    var label = d === 0 ? T("board.delayAria.onTime") : plural("board.delayAria.late", d, { n: d });
+    if (fresh !== "live" || lvl === "unknown") label += " " + T("panel.unconfirmed");
     s.setAttribute("aria-label", label);
     return s;
   }
@@ -619,17 +663,18 @@
     tr.tabIndex = 0;
     if (isRecent(board, t)) tr.classList.add("is-recent");
     if (S.selected === key) tr.classList.add("is-selected");
-    tr.setAttribute("aria-label", (t.train_type || "") + " " + t.train_no + ", " +
-      (board === "arrivals" ? "din " : "spre ") + (t.station || "stație necunoscută") +
-      ", ora " + (t.sched_time || "necunoscută") + ". Enter pentru detalii.");
+    tr.setAttribute("aria-label", T("panel.rowAria", {
+      train: (t.train_type || "") + " " + t.train_no,
+      where: T(board === "arrivals" ? "board.from" : "board.to") + " " + (t.station || T("board.stationUnknown")),
+      time: t.sched_time || T("board.timeUnknown") }));
 
     var isFav = S.favs.has(String(t.train_no));
     var star = el("button", "pnl-star");
     star.type = "button";
     star.dataset.fav = String(t.train_no);
     star.setAttribute("aria-pressed", isFav ? "true" : "false");
-    star.setAttribute("aria-label", (isFav ? "Scoate din" : "Adaugă la") + " Favorite (local): tren " + t.train_no);
-    star.title = "Favorite (local) — doar în acest browser";
+    star.setAttribute("aria-label", T(isFav ? "panel.favRemoveAria" : "panel.favAddAria", { no: t.train_no }));
+    star.title = T("panel.favTitle");
     star.appendChild(icon(ICONS.star));
     var btns = el("span", "pnl-rowbtns");
     btns.appendChild(star);
@@ -637,29 +682,29 @@
     if (fol) btns.appendChild(fol);
     tr.appendChild(cell("fav", btns));
 
-    tr.appendChild(cell("time", t.sched_time ? t.sched_time : unknown("oră")));
+    tr.appendChild(cell("time", t.sched_time ? t.sched_time : unknown("time")));
 
     var train = el("span", "pnl-train");
     var type = el("span", typeClass(t.train_type), t.train_type || "?");
-    type.title = "Tip tren " + (t.train_type || "necunoscut");
+    type.title = T("board.typeTitle", { type: t.train_type || T("board.typeUnknown") });
     train.append(type, el("span", "pnl-no", String(t.train_no)));
     if (t.flagged) {
       var flag = el("span", "pnl-flag", "*");
-      flag.title = "Marcat cu * pe tabela CFR";
-      flag.setAttribute("aria-label", "marcat cu steluță pe tabela CFR");
+      flag.title = T("board.flagTitle");
+      flag.setAttribute("aria-label", T("panel.flagAria"));
       train.appendChild(flag);
     }
     tr.appendChild(cell("train", train));
 
-    tr.appendChild(clipCell("station", t.station ? stationLink(t.station, t) : unknown("stație"),
+    tr.appendChild(clipCell("station", t.station ? stationLink(t.station, t) : unknown("station"),
       fullName(t.station, t)));
-    tr.appendChild(clipCell("op", t.operator ? nameNode(t.operator, t) : unknown("operator"),
+    tr.appendChild(clipCell("op", t.operator ? nameNode(t.operator, t) : unknown("op"),
       fullName(t.operator, t)));
     tr.appendChild(cell("delay", delayNode(t, lvl, fresh)));
 
     var known = t.platform != null && t.platform !== "";
-    var plat = known ? el("span", "pnl-plat", String(t.platform)) : unknown("linie");
-    if (known) plat.setAttribute("aria-label", "Linia " + t.platform);
+    var plat = known ? el("span", "pnl-plat", String(t.platform)) : unknown("plat");
+    if (known) plat.setAttribute("aria-label", T("board.platAria", { p: t.platform }));
     tr.appendChild(cell("plat", plat));
 
     tr.appendChild(cell("pest", pestNode(board, t)));
@@ -670,10 +715,10 @@
     var at = changedAt(board, t);
     if (at != null) {
       var ch = el("span", "pnl-changed", fmtHM.format(new Date(at)));
-      ch.title = "Modificare de întârziere/linie observată de această pagină";
+      ch.title = T("panel.changedTitle");
       tr.appendChild(cell("changed", ch));
     } else {
-      tr.appendChild(cell("changed", unknown("ultima modificare")));
+      tr.appendChild(cell("changed", unknown("changed")));
     }
     return tr;
   }
@@ -683,7 +728,7 @@
     var pe = window.TabelaApp && window.TabelaApp.peronEst;
     var est = pe && pe.enabled() ? pe.lookup(board, t) : null;
     var s = el("span", est ? "pnl-pest" : "pnl-unk", est ? est.platform + " · " + est.share_pct + "%" : "—");
-    var label = pe ? pe.label(est) : "Peron estimat indisponibil";
+    var label = pe ? pe.label(est) : T("panel.pestUnavail");
     s.setAttribute("role", "img");
     s.setAttribute("aria-label", label);
     s.title = label;
@@ -694,8 +739,8 @@
   function nameNode(text, t) {
     if (t.uncertain !== true) return document.createTextNode(text);
     var s = el("span", "is-uncertain", text);
-    s.title = text + " (" + UNSURE + ")";
-    s.appendChild(el("span", "sr-only", " (" + UNSURE + ")"));
+    s.title = text + " (" + unsureText() + ")";
+    s.appendChild(el("span", "sr-only", " (" + unsureText() + ")"));
     return s;
   }
 
@@ -717,9 +762,9 @@
     b.type = "button";
     b.setAttribute("aria-pressed", on ? "true" : "false");
     if (off) b.setAttribute("aria-disabled", "true");
-    var label = (on ? "Nu mai urmări trenul " : "Urmărește trenul ") + t.train_no + " (notificări)";
+    var label = T(on ? "panel.followAria.on" : "panel.followAria.off", { no: t.train_no });
     b.setAttribute("aria-label", label + (off ? ". " + st.reason : ""));
-    b.title = off ? st.reason : (on ? "Urmărit — primești notificări" : "Urmărește (notificări)");
+    b.title = off ? st.reason : T(on ? "panel.followTitle.on" : "panel.followTitle.off");
     b.appendChild(icon(ICONS.bell));
     return b;
   }
@@ -738,14 +783,14 @@
         else noPlat = true;
       });
     });
-    var opOpts = [["", "Toți"]].concat(Array.from(ops).sort().map(function (o) { return [o, o]; }));
+    var opOpts = [["", T("panel.allMasc")]].concat(Array.from(ops).sort().map(function (o) { return [o, o]; }));
     if (S.fOp && !ops.has(S.fOp)) opOpts.push([S.fOp, S.fOp]);
     setOptions(S.dom.fOp, opOpts);
-    var plOpts = [["", "Toate"]].concat(Array.from(plats).sort(function (a, b) {
+    var plOpts = [["", T("panel.all")]].concat(Array.from(plats).sort(function (a, b) {
       return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
-    }).map(function (p) { return [p, "Linia " + p]; }));
-    if (noPlat) plOpts.push(["__none", "Neanunțată"]);
-    if (S.fPlat && S.fPlat !== "__none" && !plats.has(S.fPlat)) plOpts.push([S.fPlat, "Linia " + S.fPlat]);
+    }).map(function (p) { return [p, T("panel.platOpt", { p: p })]; }));
+    if (noPlat) plOpts.push(["__none", T("panel.platNone")]);
+    if (S.fPlat && S.fPlat !== "__none" && !plats.has(S.fPlat)) plOpts.push([S.fPlat, T("panel.platOpt", { p: S.fPlat })]);
     setOptions(S.dom.fPlat, plOpts);
     S.dom.fOp.value = S.fOp;
     S.dom.fPlat.value = S.fPlat;
@@ -757,7 +802,7 @@
     var fresh = freshness();
     d.pnl.dataset.fresh = fresh;
     d.pnl.dataset.board = S.board;
-    d.title.textContent = TITLES[S.board];
+    d.title.textContent = T("panel.title." + S.board);
     Object.keys(d.segBtns).forEach(function (k) {
       d.segBtns[k].setAttribute("aria-pressed", k === S.board ? "true" : "false");
     });
@@ -784,7 +829,7 @@
       sec.tbody.replaceChildren.apply(sec.tbody, rows.map(function (t) { return buildRow(b, t, fresh); }));
       sec.count.textContent = rows.length === list.length ? String(list.length) : rows.length + " / " + list.length;
       sec.empty.hidden = rows.length > 0 || !S.data;
-      sec.empty.textContent = list.length ? "Niciun tren nu corespunde filtrelor." : "Momentan nu sunt trenuri afișate.";
+      sec.empty.textContent = list.length ? T("panel.noMatch") : T("app.empty");
       COLS.forEach(function (c) {
         if (!c.sort) return;
         var th = sec.ths[c.id];
@@ -799,7 +844,10 @@
       var again = d.body.querySelector('.pnl-row[data-key="' + cssEscape(focusKey) + '"]');
       if (again) ((focusBtn && again.querySelector(focusBtn)) || again).focus({ preventScroll: true });
     }
-    d.stCount.textContent = S.data ? (shown === total ? shown + " trenuri afișate" : shown + " din " + total + " trenuri afișate") : "— trenuri";
+    d.stCount.textContent = S.data
+      ? (shown === total ? plural("panel.count", shown, { n: nfInt.format(shown) })
+        : plural("panel.countOf", total, { n: nfInt.format(shown), total: nfInt.format(total) }))
+      : T("panel.countNone");
     renderStatus();
     renderDetail();
   }
@@ -814,34 +862,30 @@
     var a = age();
     d.pnl.dataset.fresh = fresh;
     d.stFresh.dataset.state = fresh;
-    d.stFresh.textContent = { live: "ACTUALIZAT", stale: "DATE VECHI", offline: "INDISPONIBIL", none: "SE ÎNCARCĂ" }[fresh];
+    d.stFresh.textContent = T("panel.fresh." + fresh);
 
     if (a != null) {
       var when = new Date(Date.now() - a * 1000);
-      d.stCapture.textContent = "Ultima captură reușită: " + fmtTime.format(when) + " (acum " + ago(a) + ")";
+      d.stCapture.textContent = T("panel.capture", { time: fmtTime.format(when), ago: ago(a) });
     } else {
-      d.stCapture.textContent = S.data ? "Ultima captură reușită: necunoscut (nicio citire)" : "Ultima captură reușită: —";
+      d.stCapture.textContent = T(S.data ? "panel.captureUnknown" : "panel.captureNone");
     }
-    d.stSystem.textContent = {
-      live: "OCR / sistem: funcționează",
-      stale: a == null ? "OCR / sistem: nicio citire încă" : "OCR / sistem: fără citire nouă de " + ago(a),
-      offline: "OCR / sistem: server indisponibil",
-      none: "OCR / sistem: se verifică…"
-    }[fresh];
+    d.stSystem.textContent = fresh === "stale"
+      ? (a == null ? T("panel.sys.staleNone") : T("panel.sys.stale", { age: dur(a) }))
+      : T("panel.sys." + fresh);
     d.stSystem.dataset.state = fresh;
-    d.stSource.textContent = fresh === "live" ? "Sursa CFR: răspunde" : "Sursa CFR: necunoscut";
+    d.stSource.textContent = T(fresh === "live" ? "panel.src.live" : "panel.src.unknown");
     d.stSource.dataset.state = fresh;
 
     var text = "";
     if (fresh === "offline") {
       text = S.data
-        ? "Conexiune pierdută — afișez ultimele date primite" + (a != null ? " (captură de acum " + ago(a) + ")" : "") +
-          ". Culorile sunt dezactivate până la reconectare. Reîncerc automat."
-        : "Nu am putut încărca tabela. Reîncerc automat.";
+        ? T("panel.banner.offline", { capture: a != null ? " " + T("panel.banner.captureFrom", { ago: ago(a) }) : "" })
+        : T("app.loadFail");
     } else if (fresh === "stale") {
       text = a == null
-        ? "Tabela CFR nu a fost încă citită — datele pot lipsi."
-        : "Datele nu s-au mai actualizat de " + ago(a) + " — pot fi depășite, culorile sunt dezactivate. Verifică și cfr.ro.";
+        ? T("app.banner.neverRead")
+        : T("panel.banner.outdated", { age: dur(a) });
     }
     d.banner.textContent = text;
     d.banner.hidden = !text;
@@ -916,7 +960,7 @@
     h.id = "pnl-detail-title";
     var close = el("button", "pnl-icon-btn");
     close.type = "button";
-    close.setAttribute("aria-label", "Închide detaliile");
+    close.setAttribute("aria-label", T("panel.closeDetails"));
     close.appendChild(icon(ICONS.close));
     close.addEventListener("click", closeDetail);
     head.append(h, close);
@@ -926,37 +970,37 @@
     var route = b === "arrivals"
       ? (station ? station : "?") + " → București Nord"
       : "București Nord → " + (station ? station : "?");
-    dlRow(dl, "Panou", b === "arrivals" ? "Sosiri" : "Plecări");
-    dlRow(dl, "Rută (cum apare pe tabelă)", station ? nameNode(route, t) : unknown("rută"));
-    dlRow(dl, "Ora programată", t.sched_time || unknown("oră"));
+    dlRow(dl, T("panel.dl.board"), T(b === "arrivals" ? "board.arrivals" : "board.departures"));
+    dlRow(dl, T("panel.dl.route"), station ? nameNode(route, t) : unknown("route"));
+    dlRow(dl, T("panel.col.time.full"), t.sched_time || unknown("time"));
     var dd = delayNode(t, lvl, fresh);
     var dWrap = el("span", "pnl-detail-delay");
     dWrap.dataset.level = lvl;
     dWrap.appendChild(dd);
-    dlRow(dl, "Ultima întârziere citită", dWrap);
+    dlRow(dl, T("panel.dl.lastDelay"), dWrap);
     var known = t.platform != null && t.platform !== "";
-    dlRow(dl, "Linia", known ? String(t.platform) : unknown("linie"));
-    dlRow(dl, "Operator", t.operator ? nameNode(t.operator, t) : unknown("operator"));
-    dlRow(dl, "Stare", message(b, t, lvl, fresh));
+    dlRow(dl, T("panel.col.plat.label"), known ? String(t.platform) : unknown("plat"));
+    dlRow(dl, T("panel.col.op.label"), t.operator ? nameNode(t.operator, t) : unknown("op"));
+    dlRow(dl, T("panel.col.msg.label"), message(b, t, lvl, fresh));
     var at = changedAt(b, t);
-    dlRow(dl, "Ultima modificare observată", at != null ? fmtTime.format(new Date(at)) : unknown("ultima modificare"));
+    dlRow(dl, T("panel.dl.lastChange"), at != null ? fmtTime.format(new Date(at)) : unknown("changed"));
 
     var note = el("p", "pnl-detail-note", gone
-      ? "Trenul nu mai apare pe tabela curentă; se afișează ultimele date văzute."
-      : (fresh === "live" ? "Date din ultima captură a tabelei CFR." : "Date vechi — neconfirmate."));
+      ? T("panel.note.gone")
+      : T(fresh === "live" ? "panel.note.live" : "panel.note.stale"));
 
     var acts = el("div", "pnl-detail-actions");
     var hist = el("a", "pnl-btn pnl-btn-primary");
     hist.href = historyHref(t);
-    hist.append(icon(ICONS.history), el("span", "pnl-btn-text", "Istoricul trenului"));
+    hist.append(icon(ICONS.history), ti("span", "pnl-btn-text", "panel.trainHistory"));
     var isFav = S.favs.has(String(t.train_no));
-    var favBtn = button("", isFav ? "Scoate din Favorite (local)" : "Adaugă la Favorite (local)", ICONS.star);
+    var favBtn = button("", isFav ? "panel.favRemoveBtn" : "panel.favAddBtn", ICONS.star);
     favBtn.setAttribute("aria-pressed", isFav ? "true" : "false");
     favBtn.addEventListener("click", function () { toggleFav(String(t.train_no)); });
     acts.append(hist, favBtn);
     if (window.TabelaApp && typeof window.TabelaApp.onFollow === "function") {
       var on = !!(fst && fst.followed);
-      var follow = button("", on ? "Nu mai urmări (notificări)" : "Urmărește (notificări)", ICONS.bell);
+      var follow = button("", on ? "panel.followBtn.on" : "panel.followBtn.off", ICONS.bell);
       follow.setAttribute("aria-pressed", on ? "true" : "false");
       if (fst && fst.unsupported) { follow.setAttribute("aria-disabled", "true"); follow.title = fst.reason; }
       follow.addEventListener("click", function () { window.TabelaApp.onFollow(t, follow); });
@@ -1088,7 +1132,7 @@
     var b = S.dom.btnFs;
     b.setAttribute("aria-pressed", on ? "true" : "false");
     b.replaceChildren(icon(on ? ICONS.exitFull : ICONS.full),
-      el("span", "pnl-btn-text", on ? "Ieși din ecran complet" : "Ecran complet"));
+      el("span", "pnl-btn-text", T(on ? "panel.exitFullscreen" : "panel.fullscreen")));
     S.dom.pnl.classList.toggle("is-fs", on);
   }
 
@@ -1166,6 +1210,24 @@
     if (S.view === "panou") render();
   });
 
+  // limba s-a schimbat: textele statice (data-i18n), apoi tot ce se construiește din date
+  document.addEventListener("i18n:change", function () {
+    var d = S.dom;
+    if (!d || !d.pnl) return;
+    if (window.I18N) { window.I18N.applyDom(d.switch); window.I18N.applyDom(d.pnl); }
+    setOptions(d.fDelay, delayOptions());
+    setOptions(d.sort, sortOptions());
+    renderCredit();
+    renderLegend();
+    refreshOptions();
+    updateFsButton();
+    if (window.TabelaApp && typeof window.TabelaApp.renderThemeButtons === "function") {
+      window.TabelaApp.renderThemeButtons();
+    }
+    S.detailSig = null;
+    render();
+  });
+
   // ascultăm imediat: primul fetch al app.js poate termina înainte de init
   document.addEventListener("tabela:board", onBoard);
   // starea „urmărit" s-a schimbat (follows.js → TabelaApp.refreshFollowButtons)
@@ -1201,6 +1263,8 @@
 
   window.TabelaPanel = { setView: setView, setBoard: setBoard, levelOf: levelOf };
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-  else init();
+  // the dictionaries must be loaded before the first build (t() returns the key until then)
+  function boot() { (window.I18N ? window.I18N.ready : Promise.resolve()).then(init); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
 })();

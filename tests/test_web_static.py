@@ -286,7 +286,9 @@ def test_app_js_quality_fixes():
     # first-fetch failure replaces the skeleton and drops aria-busy
     assert "function showLoadFailure" in js
     # '*' flag has screen-reader text
-    assert "marcat cu asterisc pe tabela CFR" in js
+    assert 'T("board.flagSr")' in js
+    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
+    assert ro["board.flagSr"] == "marcat cu asterisc pe tabela CFR"
     assert "sr-only" in js
 
 

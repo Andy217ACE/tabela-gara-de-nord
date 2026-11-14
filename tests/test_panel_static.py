@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
 """Mod „Panou": static files wired in, CSP-safe, and the read-only /api/config."""
+import json
 import re
 from pathlib import Path
 
@@ -52,10 +53,13 @@ def test_panel_js_safe_dom():
     assert "TabelaApp.config" in js or "App.config" in js
     assert 'fetch("/api/config"' not in js
     assert "#istoric?train=" in js
-    assert "SOSIRI — GARA DE NORD BUCUREȘTI" in js
-    assert "PLECĂRI — GARA DE NORD BUCUREȘTI" in js
-    assert "necunoscut" in js
-    assert "Favorite (local)" in js
+    # texts live in the dictionaries (web/i18n); panel.js only holds the keys
+    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
+    assert 'T("panel.title." + S.board)' in js
+    assert ro["panel.title.arrivals"] == "SOSIRI — GARA DE NORD BUCUREȘTI"
+    assert ro["panel.title.departures"] == "PLECĂRI — GARA DE NORD BUCUREȘTI"
+    assert "necunoscut" in ro["panel.unkBare"]
+    assert "Favorite (local)" in ro["panel.favTitle"]
     assert "requestFullscreen" in js
     # never colour "la timp" without a read delay: the level function guards null
     assert "delay_min == null" in js
@@ -99,12 +103,12 @@ ATTRIBUTION = "© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiec
 def test_panel_keeps_attribution_in_fullscreen():
     """The page footer is outside #pnl; in (pseudo-)fullscreen only #pnl is visible."""
     js = (WEB / "panel.js").read_text(encoding="utf-8")
-    assert f'credit.append("{ATTRIBUTION}" +' in js
-    assert '" neafiliat CFR. Tabela oficială: ", cfr);' in js
-    # identical to the page footer's line
+    # the line comes from the dictionary (footer.credit), the same text as the page footer
+    assert 'credit.append(d.creditText, cfr)' in js and 'T("footer.credit")' in js
+    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
+    assert ro["footer.credit"].startswith("Date preluate de la CFR (cfr.ro) — proiect independent,")
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    assert ("© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent,"
-            " neafiliat CFR. Tabela oficială: <a") in html
+    assert ("© 2026 Andy217Ace · " + ro["footer.credit"] + " <a") in html
     assert 'cfr.href = "https://cfr.ro";' in js and 'cfr.rel = "noopener noreferrer";' in js
     assert "d.detail, credit);" in js  # appended inside .pnl
 

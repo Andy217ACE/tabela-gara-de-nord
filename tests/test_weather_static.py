@@ -44,8 +44,13 @@ def test_weather_js_is_csp_safe():
     assert "api.open-meteo.com" not in js
 
 
+def read_with_dict(name):
+    """The JS plus the Romanian dictionary: the texts moved out of the code into web/i18n/ro.json."""
+    return read(name) + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")
+
+
 def test_weather_js_behaviour_markers():
-    js = read("weather.js")
+    js = read_with_dict("weather.js")
     for needle in ("Europe/Bucharest", "visibilitychange", "Escape", "aria-expanded",
                    "date vechi", "meteo indisponibilă", "se simte",
                    "Condiții curente (model Open-Meteo)", "noopener noreferrer", "_blank",
@@ -62,7 +67,7 @@ def test_weather_js_behaviour_markers():
 
 
 def test_weather_js_v2_details_chart_and_fields():
-    js = read("weather.js")
+    js = read_with_dict("weather.js")
     for needle in ("Umiditate", "Presiune", "hPa", "Rafale", "Precipitații", "relative_humidity_pct",
                    "surface_pressure_hpa", "wind_gusts_kmh", "rain_mm", "showers_mm", "snowfall_cm",
                    "hourly", "temperature_c", "Următoarele 24 h", '"acum"', "observat", "is_day",
@@ -127,7 +132,7 @@ def test_footer_and_panel_credit_carry_open_meteo_attribution():
     # after the CFR line
     assert footer.index("neafiliat CFR") < footer.index("footer-meteo")
     js = read("panel.js")
-    assert "Meteo: " in js and "https://open-meteo.com/" in js and "wx-credit" in js
+    assert 'T("footer.meteo")' in js and "https://open-meteo.com/" in js and "wx-credit" in js
 
 
 def test_service_worker_precaches_weather_files_and_bumped_version():
@@ -171,11 +176,11 @@ def test_changelog_and_version_for_weather_v2():
 
 def test_every_clock_shows_seconds_with_tabular_digits():
     wjs = (WEB / "weather.js").read_text(encoding="utf-8")
-    m = re.search(r"var fmtClock = new Intl\.DateTimeFormat\((.*?)\);", wjs, re.S)
+    m = re.search(r"var fmtClock = (?:new Intl\.DateTimeFormat|dtf)\((.*?)\);", wjs, re.S)
     assert m and 'second: "2-digit"' in m.group(1) and 'timeZone: TZ' in m.group(1)
     assert "setInterval(tickClock, 1000)" in wjs
     pjs = (WEB / "panel.js").read_text(encoding="utf-8")
-    m = re.search(r"var fmtTime = new Intl\.DateTimeFormat\((.*?)\);", pjs, re.S)
+    m = re.search(r"var fmtTime = (?:new Intl\.DateTimeFormat|dtf)\((.*?)\);", pjs, re.S)
     assert m and 'second: "2-digit"' in m.group(1)
     assert "setInterval(tickClock, 1000)" in pjs
     html = (WEB / "index.html").read_text(encoding="utf-8")

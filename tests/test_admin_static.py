@@ -1,5 +1,6 @@
 # © 2026 Andy217Ace
 """Static checks for the hidden „Administrare" view (#admin): routing, nav, safety, contract."""
+import json
 from pathlib import Path
 
 import pytest
@@ -69,7 +70,10 @@ def test_admin_route_registered_and_lazy():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '"#admin": "admin"' in app
     assert '"ocr", "admin", "versiuni"' in app  # in VIEWS
-    assert 'admin: "Administrare"' in app
+    # page titles live in the dictionary (title.<route>), looked up by app.js
+    assert 'T("title." + name)' in app and '"admin"' in app
+    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
+    assert ro["title.admin"] == "Administrare"
     assert 'if (name === "admin") loadAdminView();' in app
     assert 's.src = "admin.js"' in app and 'css.href = "admin.css"' in app
     assert 'if (currentRoute === "admin") route();' in app
