@@ -14,12 +14,16 @@
   var S = App.stats;
   var el = App.el;
   var API = "/api/stats/dwell";
-  var BOARD_PL = { arrival: "Sosiri", departure: "Plecări" };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
+  var BOARD_PL = {};   // getters: the text follows the language chosen at the time it is read
+  ["arrival", "departure"].forEach(function (k) {
+    Object.defineProperty(BOARD_PL, k, { enumerable: true, get: function () { return tt("stats.board." + k); } });
+  });
   var cache = { key: null, at: 0, data: null };
   var TTL = 60000;
 
   function num(v) { return v == null ? "—" : S.numFmt.format(v); }
-  function pct(v) { return v == null ? "—" : S.numFmt.format(v) + " %"; }
+  function pct(v) { return v == null ? "—" : tt("stats.fmt.pct", { v: S.numFmt.format(v) }); }
 
   function table(caption, cols, rows) {
     var wrap = el("div", "ss-cmp-wrap");
@@ -46,58 +50,53 @@
     return wrap;
   }
 
-  function mins(v) { return v == null ? "—" : S.numFmt.format(v) + " min"; }
+  function mins(v) { return v == null ? "—" : tt("stats.fmt.min", { v: S.numFmt.format(v) }); }
 
   function statsRow(label, x) {
     return [label, num(x.n), mins(x.median), mins(x.mean), mins(x.p90)];
   }
 
-  var COLS = ["Grup", "Servicii (N)", "Mediană", "Medie", "90% sub"];
+  function cols() { return tt("stats.dw.cols").split("|"); }
 
   function fill(sec, d) {
     sec.replaceChildren();
-    var h = el("h2", "ss-fig-title", "Cât stă trenul pe panou");
+    var h = el("h2", "ss-fig-title", tt("stats.dw.title"));
     var head = el("div", "ss-fig-head");
     head.append(h);
     sec.append(head);
     var how = el("p", "ss-how");
-    how.append(el("strong", null, "Cum se citește: "), document.createTextNode(
-      "durata dintre prima și ultima dată când trenul a fost văzut pe panou, pentru trenurile care au dispărut deja. " +
-      "Mediana este durata „de mijloc” (jumătate stau mai puțin); media este trasă în sus de cazurile foarte lungi, " +
-      "de aceea le arătăm pe amândouă."));
+    how.append(el("strong", null, tt("stats.how_label")), document.createTextNode(
+      tt("stats.dw.how")));
     sec.append(how);
     sec.append(el("p", "st-warn ss-warn", d.note));
     if (!d.n) {
-      sec.append(el("p", "ss-n", "Nu există încă trenuri încheiate pentru filtrele alese."));
+      sec.append(el("p", "ss-n", tt("stats.dw.none")));
       return;
     }
-    sec.append(el("p", "ss-n", "Toate: mediană " + mins(d.overall.median) + ", medie " + mins(d.overall.mean) +
-      " (N = " + num(d.n) + ")."));
+    sec.append(el("p", "ss-n", tt("stats.dw.all", { median: mins(d.overall.median), mean: mins(d.overall.mean), n: num(d.n) })));
     var rows = [];
     Object.keys(BOARD_PL).forEach(function (b) {
       if (d.boards[b] && d.boards[b].n) rows.push(statsRow(BOARD_PL[b], d.boards[b]));
     });
-    sec.append(table("Durata pe panou, sosiri și plecări", ["Panou"].concat(COLS.slice(1)), rows));
+    sec.append(table(tt("stats.dw.t_board"), [tt("stats.filters.board")].concat(cols().slice(1)), rows));
     if (d.types.length) {
-      sec.append(el("h3", "ss-sub-title", "Pe tip de tren"));
-      sec.append(table("Durata pe panou după tipul trenului", ["Tip"].concat(COLS.slice(1)),
+      sec.append(el("h3", "ss-sub-title", tt("stats.dw.by_type")));
+      sec.append(table(tt("stats.dw.t_type"), [tt("stats.dw.col_type")].concat(cols().slice(1)),
         d.types.map(function (g) { return statsRow(g.train_type || "—", g); })));
     }
     if (d.stations.length) {
-      sec.append(el("h3", "ss-sub-title", "Pe stație"));
-      sec.append(table("Durata pe panou după stație", ["Stația"].concat(COLS.slice(1)),
+      sec.append(el("h3", "ss-sub-title", tt("stats.dw.by_station")));
+      sec.append(table(tt("stats.dw.t_station"), [tt("stats.c.station")].concat(cols().slice(1)),
         d.stations.map(function (g) { return statsRow(S.titleCase ? S.titleCase(g.station) : g.station, g); })));
     }
-    sec.append(el("p", "ss-n", "Se arată grupurile cu cel puțin " + d.min_group + " servicii" +
-      (d.small_groups_omitted ? " (" + d.small_groups_omitted + " stații cu mai puține nu apar)" : "") +
-      ". Duratele negative sau peste 24 de ore (pauze de citire) sunt excluse."));
+    sec.append(el("p", "ss-n", tt("stats.dw.foot", { min: d.min_group, omitted: d.small_groups_omitted ? tt("stats.dw.omitted", { n: d.small_groups_omitted }) : "" })));
   }
 
   function render(body, p) {
     var sec = el("section", "ss-fig ss-fig-wide");
     sec.setAttribute("data-key", "durata-pe-panou");
     sec.setAttribute("aria-busy", "true");
-    sec.append(el("p", "ss-n", "Se încarcă durata pe panou…"));
+    sec.append(el("p", "ss-n", tt("stats.dw.loading")));
     body.append(sec);
     var q = "perioada=" + encodeURIComponent((p && p.perioada) || "all") +
       (p && p.board ? "&board=" + encodeURIComponent(p.board) : "");

@@ -8,10 +8,19 @@
 
 (function () {
   var App = window.TabelaApp = window.TabelaApp || {};
-  var nf = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 1 });
-  var BOARD_PL = { arrival: "Sosiri", departure: "Plecări" };
+  var tt = function (k, p) { return window.I18N.t(k, p); };
+  var nfCache = {};
+  var nf = { format: function (x) {   // Intl in the chosen language: English 12.5, Romanian 12,5
+    var l = window.I18N.lang();
+    nfCache[l] = nfCache[l] || new Intl.NumberFormat(l, { maximumFractionDigits: 1 });
+    return nfCache[l].format(x);
+  } };
+  var BOARD_PL = {};
+  ["arrival", "departure"].forEach(function (k) {
+    Object.defineProperty(BOARD_PL, k, { enumerable: true, get: function () { return tt("stats.board." + k); } });
+  });
 
-  function num(v, suffix) { return v == null ? "—" : nf.format(v) + (suffix || ""); }
+  function num(v, suffix) { return v == null ? "—" : suffix === "%" ? tt("stats.fmt.pct", { v: nf.format(v) }) : suffix === "min" ? tt("stats.fmt.min", { v: nf.format(v) }) : nf.format(v); }
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
   function table(ctx, w, b) {
@@ -19,11 +28,11 @@
     var wrap = el("div", "st-scroll");
     wrap.tabIndex = 0;
     wrap.setAttribute("role", "region");
-    wrap.setAttribute("aria-label", "Comparație pe zilele săptămânii — " + BOARD_PL[b]);
+    wrap.setAttribute("aria-label", tt("stats.wk.cmp", { board: BOARD_PL[b] }));
     var t = el("table", "st-table ss-table");
-    t.append(el("caption", "sr-only", "Comparație pe zilele săptămânii — " + BOARD_PL[b]));
+    t.append(el("caption", "sr-only", tt("stats.wk.cmp", { board: BOARD_PL[b] })));
     var head = el("tr");
-    ["Ziua", "Apariții", "Servicii", "La timp (≤5 min)", "Întârziere mediană", "Peste 30 min"].forEach(function (c, i) {
+    tt("stats.wk.cols").split("|").forEach(function (c, i) {
       var th = el("th", i ? "st-num" : null, c);
       th.scope = "col";
       head.append(th);
@@ -39,11 +48,11 @@
       tr.append(el("td", "st-num", String(c.appearances) + " / " + w.min_appearances));
       tr.append(el("td", "st-num", String(c.journeys)));
       if (c.reliable) {
-        tr.append(el("td", "st-num", num(c.on_time_pct, " %")),
-          el("td", "st-num", num(c.median, " min")),
-          el("td", "st-num", num(c.over_30_pct, " %")));
+        tr.append(el("td", "st-num", num(c.on_time_pct, "%")),
+          el("td", "st-num", num(c.median, "min")),
+          el("td", "st-num", num(c.over_30_pct, "%")));
       } else {
-        var td = el("td", "st-num ss-empty", "date insuficiente");
+        var td = el("td", "st-num ss-empty", tt("stats.wk.insufficient"));
         td.colSpan = 3;
         tr.append(td);
       }
@@ -58,15 +67,12 @@
     var w = d && d.weekdays;
     if (!w || !ctx || !ctx.figure) return;
     var n = w.min_appearances;
-    var f = ctx.figure({ title: "Cum se compară zilele săptămânii?", wide: true,
-      how: "fiecare rând este o zi a săptămânii; serviciile sunt toate trenurile programate în acea zi, iar procentul la timp, " +
-        "întârzierea mediană și ponderea peste 30 de minute se calculează doar din întârzierile citite. O zi se compară abia " +
-        "după " + n + " apariții distincte (zile calendaristice încheiate); până atunci apare „date insuficiente”. " +
-        "Ziua de azi nu se numără, fiindcă nu s-a încheiat." });
+    var f = ctx.figure({ title: tt("stats.wk.title"), key: "cum-se-compara-zilele-saptamanii", wide: true,
+      how: tt("stats.wk.how", { n: n }) });
     if (w.status !== "ok") {
       var box = ctx.el("div", "ss-empty-box");
-      box.append(ctx.el("p", "ss-empty", w.message || "Comparația va deveni valabilă după ~4 săptămâni de date"));
-      box.append(ctx.nLine("Săptămâni acumulate: " + w.weeks + " din " + n + " necesare (cea mai bine acoperită zi a săptămânii)."));
+      box.append(ctx.el("p", "ss-empty", w.message || tt("stats.wk.pending")));
+      box.append(ctx.nLine(tt("stats.wk.weeks", { w: w.weeks, n: n })));
       f.host.append(box);
       return;
     }
@@ -75,8 +81,7 @@
       f.host.append(ctx.el("h3", "ss-mult-h", BOARD_PL[b]));
       f.host.append(table(ctx, w, b));
     });
-    f.foot.append(ctx.nLine("Săptămâni acumulate: " + w.weeks + ". Zilele cu mai puțin de " + n +
-      " apariții rămân marcate „date insuficiente”; sosirile și plecările nu se amestecă."));
+    f.foot.append(ctx.nLine(tt("stats.wk.foot", { w: w.weeks, n: n })));
   }
 
   App.statWeekdays = { section: section };
