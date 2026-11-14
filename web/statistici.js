@@ -119,8 +119,8 @@
     var p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
     FIELDS.forEach(function (f) {
       var val = clean(f, filters[f]);
-      if (f === "operator" && !known(opts.operators, val)) val = "";
-      if (f === "tip" && !known(opts.types, val)) val = "";
+      if (f === "operator" && v.data && !known(opts.operators, val)) val = "";  // before data: keep, validated on load
+      if (f === "tip" && v.data && !known(opts.types, val)) val = "";
       p[f] = val;
     });
     v.p = p;
@@ -134,7 +134,7 @@
     if (App.statPresets) return Promise.resolve();
     if (!presetsP) presetsP = new Promise(function (resolve) {
       var sc = document.createElement("script");
-      sc.src = "stat_presets.js?v=1";
+      sc.src = "stat_presets.js?v=2";
       sc.onload = resolve;
       sc.onerror = function () { presetsP = null; resolve(); };
       document.head.append(sc);
