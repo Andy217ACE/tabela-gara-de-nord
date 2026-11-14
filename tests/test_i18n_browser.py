@@ -297,3 +297,33 @@ def test_history_and_follows_in_english(browser, base_url):  # noqa: F811
         assert page.evaluate("() => TabelaApp.follows.countLabel(1)") == "1 tren urmărit"
     finally:
         ctx.close()
+
+
+def test_invalid_stored_value_falls_back_to_ro(browser, base_url):  # noqa: F811
+    ctx, page = _open(browser, base_url, init="localStorage.setItem('tabela-lang','xx');")
+    try:
+        assert page.evaluate("I18N.lang()") == "ro"
+    finally:
+        ctx.close()
+
+
+def test_offline_page_in_english_from_cache(browser, base_url):  # noqa: F811
+    ctx = browser.new_context(service_workers="allow")
+    ctx.add_init_script("localStorage.setItem('tabela-lang','en');")
+    try:
+        page = ctx.new_page()
+        page.goto(base_url + "/offline.html")
+        page.evaluate("navigator.serviceWorker.register('/sw.js', {scope: '/'})")
+        page.evaluate("navigator.serviceWorker.ready.then(() => 0)")
+        page.reload()  # now controlled by the service worker
+        page.evaluate("fetch('/i18n/en.json').then(r => r.status)")  # runtime-cached by the SW
+        page.wait_for_function("caches.open('tabela-shell-' + 'v40').then(c => c.match('/i18n/en.json')).then(Boolean)")
+        ctx.set_offline(True)
+        page.goto(base_url + "/offline.html")
+        page.wait_for_function("document.documentElement.lang === 'en'")
+        assert page.inner_text("h1") == "You are offline"
+        assert page.inner_text(".offline-retry") == "Try again"
+        assert page.title() == "Offline · Tabela Gara de Nord"
+        assert "Sigla" not in page.get_attribute(".logo-offline", "alt")
+    finally:
+        ctx.close()

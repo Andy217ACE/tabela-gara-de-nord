@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PRECACHE_LIMIT = 660_000      # 650 KB (Beta 1.26) + ~5 KB: hook/coloana "Peron estimat" in app.js/panel.*/style.css (peron_est.* e lazy)
+PRECACHE_LIMIT = 760_000      # was 660 KB; Task 9 (English version): ro.json (~83 KB) joined the precache (measured here: 742731 B); en.json is runtime-cached, not precached
 
 
 def read(name):

@@ -9,7 +9,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v39";
+var VERSION = "v40";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -19,6 +19,8 @@ var SHELL = [
   OFFLINE_URL,
   "/theme-init.js",
   "/i18n/i18n.js",
+  "/i18n/ro.json",
+  "/offline.js",
   "/style.css",
   "/panel.css",
   "/app.js",
@@ -52,6 +54,8 @@ var SHELL = [
 // back to the 400 weight (synthetic bold) — keeps the precache inside its budget
 // peron_est.js/.css (lazy, injected by app.js) are NOT precached (precache budget); the shell works without them
 // icon-512 / maskable are fetched by the browser from the manifest; not precached.
+// /i18n/en.json is NOT precached (budget): it is cached on first use (see dictFromNetwork), so the
+// English UI and the English offline page work offline once the app has been opened in English
 var DEFAULT_TITLE = "Gara de Nord";
 
 self.addEventListener("install", function (event) {
@@ -103,6 +107,19 @@ function boardFromCache(err) {
     });
 }
 
+function dictFromNetwork(event) {
+  return fetch(event.request).then(function (resp) {
+    if (resp && resp.ok) {
+      var copy = resp.clone();
+      event.waitUntil(caches.open(SHELL_CACHE).then(function (c) { return c.put(event.request.url, copy); }));
+    }
+    return resp;
+  }).catch(function (err) {
+    return caches.open(SHELL_CACHE).then(function (c) { return c.match(event.request.url, { ignoreSearch: true }); })
+      .then(function (hit) { if (hit) return hit; throw err; });
+  });
+}
+
 function shellNetworkFirst(request, fallbackUrl, lastResort) {
   return fetch(request).catch(function (err) {
     return caches.open(SHELL_CACHE).then(function (c) {
@@ -129,6 +146,10 @@ self.addEventListener("fetch", function (event) {
   if (req.mode === "navigate") {
     // the cached app shell first (it shows the last board); the offline page otherwise
     event.respondWith(shellNetworkFirst(req, url.pathname === OFFLINE_URL ? OFFLINE_URL : "/", OFFLINE_URL));
+    return;
+  }
+  if (url.pathname === "/i18n/en.json") {
+    event.respondWith(dictFromNetwork(event));
     return;
   }
   if (SHELL.indexOf(url.pathname) >= 0) {

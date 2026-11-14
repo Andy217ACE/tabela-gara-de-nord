@@ -329,7 +329,10 @@ def test_icon_weights_and_precache_budget(client):
     # statistici: stat_platform.js + stat_dwell.js (~12 KB, secțiunile publice noi) -> 680 KB
     # Beta 1.54 (English version): the texts moved to web/i18n/*.json (not counted here); the shell code
     # grew ~8 KB for the i18n glue (t()/plural/Intl helpers + data-i18n attributes) -> 700 KB
-    assert total <= 700_000, total
+    # Task 9: ro.json (~83 KB, ~20 KB gzip) is precached so the default language works offline;
+    # en.json is NOT (cached by the service worker on first use) -> 780 KB
+    assert "/i18n/en.json" not in paths
+    assert total <= 780_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():

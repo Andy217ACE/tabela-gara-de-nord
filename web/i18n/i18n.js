@@ -38,6 +38,8 @@
     return fill(s, params);
   }
 
+  // Notă: "i18n:change" NU se emite la încărcarea inițială (limba activă e deja cunoscută; paginile
+  // aplică I18N.ready + applyDom singure) — doar setLang() o emite.
   var jobs = [load("ro")];
   if (active === "en") jobs.push(load("en"));
 

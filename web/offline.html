@@ -10,20 +10,22 @@
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f1f5f9" media="(prefers-color-scheme: light)">
   <script src="/theme-init.js"></script>
+  <script src="/i18n/i18n.js"></script>
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="offline-page">
   <main class="offline" id="main">
-    <img class="logo logo-offline" src="/icons/logo-96.png" srcset="/icons/logo-96.png 1x, /icons/logo-192.png 2x" alt="Sigla Tabela Gara de Nord" width="96" height="96">
-    <h1 class="offline-title">Ești offline</h1>
-    <p class="offline-text">Tabela Gara de Nord are nevoie de conexiune pentru datele live. Dacă ai deschis-o recent, ultimele date salvate apar automat când pagina principală e disponibilă în cache.</p>
-    <a class="btn offline-retry" href="/">Reîncearcă</a>
+    <img class="logo logo-offline" src="/icons/logo-96.png" srcset="/icons/logo-96.png 1x, /icons/logo-192.png 2x" alt="Sigla Tabela Gara de Nord" data-i18n-attr="alt:offline.logoAlt" width="96" height="96">
+    <h1 class="offline-title" data-i18n="offline.title">Ești offline</h1>
+    <p class="offline-text" data-i18n="offline.text">Tabela Gara de Nord are nevoie de conexiune pentru datele live. Dacă ai deschis-o recent, ultimele date salvate apar automat când pagina principală e disponibilă în cache.</p>
+    <a class="btn offline-retry" href="/" data-i18n="offline.retry">Reîncearcă</a>
   </main>
   <footer class="footer">
     <img class="logo logo-footer" src="/icons/favicon-16.png" srcset="/icons/favicon-32.png 2x" alt="" width="16" height="16">
-    <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
+    <p>© 2026 Andy217Ace · <span data-i18n="footer.credit">Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială:</span> <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
   </footer>
+  <script src="/offline.js"></script>
 </body>
 </html>
