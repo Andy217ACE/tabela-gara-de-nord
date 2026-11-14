@@ -25,7 +25,7 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 - **English documentation:** the guides in `docs/` are fully translated in `docs/en/`, and `README.md` is now in English, with the Romanian version in `README.ro.md`.
 - **Statistics, history, admin, OCR captures and the System screen are translated** (texts, labels, dates and numbers formatted per language); text coming from the server (notes, problem reasons) stays in Romanian.
 - **Service worker v40:** the Romanian dictionary (`ro.json`) is precached, and the English one (`en.json`) is cached on first use, so Romanian works offline from the first install.
-- **Strings left in Romanian on the translated screens** were moved into dictionaries, and a new test (RO/EN parity and text scan) keeps them from coming back.
+- **Strings left in Romanian on the translated screens** were moved into dictionaries, and a new RO/EN parity test checks that the two dictionaries match. A text scan for remaining Romanian literals exists but is not yet enforced.
 
 ## Beta 1.53 — 2026-11-14
 

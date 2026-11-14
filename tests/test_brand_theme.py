@@ -330,7 +330,7 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.54 (English version): the texts moved to web/i18n/*.json (not counted here); the shell code
     # grew ~8 KB for the i18n glue (t()/plural/Intl helpers + data-i18n attributes) -> 700 KB
     # Task 9: ro.json (~83 KB, ~20 KB gzip) is precached so the default language works offline;
-    # en.json is NOT (cached by the service worker on first use) -> 780 KB
+    # en.json is NOT (cached by the service worker on first use) -> ~800 KB (budget 800000)
     assert "/i18n/en.json" not in paths
     assert total <= 800_000, total
 
