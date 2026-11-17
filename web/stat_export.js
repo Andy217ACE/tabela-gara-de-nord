@@ -168,7 +168,28 @@
     head.append(box);
   }
 
+  // Print: the „Vezi datele” tables are opened for the paper and closed again afterwards.
+  var reopen = [];
+  function printOpen() {
+    reopen = [].filter.call(document.querySelectorAll("#st-statistici details.ss-data"), function (d) { return !d.open; });
+    reopen.forEach(function (d) { d.open = true; });
+  }
+  function printClose() {
+    reopen.forEach(function (d) { d.open = false; });
+    reopen = [];
+  }
+  window.addEventListener("beforeprint", printOpen);
+  window.addEventListener("afterprint", printClose);
+
+  function printButton(ui) {
+    if (ui.form.querySelector(".ss-sp4-print")) return;
+    var b = btn(tr("stats.sp4.print"), tr("stats.sp4.print_aria"), function () { window.print(); });
+    b.classList.add("ss-sp4-print");
+    ui.form.append(b);
+  }
+
   function enhance(ui, d, ctx) {
+    printButton(ui);
     ui.body.querySelectorAll(".ss-fig").forEach(decorate);
   }
 

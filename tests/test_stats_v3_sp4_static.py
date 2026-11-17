@@ -51,6 +51,11 @@ def test_png_from_serialized_svg_on_canvas():
     assert "XMLSerializer" in js and "toBlob" in js and "getContext(\"2d\")" in js
 
 
+def test_print_stylesheet_exists():
+    css = _read("stat_export.css")
+    assert "@media print" in css and ".ss-filters" in css
+
+
 def test_sp4_keys_in_both_languages_and_contiguous():
     ro, en = _dict("ro"), _dict("en")
     mine = [k for k in ro if k.startswith("stats.sp4.")]

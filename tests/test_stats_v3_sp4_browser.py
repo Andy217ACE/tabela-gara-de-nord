@@ -101,3 +101,31 @@ def test_export_buttons_fit_at_360(browser, base_url):
         assert errors == []
     finally:
         ctx.close()
+
+
+def test_print_view_hides_the_chrome(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-fig .ss-exp-btn")
+    try:
+        page.emulate_media(media="print")
+        for sel in (".topbar", ".mainnav", ".ss-filters", ".ss-exp-btns", ".footer"):
+            assert page.locator(sel).first.evaluate("e => getComputedStyle(e).display") == "none", sel
+        assert _hourly(page).evaluate("e => getComputedStyle(e).breakInside") in ("avoid", "avoid-page")
+        # the data tables are open on paper (beforeprint) and closed again (afterprint)
+        page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
+        assert page.locator("details.ss-data:not([open])").count() == 0
+        page.evaluate("window.dispatchEvent(new Event('afterprint'))")
+        assert page.locator("details.ss-data[open]").count() == 0
+        page.emulate_media(media="screen")
+        assert page.locator(".ss-filters").first.evaluate("e => getComputedStyle(e).display") != "none"
+    finally:
+        ctx.close()
+
+
+def test_print_button_calls_window_print(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-sp4-print")
+    try:
+        page.evaluate("() => { window.__printed = 0; window.print = () => { window.__printed++; }; }")
+        page.locator(".ss-sp4-print").click()
+        assert page.evaluate("window.__printed") == 1
+    finally:
+        ctx.close()
