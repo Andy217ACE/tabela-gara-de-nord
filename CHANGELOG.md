@@ -5,6 +5,30 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.59 — 2026-11-18
+
+### Adăugat
+- **Scală unică de culori în Statistici:** verde (bine), galben (mediu), roșu (rău), definită o dată ca token CSS și aplicată în sumar, în bare, în rute și în heatmap. Pragurile sunt într-un singur loc.
+- **Explicații pe metrici:** „Încredere”, „Gravitate”, „N” și „mediană vs medie” se explică la hover și la focus de la tastatură.
+- **Click pe grafic:** deschide lista trenurilor din spatele barei sau punctului; limitată la 200 de rânduri, cu mesaj de trunchiere. Ruta `/api/stats/overview` acceptă `detail=train_list`.
+- **Contrast ridicat în Statistici:** opțiune în bara de filtre, reținută în `localStorage`.
+- **Mod simplu sau expert:** ascunde N, încredere și mediana-față-de-medie în modul simplu (implicit).
+- **Texte scurte la Probleme:** fiecare explicație are o frază și un buton „Citește mai mult”.
+
+### Schimbat
+- Heatmap-ul folosește scala verde/galben/roșu în loc de albastrul secvențial.
+- Service worker v45; `CHARTS_V` 1.59.
+
+### English
+- **One colour scale in Statistici:** green (good), yellow (medium), red (poor), defined once as a CSS token and used in the summary, bars, routes and heatmap. The thresholds live in one place.
+- **Metric explanations:** “Confidence”, “Severity”, “N” and “median vs mean” are explained on hover and on keyboard focus.
+- **Click a chart:** opens the train list behind the bar or point; limited to 200 rows, with a truncation message. `/api/stats/overview` accepts `detail=train_list`.
+- **High contrast in Statistici:** an option in the filter bar, remembered in `localStorage`.
+- **Simple or expert mode:** hides N, confidence and median-vs-mean in simple mode (the default).
+- **Short texts on Problems:** each explanation has a one-line version and a “Read more” button.
+- The heatmap uses the green/yellow/red scale instead of the sequential blue.
+- Service worker v45; `CHARTS_V` 1.59.
+
 ## Beta 1.58 — 2026-11-17
 
 ### Adăugat

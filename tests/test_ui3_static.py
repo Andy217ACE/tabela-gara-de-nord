@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PRECACHE_LIMIT = 775_000      # Beta 1.55: measured 760451 B (was 767089 B; versions.js left the precache) + ~15 KB margin
+PRECACHE_LIMIT = 785_000      # Beta 1.59 (Statistici v3 sp2): measured 778595 B (+~18 KB over 1.55 with sp1 + sp2 shell code); ruling 18.11: budget raised to 785_000 (~6 KB margin). Beta 1.55: measured 760451 B + ~15 KB margin
 
 
 def read(name):
