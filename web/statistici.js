@@ -18,6 +18,16 @@
   var SVG_NS = "http://www.w3.org/2000/svg";
   var API = "/api/stats/overview";
   var BOARDS = ["arrival", "departure"];
+  // THE color scale (Statistici v3 sp2): thresholds in one place, colors in statistici.css (--ss-good/mid/bad).
+  // pct = % on time (>= good green, >= mid yellow, else red); minutes = typical delay (<= good green, <= mid yellow, else red).
+  var SCALE = { pct: { good: 80, mid: 60 }, minutes: { good: 5, mid: 10 } };
+  function tone(kind, val) {
+    if (val == null || isNaN(val)) return "";
+    var s = SCALE[kind];
+    var good = kind === "pct" ? val >= s.good : val <= s.good;
+    var mid = kind === "pct" ? val >= s.mid : val <= s.mid;
+    return good ? "ss-t-good" : mid ? "ss-t-mid" : "ss-t-bad";
+  }
   var tt = function (k, p) { return window.I18N.t(k, p); };
   var pl = function (n, base) { return S.pl(n, base); };   // "1 journey" / "3 journeys" from stats.w.*.one / .many
   function lazy(prefix, keys) {   // getters: the text follows the language chosen at the time it is read
@@ -812,9 +822,9 @@
     var f = quickFigures(d);
     var sec = el("section", "ss-quick");
     sec.setAttribute("aria-label", tt("stats.sum.aria"));
-    function card(title, value, sub, sect) {
+    function card(title, value, sub, sect, kind, num) {
       var c = el("div", "ss-card");
-      var val = el("p", "ss-card-v");
+      var val = el("p", "ss-card-v " + tone(kind, num));
       if (sect) {   // link to the section behind the figure
         var a = el("a", "ss-card-link", value);
         a.href = "#statistici?" + sectQuery(sect);
@@ -824,8 +834,8 @@
       c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
-    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme");
-    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme", "pct", f.pct);
+    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"), null, "minutes", f.mean);
     card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
     card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
       f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"), f.route ? "rute" : null);
@@ -887,7 +897,7 @@
     var items = boards.map(function (b) {
       var s = d.boards[b];
       var ok = s.n && s.sufficient;
-      return { label: tt("stats.hero.on_time", { board: BOARD_PL[b] }), tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v",
+      return { label: tt("stats.hero.on_time", { board: BOARD_PL[b] }), tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v " + (ok ? tone("pct", s.on_time_pct) : ""),
         value: ok ? s.on_time_pct : null, unit: ok ? " %" : "", fmt: function (x) { return nf.format(Math.round(x * 10) / 10); },
         sub: ok ? tt("stats.hero.on_time_sub", { ok: s.on_time, n: s.n, max: p.on_time_max_min })
           : (s.n ? tt("stats.hero.small_sub", { n: s.n, min: p.min_sample }) : tt("stats.hero.none_sub")),
@@ -1221,7 +1231,7 @@
       hbars(cell, { board: b, max: 100, title: title + " — " + BOARD_PL[b],
         desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
-          return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient,
+          return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
             valueText: x.sufficient ? pct(x.on_time_pct) + " · N = " + x.n : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"),
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
@@ -1254,7 +1264,7 @@
         L[1].forEach(function (x) {
           var li = el("li");
           li.append(S.stationLink(x.key));
-          li.append(el("span", "ss-rank-v", L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
+          li.append(el("span", "ss-rank-v " + (L[2] === "mean" ? tone("minutes", x.mean) : tone("pct", x.on_time_pct)), L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
           li.append(el("span", "ss-rank-n", "N = " + x.n));
           ol.append(li);
           rows.push([BOARD_PL[b] + " — " + S.titleCase(x.key), L[0], x.n, minutes(x.mean), minutes(x.median), pct(x.on_time_pct)]);
