@@ -15,18 +15,16 @@
   var el = App.el;
   var U = function () { return App.ui2; };   // Beta 1.26 visual helpers (ui2.js): donut, count-up, meter, spark
   var C3 = function () { return App.charts3; };   // Beta 1.28 interactive chart layer (charts3.js, lazy): tooltips, curves, calendar…
+  var S2 = function () { return App.statSp2; };   // lazy sp2 layer (stat_sp2.js/css)
   var SVG_NS = "http://www.w3.org/2000/svg";
   var API = "/api/stats/overview";
   var BOARDS = ["arrival", "departure"];
-  // THE color scale (Statistici v3 sp2): thresholds in one place, colors in statistici.css (--ss-good/mid/bad).
-  // pct = % on time (>= good green, >= mid yellow, else red); minutes = typical delay (<= good green, <= mid yellow, else red).
-  var SCALE = { pct: { good: 80, mid: 60 }, minutes: { good: 5, mid: 10 } };
-  function tone(kind, val) {
-    if (val == null || isNaN(val)) return "";
-    var s = SCALE[kind];
-    var good = kind === "pct" ? val >= s.good : val <= s.good;
-    var mid = kind === "pct" ? val >= s.mid : val <= s.mid;
-    return good ? "ss-t-good" : mid ? "ss-t-mid" : "ss-t-bad";
+  // THE color scale: the only thresholds (colors: --ss-good/mid/bad in statistici.css). up: 1 = higher is better
+  var SCALE = { pct: { good: 80, mid: 60, up: 1 }, minutes: { good: 5, mid: 10, up: -1 } };
+  function tone(kind, x) {
+    if (x == null || isNaN(x)) return "";
+    var k = SCALE[kind];
+    return k.up * (x - k.good) >= 0 ? "ss-t-good" : k.up * (x - k.mid) >= 0 ? "ss-t-mid" : "ss-t-bad";
   }
   var tt = function (k, p) { return window.I18N.t(k, p); };
   var pl = function (n, base) { return S.pl(n, base); };   // "1 journey" / "3 journeys" from stats.w.*.one / .many
@@ -71,14 +69,8 @@
 
   function tip(node, text) { node.append(svg("title", {}, text)); return node; }
 
-  // A chart mark that opens the list of trains behind it (stat_sp2.js, lazy): d = { by, key, label }
-  function drillMark(g, d, board) {
-    g.setAttribute("data-drill-by", d.by);
-    g.setAttribute("data-drill-key", d.key);
-    g.setAttribute("data-drill-label", d.label);
-    if (board) g.setAttribute("data-drill-board", board);
-    return g;
-  }
+  // mark opening the trains behind it (stat_sp2.js): d = { by, key, label }
+  function drillMark(g, d, board) { g.setAttribute("data-drill", JSON.stringify([d.by, d.key, d.label, board || ""])); return g; }
 
   function slug(t) {
     return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -161,28 +153,26 @@
     return presetsP;
   }
 
-  // ---- click on a chart mark -> the trains behind it: list + dialog in stat_sp2.js (lazy, not in the SW shell) ----
   var sp2P = null;
   function sp2Layer() {
     if (App.statSp2) return Promise.resolve();
     if (!sp2P) sp2P = new Promise(function (resolve) {
-      var sc = document.createElement("script");
+      var css = document.createElement("link"), sc = document.createElement("script"), left = 2;
+      css.rel = "stylesheet";
+      css.href = "stat_sp2.css?v=1";
       sc.src = "stat_sp2.js?v=1";
-      sc.onload = resolve;
-      sc.onerror = function () { sp2P = null; resolve(); };
-      document.head.append(sc);
+      css.onload = sc.onload = function () { if (--left === 0) resolve(); };
+      css.onerror = sc.onerror = function () { sp2P = null; if (--left === 0) resolve(); };
+      document.head.append(css, sc);
     });
     return sp2P;
   }
 
-  function openDrill(g) {
-    var d = { by: g.getAttribute("data-drill-by"), key: g.getAttribute("data-drill-key"),
-              label: g.getAttribute("data-drill-label"), board: g.getAttribute("data-drill-board") || "" };
-    var opener = g.closest("svg") || g;
-    sp2Layer().then(function () {
-      if (App.statSp2) App.statSp2.drill(d, opener, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); },
-        minutes: minutes, dayText: S.dayText, getJSON: S.getJSON, errorText: S.errorText });
-    });
+  function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
+    render(d);
+    if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
+      dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
+    syncFiltersH();
   }
 
   function presetsMenu() {
@@ -319,15 +309,6 @@
     });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
     var body = el("div", "ss-body");
-    body.addEventListener("click", function (e) {
-      var g = e.target.closest ? e.target.closest("[data-drill-by]") : null;
-      if (g) openDrill(g);
-    });
-    body.addEventListener("keydown", function (e) {   // Enter on the chart: the mark the arrow keys are on
-      if (e.key !== "Enter" || !e.target.matches || !e.target.matches("svg.ss-svg")) return;
-      var g = e.target.querySelector(".c3-act[data-drill-by]");
-      if (g) { e.preventDefault(); openDrill(g); }
-    });
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
     v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci };
@@ -335,7 +316,7 @@
       if (!v.data || $("view-statistici").hidden) return;
       syncFiltersH();
       var w = v.ui.body.clientWidth;
-      if (Math.abs(w - v.width) > 24) render(v.data);
+      if (Math.abs(w - v.width) > 24) draw(v.data);
     }, 200));
   }
 
@@ -409,7 +390,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
-    chartsReady = chartsReady.then(function (c) { return stepsLayer().then(function () { return c; }); });
+    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer()]).then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
@@ -418,7 +399,7 @@
         v.data = d;
         v.at = Date.now();
         setForm(v.p);
-        render(d);
+        draw(d);
         if (snap && C3()) C3().morph(v.ui.body, snap);
         focusChart();
         applySect();
@@ -535,7 +516,7 @@
     return cells;
   }
 
-  function nLine(text) { return el("p", "ss-n", text); }
+  function nLine(text) { return el("p", "ss-n ss-exp", text); }
   function warn(text) { return el("p", "st-warn ss-warn", text); }
 
   // „Vezi datele”: the chart as an accessible table.
@@ -821,7 +802,9 @@
                      (r.cls || BOARD_CLS[o.board]) + (r.low ? " ss-low" : ""));
         if (b) { b.setAttribute("data-m", String(i)); g.append(b); }
       }
-      g.append(svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText));
+      var vt = svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText);
+      if (r.valueExp) vt.append(svg("tspan", { class: "ss-exp" }, r.valueExp));
+      g.append(vt);
       g.append(svg("rect", { x: 0, y: y0, width: W, height: rowH, class: "ss-hit" }));
       if (r.drill) drillMark(g, r.drill, o.board);
       tip(g, r.label + ": " + r.tip);
@@ -875,12 +858,6 @@
         a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
         val.append(a);
       } else val.textContent = value;
-      if (kind === "minutes") {   // median vs mean: the "?" sits beside the title, not inside it
-        var hi = el("button", "ss-help-i", "?");
-        hi.type = "button";
-        hi.setAttribute("aria-label", tt("stats.gl.median.t"));
-        c.append(help(hi, "stats.sp2.help.median"));
-      }
       c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
@@ -1286,7 +1263,7 @@
         rows: list.map(function (x) {
           return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
             drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: x.key },
-            valueText: x.sufficient ? pct(x.on_time_pct) + " · N = " + x.n : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"),
+            valueText: x.sufficient ? pct(x.on_time_pct) : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"), valueExp: x.sufficient ? " · N = " + x.n : "",
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
         }) });
@@ -1319,7 +1296,7 @@
           var li = el("li");
           li.append(S.stationLink(x.key));
           li.append(el("span", "ss-rank-v " + (L[2] === "mean" ? tone("minutes", x.mean) : tone("pct", x.on_time_pct)), L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
-          li.append(el("span", "ss-rank-n", "N = " + x.n));
+          li.append(el("span", "ss-rank-n ss-exp", "N = " + x.n));
           ol.append(li);
           rows.push([BOARD_PL[b] + " — " + S.titleCase(x.key), L[0], x.n, minutes(x.mean), minutes(x.median), pct(x.on_time_pct)]);
         });
@@ -1513,25 +1490,7 @@
     return a;
   }
 
-  // Metric explanation (Statistici v3 sp2): shown on hover AND keyboard focus (CSS :hover/:focus-within), Escape hides it.
-  function help(node, key) {
-    var tip = el("span", "ss-tip", tt(key));
-    tip.id = nid("tip");
-    tip.setAttribute("role", "tooltip");
-    node.classList.add("ss-help");
-    node.tabIndex = 0;
-    node.setAttribute("aria-describedby", tip.id);
-    node.append(tip);
-    node.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") return;
-      node.classList.add("ss-help-off");
-      node.addEventListener("blur", function () { node.classList.remove("ss-help-off"); }, { once: true });
-    });
-    node.addEventListener("mouseleave", function () { node.classList.remove("ss-help-off"); });
-    return node;
-  }
-
-  function badge(text, cls, key) { var b = el("span", "ss-badge " + cls, text); return key ? help(b, key) : b; }
+  function badge(text, cls) { return el("span", "ss-badge " + cls, text); }
 
   function boardKey(b) { return el("span", "ss-key " + BOARD_CLS[b]); }
 
@@ -1577,9 +1536,9 @@
     head.append(t);
     li.append(head);
     var b = el("p", "ss-badges");
-    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev", "stats.sp2.help.sev"),
-      badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf", "stats.sp2.help.conf"),
-      badge("N = " + it.n, "ss-badge-n", "stats.gl.n.d"));
+    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev"),
+      badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf ss-exp"),
+      badge("N = " + it.n, "ss-badge-n ss-exp"));
     li.append(b);
     li.append(el("p", "ss-prob-fig", it.figures));
     var why = el("p", "ss-prob-why");

@@ -3,9 +3,7 @@
    --c-arr / --c-dep series, --c-seq sequential hue); light and dark follow automatically.
    Charts are SVG sized to their container: no horizontal page scroll at any width. */
 
-/* ---------- the one color scale (Statistici v3 sp2): good / medium / bad ----------
-   Defined once here; thresholds live in statistici.js (SCALE). Every section and the summary read
-   these tokens: never a second green/yellow/red. */
+/* the one good/medium/bad scale: tokens here, thresholds in statistici.js (SCALE) */
 :root {
   --ss-good: var(--ok);
   --ss-mid: var(--warn);
@@ -453,47 +451,3 @@
   /* open panel: scrolls with the page */
   .ss-filters.ss-panel-open { position: static; }
 }
-
-/* ---------- metric tooltips (hover + keyboard focus); anchored to the card, never wider than it ---------- */
-.ss-prob, .ss-card { position: relative; }
-.ss-help { cursor: help; }
-.ss-help-i {
-  float: right;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
-}
-.ss-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.ss-tip {
-  display: none;
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  z-index: 8;
-  margin-top: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.45;
-  white-space: normal;
-  text-align: left;
-}
-.ss-help:hover > .ss-tip,
-.ss-help:focus > .ss-tip { display: block; }
-.ss-help.ss-help-off > .ss-tip { display: none; }
-
-/* clickable marks (the trains behind them open in a dialog) */
-.ss-mark[data-drill-by] { cursor: pointer; }

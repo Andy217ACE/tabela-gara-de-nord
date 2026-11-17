@@ -40,6 +40,11 @@ def test_scale_applied_to_summary_and_ranked_bars(browser, base_url):
         ctx.close()
 
 
+def _expert(page):
+    page.locator("label.ss-check", has_text="Mod expert").click()
+    page.mouse.move(0, 0)   # the pointer must not rest on a badge (hover also shows the tooltip)
+
+
 def _tip_text(page, key):
     import json
     from pathlib import Path
@@ -50,6 +55,7 @@ def _tip_text(page, key):
 def test_metric_tooltips_on_hover_and_keyboard_focus(browser, base_url):
     ctx, page, errors = _go(browser, base_url, ready=".ss-prob")
     try:
+        _expert(page)   # confidence, N and median-vs-mean are expert-only
         helps = page.locator(".ss-prob").first.locator(".ss-help")
         assert helps.count() == 3  # severity, confidence, N
         first = helps.first
@@ -78,6 +84,8 @@ def test_metric_tooltips_on_hover_and_keyboard_focus(browser, base_url):
 def test_tooltips_do_not_overflow_at_360(browser, base_url):
     ctx, page, errors = _go(browser, base_url, 360, 740, ready=".ss-prob")
     try:
+        page.locator(".ss-filters-toggle").click()
+        _expert(page)
         last = page.locator(".ss-prob").first.locator(".ss-help").last
         last.focus()
         expect(last.locator("[role=tooltip]")).to_be_visible()
@@ -113,7 +121,7 @@ def _fake_detail(page, payload=None, status=200, seen=None):
 
 def _click_first_ranked_bar(page):
     page.wait_for_selector('[data-key="care-operatori-sunt-cei-mai-punctu"] .ss-bar', state="attached")
-    page.locator('[data-key="care-operatori-sunt-cei-mai-punctu"] .ss-mark[data-drill-by]').first.click(force=True)
+    page.locator('[data-key="care-operatori-sunt-cei-mai-punctu"] .ss-mark[data-drill]').first.click(force=True)
 
 
 def test_click_on_bar_opens_the_train_list(browser, base_url):
@@ -168,8 +176,8 @@ def test_heatmap_and_hourly_marks_are_clickable(browser, base_url):
     ctx, page, errors = _go(browser, base_url)
     try:
         page.wait_for_selector(".ss-cell", state="attached")
-        assert page.locator(".ss-mark[data-drill-by=heat]").count() > 0
-        assert page.locator(".ss-mark[data-drill-by=hour]").count() > 0
+        kinds = page.evaluate("() => [...document.querySelectorAll('.ss-mark[data-drill]')].map(g => JSON.parse(g.getAttribute('data-drill'))[0])")
+        assert "heat" in kinds and "hour" in kinds, set(kinds)
     finally:
         ctx.close()
 
@@ -189,5 +197,168 @@ def test_train_list_end_to_end_when_the_api_is_wired(browser, base_url):
         dlg = page.locator("dialog.ss-drill")
         expect(dlg.locator("tbody tr").first).to_be_visible()
         assert dlg.locator("tbody tr").count() >= 1
+    finally:
+        ctx.close()
+
+
+# ---- 4. high contrast -----------------------------------------------------------------------
+
+RATIO_JS = """() => {
+  const lum = (c) => { const unit = c.startsWith('color(');   // color-mix() computes to color(srgb r g b), 0..1
+    const [r, g, b] = c.replace('color(srgb', '').match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { if (!unit) v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+  const card = document.querySelector('.ss-card');
+  const bg = getComputedStyle(card).backgroundColor;
+  const probe = (cls) => { const s = document.createElement('span'); s.className = cls; s.textContent = 'x'; card.append(s);
+    const c = getComputedStyle(s).color; s.remove(); return ratio(c, bg); };
+  const muted = document.createElement('span'); muted.className = 'ss-card-s'; card.append(muted);
+  const m = ratio(getComputedStyle(muted).color, bg); muted.remove();
+  return { good: probe('ss-t-good'), mid: probe('ss-t-mid'), bad: probe('ss-t-bad'), muted: m };
+}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_high_contrast_option_applies_class_persists_and_raises_contrast(browser, base_url, theme):
+    ctx, page, errors = _go(browser, base_url, theme=theme)
+    try:
+        assert page.evaluate("document.documentElement.dataset.contrast || ''") == ""
+        before = page.evaluate(RATIO_JS)
+        page.locator("label.ss-check", has_text="Contrast ridicat").click()
+        assert page.evaluate("document.documentElement.dataset.contrast") == "high"
+        assert page.evaluate("localStorage.getItem('tabela.contrast')") == "high"
+        after = page.evaluate(RATIO_JS)
+        for k in ("good", "mid", "bad", "muted"):
+            assert after[k] >= before[k], (k, before, after)
+            assert after[k] >= 7, (k, after)           # AAA for normal text
+        # survives a reload, before the first paint (theme-init.js)
+        page.reload()
+        page.wait_for_selector(".ss-quick .ss-card")
+        assert page.evaluate("document.documentElement.dataset.contrast") == "high"
+        # and can be switched off again
+        page.locator("label.ss-check", has_text="Contrast ridicat").click()
+        assert page.evaluate("document.documentElement.dataset.contrast || ''") == ""
+        assert page.evaluate("localStorage.getItem('tabela.contrast')") is None
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_contrast_toggle_does_not_reload_the_data(browser, base_url):
+    ctx, page, errors = _go(browser, base_url)
+    try:
+        seen = []
+        page.on("request", lambda r: seen.append(r.url) if "/api/stats/overview" in r.url else None)
+        page.locator("label.ss-check", has_text="Contrast ridicat").click()
+        page.wait_for_timeout(300)
+        assert seen == []
+    finally:
+        ctx.close()
+
+
+# ---- 5. simple / expert mode ----------------------------------------------------------------
+
+EXPERT_BITS = ".ss-badge-conf, .ss-badge-n, .ss-n"
+
+
+def test_simple_mode_is_default_and_hides_n_confidence_and_median(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-prob")
+    try:
+        assert page.evaluate("document.getElementById('st-statistici').dataset.mode") == "simple"
+        assert not page.locator("#ss-expert").is_checked()
+        for sel in (".ss-badge-conf", ".ss-badge-n", ".ss-n", ".ss-card-s.ss-exp", ".ss-help-i"):
+            assert page.locator(sel).count() > 0, sel
+            expect(page.locator(sel).first).to_be_hidden()
+        # the headline figures stay
+        expect(page.locator(".ss-badge-sev").first).to_be_visible()
+        expect(page.locator(".ss-quick .ss-card-v").first).to_be_visible()
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_expert_mode_shows_them_and_is_remembered(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-prob")
+    try:
+        page.locator("label.ss-check", has_text="Mod expert").click()
+        assert page.evaluate("document.getElementById('st-statistici').dataset.mode") == "expert"
+        assert page.evaluate("localStorage.getItem('tabela.statsMode')") == "expert"
+        for sel in (".ss-badge-conf", ".ss-badge-n", ".ss-card-s.ss-exp", ".ss-help-i"):
+            expect(page.locator(sel).first).to_be_visible()
+        assert "mediană" in page.locator(".ss-card-s.ss-exp").first.inner_text().lower()
+        page.reload()
+        page.wait_for_selector(".ss-prob")
+        assert page.evaluate("document.getElementById('st-statistici').dataset.mode") == "expert"
+        assert page.locator("#ss-expert").is_checked()
+        page.locator("label.ss-check", has_text="Mod expert").click()
+        assert page.evaluate("document.getElementById('st-statistici').dataset.mode") == "simple"
+        assert page.evaluate("localStorage.getItem('tabela.statsMode')") is None
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_expert_toggle_does_not_reload_the_data(browser, base_url):
+    ctx, page, errors = _go(browser, base_url)
+    try:
+        seen = []
+        page.on("request", lambda r: seen.append(r.url) if "/api/stats/overview" in r.url else None)
+        page.locator("label.ss-check", has_text="Mod expert").click()
+        page.wait_for_timeout(300)
+        assert seen == []
+    finally:
+        ctx.close()
+
+
+# ---- 6. short texts with „Citește mai mult” -------------------------------------------------
+
+def test_problem_text_short_with_read_more(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-prob")
+    try:
+        item = page.locator(".ss-prob", has=page.locator(".ss-more")).first
+        assert item.count() == 1
+        why = item.locator(".ss-prob-why")
+        btn = item.locator(".ss-more")
+        rest = item.locator(".ss-more-rest")
+        expect(rest).to_be_hidden()
+        assert btn.get_attribute("aria-expanded") == "false"
+        short = why.locator(".ss-why-short").inner_text()
+        assert short.strip().endswith((".", "!", "?")) and len(short.split(". ")) == 1
+        btn.click()
+        expect(rest).to_be_visible()
+        assert btn.get_attribute("aria-expanded") == "true"
+        assert btn.get_attribute("aria-controls") == rest.get_attribute("id")
+        assert rest.inner_text().strip()
+        btn.click()
+        expect(rest).to_be_hidden()
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_single_sentence_text_has_no_button(browser, base_url):
+    ctx, page, errors = _go(browser, base_url, ready=".ss-prob")
+    try:
+        n_items = page.locator(".ss-prob").count()
+        n_more = page.locator(".ss-prob .ss-more").count()
+        assert n_more <= n_items
+        # an item without a button shows its whole text as the short version
+        for i in range(n_items):
+            it = page.locator(".ss-prob").nth(i)
+            if it.locator(".ss-more").count() == 0:
+                assert it.locator(".ss-why-short").inner_text().strip()
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("w", [360, 390])
+def test_no_horizontal_scroll_with_the_new_controls(browser, base_url, w):
+    ctx, page, errors = _go(browser, base_url, w, 800, ready=".ss-prob")
+    try:
+        page.locator(".ss-filters-toggle").click()
+        page.locator("label.ss-check", has_text="Mod expert").click()
+        page.locator("label.ss-check", has_text="Contrast ridicat").click()
+        page.locator(".ss-prob .ss-more").first.click()
+        assert page.evaluate("document.documentElement.scrollWidth") <= w
+        assert page.evaluate(NO_HSCROLL.replace("() =>", "() =>"))
     finally:
         ctx.close()

@@ -24,7 +24,7 @@ def test_color_scale_has_one_definition():
     # the three tokens are defined once on :root (the high-contrast block only overrides them)
     for tok in ("--ss-good", "--ss-mid", "--ss-bad"):
         base = re.findall(r"^\s*" + tok + r":", css, re.M)
-        assert 1 <= len(base) <= 2, (tok, "one base definition (+ at most the high-contrast override)")
+        assert len(base) == 1, (tok, "defined once; stat_sp2.css only overrides it for high contrast")
     assert len(re.findall(r"^\s*:root\s*\{[^}]*--ss-good", css, re.M)) == 1
     # thresholds: one constant, in statistici.js only
     owners = [n for n in sorted(p.name for p in WEB.glob("*.js")) if re.search(r"\bvar SCALE\s*=", _read(n))]
@@ -74,3 +74,11 @@ def test_no_unsafe_dom():
         js = _read(name)
         assert ".innerHTML" not in js and "insertAdjacentHTML" not in js and "document.write" not in js, name
         assert 'setAttribute("style"' not in js and ".style.cssText" not in js, name
+
+
+def test_theme_init_contrast_api_is_stored_like_the_theme():
+    js = _read("theme-init.js")
+    assert '"tabela.contrast"' in js and "setContrast" in js and "data-contrast" in js.replace("dataset.contrast", "data-contrast")
+    # every localStorage call of the contrast code sits in a try/catch
+    seg = js[js.index("KEY_C"):js.index("window.TabelaTheme")]
+    assert seg.count("try {") >= seg.count("localStorage.") - 1   # saveContrast: one try, two branches

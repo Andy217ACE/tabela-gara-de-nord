@@ -38,3 +38,19 @@ Dacă vreți versiune în URL, `statistici.js` îl cere ca `stat_sp2.js?v=1`.
 ## 3. Buget precache
 
 Vezi raportul: măsurarea `test_icon_weights_and_precache_budget` la finalul sub-proiectului.
+
+## 4. Contrast ridicat în meniul de temă (opțional, `web/app.js`)
+
+`theme-init.js` expune acum `TabelaTheme.getContrast()` și `TabelaTheme.setContrast(bool)` (cheia
+`tabela.contrast` în `localStorage`, `<html data-contrast="high">`). Butonul de temă din navbar e în
+`web/app.js` (fișier în afara listei permise), așa că opțiunea apare deocamdată ca „Contrast ridicat”
+în bara de filtre de la Statistici. Pentru a o pune și în navbar, `app.js` poate apela
+`window.TabelaTheme.setContrast(!window.TabelaTheme.getContrast())` dintr-un buton propriu.
+Stilurile de contrast sunt în `web/stat_sp2.css` (lazy), deci acționează pe pagina Statistici;
+dacă se dorește global, regula `html:root[data-contrast="high"]` se mută în `style.css`.
+
+## 5. Fișiere noi, încărcate la runtime (nu în `SHELL`)
+
+`web/stat_sp2.js`, `web/stat_sp2.css` (cerute de `statistici.js` înaintea primei afișări).
+`tests/i18n_allowlist.txt`: cele 3 intrări `web/statistici.js:NNNN` au fost mutate la liniile noi
+(testul scanează după număr de linie; orice modificare a `statistici.js` din alt flux le mută din nou).
