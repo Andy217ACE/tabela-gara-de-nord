@@ -181,7 +181,11 @@ async def stats_overview_v2(request: Request):
     set_name = q.get("set") or ""
     if fmt == "csv" and set_name not in overview_v2.SETS:
         raise _bad("Set invalid pentru export CSV (" + ", ".join(overview_v2.SETS) + ").")
-    d = await run_in_threadpool(overview_v2.overview, _store(request), p, filters, today)
+    try:
+        detail = overview_v2.parse_detail(q)
+    except ValueError as e:
+        raise _bad(str(e))
+    d = await run_in_threadpool(overview_v2.overview, _store(request), p, filters, today, detail)
     if fmt == "csv":
         return _csv(overview_v2.to_csv(d, set_name), f"statistici-{set_name}.csv")
     return d
