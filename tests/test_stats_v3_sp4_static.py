@@ -83,3 +83,9 @@ def test_used_keys_exist():
     used = set(re.findall(r'"(stats\.sp4\.[\w.]*\w)"', js))
     assert used, "no sp4 key used"
     assert used <= set(ro) and used <= set(en), sorted(used - set(ro))
+    assert set(k for k in ro if k.startswith("stats.sp4.")) <= used, "unused sp4 key"
+
+
+def test_indicator_refreshes_every_60_seconds():
+    js = _read("stat_export.js")
+    assert "setInterval(paint, 60000)" in js and "clearInterval" in js

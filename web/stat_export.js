@@ -188,7 +188,34 @@
     ui.form.append(b);
   }
 
+  // "Date actualizate acum X minute": from the payload time, refreshed every 60 s while the page is open.
+  var stamp = 0, note = null, timer = 0;
+  function paint() {
+    if (!note || !note.isConnected) {   // the page was rebuilt (language switch): stop the old timer
+      if (timer) clearInterval(timer);
+      timer = 0;
+      return;
+    }
+    var min = Math.max(0, Math.floor((Date.now() - stamp) / 60000));
+    note.textContent = min < 1 ? tr("stats.sp4.updated_now") : tr("stats.sp4.updated_min", { n: min });
+  }
+
+  function updated(ui, d, ctx) {
+    var t = d && d.generated_at ? Date.parse(d.generated_at) : NaN;
+    stamp = isNaN(t) ? (ctx && ctx.at ? ctx.at() : Date.now()) : t;
+    if (stamp > Date.now()) stamp = Date.now();   // a server clock ahead of the browser
+    note = ui.form.querySelector(".ss-sp4-updated");
+    if (!note) {
+      note = mk("p", "ss-sp4-updated");
+      note.setAttribute("role", "status");
+      ui.form.append(note);
+    }
+    paint();
+    if (!timer) timer = setInterval(paint, 60000);
+  }
+
   function enhance(ui, d, ctx) {
+    updated(ui, d, ctx);
     printButton(ui);
     ui.body.querySelectorAll(".ss-fig").forEach(decorate);
   }

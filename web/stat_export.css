@@ -2,6 +2,7 @@
 .ss-exp-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .ss-lazy { min-height: 1px; }
 .ss-exp-msg { margin: 8px 0 0; }
+.ss-sp4-updated { margin: 0; color: var(--text-3); font-size: 0.75rem; flex-basis: 100%; }
 .ss-sp4-print { white-space: nowrap; }
 
 /* Tipărește (PDF din browser): doar conținutul paginii Statistici, fără filtre, butoane și navigare */

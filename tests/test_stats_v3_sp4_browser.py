@@ -148,3 +148,24 @@ def test_delayed_sections_do_not_request_before_the_visit(browser, base_url):
     for p in LAZY:
         assert len([u for u in seen if p in u]) == 1, p
     ctx.close()
+
+
+def test_updated_indicator_refreshes_every_minute(browser, base_url):
+    stats_overview.clear_cache()
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    ctx.add_init_script("""(() => {
+      const real = window.setInterval; window.__ticks = [];
+      window.setInterval = function (fn, ms, ...a) { window.__ticks.push([ms, fn]); return real(fn, ms, ...a); };
+      window.__fake = 0; const RD = Date; window.Date = class extends RD {
+        constructor(...a) { if (a.length) super(...a); else super(RD.now() + window.__fake); }
+        static now() { return RD.now() + window.__fake; } };
+    })();""")
+    page = ctx.new_page()
+    page.goto(base_url + "/#statistici")
+    page.wait_for_selector(".ss-sp4-updated")
+    ind = page.locator(".ss-sp4-updated")
+    expect(ind).to_have_text("Date actualizate acum câteva secunde")
+    assert page.evaluate("window.__ticks.some(t => t[0] === 60000)")
+    page.evaluate("window.__fake = 3 * 60000 + 5000; window.__ticks.filter(t => t[0] === 60000).forEach(t => t[1]())")
+    expect(ind).to_have_text("Date actualizate acum 3 min")
+    ctx.close()
