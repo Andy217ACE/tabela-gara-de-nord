@@ -15,6 +15,11 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 - **Mod simplu sau expert:** ascunde N, încredere și mediana-față-de-medie în modul simplu (implicit).
 - **Texte scurte la Probleme:** fiecare explicație are o frază și un buton „Citește mai mult”.
 
+- **Export pe grafic și tabel:** CSV (virgulă, UTF-8 cu BOM) și PNG (desenat pe canvas, fără librării) pentru fiecare grafic; „CSV tabel” exportă tabelul „Vezi datele”.
+- **Tipărește:** vizualizare pentru print (`@media print`); PDF-ul se salvează din browser, nu se generează pe server.
+- **Încărcare progresivă:** secțiunile cu endpoint propriu (schimbări de peron, durata pe panou) se cer la prima vizită.
+- **Indicator de actualizare:** „Date actualizate acum X min” lângă filtre, reîmprospătat la 60 s.
+
 ### Schimbat
 - Heatmap-ul folosește scala verde/galben/roșu în loc de albastrul secvențial.
 - Service worker v45; `CHARTS_V` 1.59.
@@ -26,6 +31,10 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 - **High contrast in Statistici:** an option in the filter bar, remembered in `localStorage`.
 - **Simple or expert mode:** hides N, confidence and median-vs-mean in simple mode (the default).
 - **Short texts on Problems:** each explanation has a one-line version and a “Read more” button.
+- **Export per chart and table:** CSV (comma, UTF-8 with BOM) and PNG (drawn on canvas, no libraries) for every chart; “CSV table” exports the “See the data” table.
+- **Print:** a print view (`@media print`); PDF is saved from the browser, not generated on the server.
+- **Progressive loading:** sections with their own endpoint (platform changes, dwell time) are fetched on first visit.
+- **Freshness indicator:** “Data updated X min ago” next to the filters, refreshed every 60 s.
 - The heatmap uses the green/yellow/red scale instead of the sequential blue.
 - Service worker v45; `CHARTS_V` 1.59.
 
