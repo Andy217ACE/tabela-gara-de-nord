@@ -95,15 +95,86 @@
     return q.toString();
   }
 
+  // ?sect= names (not a filter: not in FIELDS)
+  var SECTS = { sumar: ".ss-summary", probleme: ".ss-problems", bune: ".ss-good", glosar: ".ss-glossary",
+    rute: '[data-key="ce-rute-intarzie-cel-mai-mult-si-c"]', operatori: '[data-key="care-operatori-sunt-cei-mai-punctu"]' };
+  function cleanSect(raw) {
+    var k = raw == null ? "" : String(raw).trim();
+    return Object.prototype.hasOwnProperty.call(SECTS, k) ? k : "";
+  }
+  function sectQuery(sect) { return query(v.p, { sect: sect }); }
+
   function syncHash(p) {
-    var q = query(p);
+    var q = v.sect ? sectQuery(v.sect) : query(p);
     var hash = "#statistici" + (q ? "?" + q : "");
     if (location.hash !== hash) history.replaceState(null, "", hash);
   }
 
+  // ---- saved presets: list + menu in stat_presets.js (lazy) ----
+
+  // only fields that still exist with a valid value (deleted operator, unknown key: dropped)
+  function presetsApply(filters) {
+    var opts = (v.data && v.data.options) || {};
+    function known(list, val) { return (list || []).some(function (o) { return o.name === val; }); }
+    var p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    FIELDS.forEach(function (f) {
+      var val = clean(f, filters[f]);
+      if (f === "operator" && v.data && !known(opts.operators, val)) val = "";  // before data: keep, validated on load
+      if (f === "tip" && v.data && !known(opts.types, val)) val = "";
+      p[f] = val;
+    });
+    v.p = p;
+    setForm(p);
+    syncHash(p);
+    load();
+  }
+
+  var presetsP = null;
+  function presetsLayer() {
+    if (App.statPresets) return Promise.resolve();
+    if (!presetsP) presetsP = new Promise(function (resolve) {
+      var sc = document.createElement("script");
+      sc.src = "stat_presets.js?v=2";
+      sc.onload = resolve;
+      sc.onerror = function () { presetsP = null; resolve(); };
+      document.head.append(sc);
+    });
+    return presetsP;
+  }
+
+  function presetsMenu() {
+    var box = el("div", "ss-presets");
+    var tog = el("button", "btn btn-ghost btn-sm ss-presets-toggle", tt("stats.preset.button"));
+    tog.type = "button";
+    tog.setAttribute("aria-expanded", "false");
+    var menu = el("div", "ss-presets-menu");
+    menu.hidden = true;
+    menu.addEventListener("change", function (e) { e.stopPropagation(); });   // the name field is not a filter
+    box.append(tog, menu);
+    var msg = el("p", "ss-preset-msg");
+    msg.setAttribute("role", "status");
+    function close() { menu.hidden = true; tog.setAttribute("aria-expanded", "false"); }
+    tog.addEventListener("click", function () {
+      if (!menu.hidden) { close(); return; }
+      menu.hidden = false;
+      tog.setAttribute("aria-expanded", "true");
+      msg.textContent = "";
+      presetsLayer().then(function () {
+        if (App.statPresets) {
+          App.statPresets.fill(menu, msg, { el: el, tt: tt, close: close, apply: presetsApply,
+            current: function () { return Object.assign({}, v.p); } });
+        } else {   // the layer could not be loaded: same message as a blocked localStorage
+          msg.textContent = tt("stats.preset.unavailable");
+          menu.replaceChildren(msg);
+        }
+      });
+    });
+    return box;
+  }
+
   // ---- shell: filters + body ---------------------------------------------------------
 
-  var v = { p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
+  var v = { sect: "", sectPending: false, p: null, data: null, key: null, ctrl: null, ui: null, width: 0, at: 0 };
 
   function segmented(name, label, opts) {
     var fs = el("fieldset", "ss-seg");
@@ -166,7 +237,33 @@
     ci.type = "checkbox";
     ci.id = "ss-confirmate";
     chk.append(ci, el("span", null, tt("stats.filters.confirmed_only")));
-    form.append(per.node, brd.node, op.node, tp.node, chk);
+    var rs = el("button", "btn btn-ghost btn-sm ss-reset", tt("stats.reset"));
+    rs.type = "button";
+    rs.hidden = true;
+    rs.addEventListener("click", function () { resetFilters(); });
+    // < 600 px: fields collapse behind „Filtre (n)”
+    var fields = el("div", "ss-fields");
+    fields.append(per.node, brd.node, op.node, tp.node, chk);
+    var ft = el("button", "btn btn-ghost btn-sm ss-filters-toggle", "");
+    ft.type = "button";
+    ft.setAttribute("aria-expanded", "false");
+    ft.hidden = true;
+    form.append(ft, fields, rs, presetsMenu());
+    var mq = window.matchMedia ? window.matchMedia("(max-width: 599px)") : null;
+    var panelOpen = false;
+    function applyPanel() {
+      var small = !!(mq && mq.matches);
+      ft.hidden = !small;
+      fields.hidden = small && !panelOpen;
+      ft.setAttribute("aria-expanded", panelOpen ? "true" : "false");
+      form.classList.toggle("ss-panel-open", small && panelOpen);
+      syncFiltersH();
+    }
+    ft.addEventListener("click", function () { panelOpen = !panelOpen; applyPanel(); });
+    if (mq) {
+      if (mq.addEventListener) mq.addEventListener("change", applyPanel);
+      else if (mq.addListener) mq.addListener(applyPanel);
+    }
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
                tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "" };
@@ -174,14 +271,17 @@
     form.addEventListener("change", function () {
       v.p = read();
       syncHash(v.p);
+      syncReset();
       load();
     });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
     var body = el("div", "ss-body");
-    root.replaceChildren(form, body);
-    v.ui = { form: form, body: body, per: per, brd: brd, op: op, tp: tp, ci: ci };
+    var quick = el("div", "ss-quick-host");
+    root.replaceChildren(form, quick, body);
+    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci };
     window.addEventListener("resize", debounce(function () {
       if (!v.data || $("view-statistici").hidden) return;
+      syncFiltersH();
       var w = v.ui.body.clientWidth;
       if (Math.abs(w - v.width) > 24) render(v.data);
     }, 200));
@@ -198,6 +298,31 @@
     v.ui.op.fill(v.data && v.data.options ? v.data.options.operators : [], p.operator);
     v.ui.tp.fill(v.data && v.data.options ? v.data.options.types : [], p.tip);
     v.ui.ci.checked = p.doar_confirmate === "1";
+    syncReset();
+  }
+
+  // „Resetează filtrele” shows only while a filter differs from its default
+  function isDefault(p) {
+    return !p || (p.perioada === "all" && !p.board && !p.operator && !p.tip && !p.doar_confirmate);
+  }
+  function activeCount(p) {
+    if (!p) return 0;
+    return (p.perioada && p.perioada !== "all" ? 1 : 0) + (p.board ? 1 : 0) + (p.operator ? 1 : 0) + (p.tip ? 1 : 0) + (p.doar_confirmate ? 1 : 0);
+  }
+  function syncReset() {
+    if (v.ui && v.ui.reset) v.ui.reset.hidden = isDefault(v.p);
+    if (v.ui && v.ui.toggle) {
+      v.ui.toggle.textContent = tt("stats.mobile.filters", { n: activeCount(v.p) });
+      v.ui.applyPanel();
+    }
+    syncFiltersH();
+  }
+  // the charts3 chips stick under the filters
+  function syncFiltersH() {
+    if (!v.ui) return;
+    var h = v.ui.form.offsetHeight;
+    var cssom = document.documentElement.style;   // CSSOM property, CSP-safe (as charts3.js)
+    cssom.setProperty("--ss-filters-h", (h ? h + 10 : 0) + "px");
   }
 
   // lazy "steps" layer (stat_steps.js): own file, not in the SW shell (precache budget); resolves even if it fails
@@ -244,11 +369,13 @@
         render(d);
         if (snap && C3()) C3().morph(v.ui.body, snap);
         focusChart();
+        applySect();
       })
       .catch(function (e) {
         if (v.ctrl !== ctrl || e.aborted) return;
         v.data = null;
         v.key = null;
+        v.ui.quick.replaceChildren();
         v.ui.body.replaceChildren(S.notice(S.errorText(e), "notice-error"));
       })
       .then(function () {
@@ -265,14 +392,28 @@
     v.focus = null;
   }
 
+  // ?sect=: scroll + highlight 2 s; unknown name ignored
+  function applySect() {
+    if (!v.sectPending || !v.data || !v.ui) return;
+    v.sectPending = false;
+    if (!v.sect) return;
+    var node = v.ui.body.querySelector(SECTS[v.sect]);
+    if (!node) return;
+    node.classList.add("ss-target");
+    node.scrollIntoView({ block: "start" });
+    setTimeout(function () { node.classList.remove("ss-target"); }, 2000);
+  }
+
   function show(params) {
     window.I18N.ready.then(function () {   // the dictionary must be loaded before the first labels are drawn
       ensure();
       v.focus = params && params.get ? (params.get("grafic") || "").slice(0, 40) : "";
       v.p = readParams(params);
+      v.sect = cleanSect(params && params.get ? params.get("sect") : "");
+      v.sectPending = !!v.sect;
       setForm(v.p);
       load();
-      if (v.data && !v.ctrl) focusChart();
+      if (v.data && !v.ctrl) { focusChart(); applySect(); }
     });
   }
 
@@ -643,6 +784,52 @@
     if (!c.first) return tt("stats.period_none");
     var span = c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last);
     return span + " (" + pl(c.days || 0, "stats.w.day_data") + ")";
+  }
+
+  // Quick summary (Statistici v3): four cards from the same /api/stats/overview payload. A missing figure is „—”.
+  function quickFigures(d) {
+    var c = d.coverage || {};
+    var p = d.params || {};
+    var n = 0, ok = 0, wsum = 0;
+    var worst = null;
+    BOARDS.forEach(function (b) {
+      var s = d.boards && d.boards[b];
+      if (s && s.n) {
+        n += s.n;
+        ok += s.on_time || 0;
+        if (s.mean != null) wsum += s.mean * s.n;
+      }
+      var r = d.routes && d.routes[b];
+      var top = r && r.eligible && r.most_delayed && r.most_delayed[0];
+      if (top && top.mean != null && (!worst || top.mean > worst.mean)) worst = top;
+    });
+    var enough = n > 0 && n >= (p.min_sample || 1);
+    return { n: n, ok: ok, pct: enough ? Math.round(1000 * ok / n) / 10 : null, mean: n ? Math.round(10 * wsum / n) / 10 : null,
+             trains: c.trains == null ? null : c.trains, journeys: c.journeys || 0, route: worst };
+  }
+
+  function renderSummary(d) {
+    var f = quickFigures(d);
+    var sec = el("section", "ss-quick");
+    sec.setAttribute("aria-label", tt("stats.sum.aria"));
+    function card(title, value, sub, sect) {
+      var c = el("div", "ss-card");
+      var val = el("p", "ss-card-v");
+      if (sect) {   // link to the section behind the figure
+        var a = el("a", "ss-card-link", value);
+        a.href = "#statistici?" + sectQuery(sect);
+        a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
+        val.append(a);
+      } else val.textContent = value;
+      c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
+      sec.append(c);
+    }
+    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme");
+    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
+    card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
+      f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"), f.route ? "rute" : null);
+    v.ui.quick.replaceChildren(sec);   // outside .ss-body: „Probleme” stays its first section
   }
 
   function summary(d) {
@@ -1595,9 +1782,23 @@
 
   function resetFilters() {
     v.p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    v.sect = "";
     setForm(v.p);
     syncHash(v.p);
     load();
+  }
+
+  // chip click -> ?sect= in the address
+  function tocSect() {
+    var nav = v.ui.body.__c3nav;
+    if (!nav) return;
+    var map = {};
+    map[tt("charts.toc.problems")] = "probleme";
+    map[tt("charts.toc.good")] = "bune";
+    nav.querySelectorAll(".c3-chip").forEach(function (b) {
+      var k = map[b.textContent];
+      if (k) b.addEventListener("click", function () { v.sect = k; syncHash(v.p); });
+    });
   }
 
   function render(d) {
@@ -1605,6 +1806,8 @@
     v.ui.body.replaceChildren();
     v.ui.body.classList.toggle("ss-no-motion", !!reduceMotion);
     var boards = boardsOf(d);
+    renderSummary(d);
+    syncFiltersH();
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
       var msg = tt("stats.empty.none");
@@ -1660,6 +1863,7 @@
     if (C3()) {
       C3().enhance(v.ui.body, { url: chartUrl });
       C3().toc(v.ui.body);
+      tocSect();
     }
   }
 

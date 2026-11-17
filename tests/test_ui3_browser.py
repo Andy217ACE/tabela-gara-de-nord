@@ -389,8 +389,10 @@ def test_section_chips_scroll_and_follow(browser, base_url, w, h):
         top = page.evaluate("[...document.querySelectorAll('.ss-fig')].find(f => f.textContent.includes('Ce zile și ore')).getBoundingClientRect().top")
         assert -10 < top < h * 0.45, top
         assert page.locator(".c3-chip[aria-current]").text_content() == "Hartă"
-        # the strip sticks under the main bar while the page scrolls
-        assert page.evaluate("document.querySelector('.c3-toc').getBoundingClientRect().top") < 120
+        # the strip sticks under the main bar and the (since Beta 1.57 sticky) filters while the page scrolls
+        assert page.evaluate("""() => { const f = document.querySelector('.ss-filters').getBoundingClientRect();
+            const t = document.querySelector('.c3-toc').getBoundingClientRect().top;
+            return t <= f.bottom + 12 && t < 120 + f.height; }""")
         # scrolling by hand moves the active chip
         _fig(page, "Care operatori").scroll_into_view_if_needed()
         page.evaluate("window.scrollBy(0, -60)")

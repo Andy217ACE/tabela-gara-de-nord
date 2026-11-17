@@ -5,6 +5,27 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.57 — 2026-11-15
+
+### Adăugat
+- **Sumar rapid în Statistici:** patru carduri sus (procent la timp, întârziere medie, trenuri analizate, ruta cu cea mai mare problemă), din aceleași date ca restul paginii; un câmp lipsă arată „—”, nu „NaN”.
+- **Filtre lipite de sus și buton „Resetează filtrele”:** bara de filtre rămâne vizibilă la derulare, sub meniul principal; butonul apare doar când un filtru e activ și golește și adresa.
+- **Link-uri directe către secțiuni:** `#statistici?sect=probleme` (și `bune`, `rute`, `operatori`, `sumar`, `glosar`) derulează la secțiune și o evidențiază 2 secunde; cardurile din sumar și butoanele „Probleme” / „Ce merge bine” scriu `sect=` în adresă, fără să șteargă filtrele. O secțiune necunoscută e ignorată.
+- **Presetări de filtre:** până la 5 seturi de filtre cu nume, salvate pe dispozitiv (`tabela.statsPresets`), cu aplicare și ștergere individuală; câmpurile care nu mai există (ex. un operator dispărut) sunt sărite. Fără `localStorage`, meniul spune că presetările sunt indisponibile, iar filtrele merg în continuare.
+- **Filtre pe mobil:** sub 600 px câmpurile se strâng în panoul „Filtre (n)”, cu n = numărul de filtre active.
+
+### Schimbat
+- Presetările sunt într-un fișier încărcat la prima deschidere a meniului (`stat_presets.js`, în afara precache-ului).
+- Service worker v43 (statistici.js, statistici.css și dicționarul s-au schimbat).
+
+### English
+- **Quick summary on Statistici:** four cards at the top (on time, average delay, trains analysed, most problematic route) from the same data as the rest of the page; a missing figure shows “—”, never “NaN”.
+- **Sticky filters and a “Reset filters” button:** the filter bar stays visible while scrolling, under the main menu; the button shows only while a filter is active and also clears the address.
+- **Direct links to sections:** `#statistici?sect=probleme` (also `bune`, `rute`, `operatori`, `sumar`, `glosar`) scrolls to the section and highlights it for 2 seconds; the summary cards and the “Probleme” / “Ce merge bine” chips write `sect=` into the address without clearing the filters. An unknown section is ignored.
+- **Filter presets:** up to 5 named filter sets saved on the device (`tabela.statsPresets`), applied or deleted one by one; fields that no longer exist (e.g. a removed operator) are skipped. Without `localStorage` the menu says presets are unavailable and the filters keep working.
+- **Filters on mobile:** under 600 px the fields collapse into a “Filters (n)” panel, n being the number of active filters.
+- Presets live in a lazily loaded file (`stat_presets.js`, outside the precache). Service worker v43.
+
 ## Beta 1.56 — 2026-11-14
 
 ### Reparat
