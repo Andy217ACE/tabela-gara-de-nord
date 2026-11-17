@@ -168,10 +168,27 @@
     return sp2P;
   }
 
+  // lazy export layer (stat_export.js/css, Beta 1.60): CSV/PNG buttons, print, "updated X minutes ago"
+  var expP = null;
+  function exportLayer() {
+    if (App.statExport) return Promise.resolve();
+    if (!expP) expP = new Promise(function (resolve) {
+      var css = document.createElement("link"), sc = document.createElement("script"), left = 2;
+      css.rel = "stylesheet";
+      css.href = "stat_export.css?v=1";
+      sc.src = "stat_export.js?v=1";
+      css.onload = sc.onload = function () { if (--left === 0) resolve(); };
+      css.onerror = sc.onerror = function () { expP = null; if (--left === 0) resolve(); };
+      document.head.append(css, sc);
+    });
+    return expP;
+  }
+
   function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
     render(d);
     if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
       dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
+    if (App.statExport) App.statExport.enhance(v.ui, d, { tt: tt, el: el, at: function () { return v.at; } });
     syncFiltersH();
   }
 
@@ -390,7 +407,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
-    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer()]).then(function () { return c; }); });
+    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), exportLayer()]).then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
