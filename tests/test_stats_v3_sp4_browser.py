@@ -75,7 +75,7 @@ def test_png_failure_offers_csv_with_message(browser, base_url):
         fig = _hourly(page)
         fig.locator("button.ss-exp-btn", has_text="PNG").click()
         msg = fig.locator(".ss-exp-msg")
-        expect(msg).to_contain_text("Imaginea nu a putut fi creată")
+        expect(msg).to_contain_text("Imaginea nu s-a putut crea")
         with page.expect_download() as dl:
             msg.locator("button", has_text="CSV").click()
         assert dl.value.suggested_filename.endswith(".csv")

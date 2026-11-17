@@ -135,7 +135,7 @@
   }
 
   function csvButton(host, table, name, title) {
-    return btn(tr("stats.sp4.csv"), tr("stats.sp4.csv_aria", { title: title }), function () {
+    return btn(tr("stats.sp4.csv"), tr("stats.sp4.csv") + ": " + title, function () {
       var rows = tableRows(table);
       if (rows.length < 2) { say(host, "stats.sp4.empty"); return; }   // header only: nothing to export
       say(host, "");
@@ -144,7 +144,7 @@
   }
 
   function pngButton(host, svgs, table, name, title) {
-    return btn(tr("stats.sp4.png"), tr("stats.sp4.png_aria", { title: title }), function () {
+    return btn(tr("stats.sp4.png"), tr("stats.sp4.png") + ": " + title, function () {
       say(host, "");
       toPng(svgs).then(function (blob) { save(blob, fileName(name, "png")); }).catch(function () {
         var m = say(host, "stats.sp4.png_failed");   // PNG failed: the CSV is offered instead
@@ -183,7 +183,7 @@
 
   function printButton(ui) {
     if (ui.form.querySelector(".ss-sp4-print")) return;
-    var b = btn(tr("stats.sp4.print"), tr("stats.sp4.print_aria"), function () { window.print(); });
+    var b = btn(tr("stats.sp4.print"), tr("stats.sp4.print"), function () { window.print(); });
     b.classList.add("ss-sp4-print");
     ui.form.append(b);
   }
@@ -200,9 +200,9 @@
     note.textContent = min < 1 ? tr("stats.sp4.updated_now") : tr("stats.sp4.updated_min", { n: min });
   }
 
-  function updated(ui, d, ctx) {
+  function updated(ui, d, at) {
     var t = d && d.generated_at ? Date.parse(d.generated_at) : NaN;
-    stamp = isNaN(t) ? (ctx && ctx.at ? ctx.at() : Date.now()) : t;
+    stamp = isNaN(t) ? (at || Date.now()) : t;
     if (stamp > Date.now()) stamp = Date.now();   // a server clock ahead of the browser
     note = ui.form.querySelector(".ss-sp4-updated");
     if (!note) {
@@ -214,11 +214,32 @@
     if (!timer) timer = setInterval(paint, 60000);
   }
 
-  function enhance(ui, d, ctx) {
-    updated(ui, d, ctx);
+  function enhance(ui, d, at) {
+    updated(ui, d, at);
     printButton(ui);
     ui.body.querySelectorAll(".ss-fig").forEach(decorate);
   }
 
-  App.statExport = { enhance: enhance, toCsv: toCsv, tableRows: tableRows };
+  // Sections with their own endpoint (platform changes, dwell) run at the first visit, not at render.
+  function lazy(x, body, p) {
+    var box = mk("div", "ss-lazy"), done = false, io = null;
+    body.append(box);
+    function run() {
+      if (done) return;
+      done = true;
+      if (io) io.disconnect();
+      window.removeEventListener("scroll", near);
+      x(box, p);
+    }
+    function near() {   // a jump past the box (End key, anchor) never makes it "intersecting": the scroll position decides too
+      if (!box.isConnected) window.removeEventListener("scroll", near);
+      else if (box.getBoundingClientRect().top < window.innerHeight + 100) run();
+    }
+    if (!window.IntersectionObserver) { run(); return; }
+    io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) run(); }, { rootMargin: "100px" });
+    io.observe(box);
+    window.addEventListener("scroll", near, { passive: true });
+  }
+
+  App.statExport = { enhance: enhance, lazy: lazy, toCsv: toCsv, tableRows: tableRows };
 })();

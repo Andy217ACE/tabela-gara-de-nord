@@ -153,63 +153,28 @@
     return presetsP;
   }
 
-  var sp2P = null;
-  function sp2Layer() {
-    if (App.statSp2) return Promise.resolve();
-    if (!sp2P) sp2P = new Promise(function (resolve) {
+  // lazy JS+CSS layers (stat_sp2, stat_export): own files, not in the SW shell; resolve even if loading fails
+  var layerP = {};
+  function layer(key, file) {
+    if (App[key]) return Promise.resolve();
+    if (!layerP[file]) layerP[file] = new Promise(function (resolve) {
       var css = document.createElement("link"), sc = document.createElement("script"), left = 2;
       css.rel = "stylesheet";
-      css.href = "stat_sp2.css?v=1";
-      sc.src = "stat_sp2.js?v=1";
+      css.href = file + ".css?v=1";
+      sc.src = file + ".js?v=1";
       css.onload = sc.onload = function () { if (--left === 0) resolve(); };
-      css.onerror = sc.onerror = function () { sp2P = null; if (--left === 0) resolve(); };
+      css.onerror = sc.onerror = function () { layerP[file] = null; if (--left === 0) resolve(); };
       document.head.append(css, sc);
     });
-    return sp2P;
+    return layerP[file];
   }
-
-  // lazy export layer (stat_export.js/css, Beta 1.60): CSV/PNG buttons, print, "updated X minutes ago"
-  var expP = null;
-  function exportLayer() {
-    if (App.statExport) return Promise.resolve();
-    if (!expP) expP = new Promise(function (resolve) {
-      var css = document.createElement("link"), sc = document.createElement("script"), left = 2;
-      css.rel = "stylesheet";
-      css.href = "stat_export.css?v=1";
-      sc.src = "stat_export.js?v=1";
-      css.onload = sc.onload = function () { if (--left === 0) resolve(); };
-      css.onerror = sc.onerror = function () { expP = null; if (--left === 0) resolve(); };
-      document.head.append(css, sc);
-    });
-    return expP;
-  }
-
-  // Extra sections (platform changes, dwell) fetch their own endpoint: only at first visit (IntersectionObserver)
-  function lazyExtra(x) {
-    var box = el("div", "ss-lazy"), done = false, p = v.p, io = null;
-    v.ui.body.append(box);
-    function run() {
-      if (done) return;
-      done = true;
-      if (io) io.disconnect();
-      window.removeEventListener("scroll", near);
-      x(box, p);
-    }
-    function near() {   // a jump past the box (End key, anchor) never makes it "intersecting": scroll position decides too
-      if (!box.isConnected) window.removeEventListener("scroll", near);
-      else if (box.getBoundingClientRect().top < window.innerHeight + 100) run();
-    }
-    if (!window.IntersectionObserver) { run(); return; }
-    io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) run(); }, { rootMargin: "100px" });
-    io.observe(box);
-    window.addEventListener("scroll", near, { passive: true });
-  }
+  function sp2Layer() { return layer("statSp2", "stat_sp2"); }
 
   function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
     render(d);
     if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
       dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
-    if (App.statExport) App.statExport.enhance(v.ui, d, { tt: tt, el: el, at: function () { return v.at; } });
+    if (App.statExport) App.statExport.enhance(v.ui, d, v.at);
     syncFiltersH();
   }
 
@@ -428,7 +393,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
-    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), exportLayer()]).then(function () { return c; }); });
+    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), layer("statExport", "stat_export")]).then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
@@ -1933,7 +1898,7 @@
     weatherSection(d);
     trafficSection(d, boards);
     platformsSection(d, boards);
-    (App.statsExtra || []).forEach(lazyExtra);   // stat_platform.js, stat_dwell.js (loaded at first visit)
+    (App.statsExtra || []).forEach(function (x) { if (App.statExport) App.statExport.lazy(x, v.ui.body, v.p); else x(v.ui.body, v.p); });
     qualitySection(d);
     glossary(d);
     if (U()) {

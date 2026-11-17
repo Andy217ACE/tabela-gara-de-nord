@@ -22,7 +22,7 @@ def test_export_layer_is_lazy_and_not_precached():
     sw = _read("sw.js")
     html = _read("index.html")
     assert "stat_export" not in sw and "stat_export" not in html
-    assert 'stat_export.js' in _read("statistici.js") and 'stat_export.css' in _read("statistici.js")
+    assert 'stat_export' in _read("statistici.js")
 
 
 def test_no_new_library_or_external_loading():
@@ -58,7 +58,7 @@ def test_print_stylesheet_exists():
 
 def test_delayed_sections_use_intersection_observer():
     js = _read("statistici.js")
-    assert "IntersectionObserver" in js and "lazyExtra" in js
+    assert "IntersectionObserver" in _read("stat_export.js") and "statExport.lazy" in js
     assert "forEach(function (x) { x(v.ui.body" not in js   # the extras never run straight from render
     sw = _read("sw.js")
     assert "/stat_platform.js" in sw and "/stat_dwell.js" in sw   # loaded (cached) as before; only their request waits
