@@ -457,6 +457,20 @@
 /* ---------- metric tooltips (hover + keyboard focus); anchored to the card, never wider than it ---------- */
 .ss-prob, .ss-card { position: relative; }
 .ss-help { cursor: help; }
+.ss-help-i {
+  float: right;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
 .ss-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ss-tip {
   display: none;
@@ -480,3 +494,6 @@
 .ss-help:hover > .ss-tip,
 .ss-help:focus > .ss-tip { display: block; }
 .ss-help.ss-help-off > .ss-tip { display: none; }
+
+/* clickable marks (the trains behind them open in a dialog) */
+.ss-mark[data-drill-by] { cursor: pointer; }

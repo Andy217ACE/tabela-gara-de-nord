@@ -71,6 +71,15 @@
 
   function tip(node, text) { node.append(svg("title", {}, text)); return node; }
 
+  // A chart mark that opens the list of trains behind it (stat_sp2.js, lazy): d = { by, key, label }
+  function drillMark(g, d, board) {
+    g.setAttribute("data-drill-by", d.by);
+    g.setAttribute("data-drill-key", d.key);
+    g.setAttribute("data-drill-label", d.label);
+    if (board) g.setAttribute("data-drill-board", board);
+    return g;
+  }
+
   function slug(t) {
     return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
       .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 34);
@@ -150,6 +159,30 @@
       document.head.append(sc);
     });
     return presetsP;
+  }
+
+  // ---- click on a chart mark -> the trains behind it: list + dialog in stat_sp2.js (lazy, not in the SW shell) ----
+  var sp2P = null;
+  function sp2Layer() {
+    if (App.statSp2) return Promise.resolve();
+    if (!sp2P) sp2P = new Promise(function (resolve) {
+      var sc = document.createElement("script");
+      sc.src = "stat_sp2.js?v=1";
+      sc.onload = resolve;
+      sc.onerror = function () { sp2P = null; resolve(); };
+      document.head.append(sc);
+    });
+    return sp2P;
+  }
+
+  function openDrill(g) {
+    var d = { by: g.getAttribute("data-drill-by"), key: g.getAttribute("data-drill-key"),
+              label: g.getAttribute("data-drill-label"), board: g.getAttribute("data-drill-board") || "" };
+    var opener = g.closest("svg") || g;
+    sp2Layer().then(function () {
+      if (App.statSp2) App.statSp2.drill(d, opener, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); },
+        minutes: minutes, dayText: S.dayText, getJSON: S.getJSON, errorText: S.errorText });
+    });
   }
 
   function presetsMenu() {
@@ -286,6 +319,15 @@
     });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
     var body = el("div", "ss-body");
+    body.addEventListener("click", function (e) {
+      var g = e.target.closest ? e.target.closest("[data-drill-by]") : null;
+      if (g) openDrill(g);
+    });
+    body.addEventListener("keydown", function (e) {   // Enter on the chart: the mark the arrow keys are on
+      if (e.key !== "Enter" || !e.target.matches || !e.target.matches("svg.ss-svg")) return;
+      var g = e.target.querySelector(".c3-act[data-drill-by]");
+      if (g) { e.preventDefault(); openDrill(g); }
+    });
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
     v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci };
@@ -710,6 +752,7 @@
         g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 4, "data-m": "d" + si + ":" + i,
                                  class: "ss-dot " + BOARD_CLS[s.board] + (s.low && s.low[i] ? " ss-dot-low" : "") }));
         g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 12, class: "ss-hit" }));
+        if (o.drill) drillMark(g, o.drill(i), s.board);
         tip(g, s.tips[i]);
         root.append(g);
       });
@@ -780,6 +823,7 @@
       }
       g.append(svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText));
       g.append(svg("rect", { x: 0, y: y0, width: W, height: rowH, class: "ss-hit" }));
+      if (r.drill) drillMark(g, r.drill, o.board);
       tip(g, r.label + ": " + r.tip);
       root.append(g);
     });
@@ -831,9 +875,13 @@
         a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
         val.append(a);
       } else val.textContent = value;
-      var ct = el("h3", "ss-card-t", title);
-      if (kind === "minutes") help(ct, "stats.sp2.help.median");
-      c.append(ct, val, el("p", "ss-card-s", sub));
+      if (kind === "minutes") {   // median vs mean: the "?" sits beside the title, not inside it
+        var hi = el("button", "ss-help-i", "?");
+        hi.type = "button";
+        hi.setAttribute("aria-label", tt("stats.gl.median.t"));
+        c.append(help(hi, "stats.sp2.help.median"));
+      }
+      c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
     card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme", "pct", f.pct);
@@ -1070,6 +1118,7 @@
     lines(f.host, { cats: cats, unit: "min", extFmt: function (q) { return nf.format(q) + " min"; },
       refR: 78, refs: [{ value: p.on_time_max_min, label: tt("stats.ref.on_time", { max: p.on_time_max_min }), short: tt("stats.ref.on_time_short", { max: p.on_time_max_min }) }],
       title: tt("stats.fig.hourly.chart"), desc: tt("stats.fig.hourly.desc"),
+      drill: function (i) { return { by: "hour", key: String(i), label: hourRange(i) }; },
       series: boards.map(function (b) {
         var hs = d.hourly[b];
         return { board: b, values: hs.map(function (x) { return x.median; }),
@@ -1153,6 +1202,7 @@
         for (var hr = 0; hr < 24; hr++) {
           var c = map[dd + "-" + hr];
           var g = svg("g", { class: "ss-mark" });
+          if (c && c.journeys) drillMark(g, { by: "heat", key: dd + "-" + hr, label: wd(dd) + ", " + hourRange(hr) }, b);
           g.append(svg("rect", { x: (L + hr * cw + 1).toFixed(1), y: (T + dd * ch + 1).toFixed(1),
                                  width: Math.max(1, cw - 2).toFixed(1), height: Math.max(1, ch - 2).toFixed(1), rx: 2,
                                  class: "ss-cell " + heatClass(c), "data-m": dd + "-" + hr }));
@@ -1200,6 +1250,7 @@
           return { value: d.boards[b].on_time_pct, cls: BOARD_CLS[b], label: tt("stats.ref.mean", { board: BOARD_PL[b], pct: pct(d.boards[b].on_time_pct) }), short: BOARD_PL[b] + " " + Math.round(d.boards[b].on_time_pct) + "%" };
         }),
         title: tt("stats.fig.daily.chart"), desc: tt("stats.fig.daily.desc"),
+        drill: function (i) { return { by: "day", key: days[i], label: S.dayText(days[i]) }; },
         series: boards.map(function (b) {
           return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.on_time_pct : null; }),
             tips: days.map(function (k) { var x = byKey[b][k];
@@ -1234,6 +1285,7 @@
         desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
           return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
+            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: x.key },
             valueText: x.sufficient ? pct(x.on_time_pct) + " · N = " + x.n : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"),
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
