@@ -557,7 +557,8 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
                    "Cache-Control": "no-store"}
         if truncated:
             headers["X-Truncated"] = "1"
-        return Response(content=text.encode("utf-8"), media_type="text/csv; charset=utf-8",
+        # BOM UTF-8: Excel citește corect diacriticele doar cu el.
+        return Response(content=("﻿" + text).encode("utf-8"), media_type="text/csv; charset=utf-8",
                         headers=headers)
 
     @app.get("/api/stats/seasons", include_in_schema=False)
