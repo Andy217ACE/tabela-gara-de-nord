@@ -831,7 +831,9 @@
         a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
         val.append(a);
       } else val.textContent = value;
-      c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
+      var ct = el("h3", "ss-card-t", title);
+      if (kind === "minutes") help(ct, "stats.sp2.help.median");
+      c.append(ct, val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
     card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme", "pct", f.pct);
@@ -1459,7 +1461,25 @@
     return a;
   }
 
-  function badge(text, cls) { return el("span", "ss-badge " + cls, text); }
+  // Metric explanation (Statistici v3 sp2): shown on hover AND keyboard focus (CSS :hover/:focus-within), Escape hides it.
+  function help(node, key) {
+    var tip = el("span", "ss-tip", tt(key));
+    tip.id = nid("tip");
+    tip.setAttribute("role", "tooltip");
+    node.classList.add("ss-help");
+    node.tabIndex = 0;
+    node.setAttribute("aria-describedby", tip.id);
+    node.append(tip);
+    node.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      node.classList.add("ss-help-off");
+      node.addEventListener("blur", function () { node.classList.remove("ss-help-off"); }, { once: true });
+    });
+    node.addEventListener("mouseleave", function () { node.classList.remove("ss-help-off"); });
+    return node;
+  }
+
+  function badge(text, cls, key) { var b = el("span", "ss-badge " + cls, text); return key ? help(b, key) : b; }
 
   function boardKey(b) { return el("span", "ss-key " + BOARD_CLS[b]); }
 
@@ -1505,8 +1525,9 @@
     head.append(t);
     li.append(head);
     var b = el("p", "ss-badges");
-    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev"), badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf"),
-      badge("N = " + it.n, "ss-badge-n"));
+    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev", "stats.sp2.help.sev"),
+      badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf", "stats.sp2.help.conf"),
+      badge("N = " + it.n, "ss-badge-n", "stats.gl.n.d"));
     li.append(b);
     li.append(el("p", "ss-prob-fig", it.figures));
     var why = el("p", "ss-prob-why");

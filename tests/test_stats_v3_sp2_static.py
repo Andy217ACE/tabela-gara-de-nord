@@ -46,3 +46,31 @@ def test_tone_classes_follow_the_tokens():
     css = _read("statistici.css")
     for k in ("good", "mid", "bad"):
         assert re.search(r"\.ss-t-" + k + r"[^{]*\{[^}]*var\(--ss-" + k + r"\)", css), k
+
+
+def test_new_keys_in_both_languages_and_contiguous():
+    ro, en = _dict("ro"), _dict("en")
+    mine = [k for k in ro if k.startswith("stats.sp2.")]
+    assert mine, "sub-project 2 keys missing"
+    assert set(mine) == {k for k in en if k.startswith("stats.sp2.")}
+    for k in mine:
+        assert set(PARAM.findall(ro[k])) == set(PARAM.findall(en[k])), k
+    keys = list(ro)
+    idx = [keys.index(k) for k in mine]
+    assert idx == list(range(idx[0], idx[0] + len(idx))), "keys are not one contiguous block"
+    assert mine == sorted(mine), "block is not sorted"
+
+
+def test_used_keys_exist():
+    ro, en = _dict("ro"), _dict("en")
+    js = "".join(_read(n) for n in FILES)
+    used = set(re.findall(r'"(stats\.(?:sp2|gl)\.[\w.]*\w)"', js))
+    assert any(k.startswith("stats.sp2.") for k in used)
+    assert used <= set(ro) and used <= set(en), sorted(used - set(ro))
+
+
+def test_no_unsafe_dom():
+    for name in FILES:
+        js = _read(name)
+        assert ".innerHTML" not in js and "insertAdjacentHTML" not in js and "document.write" not in js, name
+        assert 'setAttribute("style"' not in js and ".style.cssText" not in js, name
