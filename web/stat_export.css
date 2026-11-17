@@ -1,5 +1,6 @@
 /* © 2026 Andy217Ace — Statistici v3 sp4: export (CSV/PNG), tipărire, indicator de actualizare. Strat lazy. */
 .ss-exp-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ss-lazy { min-height: 1px; }
 .ss-exp-msg { margin: 8px 0 0; }
 .ss-sp4-print { white-space: nowrap; }
 

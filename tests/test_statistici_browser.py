@@ -122,10 +122,10 @@ def test_statistici_page(browser, base_url, w, h, theme):
         # + the „Probleme” intro + „Comparație pe zilele săptămânii” (stat_weekdays.js)
         # + 2 public sections (stat_platform.js, stat_dwell.js) + 2 (stat_steps.js: trepte, modificări)
         # the two public sections load at first visit (sp4): scroll to the end of the page
-        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-        page.wait_for_selector("[data-key='durata-pe-panou']")
-        page.wait_for_selector("[data-key='peroane-schimbate']")
-        page.wait_for_function("document.querySelectorAll('.ss-fig[aria-busy]').length === 0")
+        # (each section that loads pushes the next one down: keep scrolling to the end)
+        page.wait_for_function("""() => { window.scrollTo(0, document.documentElement.scrollHeight);
+          return !!document.querySelector("[data-key='durata-pe-panou']") && !!document.querySelector("[data-key='peroane-schimbate']"); }""")
+        page.wait_for_function("() => document.querySelectorAll('.ss-fig[aria-busy]').length === 0")
         assert page.locator(".ss-fig").count() == 25
         assert page.locator(".ss-how").count() == 26
         assert page.locator("details.ss-data").count() >= 10

@@ -56,6 +56,14 @@ def test_print_stylesheet_exists():
     assert "@media print" in css and ".ss-filters" in css
 
 
+def test_delayed_sections_use_intersection_observer():
+    js = _read("statistici.js")
+    assert "IntersectionObserver" in js and "lazyExtra" in js
+    assert "forEach(function (x) { x(v.ui.body" not in js   # the extras never run straight from render
+    sw = _read("sw.js")
+    assert "/stat_platform.js" in sw and "/stat_dwell.js" in sw   # loaded (cached) as before; only their request waits
+
+
 def test_sp4_keys_in_both_languages_and_contiguous():
     ro, en = _dict("ro"), _dict("en")
     mine = [k for k in ro if k.startswith("stats.sp4.")]

@@ -184,6 +184,27 @@
     return expP;
   }
 
+  // Extra sections (platform changes, dwell) fetch their own endpoint: only at first visit (IntersectionObserver)
+  function lazyExtra(x) {
+    var box = el("div", "ss-lazy"), done = false, p = v.p, io = null;
+    v.ui.body.append(box);
+    function run() {
+      if (done) return;
+      done = true;
+      if (io) io.disconnect();
+      window.removeEventListener("scroll", near);
+      x(box, p);
+    }
+    function near() {   // a jump past the box (End key, anchor) never makes it "intersecting": scroll position decides too
+      if (!box.isConnected) window.removeEventListener("scroll", near);
+      else if (box.getBoundingClientRect().top < window.innerHeight + 100) run();
+    }
+    if (!window.IntersectionObserver) { run(); return; }
+    io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) run(); }, { rootMargin: "100px" });
+    io.observe(box);
+    window.addEventListener("scroll", near, { passive: true });
+  }
+
   function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
     render(d);
     if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
@@ -1912,7 +1933,7 @@
     weatherSection(d);
     trafficSection(d, boards);
     platformsSection(d, boards);
-    (App.statsExtra || []).forEach(function (x) { x(v.ui.body, v.p); });   // stat_platform.js, stat_dwell.js
+    (App.statsExtra || []).forEach(lazyExtra);   // stat_platform.js, stat_dwell.js (loaded at first visit)
     qualitySection(d);
     glossary(d);
     if (U()) {

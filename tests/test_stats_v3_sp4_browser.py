@@ -129,3 +129,22 @@ def test_print_button_calls_window_print(browser, base_url):
         assert page.evaluate("window.__printed") == 1
     finally:
         ctx.close()
+
+
+def test_delayed_sections_do_not_request_before_the_visit(browser, base_url):
+    stats_overview.clear_cache()
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    page = ctx.new_page()
+    seen = []
+    page.on("request", lambda r: seen.append(r.url))
+    page.goto(base_url + "/#statistici")
+    page.wait_for_selector(".ss-quick .ss-card")
+    page.wait_for_selector(".ss-prob")
+    page.wait_for_timeout(600)
+    assert [u for u in seen if any(p in u for p in LAZY)] == []
+    assert page.locator(".ss-lazy").count() == 2
+    page.wait_for_function("""() => { window.scrollTo(0, document.documentElement.scrollHeight);
+      return !!document.querySelector("[data-key='durata-pe-panou']") && !!document.querySelector("[data-key='peroane-schimbate']"); }""")
+    for p in LAZY:
+        assert len([u for u in seen if p in u]) == 1, p
+    ctx.close()
