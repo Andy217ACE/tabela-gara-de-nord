@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.58 — 2026-11-17
+
+### Adăugat
+- **Teste de acceptare pentru Val 4:** alerte (canale active fără secrete), backup și restaurare (copie trunchiată respinsă fără să atingă baza, retenție de 5 copii, schemă veche migrată), setări (valoare invalidă nu modifică nimic), watchdog (stare coruptă, conexiune refuzată, o singură repornire, doar utilizatorul `tabela`), export (virgulă și diacritice, 422 peste 366 de zile).
+- **Fațade `app.alerts`, `app.backup_restore`, `app.settings`:** puncte de intrare cu numele din program, peste modulele existente (`telegram`, `dbbackup`, `restore`, `admin_settings`); nicio logică nouă.
+
+### Schimbat
+- **Export CSV cu BOM UTF-8:** `/api/export/history.csv` începe acum cu BOM, ca Excel să afișeze corect diacriticele (ă, â, î, ș, ț).
+
+### English
+- **Acceptance tests for Val 4:** alerts (active channels without secrets), backup and restore (truncated copy rejected without touching the database, 5-copy retention, old schema migrated), settings (an invalid value changes nothing), watchdog (corrupt state, refused connection, a single restart, only the `tabela` user), export (commas and diacritics, 422 beyond 366 days).
+- **Facades `app.alerts`, `app.backup_restore`, `app.settings`:** entry points with the names from the programme, over the existing modules; no new logic.
+- **CSV export with UTF-8 BOM:** `/api/export/history.csv` now starts with a BOM so Excel shows diacritics correctly.
+
 ## Beta 1.57 — 2026-11-15
 
 ### Adăugat
