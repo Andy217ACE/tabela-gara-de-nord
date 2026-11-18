@@ -335,7 +335,9 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.55: measured 785642 B (was 792280 B before versions.js left the precache); budget 795_000 (~9 KB margin; +15 KB would exceed the old 800_000)
     # Beta 1.57 (Statistici v3 sp1): measured 799718 B (+13 KB: summary cards, sticky filters, reset, ?sect=, mobile panel,
     # ro.json keys; the presets menu is already lazy: stat_presets.js); budget 805_000 (~5 KB margin)
-    assert total <= 805_000, total
+    # Beta 1.59 (sp2 + sp4): measured 805013 B; budget 810_000 (~5 KB margin). Ruling 18.11: the
+    # features are the spec's core and the lazy modules stay out of the shell where possible.
+    assert total <= 810_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():
