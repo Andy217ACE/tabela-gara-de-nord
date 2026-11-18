@@ -281,3 +281,25 @@ def test_alt_mark_does_not_break_the_version_parser():
     assert parse_line_version("ocr-tess-grid-5+ocr:alt") == {"state": "ok", "retry": None}
     assert parse_line_version("v+retry:lvl+:2+ocr:alt")["retry"] == {"variant": "lvl+",
                                                                       "attempts": 2}
+
+
+def test_apply_shadow_mode_logs_but_changes_nothing(monkeypatch, fake_panels, caplog):
+    monkeypatch.setenv("OCR_ALT", "1")
+    monkeypatch.setenv("OCR_ALT_SHADOW", "1")
+    es = read_entries()
+    fake_panels({"arrival": {2: {"no": make_cell("7942"), "time": make_cell("10:20")}}})
+    with caplog.at_level("INFO", logger="app.ocr.alt_shadow"):
+        info = alt.apply(b"img", es, MODEL)
+    assert info["recovered"] == 1 and info["shadow"] is True
+    assert es[2]["row"] is None and "alt" not in es[2]  # nimic publicat
+    assert "7942" in caplog.text
+
+
+def test_apply_error_leaves_entries_untouched(monkeypatch, fake_panels):
+    monkeypatch.setenv("OCR_ALT", "1")
+    monkeypatch.delenv("OCR_ALT_SHADOW", raising=False)
+    es = read_entries()
+    fake_panels({"arrival": {2: {"no": make_cell("7942"), "time": make_cell("10:20")}}})
+    monkeypatch.setattr(alt, "_build_row", lambda *a: (_ for _ in ()).throw(ValueError("x")))
+    assert alt.apply(b"img", es, MODEL)["reason"] == "error"
+    assert es == read_entries()

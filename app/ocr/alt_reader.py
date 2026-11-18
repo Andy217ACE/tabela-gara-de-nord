@@ -25,6 +25,7 @@ doar codul care a primit liniile de la cititor (vezi docs/superpowers/plans/
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import logging
 import os
@@ -44,7 +45,7 @@ log = logging.getLogger(__name__)
 CLASSES = "0123456789+:"
 ALLOWED = {"no": "0123456789", "time": "0123456789:"}
 ALT_COLS = ("no", "time")  # coloanele numerice pe care le poate completa alternativa
-MIN_PROB = 0.95            # probabilitatea minima a FIECAREI glife dintr-o celula acceptata
+MIN_PROB = 0.99            # probabilitatea minima a FIECAREI glife dintr-o celula acceptata
 MAX_NO_DIGITS = 5
 MAX_UNREAD = 4             # ca reader.MAX_RETRY_LINES: peste, panoul e stricat, nu se atinge
 MIN_UNREAD = 1             # linii necitite pe panou de la care alternativa se declanseaza
@@ -312,19 +313,42 @@ def recover(image_bytes: bytes, entries: list[dict], model: AltModel, *,
     return info
 
 
+def shadow() -> bool:
+    """OCR_ALT_SHADOW=1: alternativa ruleaza si scrie in jurnal ce ar fi completat, dar nu
+    schimba nimic (faza de 7 zile in umbra din specificatie)."""
+    return os.environ.get("OCR_ALT_SHADOW", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+shadow_log = logging.getLogger("app.ocr.alt_shadow")
+
+
 def apply(image_bytes: bytes, entries: list[dict], model: AltModel | None = None) -> dict:
     """Punctul de intrare pentru poller: no-op daca alternativa e oprita sau fara model.
-    Modifica ``entries`` in loc; randurile noi = ``[e["row"] for e in entries if e["row"]]``."""
+    Modifica ``entries`` in loc (doar la reusita; la eroare raman neatinse); randurile noi =
+    ``[e["row"] for e in entries if e["row"]]``. In mod umbra (``OCR_ALT_SHADOW``) calculeaza
+    pe o copie, scrie in jurnal ``app.ocr.alt_shadow`` si lasa ``entries`` neatinse."""
+    info = {"tried": 0, "recovered": 0, "lines": [], "secs": 0.0}
     if not enabled():
-        return {"tried": 0, "recovered": 0, "lines": [], "secs": 0.0, "reason": "disabled"}
+        return info | {"reason": "disabled"}
     model = model or get_model()
     if model is None:
-        return {"tried": 0, "recovered": 0, "lines": [], "secs": 0.0, "reason": "no_model"}
+        return info | {"reason": "no_model"}
+    work = copy.deepcopy(entries)
     try:
-        return recover(image_bytes, entries, model)
+        info = recover(image_bytes, work, model)
     except Exception:  # optional: cadrul ramane asa cum l-a lasat cititorul
         log.warning("OCR alt a esuat; cadrul ramane cum l-a citit cititorul", exc_info=True)
-        return {"tried": 0, "recovered": 0, "lines": [], "secs": 0.0, "reason": "error"}
+        return info | {"reason": "error"}
+    if shadow():
+        for i in info["lines"]:
+            e = work[i]
+            shadow_log.info("alt-shadow %s linia %d: %s", e["board"], e["row_index"],
+                            {c: e["fields"][c]["norm"] for c in e["alt"]["cols"]}
+                            | {"prob": e["alt"]["prob"]})
+        return info | {"shadow": True}
+    entries[:] = work
+    return info
 
 
-__all__ = ["AltModel", "apply", "recover", "eligible", "read_cell", "enabled", "get_model"]
+__all__ = ["AltModel", "apply", "recover", "eligible", "read_cell", "enabled", "get_model",
+           "shadow"]
