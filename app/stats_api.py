@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app import journeys, stations, stats
 from app import stats_overview as overview_v2
+from app import stats_changes, stats_compare, stats_heatmap
 
 router = APIRouter()
 MAX_QUERY = 40
@@ -73,6 +74,28 @@ def _csv(body: str, name: str) -> Response:
 
 def _store(request: Request):
     return request.app.state.store
+
+
+def _sp3_args(request: Request):
+    """(params, filters, today) for the sp3 routes: `perioada`, `board`, `operator`, `tip`,
+    `doar_confirmate`, `prag`, `min` — the same reading as /api/stats/overview."""
+    q = request.query_params
+    perioada = q.get("perioada") or "all"
+    if perioada not in overview_v2.PERIODS:
+        raise _bad("Perioadă invalidă (1, 7, 30 sau all).")
+    filters = {"perioada": perioada}
+    for name in ("operator", "tip"):
+        v = (q.get(name) or "").strip()
+        if len(v) > MAX_QUERY:
+            raise _bad(f"Parametru „{name}” prea lung.")
+        filters[name] = v or None
+    p = params(request)
+    today = datetime.now(journeys.TZ).date()
+    if perioada != "all":
+        if p.date_from or p.date_to:
+            raise _bad("„perioada” și „from”/„to” nu se folosesc împreună.")
+        p.date_from, p.date_to = overview_v2.period_range(perioada, today)
+    return p, filters, today
 
 
 @router.get("/api/journeys")
@@ -185,10 +208,38 @@ async def stats_overview_v2(request: Request):
         detail = overview_v2.parse_detail(q)
     except ValueError as e:
         raise _bad(str(e))
+    compare = (q.get("compare") or "").strip()
+    if compare:
+        if compare != "prev7":
+            raise _bad("Parametrul „compare” poate fi doar prev7.")
+        if detail or fmt == "csv":
+            raise _bad("„compare” nu se combină cu „detail” sau cu exportul CSV.")
+        return await run_in_threadpool(stats_compare.compare, _store(request), p, filters, today)
     d = await run_in_threadpool(overview_v2.overview, _store(request), p, filters, today, detail)
     if fmt == "csv":
         return _csv(overview_v2.to_csv(d, set_name), f"statistici-{set_name}.csv")
     return d
+
+
+@router.get("/api/stats/changes")
+async def stats_changes_route(request: Request):
+    """„Ce s-a schimbat săptămâna asta” + alertele pe prag (mediană > 15 min, ultimele 7 zile)."""
+    p, filters, today = _sp3_args(request)
+    return await run_in_threadpool(stats_changes.changes, _store(request), p, filters, today)
+
+
+@router.get("/api/stats/heatmap")
+async def stats_heatmap_route(request: Request):
+    """Întârzierea medie pe zi a săptămânii (0-6) și oră (0-23), cu scală comună."""
+    p, filters, today = _sp3_args(request)
+    return await run_in_threadpool(stats_heatmap.heatmap, _store(request), p, filters, today)
+
+
+@router.get("/api/stats/reliable")
+async def stats_reliable_route(request: Request):
+    """„Cele mai fiabile trenuri”: minim 10 călătorii cu întârziere citită."""
+    p, filters, today = _sp3_args(request)
+    return await run_in_threadpool(stats_changes.reliable, _store(request), p, filters, today)
 
 
 @router.get("/api/stats/rankings")
