@@ -5,6 +5,28 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.60 — 2026-11-18
+
+### Adăugat
+- **Ce s-a schimbat săptămâna asta:** top 3 rute și top 3 operatori care s-au îmbunătățit și top 3 care s-au înrăutățit, față de săptămâna anterioară, după procentul la timp (`/api/stats/changes`).
+- **Alerte pe prag:** o rută sau un operator cu întârziere mediană peste 15 min în ultimele 7 zile apare într-un banner în sumar. Pragul e constant în cod.
+- **Comparație între perioade:** ultimele 7 zile față de cele 7 dinaintea lor, pentru metricile din sumar (`/api/stats/overview?compare=prev7`).
+- **Cele mai fiabile trenuri:** secțiune cu trenurile cel mai des la timp, cu minim 10 călătorii cu întârziere citită (`/api/stats/reliable`).
+- **Heatmap zile × ore:** întârzierea medie pe zi a săptămânii și oră, cu aceeași scală de culori (`/api/stats/heatmap`).
+- Sub 7 zile de date, comparația, schimbările și heatmap-ul afișează „date insuficiente”, nu valori zero.
+
+### Schimbat
+- Service worker v46; `CHARTS_V` 1.60.
+
+### English
+- **What changed this week:** top 3 routes and top 3 operators that improved and top 3 that worsened versus the previous week, by on-time share (`/api/stats/changes`).
+- **Threshold alerts:** a route or operator whose median delay exceeds 15 min over the last 7 days appears in a banner on the summary. The threshold is fixed in code.
+- **Period comparison:** the last 7 days against the 7 before them, for the summary metrics (`/api/stats/overview?compare=prev7`).
+- **Most reliable trains:** a section of the trains most often on time, with at least 10 journeys with a read delay (`/api/stats/reliable`).
+- **Heatmap, days × hours:** average delay per weekday and hour, on the same colour scale (`/api/stats/heatmap`).
+- With under 7 days of data, the comparison, changes and heatmap show “insufficient data” rather than zero values.
+- Service worker v46; `CHARTS_V` 1.60.
+
 ## Beta 1.59 — 2026-11-18
 
 ### Adăugat

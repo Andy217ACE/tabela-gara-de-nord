@@ -174,7 +174,7 @@
     render(d);
     if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
       dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
-    if (App.statExport) App.statExport.enhance(v.ui, d, v.at);
+    if (App.statExport) App.statExport.enhance(v.ui, d, v.at); if (App.statSp3) App.statSp3.enhance(v.ui, d, { query: function () { return query(v.p, {}); } });
     syncFiltersH();
   }
 
@@ -393,7 +393,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
-    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), layer("statExport", "stat_export")]).then(function () { return c; }); });
+    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), layer("statExport", "stat_export"), layer("statSp3", "stat_sp3")]).then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {

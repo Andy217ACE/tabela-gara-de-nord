@@ -1,0 +1,56 @@
+/* © 2026 Andy217Ace */
+/* Statistici v3 sp3 (stat_sp3.js, lazy): alert banner, what changed, 7-day comparison, reliable trains, heatmap. */
+
+.ss-sp3 {
+  min-width: 0;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ss-sp3[hidden] { display: none; }
+.ss-sp3-alert {
+  margin: 0 0 10px;
+  border-color: var(--ss-bad);
+  border-left-width: 4px;
+}
+.ss-sp3-h { margin: 0 0 6px; font-size: 1rem; font-weight: 700; }
+.ss-sp3-h4 { margin: 0 0 4px; font-size: 0.875rem; font-weight: 600; color: var(--text-2); }
+.ss-sp3-note { margin: 4px 0 0; font-size: 0.8125rem; color: var(--text-2); overflow-wrap: anywhere; }
+.ss-sp3-n { color: var(--text-2); font-size: 0.75rem; }
+.ss-sp3-list { margin: 0; padding-left: 1.1rem; overflow-wrap: anywhere; }
+.ss-sp3-list li { margin: 3px 0; }
+.ss-sp3-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 8px; }
+.ss-sp3-col { min-width: 0; }
+.ss-sp3-up .ss-sp3-h4 { color: var(--ss-good); }
+.ss-sp3-down .ss-sp3-h4 { color: var(--ss-bad); }
+@media (min-width: 760px) {
+  .ss-sp3-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.ss-sp3-cmp { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.ss-sp3-cmp th, .ss-sp3-cmp td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.ss-sp3-cmp th:first-child, .ss-sp3-cmp thead th:first-child { text-align: left; }
+.ss-sp3-cmp thead th { font-weight: 600; color: var(--text-2); }
+
+.ss-sp3-sec { margin-top: 18px; }
+.ss-sp3-rel { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ss-sp3-rel-i {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+.ss-sp3-train { font-weight: 700; }
+.ss-sp3-rel-r { color: var(--text-2); font-size: 0.8125rem; }
+.ss-sp3-rel-s { font-size: 0.8125rem; font-weight: 600; }
+@media (min-width: 760px) {
+  .ss-sp3-rel-i { grid-template-columns: 8rem minmax(0, 1fr) auto; align-items: baseline; gap: 12px; }
+}
+
+.ss-sp3-heat { margin-top: 10px; }
