@@ -87,3 +87,32 @@ def envelope(p: stats.Params, filters: dict, today: date, hist: dict) -> dict:
             "window": window_echo(today), "history": hist,
             "generated_at": datetime.now(so.TZ).isoformat(timespec="seconds"),
             "cache_ttl_s": so._ttl()}
+
+
+# ---- compare=prev7 -----------------------------------------------------------------------
+
+def metrics(rows: list[dict], p: stats.Params) -> dict:
+    """The summary's figures for one window (all boards in `rows`): counted delays N, % on time
+    (only with the minimum sample), mean, median, journeys and distinct trains. Missing is None."""
+    s = stats.summarize(stats.delays(rows, p), p.on_time, p.min_sample)
+    return {"n": s["n"], "on_time": s["on_time"], "on_time_pct": s["on_time_pct"], "mean": s["mean"],
+            "median": s["median"], "sufficient": s["sufficient"], "journeys": len(rows),
+            "trains": len({j["train_no"] for j in rows})}
+
+
+def _delta(a: dict, b: dict) -> dict:
+    def d(k):
+        return None if a[k] is None or b[k] is None else round(a[k] - b[k], 1)
+    return {k: d(k) for k in ("on_time_pct", "mean", "median", "journeys", "trains")}
+
+
+def compare(store, p: stats.Params, filters: dict, today: date) -> dict:
+    now, before, hist = two_weeks(store, p, filters, today)
+    d = envelope(p, filters, today, hist)
+    d["compare"] = "prev7"
+    if not hist["sufficient"]:
+        d.update(status="insufficient", message_key=INSUFFICIENT_KEY, now=None, before=None, delta=None)
+        return d
+    a, b = metrics(now, p), metrics(before, p)
+    d.update(status="ok", now=a, before=b, delta=_delta(a, b))
+    return d
