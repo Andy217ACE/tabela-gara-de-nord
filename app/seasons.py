@@ -204,3 +204,26 @@ def overview(store, p: stats.Params, boards=None, changes=None) -> dict:
     if changes is None:
         changes = TIMETABLE_CHANGE_DATES
     return build(rows, wx, p, boards or list(stats.BOARDS), tuple(changes))
+
+
+# ---- CSV -------------------------------------------------------------------------------
+
+_CSV_HEAD = ["board", "season", "season_days", "dimension", "key", "label",
+             "n", "mean", "median", "on_time_pct", "comparable"]
+
+
+def to_csv(d: dict) -> str:
+    """Payload-ul sezoanelor ca CSV (aceleași N ca pagina). Un sezon sub prag are un singur
+    rând `insufficient`, fără cifre; sosirile și plecările rămân pe rânduri separate."""
+    rows: list[list] = []
+    for b, bd in d["boards"].items():
+        for s in bd["seasons"]:
+            if not s["enough"]:
+                rows.append([b, s["key"], s["days"], "insufficient", "", "",
+                             None, None, None, None, None])
+                continue
+            for dim, gs in s["groups"].items():
+                for g in gs:
+                    rows.append([b, s["key"], s["days"], dim, g["key"], g["label"], g["n"],
+                                 g["mean"], g["median"], g["on_time_pct"], g["comparable"]])
+    return stats.to_csv(_CSV_HEAD, rows)
