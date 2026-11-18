@@ -35,6 +35,7 @@ def _fresh_ocr_stats():
 
 
 EMPTY_OCR = {"expected_rows": 12, "last": None,
+             "alt": {"frames": 0, "tried": 0, "recovered": 0},
              "window": {"frames": 0, "full_frames": 0, "frames_retried": 0,
                         "lines_retried": 0, "lines_recovered": 0, "duration_ms_max": None,
                         "duration_ms_p50": None, "retry_ms_max": None}}

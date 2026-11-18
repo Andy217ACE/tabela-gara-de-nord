@@ -106,11 +106,15 @@ def export_db(db: Path, img_root: Path, out_json: Path, select=None) -> dict:
         caps = [{"id": on_disk[frame_of[f]], "path": frame_of[f]} for f in sorted(chosen)]
         ids = {c["id"] for c in caps}
         obs = []
-        for c, b, r, f in con.execute(
-                "SELECT capture_id, board, row_index, fields_json FROM observations"):
+        has_pv = any(r[1] == "processing_version"
+                     for r in con.execute("PRAGMA table_info(observations)"))
+        pv_col = "processing_version" if has_pv else "NULL"  # baze vechi: fara coloana
+        for c, b, r, f, pv in con.execute(
+                f"SELECT capture_id, board, row_index, fields_json, {pv_col} FROM observations"):
             n_obs += 1
             if c in ids:
-                obs.append({"capture_id": c, "board": b, "row_index": r, "fields_json": f})
+                obs.append({"capture_id": c, "board": b, "row_index": r, "fields_json": f,
+                            "processing_version": pv})
     finally:
         con.close()
     out_json.write_text(json.dumps({"captures": caps, "observations": obs}, ensure_ascii=False),

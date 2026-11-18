@@ -16,6 +16,14 @@ WINDOW = 60  # frames (about one hour: one new image per minute)
 
 _lock = threading.Lock()
 _frames: deque[dict] = deque(maxlen=WINDOW)
+_alt = {"frames": 0, "tried": 0, "recovered": 0}  # alternativa OCR (OCR_ALT), de la pornire
+
+
+def record_alt(info: dict) -> None:
+    with _lock:
+        _alt["frames"] += bool(info.get("tried"))
+        _alt["tried"] += info.get("tried", 0)
+        _alt["recovered"] += info.get("recovered", 0)
 
 
 def record(summary: dict) -> None:
@@ -26,6 +34,8 @@ def record(summary: dict) -> None:
 def reset() -> None:
     with _lock:
         _frames.clear()
+        for k in _alt:
+            _alt[k] = 0
 
 
 def _full(f: dict) -> bool:
@@ -53,11 +63,13 @@ def snapshot() -> dict:
     """{expected_rows, last: last frame summary or None, window: aggregates}."""
     with _lock:
         frames = list(_frames)
+        alt = dict(_alt)
     n = len(frames)
     durs = sorted(f["duration_ms"] for f in frames)
     return {
         "expected_rows": EXPECTED_ROWS,
         "last": frames[-1] if frames else None,
+        "alt": alt,
         "window": {
             "frames": n,
             "full_frames": sum(_full(f) for f in frames),

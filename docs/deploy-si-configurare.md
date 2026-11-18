@@ -115,6 +115,12 @@ Observații despre tabel:
 | `CAPTURE_MIN_FREE_MB` | `app/observations.py` | `2048` | Pragul de spațiu liber, în MB, folosit când pagina Setări a aplicației nu are un prag propriu (`min_free_bytes(store)`). Valorile care nu sunt întregi dau `2048`; cele negative devin `0`. |
 | `BACKUP_DIR` | `app/dbbackup.py` | `<directorul bazei>/backups` | Directorul backup-urilor făcute înainte de migrări. Pe server, implicitul este `/var/lib/tabela/backups`. |
 | `OCR_FRAME_BUDGET_S` | `app/ocr/reader.py` | `8.0` | Timpul maxim de OCR pe cadru, inclusiv recitirile. Nu e negativ (valoarea negativă devine 0). |
+| `OCR_ALT` | `app/ocr/alt_reader.py` | oprit | `1`, `true`, `yes` sau `on` pornește alternativa OCR (MLP de cifre, rezervă pe liniile necitite). Liniile completate au `+ocr:alt` în `processing_version`. |
+| `OCR_ALT_SHADOW` | `app/ocr/alt_reader.py` | oprit | Mod umbră: alternativa rulează și scrie în jurnalul `app.ocr.alt_shadow` ce ar completa, fără să schimbe rândurile (faza de 7 zile). |
+| `OCR_ALT_MODEL` | `app/ocr/alt_reader.py` | gol (= oprit) | Calea modelului `model-AAAA-LL-ZZ.npz`. Lipsă, stricat sau cu amprentă diferită: alternativa rămâne oprită, cu avertisment. |
+| `OCR_ALT_BUDGET_S` | `app/ocr/alt_reader.py` | `4` | Bugetul propriu al alternativei pe cadru, în secunde. |
+| `OCR_ALT_MIN_UNREAD` | `app/ocr/alt_reader.py` | `1` | Numărul de linii necitite pe panou de la care se declanșează alternativa. |
+| `OCR_ALT_MAX_UNREAD` | `app/ocr/alt_reader.py` | `4` | Peste acest număr de linii necitite panoul e considerat stricat la sursă și alternativa nu îl atinge. |
 | `FINAL_READ_MAX_GAP_MIN` | `app/journeys.py` | `15` | Parametru de timp, în minute, la stabilirea stării finale a unei călătorii (`final_gap_min()`). Valorile în afara intervalului 1–240 și cele care nu sunt întregi dau `15`. Sensul exact al intervalului: nesigur, citește `app/journeys.py`. |
 | `STATS_INCLUDE_LOW_QUALITY` | `app/quality.py` | `0` | Dacă este `1`, perioada de calitate redusă (`quality_periods`) intră în statistici. Implicit, este exclusă. |
 | `STATS_CACHE_TTL_S` | `app/stats_overview.py` | `60` | Cât timp se păstrează rezultatul agregatelor statistice (un singur calcul simultan). |
