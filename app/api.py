@@ -34,6 +34,7 @@ from app import (admin, captures, corrections, corrections_api, export, history_
                  peron_api, poller, seasons, stats, stats_api, stats_quality_daily, system_api,
                  telegram, trains_api, weather)
 from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice noi #statistici)
+from app import line_prediction, stats_overview  # noqa: E402  (Val 5: sezoane CSV, estimare per tren)
 from app.config import Settings, get_settings
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
@@ -562,10 +563,33 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
                         headers=headers)
 
     @app.get("/api/stats/seasons", include_in_schema=False)
-    async def stats_seasons(request: Request):
+    async def stats_seasons(request: Request, format: str = "json"):
         # Comparație sezoane și meteo (Val 5a); parametrii ca la /api/stats/overview.
         p = stats_api.params(request)
-        return await run_in_threadpool(seasons.overview, store_of(request), p)
+        d = await run_in_threadpool(seasons.overview, store_of(request), p)
+        if format == "csv":
+            return Response(content=("﻿" + seasons.to_csv(d)).encode("utf-8"),
+                            media_type="text/csv; charset=utf-8",
+                            headers={"Content-Disposition": 'attachment; filename="sezoane.csv"'})
+        return d
+
+    @app.get("/api/trains/{no}/prediction", include_in_schema=False)
+    async def train_prediction(request: Request, no: int):
+        # Estimarea întârzierii finale per tren (Val 5b). Cache 5 min: poarta rulează backtestul.
+        import time
+        from datetime import datetime
+        cache = getattr(request.app.state, "prediction_cache", None) or {}
+        hit = cache.get(no)
+        if hit and time.monotonic() - hit[0] < 300:
+            return hit[1]
+
+        def run():
+            with stats_overview._reader(store_of(request)) as c:
+                return line_prediction.compute(c, no, datetime.now(TZ).date())
+        d = await run_in_threadpool(run)
+        cache[no] = (time.monotonic(), d)
+        request.app.state.prediction_cache = cache
+        return d
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
                    include_in_schema=False)
