@@ -197,10 +197,14 @@ def extract(img_root: str, db_json: str, out_dir: str, max_frames: int | None = 
     for cap in db["captures"]:
         if cap["path"]:
             cap_of[cap["id"]] = cap["path"][:-4] if cap["path"].endswith(".jpg") else cap["path"]
+    alt_lines: set[tuple[str, str, int]] = set()  # linii completate de alternativa OCR
     for o in db["observations"]:
         frame = cap_of.get(o["capture_id"])
         if frame is not None:
-            obs[(frame, o["board"], o["row_index"])] = json.loads(o["fields_json"] or "{}")
+            key = (frame, o["board"], o["row_index"])
+            obs[key] = json.loads(o["fields_json"] or "{}")
+            if "+ocr:alt" in (o.get("processing_version") or ""):
+                alt_lines.add(key)
     on_disk = [f for f in cap_of.values() if (root / "captures" / (f + ".jpg")).exists()]
     chosen = select_frames(on_disk, max_frames)
     cache = Path(cache_dir) if cache_dir else Path(out_dir) / "cache"
@@ -232,6 +236,7 @@ def extract(img_root: str, db_json: str, out_dir: str, max_frames: int | None = 
             ob = obs.get((frame, c["board"], c["row"]))
             c["B"] = None if ob is None else _norm((ob.get(c["col"]) or {}).get("raw"))
             c["has_obs"] = ob is not None
+            c["alt"] = (frame, c["board"], c["row"]) in alt_lines
             cells.append(c)
         glyphs.extend(gs)
     _save(Path(out_dir), cells, glyphs)
@@ -270,6 +275,8 @@ def label(out_dir: str, verified_csv: str | None = None) -> dict:
             status, text = "verificat", verified[cell_id(c)]
         elif "?" in A or (B is not None and "?" in B):
             status, reason = "nelizibil", "marcat ?"
+        elif c.get("alt"):  # ieșirea alternativei OCR: modelul nu se antrenează pe propria ieșire
+            status, reason = "nelizibil", "ocr alt"
         elif B is None:
             reason = "fara observatie"
         elif c["retry"]:

@@ -14,6 +14,8 @@ import httpx
 
 from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
+from app.ocr import alt_reader
+from app.ocr import stats as ocr_stats
 from app.ocr.reader import DelayVotes, OcrError, read_board, read_board_debug
 from app.rejected import save_rejected
 from app.system_status import record_error  # „Sistem” page: last failure as a short code
@@ -212,6 +214,11 @@ async def run_poller(
                                                     votes=votes)
                 if on_capture is not None:
                     rows, debug = rows
+                    if debug and alt_reader.enabled():
+                        alt = await asyncio.to_thread(alt_reader.apply, data, debug)
+                        if alt.get("recovered") and not alt.get("shadow"):
+                            rows = [e["row"] for e in debug if e["row"] is not None]
+                        ocr_stats.record_alt(alt)
             except (OcrError, ValueError) as e:
                 record_error("ocr", ts)
                 log.exception("OCR failed for new image")

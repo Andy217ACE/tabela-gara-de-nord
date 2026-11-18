@@ -229,6 +229,8 @@ def line_version(base: str, entry: dict) -> str:
     retry = entry.get("retry")
     if retry:
         v += f"+retry:{retry.get('variant') or 'none'}:{int(retry.get('attempts') or 0)}"
+    if entry.get("alt"):  # linia a fost completata de alternativa OCR (app/ocr/alt_reader.py)
+        v += "+ocr:alt"
     delay = (entry.get("fields") or {}).get("delay") or {}
     if delay.get("check"):
         v += f"+delay:{delay['check']}"
