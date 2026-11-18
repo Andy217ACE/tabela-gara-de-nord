@@ -5,6 +5,32 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.62 — 2026-11-18
+
+### Adăugat
+- **Alternativă OCR (rezervă, oprită implicit):** un MLP de cifre care completează rândurile necitite ale cititorului principal. Se pornește cu `OCR_ALT=1`; nimic nu se schimbă până nu e pornită.
+- **Mod umbră:** `OCR_ALT_SHADOW=1` rulează alternativa și doar înregistrează ce ar completa, fără să schimbe ce se afișează.
+- **Marcaj `+ocr:alt`** pe liniile completate de alternativă, în versiunea observației; rândurile au `uncertain` și încredere sub pragul de confirmare.
+- **Contor alternativă în `/api/health`** (`ocr.alt`): cadre încercate, linii recuperate.
+- Variabilele `OCR_ALT*` sunt documentate în `docs/deploy-si-configurare.md`.
+
+### Schimbat
+- Antrenarea modelului de cifre sare liniile `+ocr:alt`, ca modelul să nu se antreneze pe propria ieșire.
+- Exportul de date pentru antrenare include `processing_version`.
+- Schema bazei rămâne v9; nicio migrare.
+
+### English
+- **OCR alternative (fallback, off by default):** a digit MLP that fills unread rows left by the main reader. Enabled with `OCR_ALT=1`; nothing changes until it is turned on.
+- **Shadow mode:** `OCR_ALT_SHADOW=1` runs the alternative and only records what it would fill in, without changing what is shown.
+- **`+ocr:alt` mark** on lines filled by the alternative, in the observation version; those rows are `uncertain` with confidence below the confirmation threshold.
+- **Alternative counter in `/api/health`** (`ocr.alt`): frames tried, lines recovered.
+- The `OCR_ALT*` variables are documented in `docs/deploy-si-configurare.md`.
+
+### Changed
+- Digit-model training skips `+ocr:alt` lines, so the model is not trained on its own output.
+- The training data export includes `processing_version`.
+- The database schema stays at v9; no migration.
+
 ## Beta 1.61 — 2026-11-18
 
 ### Adăugat
