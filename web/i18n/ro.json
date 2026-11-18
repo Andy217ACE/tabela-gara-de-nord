@@ -1752,5 +1752,14 @@
   "meta.ogTitle": "Tabela Gara de Nord — sosiri și plecări live",
   "meta.ogDescription": "Sosirile și plecările din Gara de Nord București: ore, întârzieri și linii, citite de pe tabela CFR. Proiect independent, neafiliat CFR.",
   "meta.ogLocale": "ro_RO",
-  "meta.twitterDescription": "Sosirile și plecările din Gara de Nord București, citite de pe tabela CFR. Proiect independent."
+  "meta.twitterDescription": "Sosirile și plecările din Gara de Nord București, citite de pe tabela CFR. Proiect independent.",
+  "val5.seasons.title": "Sezoane și meteo",
+  "val5.seasons.csv": "Descarcă CSV",
+  "val5.seasons.loadFail": "Nu s-au putut încărca sezoanele.",
+  "val5.pred.label": "Estimare",
+  "val5.pred.n": "N = {n}",
+  "val5.pred.interval": "interval {low}–{high} min",
+  "val5.pred.median": "mediană {v} min",
+  "val5.pred.hidden": "Estimarea nu e publicată încă: {reason}",
+  "val5.pred.none": "Fără estimare: date insuficiente."
 }
