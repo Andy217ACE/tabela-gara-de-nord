@@ -55,7 +55,7 @@ def test_statistici_css_tokens_only(client):
     css = r.text
     assert css.startswith("/* © 2026 Andy217Ace */")
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", css)  # theme tokens only
-    for tok in ("var(--c-arr)", "var(--c-dep)", "var(--c-seq)", "var(--surface)", "var(--accent)"):
+    for tok in ("var(--c-arr)", "var(--c-dep)", "var(--ss-good)", "var(--surface)", "var(--accent)"):
         assert tok in css, tok
     assert "@import" not in css and "url(" not in css
     assert "prefers-reduced-motion" in css

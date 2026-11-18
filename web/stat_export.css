@@ -1,0 +1,14 @@
+/* © 2026 Andy217Ace — Statistici v3 sp4: export (CSV/PNG), tipărire, indicator de actualizare. Strat lazy. */
+.ss-exp-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ss-lazy { min-height: 1px; }
+.ss-exp-msg { margin: 8px 0 0; }
+.ss-sp4-updated { margin: 0; color: var(--text-3); font-size: 0.75rem; flex-basis: 100%; }
+.ss-sp4-print { white-space: nowrap; }
+
+/* Tipărește (PDF din browser): doar conținutul paginii Statistici, fără filtre, butoane și navigare */
+@media print {
+  .topbar, .mainnav, .footer, .ss-filters, .ss-exp-btns, .ss-exp-msg, .ss-csv, .ss-presets, .c3-toc, .ss-sp4-print { display: none !important; }
+  .ss-fig, .ss-prob, .ss-card, .ss-kpi, .ss-cmp-wrap { break-inside: avoid; page-break-inside: avoid; }
+  .ss-fig-title, .ss-section-h { break-after: avoid; page-break-after: avoid; }
+  .st-scroll { overflow: visible !important; }
+}

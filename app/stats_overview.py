@@ -568,11 +568,25 @@ def _lock_for(key) -> threading.Lock:
         return lk
 
 
-def overview(store, p: stats.Params, filters: dict, today: date | None = None) -> dict:
+def overview(store, p: stats.Params, filters: dict, today: date | None = None,
+             detail: dict | None = None) -> dict:
+    """`detail` (from parse_detail): instead of the full payload, the journeys behind one chart
+    mark (`train_list`), computed from the same cached database read."""
     today = today or datetime.now(TZ).date()
     ttl = _ttl()
     fkey = (id(store), getattr(store, "path", None), tuple(sorted(p.echo().items())),
             today.isoformat())
+    if detail:
+        with _lock_for(fkey):
+            data = _fresh(_fetched, fkey, ttl)
+            if data is None:
+                data = fetch(store, p)
+                _put(_fetched, fkey, data, CACHE_MAX)
+        return {"params": {**p.echo(), "perioada": filters.get("perioada") or "all",
+                           "operator": filters.get("operator") or None,
+                           "tip": filters.get("tip") or None, "today": today.isoformat()},
+                "detail": {"kind": "train_list", **detail},
+                "train_list": train_list(data[0], p, filters, detail)}
     bkey = fkey + (tuple(sorted((k, v) for k, v in filters.items() if v)),)
     hit = _fresh(_built, bkey, ttl)
     if hit is not None:
@@ -589,6 +603,81 @@ def overview(store, p: stats.Params, filters: dict, today: date | None = None) -
         d = build(*data, p, today, filters)
         _put(_built, bkey, d, BUILT_MAX)
         return d
+
+
+# ---- detail=train_list (Statistici v3 sp2) ---------------------------------------------
+# Click on a chart mark -> the journeys behind it. Same cached database read as the overview,
+# nothing written; at most TRAIN_LIST_LIMIT rows, `truncated` tells the page to say so.
+
+TRAIN_LIST_LIMIT = 200
+DETAIL_BY = ("operator", "type", "route", "hour", "day", "heat")
+DETAIL_KEY_MAX = 80
+
+
+def parse_detail(q) -> dict | None:
+    """The drill-down request from the query string (a mapping), or None when absent.
+    Raises ValueError (message in Romanian) for an invalid combination."""
+    kind = (q.get("detail") or "").strip()
+    if not kind:
+        return None
+    if kind != "train_list":
+        raise ValueError("Parametrul „detail” poate fi doar train_list.")
+    by = (q.get("by") or "").strip()
+    if by not in DETAIL_BY:
+        raise ValueError("Parametrul „by” invalid (" + ", ".join(DETAIL_BY) + ").")
+    key = (q.get("key") or "").strip()
+    if not key or len(key) > DETAIL_KEY_MAX:
+        raise ValueError("Parametrul „key” lipsește sau este prea lung.")
+    try:
+        if by == "hour" and not 0 <= int(key) <= 23:
+            raise ValueError
+        if by == "heat":
+            d, h = (int(x) for x in key.split("-"))
+            if not (0 <= d <= 6 and 0 <= h <= 23):
+                raise ValueError
+        if by == "day":
+            date.fromisoformat(key)
+    except ValueError:
+        raise ValueError("Parametrul „key” nu se potrivește cu „by”.") from None
+    board = (q.get("board") or "").strip() or None
+    if board is not None and board not in stats.BOARDS:
+        raise ValueError("Panou invalid (arrival sau departure).")
+    return {"by": by, "key": key, "board": board}
+
+
+def _matches(j: dict, by: str, key: str) -> bool:
+    if by == "operator":
+        return j["operator"] == key
+    if by == "type":
+        return j["train_type"] == key
+    if by == "route":
+        return j["station"] == key
+    if by == "hour":
+        return int(j["sched_time"][:2]) == int(key)
+    if by == "day":
+        return j["service_date"] == key
+    d, h = (int(x) for x in key.split("-"))   # heat: weekday-hour
+    return (date.fromisoformat(j["service_date"]).weekday() == d
+            and int(j["sched_time"][:2]) == h)
+
+
+def train_list(rows: list[dict], p: stats.Params, filters: dict, detail: dict) -> dict:
+    op, tip = filters.get("operator"), filters.get("tip")
+    sel = [j for j in rows
+           if (not op or j["operator"] == op) and (not tip or j["train_type"] == tip)
+           and (not detail["board"] or j["board"] == detail["board"])
+           and _matches(j, detail["by"], detail["key"])]
+    sel.sort(key=lambda j: (j["service_date"], j["sched_time"], j["train_no"]), reverse=True)
+    out = []
+    for j in sel[:TRAIN_LIST_LIMIT]:
+        r = j["result"]
+        out.append({"board": j["board"], "train": f"{j['train_type']} {j['train_no']}".strip(),
+                    "train_no": j["train_no"], "type": j["train_type"], "operator": j["operator"],
+                    "route": j["station"], "date": j["service_date"], "time": j["sched_time"],
+                    "delay": r["observed_delay"] if stats.counted(j, p) else None,
+                    "state": r["state"]})
+    return {"rows": out, "total": len(sel), "limit": TRAIN_LIST_LIMIT,
+            "truncated": len(sel) > TRAIN_LIST_LIMIT}
 
 
 # ---- CSV -------------------------------------------------------------------------------

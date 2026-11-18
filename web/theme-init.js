@@ -46,8 +46,23 @@
 
   var current = apply(load());
 
+  // Contrast ridicat: <html data-contrast="high"> (stat_sp2.css), în localStorage ca tema.
+  var KEY_C = "tabela.contrast";
+  var contrast = false;
+  try { contrast = localStorage.getItem(KEY_C) === "high"; } catch (e) { /* ignore */ }
+  function applyContrast(on) { if (on) root.dataset.contrast = "high"; else delete root.dataset.contrast; return on; }
+  applyContrast(contrast);
+
   window.TabelaTheme = {
     get: function () { return current; },
+    getContrast: function () { return contrast; },
+    setContrast: function (on) {
+      contrast = applyContrast(!!on);
+      try {
+        if (contrast) localStorage.setItem(KEY_C, "high"); else localStorage.removeItem(KEY_C);
+      } catch (e) { /* fără stocare: ține până la reîncărcare */ }
+      return contrast;
+    },
     set: function (mode) {
       current = apply(mode);
       save(current);

@@ -15,9 +15,17 @@
   var el = App.el;
   var U = function () { return App.ui2; };   // Beta 1.26 visual helpers (ui2.js): donut, count-up, meter, spark
   var C3 = function () { return App.charts3; };   // Beta 1.28 interactive chart layer (charts3.js, lazy): tooltips, curves, calendar…
+  var S2 = function () { return App.statSp2; };   // lazy sp2 layer (stat_sp2.js/css)
   var SVG_NS = "http://www.w3.org/2000/svg";
   var API = "/api/stats/overview";
   var BOARDS = ["arrival", "departure"];
+  // THE color scale: the only thresholds (colors: --ss-good/mid/bad in statistici.css). up: 1 = higher is better
+  var SCALE = { pct: { good: 80, mid: 60, up: 1 }, minutes: { good: 5, mid: 10, up: -1 } };
+  function tone(kind, x) {
+    if (x == null || isNaN(x)) return "";
+    var k = SCALE[kind];
+    return k.up * (x - k.good) >= 0 ? "ss-t-good" : k.up * (x - k.mid) >= 0 ? "ss-t-mid" : "ss-t-bad";
+  }
   var tt = function (k, p) { return window.I18N.t(k, p); };
   var pl = function (n, base) { return S.pl(n, base); };   // "1 journey" / "3 journeys" from stats.w.*.one / .many
   function lazy(prefix, keys) {   // getters: the text follows the language chosen at the time it is read
@@ -60,6 +68,9 @@
   }
 
   function tip(node, text) { node.append(svg("title", {}, text)); return node; }
+
+  // mark opening the trains behind it (stat_sp2.js): d = { by, key, label }
+  function drillMark(g, d, board) { g.setAttribute("data-drill", JSON.stringify([d.by, d.key, d.label, board || ""])); return g; }
 
   function slug(t) {
     return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -140,6 +151,31 @@
       document.head.append(sc);
     });
     return presetsP;
+  }
+
+  // lazy JS+CSS layers (stat_sp2, stat_export): own files, not in the SW shell; resolve even if loading fails
+  var layerP = {};
+  function layer(key, file) {
+    if (App[key]) return Promise.resolve();
+    if (!layerP[file]) layerP[file] = new Promise(function (resolve) {
+      var css = document.createElement("link"), sc = document.createElement("script"), left = 2;
+      css.rel = "stylesheet";
+      css.href = file + ".css?v=1";
+      sc.src = file + ".js?v=1";
+      css.onload = sc.onload = function () { if (--left === 0) resolve(); };
+      css.onerror = sc.onerror = function () { layerP[file] = null; if (--left === 0) resolve(); };
+      document.head.append(css, sc);
+    });
+    return layerP[file];
+  }
+  function sp2Layer() { return layer("statSp2", "stat_sp2"); }
+
+  function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
+    render(d);
+    if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
+      dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
+    if (App.statExport) App.statExport.enhance(v.ui, d, v.at);
+    syncFiltersH();
   }
 
   function presetsMenu() {
@@ -283,7 +319,7 @@
       if (!v.data || $("view-statistici").hidden) return;
       syncFiltersH();
       var w = v.ui.body.clientWidth;
-      if (Math.abs(w - v.width) > 24) render(v.data);
+      if (Math.abs(w - v.width) > 24) draw(v.data);
     }, 200));
   }
 
@@ -357,7 +393,7 @@
       if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
-    chartsReady = chartsReady.then(function (c) { return stepsLayer().then(function () { return c; }); });
+    chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), layer("statExport", "stat_export")]).then(function () { return c; }); });
     S.getJSON(url, ctrl)
       .then(function (d) { return chartsReady.then(function () { return d; }); })
       .then(function (d) {
@@ -366,7 +402,7 @@
         v.data = d;
         v.at = Date.now();
         setForm(v.p);
-        render(d);
+        draw(d);
         if (snap && C3()) C3().morph(v.ui.body, snap);
         focusChart();
         applySect();
@@ -483,7 +519,7 @@
     return cells;
   }
 
-  function nLine(text) { return el("p", "ss-n", text); }
+  function nLine(text) { return el("p", "ss-n ss-exp", text); }
   function warn(text) { return el("p", "st-warn ss-warn", text); }
 
   // „Vezi datele”: the chart as an accessible table.
@@ -700,6 +736,7 @@
         g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 4, "data-m": "d" + si + ":" + i,
                                  class: "ss-dot " + BOARD_CLS[s.board] + (s.low && s.low[i] ? " ss-dot-low" : "") }));
         g.append(svg("circle", { cx: x(i).toFixed(1), cy: y(val).toFixed(1), r: 12, class: "ss-hit" }));
+        if (o.drill) drillMark(g, o.drill(i), s.board);
         tip(g, s.tips[i]);
         root.append(g);
       });
@@ -768,8 +805,11 @@
                      (r.cls || BOARD_CLS[o.board]) + (r.low ? " ss-low" : ""));
         if (b) { b.setAttribute("data-m", String(i)); g.append(b); }
       }
-      g.append(svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText));
+      var vt = svg("text", { x: labW + plotW + 8, y: y0 + 16, class: "ss-hvalue" + (r.low ? " ss-muted" : "") }, r.valueText);
+      if (r.valueExp) vt.append(svg("tspan", { class: "ss-exp" }, r.valueExp));
+      g.append(vt);
       g.append(svg("rect", { x: 0, y: y0, width: W, height: rowH, class: "ss-hit" }));
+      if (r.drill) drillMark(g, r.drill, o.board);
       tip(g, r.label + ": " + r.tip);
       root.append(g);
     });
@@ -812,9 +852,9 @@
     var f = quickFigures(d);
     var sec = el("section", "ss-quick");
     sec.setAttribute("aria-label", tt("stats.sum.aria"));
-    function card(title, value, sub, sect) {
+    function card(title, value, sub, sect, kind, num) {
       var c = el("div", "ss-card");
-      var val = el("p", "ss-card-v");
+      var val = el("p", "ss-card-v " + tone(kind, num));
       if (sect) {   // link to the section behind the figure
         var a = el("a", "ss-card-link", value);
         a.href = "#statistici?" + sectQuery(sect);
@@ -824,8 +864,8 @@
       c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
-    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme");
-    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"));
+    card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme", "pct", f.pct);
+    card(tt("stats.sum.mean"), minutes(f.mean), f.n ? tt("stats.sum.mean_sub", { n: f.n }) : tt("stats.sum.none"), null, "minutes", f.mean);
     card(tt("stats.sum.trains"), num(f.trains), tt("stats.sum.trains_sub", { n: f.journeys }));
     card(tt("stats.sum.route"), f.route ? S.titleCase(f.route.key) : "—",
       f.route ? tt("stats.sum.route_sub", { mean: minutes(f.route.mean), n: f.route.n }) : tt("stats.sum.none"), f.route ? "rute" : null);
@@ -887,7 +927,7 @@
     var items = boards.map(function (b) {
       var s = d.boards[b];
       var ok = s.n && s.sufficient;
-      return { label: tt("stats.hero.on_time", { board: BOARD_PL[b] }), tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v",
+      return { label: tt("stats.hero.on_time", { board: BOARD_PL[b] }), tone: b === "arrival" ? "arr" : "dep", cls: "ss-hero-v " + (ok ? tone("pct", s.on_time_pct) : ""),
         value: ok ? s.on_time_pct : null, unit: ok ? " %" : "", fmt: function (x) { return nf.format(Math.round(x * 10) / 10); },
         sub: ok ? tt("stats.hero.on_time_sub", { ok: s.on_time, n: s.n, max: p.on_time_max_min })
           : (s.n ? tt("stats.hero.small_sub", { n: s.n, min: p.min_sample }) : tt("stats.hero.none_sub")),
@@ -1058,6 +1098,7 @@
     lines(f.host, { cats: cats, unit: "min", extFmt: function (q) { return nf.format(q) + " min"; },
       refR: 78, refs: [{ value: p.on_time_max_min, label: tt("stats.ref.on_time", { max: p.on_time_max_min }), short: tt("stats.ref.on_time_short", { max: p.on_time_max_min }) }],
       title: tt("stats.fig.hourly.chart"), desc: tt("stats.fig.hourly.desc"),
+      drill: function (i) { return { by: "hour", key: String(i), label: hourRange(i) }; },
       series: boards.map(function (b) {
         var hs = d.hourly[b];
         return { board: b, values: hs.map(function (x) { return x.median; }),
@@ -1141,6 +1182,7 @@
         for (var hr = 0; hr < 24; hr++) {
           var c = map[dd + "-" + hr];
           var g = svg("g", { class: "ss-mark" });
+          if (c && c.journeys) drillMark(g, { by: "heat", key: dd + "-" + hr, label: wd(dd) + ", " + hourRange(hr) }, b);
           g.append(svg("rect", { x: (L + hr * cw + 1).toFixed(1), y: (T + dd * ch + 1).toFixed(1),
                                  width: Math.max(1, cw - 2).toFixed(1), height: Math.max(1, ch - 2).toFixed(1), rx: 2,
                                  class: "ss-cell " + heatClass(c), "data-m": dd + "-" + hr }));
@@ -1188,6 +1230,7 @@
           return { value: d.boards[b].on_time_pct, cls: BOARD_CLS[b], label: tt("stats.ref.mean", { board: BOARD_PL[b], pct: pct(d.boards[b].on_time_pct) }), short: BOARD_PL[b] + " " + Math.round(d.boards[b].on_time_pct) + "%" };
         }),
         title: tt("stats.fig.daily.chart"), desc: tt("stats.fig.daily.desc"),
+        drill: function (i) { return { by: "day", key: days[i], label: S.dayText(days[i]) }; },
         series: boards.map(function (b) {
           return { board: b, values: days.map(function (k) { var x = byKey[b][k]; return x ? x.on_time_pct : null; }),
             tips: days.map(function (k) { var x = byKey[b][k];
@@ -1221,8 +1264,9 @@
       hbars(cell, { board: b, max: 100, title: title + " — " + BOARD_PL[b],
         desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
-          return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient,
-            valueText: x.sufficient ? pct(x.on_time_pct) + " · N = " + x.n : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"),
+          return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
+            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: x.key },
+            valueText: x.sufficient ? pct(x.on_time_pct) : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"), valueExp: x.sufficient ? " · N = " + x.n : "",
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
         }) });
@@ -1254,8 +1298,8 @@
         L[1].forEach(function (x) {
           var li = el("li");
           li.append(S.stationLink(x.key));
-          li.append(el("span", "ss-rank-v", L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
-          li.append(el("span", "ss-rank-n", "N = " + x.n));
+          li.append(el("span", "ss-rank-v " + (L[2] === "mean" ? tone("minutes", x.mean) : tone("pct", x.on_time_pct)), L[2] === "mean" ? tt("stats.fig.routes.mean_suffix", { v: minutes(x.mean) }) : tt("stats.fig.routes.ontime_suffix", { v: pct(x.on_time_pct) })));
+          li.append(el("span", "ss-rank-n ss-exp", "N = " + x.n));
           ol.append(li);
           rows.push([BOARD_PL[b] + " — " + S.titleCase(x.key), L[0], x.n, minutes(x.mean), minutes(x.median), pct(x.on_time_pct)]);
         });
@@ -1495,8 +1539,9 @@
     head.append(t);
     li.append(head);
     var b = el("p", "ss-badges");
-    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev"), badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf"),
-      badge("N = " + it.n, "ss-badge-n"));
+    b.append(badge(tt("stats.prob.severity", { v: srv(SEV_KEY, "stats.sev.", it.severity) }), "ss-badge-sev"),
+      badge(tt("stats.prob.confidence", { v: srv(CONF_KEY, "stats.conf.", it.confidence) }), "ss-badge-conf ss-exp"),
+      badge("N = " + it.n, "ss-badge-n ss-exp"));
     li.append(b);
     li.append(el("p", "ss-prob-fig", it.figures));
     var why = el("p", "ss-prob-why");
@@ -1853,7 +1898,7 @@
     weatherSection(d);
     trafficSection(d, boards);
     platformsSection(d, boards);
-    (App.statsExtra || []).forEach(function (x) { x(v.ui.body, v.p); });   // stat_platform.js, stat_dwell.js
+    (App.statsExtra || []).forEach(function (x) { if (App.statExport) App.statExport.lazy(x, v.ui.body, v.p); else x(v.ui.body, v.p); });
     qualitySection(d);
     glossary(d);
     if (U()) {

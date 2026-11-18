@@ -3,6 +3,19 @@
    --c-arr / --c-dep series, --c-seq sequential hue); light and dark follow automatically.
    Charts are SVG sized to their container: no horizontal page scroll at any width. */
 
+/* the one good/medium/bad scale: tokens here, thresholds in statistici.js (SCALE) */
+:root {
+  --ss-good: var(--ok);
+  --ss-mid: var(--warn);
+  --ss-bad: var(--bad);
+}
+.ss-t-good { color: var(--ss-good); }
+.ss-t-mid { color: var(--ss-mid); }
+.ss-t-bad { color: var(--ss-bad); }
+.ss-bar.ss-t-good { fill: var(--ss-good); }
+.ss-bar.ss-t-mid { fill: var(--ss-mid); }
+.ss-bar.ss-t-bad { fill: var(--ss-bad); }
+
 /* ---------- filters (one row above everything they scope) ---------- */
 .ss-filters {
   display: flex;
@@ -129,11 +142,11 @@
 .ss-key.ss-dep { background: var(--c-dep); }
 .ss-key-hollow { border-radius: 50%; background: transparent; border: 2px solid var(--text-2); }
 .ss-key-sq { border-radius: 2px; }
-.ss-key.ss-q0 { background: color-mix(in srgb, var(--c-seq) 16%, var(--surface)); }
-.ss-key.ss-q1 { background: color-mix(in srgb, var(--c-seq) 36%, var(--surface)); }
-.ss-key.ss-q2 { background: color-mix(in srgb, var(--c-seq) 56%, var(--surface)); }
-.ss-key.ss-q3 { background: color-mix(in srgb, var(--c-seq) 78%, var(--surface)); }
-.ss-key.ss-q4 { background: var(--c-seq); }
+.ss-key.ss-q0 { background: color-mix(in srgb, var(--ss-good) 55%, var(--surface)); }
+.ss-key.ss-q1 { background: var(--ss-good); }
+.ss-key.ss-q2 { background: var(--ss-mid); }
+.ss-key.ss-q3 { background: color-mix(in srgb, var(--ss-bad) 65%, var(--surface)); }
+.ss-key.ss-q4 { background: var(--ss-bad); }
 .ss-key.ss-cell-low { background: var(--border-strong); }
 .ss-key.ss-cell-none { background: transparent; border: 1px solid var(--border-strong); }
 .ss-key.ss-cell-unread { background: var(--surface-2); border: 1px solid var(--text-3); }
@@ -198,12 +211,12 @@
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-.ss-problems { border-top: 4px solid var(--bad); }
+.ss-problems { border-top: 4px solid var(--ss-bad); }
 .ss-prob-h1 { font-size: 1.375rem; }
-.ss-good { border-left: 4px solid var(--ok); }
+.ss-good { border-left: 4px solid var(--ss-good); }
 .ss-good-list { margin: 8px 0 0; padding-left: 1.1rem; display: grid; gap: 4px; max-width: 85ch; }
 .ss-good-list li { line-height: 1.5; font-size: 0.9375rem; }
-.ss-good-list li::marker { color: var(--ok); }
+.ss-good-list li::marker { color: var(--ss-good); }
 
 /* coverage / data quality indicator */
 .ss-cov {
@@ -217,9 +230,9 @@
   line-height: 1.5;
   color: var(--text-2);
 }
-.ss-cov-low { border-left-color: var(--bad); }
-.ss-cov-mid { border-left-color: var(--warn); }
-.ss-cov-ok { border-left-color: var(--ok); }
+.ss-cov-low { border-left-color: var(--ss-bad); }
+.ss-cov-mid { border-left-color: var(--ss-mid); }
+.ss-cov-ok { border-left-color: var(--ss-good); }
 .ss-cov-h { margin: 0; }
 .ss-cov-h strong { color: var(--text); }
 .ss-cov-list { margin: 6px 0 0; padding-left: 1.1rem; display: grid; gap: 2px; }
@@ -234,8 +247,8 @@
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
-.ss-prob.ss-sev-mare { border-left-color: var(--bad); }
-.ss-prob.ss-sev-medie { border-left-color: var(--warn); }
+.ss-prob.ss-sev-mare { border-left-color: var(--ss-bad); }
+.ss-prob.ss-sev-medie { border-left-color: var(--ss-mid); }
 .ss-prob-head { display: flex; align-items: flex-start; gap: 10px; }
 .ss-prob-rank {
   flex: none;
@@ -273,8 +286,8 @@
   font-weight: 600;
   white-space: nowrap;
 }
-.ss-sev-mare .ss-badge-sev { background: var(--bad-bg); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
-.ss-sev-medie .ss-badge-sev { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.ss-sev-mare .ss-badge-sev { background: var(--bad-bg); color: var(--ss-bad); border-color: color-mix(in srgb, var(--ss-bad) 40%, transparent); }
+.ss-sev-medie .ss-badge-sev { background: var(--warn-bg); color: var(--ss-mid); border-color: color-mix(in srgb, var(--ss-mid) 40%, transparent); }
 .ss-badge-n { font-variant-numeric: tabular-nums; }
 .ss-prob-fig { margin: 8px 0 0; font-size: 0.875rem; line-height: 1.55; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .ss-prob-why { margin: 6px 0 0; color: var(--text-2); font-size: 0.8125rem; line-height: 1.5; max-width: 85ch; }
@@ -342,11 +355,11 @@
 .ss-hlabel { text-anchor: end; fill: var(--text) !important; font-size: 12px !important; }
 .ss-hvalue { fill: var(--text-2); font-variant-numeric: tabular-nums; }
 .ss-cell { stroke: none; }
-.ss-cell.ss-q0 { fill: color-mix(in srgb, var(--c-seq) 16%, var(--surface)); }
-.ss-cell.ss-q1 { fill: color-mix(in srgb, var(--c-seq) 36%, var(--surface)); }
-.ss-cell.ss-q2 { fill: color-mix(in srgb, var(--c-seq) 56%, var(--surface)); }
-.ss-cell.ss-q3 { fill: color-mix(in srgb, var(--c-seq) 78%, var(--surface)); }
-.ss-cell.ss-q4 { fill: var(--c-seq); }
+.ss-cell.ss-q0 { fill: color-mix(in srgb, var(--ss-good) 55%, var(--surface)); }
+.ss-cell.ss-q1 { fill: var(--ss-good); }
+.ss-cell.ss-q2 { fill: var(--ss-mid); }
+.ss-cell.ss-q3 { fill: color-mix(in srgb, var(--ss-bad) 65%, var(--surface)); }
+.ss-cell.ss-q4 { fill: var(--ss-bad); }
 .ss-cell.ss-cell-low { fill: var(--border-strong); }
 .ss-cell.ss-cell-none { fill: none; stroke: var(--border); stroke-width: 1; }
 .ss-cell.ss-cell-unread { fill: var(--surface-2); stroke: var(--text-3); stroke-width: 1; }
