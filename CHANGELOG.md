@@ -5,6 +5,24 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.61 — 2026-11-18
+
+### Adăugat
+- **Export CSV pentru sezoane:** `/api/stats/seasons?format=csv` (UTF-8 cu BOM, aceleași N ca în pagină).
+- **Estimarea întârzierii finale per tren** (`/api/trains/{număr}/prediction`): un interval cu N, separat de valoarea citită. Estimarea se publică doar după ce trece poarta de calitate (30 de zile, 100 de predicții, eroare sub linia de bază). Până atunci răspunsul are `published: false` și nicio cifră.
+- Componentele de interfață pentru sezoane și estimare sunt pregătite (încărcare lazy), dar nu sunt montate încă în pagini.
+
+### Schimbat
+- Schema bazei rămâne v9; nicio migrare.
+
+### English
+- **CSV export for seasons:** `/api/stats/seasons?format=csv` (UTF-8 with BOM, the same N as on the page).
+- **Final delay estimate per train** (`/api/trains/{number}/prediction`): a range with N, kept apart from the read value. It is published only after the quality gate passes (30 days, 100 predictions, error below the baseline). Until then the response has `published: false` and no figures.
+- The seasons and estimate UI components are prepared (lazy loading) but not yet mounted on the pages.
+
+### Changed
+- The database schema stays at v9; no migration.
+
 ## Beta 1.60 — 2026-11-18
 
 ### Adăugat

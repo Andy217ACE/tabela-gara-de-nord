@@ -1752,5 +1752,14 @@
   "meta.ogTitle": "Tabela Gara de Nord — live arrivals and departures",
   "meta.ogDescription": "Arrivals and departures at Bucharest Gara de Nord: times, delays and platforms, read from the CFR board. Independent project, not affiliated with CFR.",
   "meta.ogLocale": "en_GB",
-  "meta.twitterDescription": "Arrivals and departures at Bucharest Gara de Nord, read from the CFR board. Independent project."
+  "meta.twitterDescription": "Arrivals and departures at Bucharest Gara de Nord, read from the CFR board. Independent project.",
+  "val5.seasons.title": "Seasons and weather",
+  "val5.seasons.csv": "Download CSV",
+  "val5.seasons.loadFail": "Could not load the seasons.",
+  "val5.pred.label": "Estimate",
+  "val5.pred.n": "N = {n}",
+  "val5.pred.interval": "range {low}–{high} min",
+  "val5.pred.median": "median {v} min",
+  "val5.pred.hidden": "The estimate is not published yet: {reason}",
+  "val5.pred.none": "No estimate: insufficient data."
 }

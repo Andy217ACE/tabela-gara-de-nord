@@ -1,0 +1,6 @@
+/* © 2026 Andy217Ace */
+.val5-note { color: var(--muted, #667); font-size: .9rem; margin: .4rem 0; overflow-wrap: anywhere; }
+.val5-pred { border: 1px solid var(--border, #ccd); border-radius: 8px; padding: .6rem .8rem; margin: .6rem 0; max-width: 100%; }
+.val5-row { margin: .25rem 0; overflow-wrap: anywhere; }
+.val5-csv { display: inline-block; margin: .6rem 0; }
+.val5-body { max-width: 100%; overflow-x: auto; }
