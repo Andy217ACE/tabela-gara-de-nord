@@ -75,3 +75,40 @@ def changes(store, p: stats.Params, filters: dict, today: date) -> dict:
     better, worse = _changes(now, before, p)
     d.update(status="ok", improved=better, worsened=worse)
     return d
+
+
+# ---- „Cele mai fiabile trenuri” ----------------------------------------------------------
+
+RELIABLE_MIN_JOURNEYS = 10   # journeys WITH a read delay: one lucky journey is not reliability
+RELIABLE_TOP = 10
+RELIABLE_EMPTY_KEY = "stats.sp3.reliable.empty"
+
+
+def reliable(store, p: stats.Params, filters: dict, today: date) -> dict:
+    """The trains most often on time over the request's period (`p.date_from/date_to`, as the
+    summary), mirror of the „Probleme” section. Per (train number, board)."""
+    rows, extra = cmp.load(store, p)
+    op, tip = filters.get("operator"), filters.get("tip")
+    g: dict = defaultdict(list)
+    for j in rows:
+        if (not op or j["operator"] == op) and (not tip or j["train_type"] == tip):
+            g[(j["train_no"], j["board"])].append(j)
+    items = []
+    for (no, board), js in g.items():
+        s = stats.summarize(stats.delays(js, p), p.on_time, p.min_sample)
+        if s["n"] < RELIABLE_MIN_JOURNEYS or not s["sufficient"]:
+            continue
+        last = max(js, key=lambda j: (j["service_date"], j["sched_time"]))
+        items.append({"train_no": no, "train": f"{last['train_type']} {no}".strip(), "board": board,
+                      "operator": last["operator"], "route": last["station"], "n": s["n"],
+                      "journeys": len(js), "on_time_pct": s["on_time_pct"], "mean": s["mean"],
+                      "median": s["median"]})
+    items.sort(key=lambda x: (-x["on_time_pct"], -x["n"], x["mean"], x["train_no"], x["board"]))
+    d = cmp.envelope(p, filters, today, cmp.history(extra))
+    d["min_journeys"] = RELIABLE_MIN_JOURNEYS
+    d["items"] = items[:RELIABLE_TOP]
+    d["eligible"] = len(items)
+    d["status"] = "ok" if items else "empty"
+    if not items:
+        d["message_key"] = RELIABLE_EMPTY_KEY
+    return d
