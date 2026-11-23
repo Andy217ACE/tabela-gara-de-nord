@@ -228,11 +228,8 @@
     return isNaN(d.getTime()) ? iso : fmt.format(d);
   }
 
-  function titleCase(x) {
-    return String(x || "").toLowerCase().replace(/(^|[\s\-.])(\S)/g, function (m, a, b) {
-      return a + b.toUpperCase();
-    });
-  }
+  // station names: display form from data/stations.txt (I18N.station), else Title Case
+  function titleCase(x) { return window.I18N.station(x); }
 
   function onBoard(no, date) {
     return App.boardTrains().filter(function (t) { return t.train_no === no && trainDate(t) === date; });

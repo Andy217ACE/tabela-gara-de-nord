@@ -13,6 +13,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from app import journeys, quality, stats
+from app.canonical import station_key, station_names, stations_matching
 from app.normalize import clean_station
 
 NOTE = ("Întârzierea este cea afișată pe tabela din București Nord (la sosirea sau "
@@ -23,7 +24,22 @@ JOURNEYS_PAGE_MAX = 500
 
 
 def canonical(name: str) -> str:
-    return clean_station(name or "")
+    """Stored key for a key or a display name ("Brașov", "Cluj-Napoca")."""
+    return station_key(name or "")
+
+
+def display_name(key: str) -> str:
+    """Romanian display name (data/stations.txt); unknown keys stay as stored."""
+    return station_names().get(key, key)
+
+
+def search_sql(expr: str, query: str) -> tuple[str, list]:
+    """WHERE fragment: `expr` contains the query (key form) or its display name does."""
+    q = clean_station(query) or query.strip().upper()
+    esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    keys = stations_matching(query)
+    extra = f" OR {expr} IN ({','.join('?' * len(keys))})" if keys else ""
+    return f"({expr} LIKE ? ESCAPE '!'{extra})", [f"%{esc}%", *keys]
 
 
 def _when(stamp: str):
@@ -33,10 +49,8 @@ def _when(stamp: str):
 def list_stations(store, query: str | None = None, limit: int = 100) -> list[dict]:
     where, args = "", []
     if query:
-        q = canonical(query) or query.strip().upper()
-        esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-        where = " AND station LIKE ? ESCAPE '!'"
-        args.append(f"%{esc}%")
+        sql, args = search_sql("station", query)
+        where = " AND " + sql
     # canonical names; ghosts (and the beta period unless included) left out
     src = (f"(SELECT s.board, s.train_no, s.status, s.uncertain, s.service_date,"
            f" s.delay_read_at, {journeys.STATION_SQL} AS station FROM services s"
@@ -52,7 +66,8 @@ def list_stations(store, query: str | None = None, limit: int = 100) -> list[dic
            " ORDER BY journeys DESC, station LIMIT ?")
     with store._lock:
         rows = store._conn.execute(sql, args + [int(limit)]).fetchall()
-    return [{"name": r["station"], "journeys": r["journeys"], "arrivals": r["arrivals"],
+    return [{"name": r["station"], "display_name": display_name(r["station"]),
+             "journeys": r["journeys"], "arrivals": r["arrivals"],
              "departures": r["departures"], "trains": r["trains"],
              "delay_known": r["delay_known"], "first_date": r["first_date"],
              "last_date": r["last_date"],
@@ -122,7 +137,8 @@ def detail(store, name: str, p: stats.Params) -> dict | None:
     return {
         "params": p.echo(),
         "name": name,
-        "note": NOTE.format(name=name),
+        "display_name": display_name(name),
+        "note": NOTE.format(name=display_name(name)),
         "journeys": len(js),
         "trains": len({j["train_no"] for j in js}),
         "uncertain_names": sum(1 for j in js if j["uncertain"]),

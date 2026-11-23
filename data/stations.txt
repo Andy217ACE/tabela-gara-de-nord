@@ -1,0 +1,75 @@
+# © 2026 Andy217Ace
+# Nume de afișare ale stațiilor. Format: CHEIE | Nume afișat
+# CHEIE = forma stocată (clean_station: majuscule, fără diacritice, exact cum o dă tabela,
+# inclusiv trunchierile ei: „AEROPORT H COANDA”). Cheia rămâne în URL-uri, statistici, export;
+# aplicația afișează doar numele. Cheile necunoscute se afișează ca text citit (Title Case).
+# Surse: denumirile stațiilor CFR (mersul trenurilor CFR Călători / Infofer) și Wikipedia RO.
+# Văzute pe tabela Gara de Nord (baza live):
+AEROPORT H COANDA | Aeroport Henri Coandă
+BRASOV | Brașov
+CONSTANTA | Constanța
+ROSIORI NORD | Roșiori Nord
+PITESTI | Pitești
+PLOIESTI SUD | Ploiești Sud
+CRAIOVA | Craiova
+TARGOVISTE | Târgoviște
+BUZAU | Buzău
+CLUJ NAPOCA | Cluj-Napoca
+GALATI | Galați
+ADJUD | Adjud
+IASI | Iași
+BUDAPESTA KELETI | Budapesta Keleti
+URZICENI | Urziceni
+ARAD | Arad
+SUCEAVA | Suceava
+FETESTI | Fetești
+SLOBOZIA VECHE | Slobozia Veche
+TITU | Titu
+VATRA DORNEI BAI | Vatra Dornei Băi
+TIMISOARA NORD | Timișoara Nord
+VIENA | Viena
+SUCEAVA NORD | Suceava Nord
+SIBIU | Sibiu
+SATU MARE | Satu Mare
+RUSE | Ruse
+BUCURESTI OBOR | București Obor
+BACAU | Bacău
+TARGU JIU | Târgu Jiu
+DEVA | Deva
+TEIUS | Teiuș
+TARGU MURES | Târgu Mureș
+KIEV - CHISINAU | Kiev - Chișinău
+CHISINAU-KIEV | Chișinău-Kiev
+# Capete de linie din București Nord încă necitite (forma probabilă de pe tabelă):
+BRAILA | Brăila
+FOCSANI | Focșani
+GIURGIU NORD | Giurgiu Nord
+MANGALIA | Mangalia
+MARASESTI | Mărășești
+MEDIAS | Mediaș
+ORADEA | Oradea
+PASCANI | Pașcani
+ROMAN | Roman
+SIGHISOARA | Sighișoara
+VATRA DORNEI | Vatra Dornei
+BAIA MARE | Baia Mare
+BOTOSANI | Botoșani
+CALARASI SUD | Călărași Sud
+TULCEA ORAS | Tulcea Oraș
+CAMPINA | Câmpina
+SINAIA | Sinaia
+PREDEAL | Predeal
+ALBA IULIA | Alba Iulia
+RAMNICU VALCEA | Râmnicu Vâlcea
+CURTEA DE ARGES | Curtea de Argeș
+BISTRITA NORD | Bistrița Nord
+SFANTU GHEORGHE | Sfântu Gheorghe
+MIERCUREA CIUC | Miercurea Ciuc
+VASLUI | Vaslui
+BARLAD | Bârlad
+TECUCI | Tecuci
+CARANSEBES | Caransebeș
+LUGOJ | Lugoj
+HUNEDOARA | Hunedoara
+PETROSANI | Petroșani
+SIMERIA | Simeria

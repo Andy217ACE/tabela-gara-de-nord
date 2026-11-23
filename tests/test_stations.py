@@ -47,7 +47,7 @@ def test_list(store):
 def test_detail_separates_boards_and_keeps_exact_name(store):
     d = stations.detail(store, "Galați", stats.Params(on_time=5, min_sample=5))
     assert d["name"] == "GALATI" and d["journeys"] == 7
-    assert "București Nord" in d["note"] and "GALATI" in d["note"]
+    assert "București Nord" in d["note"] and "Galați" in d["note"]  # display name in the text
     a, dep = d["boards"]["arrival"], d["boards"]["departure"]
     assert a["stats"]["n"] == 5 and a["stats"]["sufficient"] and a["stats"]["on_time"] == 3
     assert dep["stats"]["n"] == 1 and dep["stats"]["on_time_pct"] is None

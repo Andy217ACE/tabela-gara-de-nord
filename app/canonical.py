@@ -78,6 +78,37 @@ def seed_stations() -> frozenset[str]:
     return frozenset(clean_station(s) for s in _load("stations_seed.txt"))
 
 
+@lru_cache(maxsize=1)
+def station_names() -> dict[str, str]:
+    """Stored key (board form, ASCII upper case) -> display name, ``data/stations.txt``.
+
+    Display only: keys stay what is stored and used in URLs, stats and exports.
+    """
+    out = {}
+    for ln in _load("stations.txt"):
+        key, _, name = (p.strip() for p in ln.partition("|"))
+        if clean_station(key) and name:
+            out[clean_station(key)] = name
+    return out
+
+
+@lru_cache(maxsize=1)
+def _display_keys() -> dict[str, str]:
+    return {clean_station(n): k for k, n in station_names().items()}
+
+
+def station_key(text: str | None) -> str:
+    """The stored key for a key or a display name ("Cluj-Napoca" -> "CLUJ NAPOCA")."""
+    raw = clean_station(text or "")
+    return _display_keys().get(raw, raw)
+
+
+def stations_matching(text: str | None) -> list[str]:
+    """Keys whose display name contains `text`, diacritics/case ignored ("henri" -> airport)."""
+    q = clean_station(text or "")
+    return sorted(k for d, k in _display_keys().items() if q in d) if q else []
+
+
 def _lev(a: str, b: str) -> int:
     """Levenshtein distance (short strings only)."""
     prev = list(range(len(b) + 1))

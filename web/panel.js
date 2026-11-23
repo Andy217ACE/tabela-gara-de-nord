@@ -220,7 +220,7 @@
       var q = norm(S.q);
       if (/^\d+$/.test(q)) {
         if (String(t.train_no).indexOf(q) < 0) return false;
-      } else if (norm(t.station).indexOf(q) < 0 && norm(t.train_type + " " + t.train_no).indexOf(q) < 0) {
+      } else if (norm(t.station + " " + window.I18N.station(t.station)).indexOf(q) < 0 && norm(t.train_type + " " + t.train_no).indexOf(q) < 0) {
         return false;
       }
     }
@@ -665,7 +665,7 @@
     if (S.selected === key) tr.classList.add("is-selected");
     tr.setAttribute("aria-label", T("panel.rowAria", {
       train: (t.train_type || "") + " " + t.train_no,
-      where: T(board === "arrivals" ? "board.from" : "board.to") + " " + (t.station || T("board.stationUnknown")),
+      where: T(board === "arrivals" ? "board.from" : "board.to") + " " + (t.station ? window.I18N.station(t.station) : T("board.stationUnknown")),
       time: t.sched_time || T("board.timeUnknown") }));
 
     var isFav = S.favs.has(String(t.train_no));
@@ -699,7 +699,7 @@
     tr.appendChild(cell("train", train));
 
     tr.appendChild(clipCell("station", t.station ? stationLink(t.station, t) : unknown("station"),
-      fullName(t.station, t)));
+      fullName(t.station && window.I18N.station(t.station), t)));
     tr.appendChild(clipCell("op", t.operator ? nameNode(t.operator, t) : unknown("op"),
       fullName(t.operator, t)));
     tr.appendChild(cell("delay", delayNode(t, lvl, fresh)));
@@ -750,7 +750,7 @@
   function stationLink(name, t) {
     var a = el("a", "station-link station-link-plain");
     a.href = "#statie?nume=" + encodeURIComponent(name);
-    a.appendChild(nameNode(name, t));
+    a.appendChild(nameNode(window.I18N.station(name), t));
     return a;
   }
 
@@ -968,7 +968,7 @@
     head.append(h, close);
 
     var dl = el("dl", "pnl-dl");
-    var station = t.station || null;
+    var station = t.station ? window.I18N.station(t.station) : null;
     var route = b === "arrivals"
       ? (station ? station : "?") + " → București Nord"
       : "București Nord → " + (station ? station : "?");

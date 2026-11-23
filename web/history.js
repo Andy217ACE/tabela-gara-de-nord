@@ -596,11 +596,8 @@
     return { step: step, max: Math.max(step, Math.ceil(v / step) * step) };
   }
 
-  function titleCase(s) {
-    return String(s || "").toLowerCase().replace(/(^|[\s\-.])(\S)/g, function (m, a, b) {
-      return a + b.toUpperCase();
-    });
-  }
+  // station names: display form from data/stations.txt (I18N.station), else Title Case
+  function titleCase(s) { return window.I18N.station(s); }
 
   // Points of /api/journeys/{id} `delay_series` (real readings only, never an unread
   // frame) + a final marker at the observed disappearance. A reading repeated by two

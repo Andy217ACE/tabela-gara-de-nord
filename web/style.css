@@ -903,7 +903,6 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
   letter-spacing: -0.005em;
   line-height: 1.25;
   overflow-wrap: anywhere;
-  text-transform: capitalize;
   /* nume lungi: cel mult 2 rânduri, apoi „…" (numele complet e în title) */
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1367,7 +1366,6 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
   grid-column: 2;
   grid-row: 1;
   font-weight: 600;
-  text-transform: capitalize;
   overflow-wrap: anywhere;
 }
 .h-trn { grid-column: 2; grid-row: 2; }

@@ -216,12 +216,13 @@
 
     // A2 canonicalisation: `uncertain` = station/operator did not match a known name
     var unsure = t.uncertain === true;
-    c.stationLink.textContent = t.station ? t.station.toLowerCase() : "—";
+    var name = t.station ? window.I18N.station(t.station) : "";   // display name; the key stays in the URL
+    c.stationLink.textContent = name || "—";
     if (t.station) {
       var href = "#statie?nume=" + encodeURIComponent(t.station);
       if (c.stationLink.getAttribute("href") !== href) c.stationLink.setAttribute("href", href);
       c.stationLink.setAttribute("aria-label", T(fromBoard ? "board.stationPageFrom" : "board.stationPageTo",
-        { name: t.station + (unsure ? " (" + unsureText() + ")" : "") }));
+        { name: name + (unsure ? " (" + unsureText() + ")" : "") }));
       c.station.removeAttribute("aria-label");
     } else {
       c.stationLink.removeAttribute("href");
@@ -230,7 +231,7 @@
     }
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
     // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
-    c.station.title = t.station ? t.station + (unsure ? " (" + unsureText() + ")" : "") : "";
+    c.station.title = t.station ? name + (unsure ? " (" + unsureText() + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = typeAbbr(t.train_type) || "?";
     c.type.title = T("board.typeTitle", { type: typeName(t.train_type) || typeAbbr(t.train_type) || T("board.typeUnknown") });
@@ -265,7 +266,7 @@
     c.plat.setAttribute("aria-label", known ? T("board.platAria", { p: t.platform }) : T("board.platNone"));
     c.plat.title = known ? T("board.platAria", { p: t.platform }) : T("board.platNoneTitle");
 
-    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + (t.station || "");
+    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + name;
     applyFollow(c);
 
     var sig = (read ? d : "?") + "|" + (known ? t.platform : "-");
