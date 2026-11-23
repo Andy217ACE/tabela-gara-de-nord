@@ -121,19 +121,30 @@ def test_renders_state_totals_events(browser, base_url):  # noqa: F811
         ctx.close()
 
 
+def _wait_posts(page, api, n):
+    # the page updates optimistically, so the summary can change before the mocked POST is handled
+    for _ in range(100):
+        if len(api.posts) >= n:
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError(f"expected {n} verdict POSTs, got {len(api.posts)}")
+
+
 def test_verdict_post_csrf_toggle_and_error_revert(browser, base_url):  # noqa: F811
     api = Api()
     ctx, page, _ = _page(browser, base_url, api)
     try:
         page.wait_for_selector(".ocr2-ev")
-        second = page.locator(".ocr2-ev").nth(1)  # no verdict yet... actually event 2
+        second = page.locator(".ocr2-ev").nth(1)
         second.get_by_role("button", name="Greșit").click()
         page.wait_for_function("() => document.getElementById('ocr2-summary').innerText.includes('33.3%')")
+        _wait_posts(page, api, 1)
         assert api.posts[-1] == ({"verdict": "wrong"}, "tok")
         assert second.get_by_role("button", name="Greșit").get_attribute("aria-pressed") == "true"
         # clicking the active verdict clears it
         second.get_by_role("button", name="Greșit").click()
         page.wait_for_function("() => document.getElementById('ocr2-summary').innerText.includes('50.0%')")
+        _wait_posts(page, api, 2)
         assert api.posts[-1][0] == {"verdict": None}
         assert second.get_by_role("button", name="Greșit").get_attribute("aria-pressed") == "false"
         # failure: reverts, shows an inline error

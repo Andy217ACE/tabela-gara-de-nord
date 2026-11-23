@@ -5,6 +5,24 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.63 — 2026-11-23
+### Adăugat
+- **Pagina admin „Alternativa OCR” (`#ocr2`):** starea alternativei (pornită, mod umbră, model), contoarele de la pornire și totalurile care rămân după repornire.
+- **Jurnalul alternativei:** fiecare rând pe care alternativa l-ar completa (în umbră) sau l-a completat se păstrează în `ocr_alt/` lângă bază, cu decupajul celulei citite; 30 de zile, maxim 5000 de rânduri.
+- **Verificare pe imagine:** lângă fiecare propunere apare decupajul din captură și butoanele Corect / Greșit / Neclar; pagina calculează precizia (corecte / (corecte + greșite)) și afișează N.
+- **API admin** `/api/admin/ocr-alt` (listă paginată, filtru „doar neverificate”), `/api/admin/ocr-alt/crop/…` (PNG) și verdictul prin POST cu CSRF; nimic din aceste date în API-ul public.
+- Link „Alternativa OCR →” din pagina „Capturi OCR”.
+### Schimbat
+- Schema bazei rămâne v9; nicio migrare. Pagina nouă se încarcă la cerere, fără schimbare în precache.
+### English
+- **Admin page “OCR alternative” (`#ocr2`):** the alternative's state (on, shadow mode, model), counters since start and totals that survive a restart.
+- **Alternative journal:** every row the alternative would fill (in shadow mode) or filled is kept in `ocr_alt/` next to the database, with a crop of the cell it read; 30 days, at most 5000 rows.
+- **Check on the image:** each proposal shows the crop from the capture and Correct / Wrong / Unclear buttons; the page computes precision (correct / (correct + wrong)) and shows N.
+- **Admin API** `/api/admin/ocr-alt` (paged list, “unverified only” filter), `/api/admin/ocr-alt/crop/…` (PNG) and the verdict via POST with CSRF; none of this data is in the public API.
+- A “OCR alternative →” link from the “OCR captures” page.
+### Changed
+- The database schema stays at v9; no migration. The new page loads on demand, with no precache change.
+
 ## Beta 1.62 — 2026-11-18
 
 ### Adăugat
