@@ -1,0 +1,54 @@
+/* © 2026 Andy217Ace */
+/* „Alternativa OCR" (#ocr2) — admin evidence page; loaded on demand, uses the theme tokens of style.css. */
+
+.view-ocr2 { padding-bottom: 32px; }
+.ocr2-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ocr2-h2 { font-size: 1rem; margin: 0 0 8px; }
+.ocr2-login { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.ocr2-login .btn { align-self: flex-start; margin-top: 0; }
+
+.ocr2-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.ocr2-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.ocr2-stat dt { color: var(--text-3); font-size: 0.75rem; }
+.ocr2-stat dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.ocr2-stat dd.ocr2-n { color: var(--text-2); font-size: 0.75rem; font-weight: 400; }
+
+.ocr2-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.ocr2-bar .ocr2-h2 { margin: 0; }
+.ocr2-filter { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
+
+.ocr2-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ocr2-ev { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ocr2-ev-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.ocr2-tag { background: var(--surface-2); border-radius: var(--radius-md); padding: 1px 8px; font-size: 0.75rem; }
+.ocr2-ctx { margin: 0; color: var(--text-2); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.ocr2-cols { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ocr2-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.ocr2-crop {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 72px;
+  object-fit: contain;
+  object-position: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.ocr2-col .mono { font-family: var(--mono); }
+.ocr2-verdicts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ocr2-v { margin-top: 0; }
+.ocr2-v:focus-visible, .ocr2-filter input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ocr2-v[aria-pressed="true"] { border-width: 2px; font-weight: 700; }
+.ocr2-v-correct[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.ocr2-v-wrong[aria-pressed="true"] { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+.ocr2-v-unclear[aria-pressed="true"] { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.ocr2-err { margin: 0; }
+.ocr2-empty { color: var(--text-2); margin: 0; }
+#ocr2-more { align-self: center; }
