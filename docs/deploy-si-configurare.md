@@ -362,6 +362,10 @@ Fișiere: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.time
 | site nginx și `tabela-limits.conf` | da | nu | |
 | `tabela-noip` (DNS dinamic) | nu | nu | da (vezi secțiunea 9) |
 
+### 5.5 Tesseract
+
+Pe server: Tesseract **5.5.0**, Ubuntu 26.04, pachet apt (`tesseract-ocr`, `tesseract-ocr-ron`), doar modelele oficiale `eng`, `ron` și `osd`; utilizatorii nu pot încărca modele. Versiunea și limbile încărcate sunt în `GET /api/system` (`tesseract.version`, `tesseract.langs`, citite o singură dată la prima cerere), iar `security_updates` arată actualizările de securitate Ubuntu în așteptare (din `/var/lib/update-notifier/updates-available`; `null` dacă fișierul lipsește). Verificare manuală: `tesseract --version` și `tesseract --list-langs`. Actualizare: `sudo apt-get update && sudo apt-get install --only-upgrade tesseract-ocr tesseract-ocr-ron`, apoi repornirea serviciului (versiunea se citește la pornire) și o re-măsurare OCR (`docs/ocr.md`), pentru că o versiune nouă poate schimba citirea.
+
 ## 6. nginx
 
 ### 6.1 Site-ul

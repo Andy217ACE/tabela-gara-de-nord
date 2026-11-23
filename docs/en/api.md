@@ -693,12 +693,15 @@ The system state, for the System page. The public variant is minimal.
 {"version": "Beta 1.65", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
- "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3}, "admin": false}
+ "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3},
+ "tesseract": {"version": "5.5.0", "langs": ["eng", "osd", "ron"]}, "security_updates": 0,
+ "admin": false}
 ```
 
 - `admin` is `true` only if the request has a valid Bearer token or a valid session. Then
   the page also requests `GET /api/admin/system` (section 7.9). The check never produces 401 or
   503 for ordinary visitors.
+- `tesseract.version` is the Tesseract version (`null` if it cannot be read) and `tesseract.langs` the list of loaded traineddata models (`[]` if unknown); both are read once and cached. `security_updates` is the number of pending Ubuntu security updates, read from `/var/lib/update-notifier/updates-available` (no apt, no sudo); `null` if the file is missing.
 - `stare` can be `live`, but also other values (`app/system_status.py`).
 
 ### 5.20 `GET /api/export/history.csv`

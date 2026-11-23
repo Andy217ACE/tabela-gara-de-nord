@@ -9,7 +9,9 @@ A missing value is reported as None ("necunoscut" on the page), never as 0.
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import subprocess
 import time
 from datetime import datetime
 
@@ -41,6 +43,45 @@ def panel_state(age_s: float | None) -> str:
     if age_s is None:
         return "necunoscut"
     return "live" if age_s <= STALE_PANEL_S else "date_vechi"
+
+
+_tess_info: dict | None = None  # cached on first call: the installed binary does not change while running
+_UPDATES_FILE = "/var/lib/update-notifier/updates-available"  # written by Ubuntu's update-notifier
+
+
+def tesseract_info(cmd: str) -> dict:
+    """Tesseract version and loaded traineddata languages, from `tesseract --version` and
+    `--list-langs` (one call each, cached). Unavailable -> None / []."""
+    global _tess_info
+    if _tess_info is None:
+        exe = cmd if os.path.isabs(cmd) else (shutil.which(cmd) or cmd)
+
+        def run(arg):
+            try:
+                p = subprocess.run([exe, arg], capture_output=True, text=True, timeout=5)
+                return (p.stdout or p.stderr) if p.returncode == 0 else ""
+            except (OSError, subprocess.SubprocessError):
+                return ""
+
+        m = re.search(r"tesseract\s+v?(\d[\w.\-]*)", run("--version"))
+        langs = [x.strip() for x in run("--list-langs").splitlines()[1:] if x.strip()]
+        _tess_info = {"version": m.group(1) if m else None, "langs": langs}
+    return _tess_info
+
+
+def pending_security_updates() -> int | None:
+    """Security updates waiting, from update-notifier's text file ("N updates can be applied
+    immediately" / "N of these updates are security updates"); None if the file is missing
+    or unparseable. No apt call, no sudo."""
+    try:
+        with open(_UPDATES_FILE, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r"(\d+) of these updates are (?:standard )?security", text)
+    if m:
+        return int(m.group(1))
+    return 0 if "updates can be applied" in text or "updates can be installed" in text else None
 
 
 def _disk(db_path: str) -> dict:
@@ -88,6 +129,8 @@ def collect_status(store, settings, now: datetime, *, admin: bool = False) -> di
         },
         "disk": {"free_gb": disk["free_gb"]},
         "db": _db(db_path),
+        "tesseract": tesseract_info(getattr(settings, "tesseract_cmd", "tesseract")),
+        "security_updates": pending_security_updates(),
     }
     if admin:
         snap = ocr_stats.snapshot()
