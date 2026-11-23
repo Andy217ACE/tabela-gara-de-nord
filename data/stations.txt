@@ -14,7 +14,7 @@ PLOIESTI SUD | Ploiești Sud
 CRAIOVA | Craiova
 TARGOVISTE | Târgoviște
 BUZAU | Buzău
-CLUJ NAPOCA | Cluj-Napoca
+CLUJ NAPOCA | Cluj Napoca
 GALATI | Galați
 ADJUD | Adjud
 IASI | Iași

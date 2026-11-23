@@ -29,6 +29,7 @@ def test_mapping_loads_and_covers_live_and_seed():
 
 def test_key_resolution_and_search():
     assert stations.canonical("Cluj-Napoca") == "CLUJ NAPOCA"
+    assert stations.display_name("CLUJ NAPOCA") == "Cluj Napoca"  # forma CFR, fără cratimă
     assert stations.canonical("Brașov") == stations.canonical("BRASOV") == "BRASOV"
     assert stations.canonical("NEWHERE") == "NEWHERE"   # unknown: kept as read
     assert canonical.stations_matching("henri coandă") == ["AEROPORT H COANDA"]
