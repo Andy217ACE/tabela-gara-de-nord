@@ -372,7 +372,7 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
             had = "a avut" if s["over_30"] == 1 else "au avut"
             out.append(f"{BOARD_PL[b]}: din {_pl(n, 'călătorie încheiată', 'călătorii încheiate')}"
                        f" cu întârziere citită, {s['on_time']} ({_fmt(s['on_time_pct'])} %) {were}"
-                       f" la timp (≤ {p.on_time} min); mediana {_fmt(s['median'])} min, iar "
+                       f" la timp (≤ {p.on_time} min); întârziere tipică {_fmt(s['median'])} min, iar "
                        f"{s['over_30']} {had} peste 30 min (N = {n}).")
     for b in boards:
         ok = [h for h in hourly[b] if h["sufficient"]]
@@ -383,12 +383,12 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
         worst = max(ok, key=lambda h: (h["median"], h["over_30"], -h["key"]))
         if worst["median"] <= p.on_time:
             most = max(ok, key=lambda h: (h["over_30"], -h["key"]))
-            out.append(f"{BOARD_PL[b]}: la fiecare oră cu destule date mediana e la timp "
+            out.append(f"{BOARD_PL[b]}: la fiecare oră cu destule date întârzierea tipică e la timp "
                        f"(≤ {p.on_time} min)" + (
                            f"; cele mai multe întârzieri peste 30 min: {_between(most['key'])} "
                            f"({most['over_30']} din N = {most['n']})." if most["over_30"] else "."))
             continue
-        line = (f"{BOARD_PL[b]}: cea mai mare întârziere mediană o au trenurile programate "
+        line = (f"{BOARD_PL[b]}: cea mai mare întârziere tipică o au trenurile programate "
                 f"{_between(worst['key'])} — {_fmt(worst['median'])} min, cu "
                 f"{worst['over_30']} peste 30 min (N = {worst['n']})")
         best = min(ok, key=lambda h: (h["median"], h["over_30"], h["key"]))
@@ -401,7 +401,7 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
         if r.get("worst") and (r["worst"][0]["median"] or 0) > p.on_time:
             e = r["worst"][0]
             way = "din" if b == "arrival" else "spre"
-            out.append(f"Cea mai mare întârziere mediană {BOARD_AT[b]}: trenurile {way} "
+            out.append(f"Cea mai mare întârziere tipică {BOARD_AT[b]}: trenurile {way} "
                        f"{e['key'].title()} — {_fmt(e['median'])} min "
                        f"(N = {e['n']}, {_pl(e['trains'], 'tren', 'trenuri')}).")
     per_hour = [sum(traffic[b][h] for b in boards) for h in range(24)]

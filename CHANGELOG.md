@@ -12,12 +12,18 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 - **Migrare v10 (automată, cu copie de siguranță înainte):** serviciile, observațiile, calitatea, corecțiile și catalogul de trenuri trec la numele oficiale într-o singură trecere pe tabel; textul citit de OCR (`*_raw`) nu se atinge niciodată. Dacă operatorul stocat nu se potrivește dar textul citit da, se folosește textul citit.
 - **Căutare fără diacritice:** „calatori” găsește „Călători” (catalogul de trenuri și statisticile).
 - **Evaluarea față de adevărul de teren:** etichetele (text de pe tabelă) se compară cu numele oficial, deci rezultatele OCR rămân comparabile.
+- **Corecții manuale la operator:** valoarea corectă se potrivește cu lista oficială și se salvează cu numele oficial; un operator necunoscut e respins (422) cu lista numelor oficiale. Valoarea „citită greșit” poate rămâne text necunoscut, ca să poți corecta ce a văzut OCR-ul.
+- **Restaurare fără forme vechi:** la restaurarea unui lot de corecții, numele de operator din copiile vechi (forma de pe tabelă sau cu majuscule) trec prin aceeași potrivire și se scriu cu numele oficial; istoricul de audit rămâne neschimbat.
+- **Fără „mediană” în interfață:** peste tot apare „întârziere tipică” (jumătate din trenuri au întârziat mai puțin, jumătate mai mult), iar „media” devine „în medie” (anteturi, sfaturi, texte generate de server, grafice). Cheile din API și numele coloanelor tehnice rămân neschimbate.
 ### English
 - **Operators under their official names:** instead of the truncated board text the app shows `CFR Călători`, `Regio Călători`, `Transferoviar Călători`, `InterRegional Călători`, `Astra Trans Carpatic`, `Softrans`, `Ferotrafic TFI`. `data/operators.txt` is now `Official name | alias | alias` (sources: ARF arf.gov.ro/ro/prezentare-otf, operator sites, data.gov.ro); the official name and the board forms are match keys.
 - **Wider, measured OCR matching:** on 823,912 live readings vs each train number's stable operator, a score ≥ 0.82 is right 99.9999% of the time; 0.65–0.82 with a margin ≥ 0.10 over the runner-up operator is right for 100% of 1,626 (without the margin: 99.3%; below 0.65: ≤ 93%). Scores are computed per operator (best of name and aliases); a “soft” match is no longer flagged uncertain.
 - **Migration v10 (automatic, backup first):** services, observations, quality, corrections and the train catalog move to the official names in one pass per table; the OCR text (`*_raw`) is never touched. If the stored operator does not match but the raw text does, the raw text is used.
 - **Diacritic-insensitive search:** “calatori” finds “Călători” (train catalog and statistics).
 - **Truth-set evaluation:** labels (board text) are compared against the official name, so OCR accuracy results stay comparable.
+- **Manual operator corrections:** the correct value is matched against the official list and stored under the official name; an unknown operator is rejected (422) with the list of official names. The “read wrongly” value may stay unrecognised text so you can fix what OCR saw.
+- **Restore never writes old forms back:** when a correction batch is restored, operator names in old snapshots (board or uppercase forms) go through the same matching and are written under the official name; the audit history is left untouched.
+- **No more “median” in the interface:** it now says “typical delay” (half of the trains were less late, half more) and “mean” becomes “on average” (headers, tooltips, server-generated sentences, charts). API keys and technical column names are unchanged.
 
 ## Beta 1.63 — 2026-11-23
 ### Adăugat

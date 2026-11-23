@@ -26,7 +26,7 @@ def test_summary_cards_show_four_metrics(browser, base_url):
         cards = page.locator(".ss-quick .ss-card")
         assert cards.count() == 4
         titles = [t.strip() for t in cards.locator(".ss-card-t").all_text_contents()]
-        assert titles == ["La timp", "Întârziere medie", "Trenuri analizate", "Cea mai problematică rută"]
+        assert titles == ["La timp", "Întârziere în medie", "Trenuri analizate", "Cea mai problematică rută"]
         for txt in cards.locator(".ss-card-v").all_text_contents():
             assert txt.strip() and "NaN" not in txt and "undefined" not in txt
         assert "NaN" not in page.text_content(".ss-quick")

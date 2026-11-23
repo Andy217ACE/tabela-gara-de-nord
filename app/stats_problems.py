@@ -362,7 +362,7 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
         w, bt = cmp_[worse], cmp_[better]
         if bt["on_time_pct"] - w["on_time_pct"] >= 20:
             fig = " · ".join(f"{BOARD_PL[b]}: {cmp_[b]['on_time']} din {cmp_[b]['n']} la timp "
-                             f"({_fmt(cmp_[b]['on_time_pct'])} %), mediana "
+                             f"({_fmt(cmp_[b]['on_time_pct'])} %), întârziere tipică "
                              f"{_fmt(cmp_[b]['median'])} min" for b in boards)
             mix = w["mix"]
             if mix:
@@ -387,10 +387,10 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
             if not (r["median"] is not None and (r["median"] >= LATE or r["on_time_pct"] <= 50)):
                 continue
             way = "din" if b == "arrival" else "spre"
-            fig = (f"{r['on_time']} din {r['n']} la timp ({_fmt(r['on_time_pct'])} %) · mediana "
+            fig = (f"{r['on_time']} din {r['n']} la timp ({_fmt(r['on_time_pct'])} %) · întârziere tipică "
                    f"{_fmt(r['median'])} min · {r['over_15']} peste 15 min, {r['over_30']} peste "
                    f"30 · {r['trains']} trenuri în {r['days']} zile")
-            why = ("Cea mai întârziată direcție după mediană (nu după medie, pe care un singur caz "
+            why = ("Cea mai întârziată direcție după întârzierea tipică (nu după cea în medie, pe care un singur caz "
                    "extrem o poate deforma). Întârzierea e cea afișată la București Nord, "
                    "acumulată pe drum." if b == "arrival" else
                    "Plecări întârziate repetat pe aceeași direcție: de verificat dacă trenul "
@@ -409,11 +409,11 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
                 continue
             name = TYPE_NAME.get(r["key"], r["key"])
             fig = (f"{r['on_time']} din {r['n']} la timp ({_fmt(r['on_time_pct'])} %, față de "
-                   f"{_fmt(base)} % la toate {BOARD_LOW[b]}le) · mediana {_fmt(r['median'])} min · "
+                   f"{_fmt(base)} % la toate {BOARD_LOW[b]}le) · întârziere tipică {_fmt(r['median'])} min · "
                    f"{r['over_30']} peste 30 min · {r['trains']} trenuri")
             items.append(_item("type", b, severity_of(r["median"]), _conf_group(r, p, TYPE_MIN_TRAINS),
                                r["over_15"], f"{r['key']} ({name}) la {BOARD_LOW[b]}: "
-                               f"mult sub medie", fig,
+                               f"mult sub media generală", fig,
                                "Tipul de tren coincide cu anumite rute (de exemplu cele lungi sau "
                                "de noapte): arată unde apar întârzierile, nu de ce (corelație, nu "
                                "cauzalitate).", r["n"],
@@ -454,7 +454,7 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
                                w["over_15"], f"{BOARD_PL[b]} programate {w['label']}: cele mai "
                                f"multe întârzieri", f"{w['over_15']} din {w['n']} peste 15 min "
                                f"({_fmt(pct15)} %, față de {_fmt(_pct(base['over_15'], base['n'], p))} % "
-                               f"la toate {BOARD_LOW[b]}le) · mediana {_fmt(w['median'])} min · în "
+                               f"la toate {BOARD_LOW[b]}le) · întârziere tipică {_fmt(w['median'])} min · în "
                                f"{w['late_days']} din {w['days']} zile",
                                "Fereastra în care legăturile sunt cel mai des ratate; se repetă în "
                                "mai multe zile, deci nu e un singur incident.", w["n"],
@@ -488,8 +488,8 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
                                "ridicată" if g["n"] >= p.min_sample else "medie", g["over_30"],
                                f"{BOARD_PL[b]}: întârzieri foarte mari (maxim {top[0]['delay']} min)",
                                fig, "Puține, dar cu impact mare pentru cei afectați. Un singur caz "
-                               "extrem poate muta media unei ore sau a unei rute — de aceea "
-                               "clasamentele de aici folosesc mediana.", g["n"],
+                               "extrem poate deforma valoarea în medie a unei ore sau a unei rute — de aceea "
+                               "clasamentele de aici folosesc întârzierea tipică.", g["n"],
                                [{"label": f"{t['train_type']} {t['train_no']}",
                                  "href": f"#tren?nr={t['train_no']}"} for t in top]))
     # 8. delay grows after the first announcement
@@ -500,7 +500,7 @@ def _items(boards, cmp_, routes, types, rec, wins, eps, bigs, grow, p, bj) -> li
                                else "medie", g["grew"], f"{BOARD_PL[b]}: prima întârziere "
                                f"anunțată crește adesea", f"Din {g['n']} {BOARD_LOW[b]} cu "
                                f"întârziere anunțată (> 0): {g['grew']} au crescut după primul "
-                               f"anunț ({_fmt(g['grew_pct'])} %, mediana +{_fmt(g['grew_median'])} "
+                               f"anunț ({_fmt(g['grew_pct'])} %, tipic +{_fmt(g['grew_median'])} "
                                f"min), {g['same']} au rămas la fel, {g['recovered']} au scăzut",
                                "Prima cifră de pe tabelă tinde să subestimeze întârzierea finală: "
                                "pentru o legătură strânsă, socotește o marjă.", g["n"]))
@@ -516,7 +516,7 @@ def _good(boards, cmp_, routes, types) -> list[str]:
         s = cmp_[b]
         if s["sufficient"] and s["on_time_pct"] >= 90:
             out.append(f"{BOARD_PL[b]}: {s['on_time']} din {s['n']} la timp "
-                       f"({_fmt(s['on_time_pct'])} %), mediana {_fmt(s['median'])} min.")
+                       f"({_fmt(s['on_time_pct'])} %), întârziere tipică {_fmt(s['median'])} min.")
     for b in boards:
         for r in routes[b]["best"][:2]:
             way = "din" if b == "arrival" else "spre"
