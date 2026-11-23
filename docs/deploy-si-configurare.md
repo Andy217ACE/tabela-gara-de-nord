@@ -2,7 +2,7 @@
 
 Această pagină descrie cum ajunge codul pe serverul Ubuntu, ce setări citește aplicația, ce fac scripturile `deploy/install.sh` și `deploy/update.sh`, ce unități systemd și ce configurare nginx sunt în repo, cum se face o versiune nouă și cum se revine la una veche.
 
-Pagina a fost scrisă din codul și fișierele de configurare din repo, la versiunea `Beta 1.43` (fișierul `VERSION`). Acolo unde o afirmație nu s-a putut verifica din repo (de exemplu, ce există pe server și nu e în git), este marcată cu **nesigur** și se spune ce fișier sau ce comandă trebuie verificată.
+Pagina a fost scrisă din codul și fișierele de configurare din repo, inițial la versiunea `Beta 1.43`, actualizată la `Beta 1.65` (fișierul `VERSION`). Acolo unde o afirmație nu s-a putut verifica din repo (de exemplu, ce există pe server și nu e în git), este marcată cu **nesigur** și se spune ce fișier sau ce comandă trebuie verificată.
 
 Convenții:
 
@@ -182,7 +182,7 @@ Scriptul este pentru prima instalare, dar poate fi rulat și peste o instalare e
 sudo bash install.sh [branch]
 ```
 
-Antetul scriptului spune ce nu face: nu pornește `ufw` (firewall-ul este NSG-ul din cloud, conform comentariului din cod), iar cheia privată VAPID nu se afișează niciodată. Variabilele `REPO_URL` (implicit `https://github.com/Andy217Ace/tabela-gara-de-nord.git`) și `APP_DIR` (implicit `/opt/tabela/app`) pot fi suprascrise prin mediu.
+Antetul scriptului spune ce nu face: nu pornește `ufw` (firewall-ul se configurează o singură dată, de mână; vezi secțiunea 7), iar cheia privată VAPID nu se afișează niciodată. Variabilele `REPO_URL` (implicit `https://github.com/Andy217Ace/tabela-gara-de-nord.git`) și `APP_DIR` (implicit `/opt/tabela/app`) pot fi suprascrise prin mediu.
 
 Pașii, în ordinea din cod:
 
@@ -326,6 +326,8 @@ Fișier: `deploy/tabela.service`, instalat ca `/etc/systemd/system/tabela.servic
 
 Notă: `ReadWritePaths` este singurul loc scriptibil. De aceea `CAPTURE_DIR`, `BACKUP_DIR` și `REJECTED_DIR` trebuie să fie sub `/var/lib/tabela`, iar `update.sh` avertizează când nu sunt.
 
+Unitatea setează `Environment=OMP_THREAD_LIMIT=1`: Tesseract este apelat dintr-un fir de execuție, iar fără limită OpenMP ar ocupa toate nucleele la fiecare apel. `update.sh` instalează unitatea la fiecare deploy (`UNIT_SRC` → `UNIT_DST`).
+
 ### 5.2 Watchdog-ul
 
 Fișiere: `deploy/tabela-watchdog.service`, `deploy/tabela-watchdog.timer`, `deploy/tabela-watchdog.sudoers`, cod în `app/watchdog.py`.
@@ -426,22 +428,25 @@ Testul `test_nginx_admin_login_rate_limited_and_certbot_untouched` din `tests/te
 
 ## 7. Firewall
 
-Ce spune documentația (de verificat pe server):
+Serverul de producție este serverul de acasă (Ubuntu 26.04 LTS), nu o mașină din cloud. Firewall-ul este `ufw`, activ, cu politica implicită „deny incoming”, configurat o singură dată, de mână (`install.sh` nu activează `ufw`):
 
-- README (secțiunea de deploy): „`ufw` nu se activează: firewall-ul e NSG-ul Azure.” Acesta este singurul text din repo despre firewall-ul serverului. Atenție: dacă serverul actual nu mai este pe Azure, această propoziție este depășită. Nesigur: verifică ce firewall e activ pe mașina reală.
-- Antetul `deploy/install.sh`: „Never enables ufw (the cloud NSG is the firewall).”
-- Planul de implementare `docs/superpowers/plans/2026-10-20-tabela-gara-de-nord.md`, pasul 2 al instalării, menționează `ufw allow 80,443`. Este un plan, nu o procedură verificată, și nu se regăsește în README sau CHANGELOG.
-
-Porturi necesare, din configurare:
-
-| Port | Expus public | Motiv |
+| Port | Cine are acces | Motiv |
 |---|---|---|
-| 80 (TCP) | da | Redirecționare spre HTTPS pentru `tabelacfr.ddns.net` și `404` pentru restul cererilor HTTP din acest bloc (`listen 80` în `nginx-tabela.conf`) |
-| 443 (TCP) | da | Site-ul HTTPS |
-| 8000 (TCP) | nu | Uvicorn ascultă doar pe `127.0.0.1` (`--host 127.0.0.1` în `tabela.service`) |
-| SSH (de obicei 22) | nesigur | Nu apare în repo. Verifică pe server |
+| 80 (TCP) | internetul | Redirecționare spre HTTPS pentru `tabelacfr.ddns.net` și `404` pentru restul cererilor HTTP din acest bloc (`listen 80` în `nginx-tabela.conf`) |
+| 443 (TCP) | internetul | Site-ul HTTPS |
+| 22 (TCP, SSH) | doar rețeaua locală `192.168.1.0/24` | Administrare |
+| 3389 (TCP, RDP) | doar rețeaua locală `192.168.1.0/24` | Administrare |
+| 8000 (TCP) | nimeni din afară | Uvicorn ascultă doar pe `127.0.0.1` (`--host 127.0.0.1` în `tabela.service`) |
 
-Recomandare de verificare, fără a modifica nimic: `sudo ufw status verbose` (dacă ufw e instalat) și `sudo ss -tlnp` (ca să confirmi că 8000 ascultă doar pe loopback).
+Comenzi de verificare, fără modificări: `sudo ufw status verbose` și `sudo ss -tlnp` (8000 trebuie să asculte doar pe loopback).
+
+### 7.1 fail2ban
+
+Trei jail-uri active: `sshd`, `nginx-tabela-probes` și `nginx-tabela-slow`. Filtrul pentru probe (cereri evidente de scanere, cu răspuns 4xx; `/.well-known/` este exclus) este în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban. Pașii manuali (pachet, copierea filtrului în `/etc/fail2ban/filter.d/`, definiția jail-ului în `/etc/fail2ban/jail.d/`, repornire, verificare cu `fail2ban-client status`) sunt în `docs/administrare-operare.md`, secțiunea 15. Definiția jail-urilor și filtrul `nginx-tabela-slow` sunt doar pe server, nu în repo.
+
+### 7.2 Antete și limite
+
+HSTS (`max-age=31536000`) și limitele `limit_req` (`tabela_api` 10 cereri/s, burst 20, pe `/api/`; `tabela_stats` 60 cereri/min pe rutele de statistici; `tabela_admin_login` 5 cereri/min) sunt în `deploy/nginx-tabela.conf` și `deploy/tabela-limits.conf` (secțiunea 6.2). CSP-ul și celelalte antete de securitate se pun în `app/api.py`.
 
 ## 8. Certificate TLS (Let's Encrypt)
 
@@ -568,7 +573,7 @@ Acestea sunt diferențe între cod, configurare și documentație, găsite la sc
 2. **Rollback-ul automat lasă watchdog-ul oprit.** `update.sh` dezactivează timer-ul înainte de rollback și nu îl mai reactivează. Watchdog-ul rămâne oprit până la următorul `update.sh` reușit. Procedura manuală de mai sus include reactivarea.
 3. **Eșec după schimbarea unității, înainte de restart.** Dacă `install_unit` schimbă `tabela.service`, iar pasul următor (watchdog) eșuează, `abort_before_restart` restaurează codul, dar nu unitatea. Unitatea nouă rămâne instalată, deși procesul rulează codul vechi. La următoarea rulare a scriptului se aliniază.
 4. **Unitățile de antrenare umbră nu sunt instalate de niciun script.** Trebuie instalate manual. Vezi secțiunea 5.3.
-5. **Firewall-ul documentat.** README spune că firewall-ul este NSG-ul Azure. Dacă serverul nu mai este pe Azure, documentația trebuie actualizată. Nesigur: verifică firewall-ul efectiv pe server (secțiunea 7).
+5. **Firewall-ul.** Documentat în secțiunea 7 (ufw activ, fail2ban cu trei jail-uri). Definiția jail-urilor și filtrul `nginx-tabela-slow` nu sunt versionate în repo.
 6. **`VAPID_SUBJECT`** are valori diferite în cod, în `install.sh` și în `.env.example` (secțiunea 2.4). Nu strică funcționarea, dar trebuie știută.
 7. **`TELEGRAM_STATE_PATH`** are implicitul relativ `data/telegram_sent.json` în cod (dev și teste). Unitul `tabela.service` îl setează la `/var/lib/tabela/telegram_sent.json`, singurul loc scriptibil sub `ProtectSystem=strict`; `tests/test_deploy_static.py` verifică asta.
 8. **Certificatele trebuie să existe înainte de `install.sh`** (secțiunea 3, final). Altfel `nginx -t` eșuează.

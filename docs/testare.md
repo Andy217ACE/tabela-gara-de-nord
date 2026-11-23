@@ -2,14 +2,15 @@
 
 Această pagină descrie suita de teste a proiectului Tabela Gara de Nord: cum se pregătește mediul, cum se rulează suita completă și părți din ea, ce categorii de teste există și ce verifică, ce fac `tests/conftest.py` și `tests/ocr_truth_images.py`, ce teste sar în anumite medii, și cum se adaugă un test nou după convențiile din proiect.
 
-Pagina a fost scrisă din codul din branch-ul `docs/documentatie-detaliata`. Acolo unde o afirmație nu s-a putut verifica din repo, este marcată cu **nesigur**. Suita completă nu a fost rulată la scrierea paginii.
+Pagina a fost scrisă din codul aplicației și actualizată pentru Beta 1.65. Acolo unde o afirmație nu s-a putut verifica din repo, este marcată cu **nesigur**. Suita completă nu a fost rulată la scrierea paginii.
 
-Numere de referință (numărătoare cu `grep`, nu cu `pytest --collect-only`):
+Numere de referință (Beta 1.65, `pytest --collect-only -q`):
 
-- 90 de fișiere `tests/test_*.py`, plus `tests/conftest.py`, `tests/ocr_truth_images.py` și `tests/__init__.py`;
-- aproximativ 1 200 de definiții `def test_` (un test parametrizat poate produce mai multe cazuri la rulare);
-- raportul de retro din 26.10.2026 (`.superpowers/sdd/task-RETRO-report.md`) menționează „1334 teste trec” la acea dată. Cifra e istorică, nu verificată acum;
-- durata suitei: „~18 min” din cerința de documentare. **Nesigur**: nu există în repo nicio măsurătoare a duratei; trebuie cronometrată pe mașina ta.
+- 149 de fișiere `tests/test_*.py`, plus `tests/conftest.py`, `tests/ocr_truth_images.py` și `tests/__init__.py`;
+- 2512 de teste colectate (cazurile parametrizate sunt numărate separat);
+- durata suitei complete: de ordinul zecilor de minute pe un laptop, din cauza testelor de browser și a celor de OCR. Nu există o măsurătoare versionată: cronometrează pe mașina ta.
+
+**CI (GitHub Actions).** `.github/workflows/ci.yml` rulează la fiecare push și pull request: suita `pytest`, inclusiv testele de browser (Playwright, Chromium), `pip-audit` pe dependențe și verificarea coerenței versiunii (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` și numerele din cod). Dependabot propune actualizări de dependențe. Dependențele sunt fixate în `requirements.txt` (directe) și `requirements.lock` (și tranzitive). Un test (`tests/test_docs_routes.py`) cere ca fiecare rută înregistrată în aplicație să apară în `docs/api.md`, ca documentația să nu rămână în urmă. Regresia OCR rulează pe cadre etichetate (`tests/fixtures`, `app/ocr/truth.py`: aproximativ 59 de cadre și 1416 rânduri etichetate), cu praguri stricte și un test al bugetului de timp din producție.
 
 ## Cuprins
 

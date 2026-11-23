@@ -80,7 +80,7 @@ Watchdog-ul rulează ca `tabela`, nu ca root. Singura permisiune de root este o 
 | Poller | `app/poller.py` | Buclă asincronă: cere pagina, compară hash-ul imaginii cu cel anterior, apelează OCR-ul la o imagine nouă și predă rândurile citite mai departe. Are limite ferme: cel puțin 2 s între cereri și cel mult 10 cereri în 60 s (`MIN_GAP`, `MAX_PER_MIN`). |
 | Fetcher | `app/fetcher.py` | Descarcă pagina, extrage imaginea (JPEG sau PNG în base64), refuză peste 10 MB (`MAX_BYTES`) și calculează hash-ul. |
 | Motor OCR | `app/ocr/` | OpenCV pentru preprocesare și Tesseract pentru text, cu șabloane pentru cifre. Produce `Row` cu încredere. `PROCESSING_VERSION` (în `app/observations.py`) este `ocr-tess-grid-5`. |
-| Store | `app/store.py` | Singura poartă spre SQLite pentru starea tablei. Migrează schema (`SCHEMA_VERSION = 9`), aplică `ingest` (diff cu starea, evenimente) și construiește tabla LIVE (`current_board`). |
+| Store | `app/store.py` | Singura poartă spre SQLite pentru starea tablei. Migrează schema (`SCHEMA_VERSION = 10`), aplică `ingest` (diff cu starea, evenimente) și construiește tabla LIVE (`current_board`). |
 | Corecții manuale | `app/corrections.py` | Reguli înguste care corectează o valoare citită greșit, pe cadre noi și retroactiv. |
 | Capturi și observații | `app/captures.py`, `app/observations.py` | Salvează imaginea fiecărui cadru nou (pe disc), o observație per rând OCR și catalogul de trenuri. |
 | Calitate | `app/quality.py` | Reguli de validare (întârzieri confirmate, peroane, fantome, evenimente suspecte) și tabelele de calitate. |
@@ -151,7 +151,7 @@ Ce se întâmplă, pe scurt:
 
 ## 5. Diagrama de deployment
 
-Diagrama arată serverul așa cum e descris în repo și în instrucțiunile de lucru. Gazda concretă (serverul de acasă, cu IP privat) nu apare aici. README descrie încă un server Ubuntu 24.04 cu firewall Azure NSG (vezi secțiunea 9).
+Diagrama arată serverul așa cum e descris în repo și în instrucțiunile de lucru. Gazda concretă (serverul de acasă, cu IP privat) nu apare aici.
 
 ```mermaid
 flowchart TB
@@ -322,7 +322,6 @@ Lista acoperă toate modulele din `app/` (inclusiv `app/ocr/`). Descrierile vin 
 ## 9. Ce nu am putut verifica
 
 - **Timerul `tabela-noip`.** Nu există în `deploy/`, în README sau în CHANGELOG. Verificați pe server cu `systemctl list-timers` și cu `systemctl cat` pentru unitatea respectivă.
-- **Gazda curentă.** README (secțiunea Deploy) descrie un server Ubuntu 24.04 cu firewall Azure NSG. Instrucțiunile de lucru spun că serverul live este cel de acasă. Diagrama de deployment din secțiunea 5 urmează instrucțiunile. Confirmați gazda și actualizați README.
 - **Conținutul `/etc/tabela.env`.** Nu e în repo. Nu știu dacă `TELEGRAM_STATE_PATH`, `CAPTURE_DIR` sau `REJECTED_DIR` sunt setate pe server. Verificați în `/etc/tabela.env` (fără a afișa valorile secrete).
 - **Scriptul de antrenare în umbră.** Nu am citit `scripts/nightly_shadow_train.py` integral. Calea `/var/lib/tabela/shadow` e confirmată din antet și din `DEFAULT_WORKDIR`, dar modul de rotație al fișierelor din `shadow/` nu e verificat.
 - **Forma exactă a câmpurilor din `observations.fields_json`.** Am verificat că e un dicționar cu câmpuri, dar nu structura internă a fiecărei intrări. Verificați în `app/ocr/reader.py`.

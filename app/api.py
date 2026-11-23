@@ -376,7 +376,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
                       "stale": ages[b] is None or ages[b] > STALE_S}
                 for b, key in (("arrival", "arrivals"), ("departure", "departures"))}
 
-    @app.get("/api/health")
+    @app.api_route("/api/health", methods=["GET", "HEAD"])  # uptime monitors default to HEAD
     def health(request: Request):
         store = store_of(request)
         age = store.last_ok_age(datetime.now(TZ))

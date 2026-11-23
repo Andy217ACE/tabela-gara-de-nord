@@ -21,7 +21,7 @@ Setări SQLite folosite de `Store` (`app/store.py`, `__init__`): `journal_mode =
 
 ## 2. Versiunea schemei
 
-Versiunea e în `PRAGMA user_version`. Valoarea curentă e `SCHEMA_VERSION = 9` (`app/store.py`, linia 54). Există și o a doua „versiune”, `dq_meta.version`, care e versiunea stratului de calitate (`DQ_VERSION = "1"`, `app/quality.py`) și nu are legătură cu `user_version`.
+Versiunea e în `PRAGMA user_version`. Valoarea curentă e `SCHEMA_VERSION = 10` (`app/store.py`). Există și o a doua „versiune”, `dq_meta.version`, care e versiunea stratului de calitate (`DQ_VERSION = "1"`, `app/quality.py`) și nu are legătură cu `user_version`.
 
 `Store.migrate()` aplică pașii în ordine. Fiecare pas e aditiv, atomic împreună cu creșterea versiunii, și se poate reface fără efecte (vezi docstring-ul metodei: „Never renumber a step”).
 
@@ -36,6 +36,7 @@ Versiunea e în `PRAGMA user_version`. Valoarea curentă e `SCHEMA_VERSION = 9` 
 | 6 → 7 | tabelele `dq_meta`, `service_quality`, `event_quality`, `quality_periods`; `dq_meta.live_since` | `app/quality.migrate_to_7` | Beta 1.06 |
 | 7 → 8 | opt coloane noi în `weather_observations` (umiditate, ploaie, rafale etc.) | `Store._migrate_to_8` | Beta 1.25 |
 | 8 → 9 | tabelele `corrections`, `correction_batches`, `correction_archive`, `correction_audit` | `app/corrections.migrate_to_9` | Beta 1.29 |
+| 9 → 10 | nicio structură nouă: operatorii din `services`, `observations`, calitate, corecții și catalogul `trains` sunt rescriși la numele oficial („CFR Calatori” → „CFR Călători”), o trecere pe tabel; coloanele `*_raw` nu se ating | `app/operator_names.migrate_to_10` | Beta 1.64 |
 
 Note despre versiunile vechi:
 
@@ -54,7 +55,7 @@ Dacă nimic din acestea nu reușește, migrarea se oprește cu `BackupUnavailabl
 
 ## 3. Tabelele
 
-Mai jos sunt toate tabelele pe care le creează `Store.migrate()` pe o bază nouă (verificat: 17 tabele, `user_version = 9`), plus tabelele care apar în alte momente (secțiunea 3.3).
+Mai jos sunt toate tabelele pe care le creează `Store.migrate()` pe o bază nouă (verificat: 17 tabele, `user_version = 10`), plus tabelele care apar în alte momente (secțiunea 3.3).
 
 Convenții: „NN” înseamnă `NOT NULL`. „DEF” e valoarea implicită. „FK” e cheia străină, cu acțiunea din `ON DELETE`. Timpii din `services`, `events` și `runs` sunt ora locală Europe/Bucharest cu offset (`isoformat()` din `_local`). Timpii din `observations`, `captures` și `weather_observations` sunt UTC (`app/observations.py`, docstring: „All timestamps written here are UTC ISO 8601”).
 

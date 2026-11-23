@@ -7,7 +7,7 @@ pagina live, de Istoric, de Statistici și de ceilalți) și endpoint-urile de a
 (`/api/admin/*`). Pentru fiecare ruta găsești metoda, calea, autentificarea, parametrii cu tipuri
 și valori implicite, forma răspunsului, codurile de eroare, antetele de cache și limitele de cereri.
 
-Documentul descrie versiunea **Beta 1.43** (`VERSION`). Pagina de interfață este descrisă în
+Documentul descrie versiunea **Beta 1.65** (schema 10) (`VERSION`). Pagina de interfață este descrisă în
 `docs/interfata.md`; deploy-ul și nginx sunt descrise în `README.md`.
 
 ## Cum a fost verificat documentul
@@ -111,6 +111,13 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/stations/{name}/journeys` | nimic | Călătoriile unei stații (paginat) | 5.18 |
 | GET | `/api/system` | nimic (detalii doar pentru admin) | Starea sistemului, versiunea, discul | 5.19 |
 | GET | `/api/export/history.csv` | nimic | Export CSV al istoricului pe interval | 5.20 |
+| GET | `/api/stats/changes` | nimic | „Ce s-a schimbat săptămâna asta” și alertele pe prag | 5.21 |
+| GET | `/api/stats/heatmap` | nimic | Întârzierea medie pe zi a săptămânii și oră | 5.21 |
+| GET | `/api/stats/reliable` | nimic | Cele mai fiabile trenuri | 5.21 |
+| GET | `/api/stats/dwell` | nimic | Cât stă trenul pe panou | 5.21 |
+| GET | `/api/stats/platform-changes` | nimic | Schimbările de peron | 5.21 |
+| GET | `/api/predict/peron` | nimic | Estimări de peron pentru trenurile fără peron anunțat | 5.21 |
+| GET | `/api/trains/{no}/prediction` | nimic | Estimarea întârzierii finale a unui tren (ascunsă din schema OpenAPI) | 5.21 |
 
 ### Administrare
 
@@ -141,6 +148,13 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/admin/security` | admin | Securitate: IP-uri banate (fail2ban), istoric ban-uri, cereri/probe 24 h și 7 zile — din `security/snapshot.json` scris de exportatorul root; `available:false` + `reason` (`missing`/`invalid`/`stale`, cu `age_s`) | — |
 | GET | `/api/admin/tools/server` | admin | Starea serverului (load, memorie, servicii) | 7.8 |
 | GET | `/api/admin/system` | admin | Detaliile paginii Sistem | 7.9 |
+| GET | `/api/admin/tools/nvme` | admin | Starea discului NVMe (din `nvme.json`) | 7.10 |
+| GET | `/api/admin/ocr-alt` | admin | Jurnalul OCR-ului alternativ (pagina `#ocr2`) | 7.10 |
+| GET | `/api/admin/ocr-alt/crop/{eid}/{col}` | admin | Decupajul unei celule (PNG) | 7.10 |
+| POST | `/api/admin/ocr-alt/{eid}/verdict` | admin + CSRF | Verdictul administratorului pentru un eveniment | 7.10 |
+| GET | `/api/admin/quality-daily/confirmation` | admin | Rata zilnică de confirmare a călătoriilor | 7.10 |
+| GET | `/api/admin/quality-daily/reading` | admin | Calitatea zilnică a citirii | 7.10 |
+| GET | `/api/admin/quality-daily/coverage` | admin | Acoperirea orară a panoului | 7.10 |
 
 **Copii de siguranță.** Nu există o rută HTTP pentru descărcarea sau crearea unei copii a bazei.
 Copia de siguranță se face doar în interiorul `POST /api/admin/tools/dupes/apply` și
@@ -288,7 +302,7 @@ Starea serviciului. Folosită de `deploy/update.sh` după repornire (vezi `READM
 {
   "ok": true,
   "age_s": 0.004525,
-  "version": "Beta 1.43",
+  "version": "Beta 1.65",
   "boards": {
     "arrivals":   {"age_s": 0.004525, "ok": true, "stale": false},
     "departures": {"age_s": 0.004525, "ok": true, "stale": false}
@@ -303,6 +317,7 @@ Starea serviciului. Folosită de `deploy/update.sh` după repornire (vezi `READM
 
 - `ok` este `true` dacă ultima citire acceptată are cel mult 180 de secunde.
 - `weather_age_s` este `null` dacă nu există nicio observație meteo. Meteo nu influențează `ok`.
+- `GET` și `HEAD` dau același status; monitoarele externe de uptime folosesc implicit `HEAD` (răspunsul nu are corp).
 
 ### 5.3 `GET /api/changelog`
 
@@ -313,9 +328,9 @@ Istoricul versiunilor, citit din `CHANGELOG.md` (funcția `changelog()` din `app
 
 ```json
 {
-  "version": "Beta 1.43",
+  "version": "Beta 1.65",
   "entries": [
-    {"version": "Beta 1.43", "date": "2026-10-31",
+    {"version": "Beta 1.65", "date": "2026-11-23",
      "groups": [{"title": "Schimbat", "items": ["**Capturi scoase din git:** …"]}]}
   ]
 }
@@ -673,7 +688,7 @@ Starea sistemului, pentru pagina Sistem. Varianta publică e minimă.
 - **Răspuns (200), public:**
 
 ```json
-{"version": "Beta 1.43", "schema": 9, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
+{"version": "Beta 1.65", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
  "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3}, "admin": false}
@@ -711,6 +726,24 @@ data,ora,tren,stație,întârziere_min,peron
 
 - Exportul conține doar date publice (cele afișate pe pagina Istoric), fără corecții manuale
   și fără note de administrare.
+
+### 5.21 Statistici avansate și estimări
+
+Toate sunt publice, read-only și răspund JSON. Rezultatele sunt în cache scurt (60 s pentru statistici,
+300 s pentru estimări).
+
+| Cale | Parametri | Ce returnează |
+|---|---|---|
+| `GET /api/stats/changes` | `perioada` (`1`, `7`, `30`, `all`), `board`, `operator`, `tip`, `doar_confirmate`, `prag`, `min` (ca la `/api/stats/overview`) | Rutele și operatorii comparați pe ultimele 7 zile față de cele 7 dinainte (% la timp), plus alertele pe prag (mediană > 15 min). Sub numărul minim de zile de istoric: `status: "insufficient"`, fără liste. |
+| `GET /api/stats/heatmap` | aceiași | Întârzierea medie pe zi a săptămânii (0 = luni) și oră (0–23), pe panou, cu o singură scală. O celulă fără întârziere citită are media `null`, niciodată 0. |
+| `GET /api/stats/reliable` | aceiași | „Cele mai fiabile trenuri”: minim 10 călătorii cu întârziere citită. |
+| `GET /api/stats/dwell` | `perioada`, `board` | Cât stă trenul pe panou (mediană, medie, p90) pe tip și stație; doar servicii încheiate. E fereastra de consultare observată, nu orarul real. |
+| `GET /api/stats/platform-changes` | `perioada`, `board` | Cât de des se schimbă peronul anunțat. |
+| `GET /api/predict/peron` | — | Estimări de peron pentru trenurile de pe panou fără peron anunțat, din istoricul observat. Corpul are `estimates` (`arrivals`, `departures`), `note`, `backtest` (acuratețea măsurată) și `threshold`. Cache 300 s. Nu e informație oficială CFR. |
+| `GET /api/trains/{no}/prediction` | `no`: întreg | Estimarea întârzierii finale: `label`, `note`, `train_no`, `published`, `reason` și `estimates` (pe panou și stație: `delay_min`, `low`, `high`, `n`, `basis`). Dacă poarta de calitate nu e trecută: `published: false`, fără cifre. Cache 300 s. Ruta e declarată cu `include_in_schema=False`. |
+
+Perioadă invalidă: 422 `"Perioadă invalidă (1, 7, 30 sau all)."`; panou invalid: 422
+`"Panou invalid (arrival sau departure)."`.
 
 ---
 
@@ -1075,6 +1108,27 @@ vin din cerere.
 Detaliile paginii Sistem. Aceleași câmpuri ca la `/api/system`, plus `disk.total_gb`,
 `ocr.expected_rows`, `poller.last_error_age_s` și `ocr_window`. Pentru vizitatorii fără admin
 ruta returnează 401, iar pagina nu o cere.
+
+### 7.10 OCR alternativ (`#ocr2`), calitatea pe zi și NVMe
+
+Toate cer sesiune de admin (sau `Bearer`); doar `POST …/verdict` cere și `X-CSRF-Token`.
+
+- **`GET /api/admin/ocr-alt`** — jurnalul citirilor făcute de OCR-ul alternativ (pagina `#ocr2`).
+  Parametri: `limit` (1–200, implicit 50), `before` (id de eveniment, pentru pagina următoare), `only`
+  (`all` sau `unverified`); altfel 422 `"Parametri invalizi."`. Răspuns: `state` (`enabled`, `shadow`,
+  `model_path`, `model_loaded`, `since_start`), `totals`, `events` (fiecare cu `crops`, adică URL-urile
+  decupajelor) și `next`.
+- **`GET /api/admin/ocr-alt/crop/{eid}/{col}`** — decupajul PNG al unei celule; 404 `"Decupaj inexistent."`;
+  `Cache-Control: private, max-age=86400`.
+- **`POST /api/admin/ocr-alt/{eid}/verdict`** — corpul este exact `{"verdict": "correct" | "wrong" |
+  "unclear" | null}` (`null` șterge verdictul; cel mult 1024 de octeți). 422 `"Verdict invalid."`, 404
+  `"Eveniment necunoscut."`; răspuns `{"ok": true, "verdict": …, "totals": …}`.
+- **`GET /api/admin/quality-daily/confirmation`** și **`/reading`** — `days` (1–90, implicit 14): rata de
+  confirmare a călătoriilor pe zi, respectiv calitatea citirii pe zi, cu tendință.
+- **`GET /api/admin/quality-daily/coverage`** — `days` (1–90, implicit 7) și `threshold` (0–1, implicit
+  0,9): capturile reușite față de cele așteptate (60/oră), pe oră, cu golurile sub prag.
+- **`GET /api/admin/tools/nvme`** — starea discului NVMe citită din `nvme.json` (scris de colectorul root);
+  `available: false` dacă fișierul lipsește sau e invalid; `generated_at`.
 
 ---
 

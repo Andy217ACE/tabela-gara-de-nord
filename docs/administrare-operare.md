@@ -25,6 +25,7 @@ Convenții:
 12. [Capturile OCR și spațiul pe disc](#12-capturile-ocr-și-spațiul-pe-disc)
 13. [Runbook-uri](#13-runbook-uri)
 14. [Ce nu am putut verifica și inconsistențe](#14-ce-nu-am-putut-verifica-și-inconsistențe)
+15. [Firewall, fail2ban și monitorizare externă](#15-firewall-fail2ban-și-monitorizare-externă)
 
 ---
 
@@ -73,6 +74,7 @@ Atenție: `Bearer` ocolește CSRF, deci are aceleași drepturi ca sesiunea. Folo
 | Pagină (hash) | Fișier | Ce face | Acces |
 |---|---|---|---|
 | `#ocr` „Capturi OCR” | `web/ocr.js` | listă capturi, imagine cu dreptunghiurile OCR, text brut față de text normalizat, **corecțiile manuale**, starea OCR | admin |
+| `#ocr2` „Alternativa OCR” | `web/ocr2.js` | jurnalul alternativei OCR: decupaje, verdict corect / greșit / neclar pe eveniment (`/api/admin/ocr-alt*`, vezi `docs/ocr.md` §19.6) | admin |
 | `#setari` | `web/setari.js` | retenția capturilor și pragul de spațiu liber (`app/admin_settings.py`) | admin |
 | `#admin` „Administrare” | `web/admin.js` | „Duplicate de numere de tren” (raport, aplicare, restaurare) și „Server (live)” | admin |
 | `#sistem` | `web/sistem.js` | starea serverului; detaliile apar doar pentru admin | public, cu detalii pentru admin |
@@ -295,7 +297,7 @@ Verificarea unei copii (fără să atingi baza):
 # trebuie să scrie: ok
 ```
 
-Atenție la retenție: `dbbackup._prune` (folosit de `make_backup` și de migrări) șterge orice fișier `tabela-*.db` din director, peste primele 5 în ordinea numelor. Copiile `tabela-before-merge-*` și `tabela-before-purge-*` au același prefix, deci pot fi șterse de aceste rutine, iar cele mai noi copii de fuziune pot fi printre cele afectate. Vezi secțiunea 14.
+Retenția copiilor: `dbbackup._prune` (folosit de `make_backup` și de migrări) lucrează pe familii. Recunoaște doar fișierele cu forma exactă `tabela-<stamp>-v<N>.db` (expresie regulată strictă) și păstrează cele mai noi 5 dintre ele; ordinea vine din timestamp-ul din nume. Copiile `tabela-before-merge-*` și `tabela-before-purge-*`, ca și fișierele `.tmp`, nu se potrivesc cu expresia și nu sunt șterse niciodată de aceste rutine; nu fac parte din cele 5 păstrate.
 
 ### Restaurarea
 
@@ -701,9 +703,9 @@ Rezumat pentru orientare, fără secrete:
 - Calea interpretorului: presupun `/opt/tabela/venv/bin/python` din `deploy/tabela.service` și `deploy/update.sh`. Verifică pe server.
 - Locația exactă a `last.jpg` și a `LAST_IMAGE_PATH` din README (nu am verificat în cod).
 
-**Risc de retenție (de verificat cu un test):**
+**Retenția copiilor (verificat în cod):**
 
-- `app/dbbackup.py` `_prune` (folosit de `backup_api.make_backup` și de migrări) șterge orice `tabela-*.db` din directorul de copii, peste primele 5 în ordinea numelor, în ordine descrescătoare. Copiile `tabela-before-merge-*.db` și `tabela-before-purge-*.db` au același prefix, iar „before” sortează înaintea cifrelor, deci sunt considerate cele mai noi. Efect posibil: copiile de fuziune și de purjare pot fi șterse de rutinele de restaurare și de migrare, și invers, `scripts/merge_number_dups.py` păstrează 10 copii din propriul prefix. Nu am rulat acest scenariu.
+- `app/dbbackup.py` `_prune` (folosit de `backup_api.make_backup` și de migrări) șterge doar fișierele familiei `tabela-<stamp>-v<N>.db`, peste cele mai noi 5. Copiile `tabela-before-merge-*.db` și `tabela-before-purge-*.db` nu sunt atinse; `scripts/merge_number_dups.py` își păstrează singur 10 copii din propria familie.
 - `scripts/purge_ghosts.py` nu are retenție pentru copiile sale.
 
 **Inconsistențe între cod și documentație:**
@@ -714,3 +716,22 @@ Rezumat pentru orientare, fără secrete:
 - Copiile de siguranță: `deploy/update.sh` păstrează 5 (`BACKUP_KEEP`), `app/dbbackup.py` 5, `scripts/merge_number_dups.py` 10. Documentația nu spune asta peste tot.
 
 **Nu am verificat în browser:** paginile `#admin`, `#ocr`, `#setari`, `#sistem` și exporturile lor (am citit codul JavaScript și API-ul).
+
+---
+
+## 15. Firewall, fail2ban și monitorizare externă
+
+**Firewall (serverul de acasă, Ubuntu).** `ufw` este activ, cu politica implicită „deny incoming”. Porturile 80 și 443 sunt deschise spre internet. SSH (22) și RDP (3389) sunt permise doar din rețeaua locală `192.168.1.0/24`. Uvicorn ascultă doar pe `127.0.0.1:8000`. `install.sh` nu activează `ufw`: firewall-ul se configurează o singură dată, de mână (`sudo ufw status verbose` arată starea).
+
+**fail2ban.** Trei jail-uri active: `sshd`, `nginx-tabela-probes` (cereri evidente de scanere: `.env`, `.git`, `wp-*`, `*.php` etc., cu răspuns 4xx) și `nginx-tabela-slow` (clienți care țin conexiunea sau cer prea des). Filtrul pentru probe este versionat în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban; pașii manuali:
+
+1. `sudo apt install fail2ban`;
+2. `sudo install -m 644 deploy/fail2ban/nginx-tabela-probes.local /etc/fail2ban/filter.d/`;
+3. în `/etc/fail2ban/jail.d/` se definește jail-ul (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` la alegerea operatorului) și se repornește cu `sudo systemctl restart fail2ban`;
+4. verificare: `sudo fail2ban-client status` și `sudo fail2ban-client status nginx-tabela-probes`.
+
+Definiția jail-urilor și filtrul `nginx-tabela-slow` sunt configurate pe server și nu sunt (încă) în repo. Pagina `#sistem` arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
+
+**Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram) și de la temporizatorul de sănătate NVMe.
+
+**Ce lipsește, deliberat sau încă nefăcut:** copia de siguranță în afara serverului (off-site) nu există; decizia aparține proprietarului și este amânată. Actualizările de sistem nu sunt automate. Vezi `docs/decizii-arhitectura.md`.

@@ -2,7 +2,7 @@
 
 This page describes how the code reaches the Ubuntu server, what settings the application reads, what the scripts `deploy/install.sh` and `deploy/update.sh` do, which systemd units and which nginx configuration are in the repo, how a new version is made and how to go back to an old one.
 
-The page was written from the code and the configuration files in the repo, at version `Beta 1.43` (the `VERSION` file). Where a statement could not be verified from the repo (for example, what exists on the server and is not in git), it is marked **uncertain** and the file or command to check is named.
+The page was written from the code and the configuration files in the repo, initially at version `Beta 1.43`, updated for `Beta 1.65` (the `VERSION` file). Where a statement could not be verified from the repo (for example, what exists on the server and is not in git), it is marked **uncertain** and the file or command to check is named.
 
 Conventions:
 
@@ -176,7 +176,7 @@ The script is for the first installation, but it can also be run over an existin
 sudo bash install.sh [branch]
 ```
 
-The script header says what it does not do: it does not start `ufw` (the firewall is the cloud NSG, according to the comment in the code), and the VAPID private key is never displayed. The variables `REPO_URL` (default `https://github.com/Andy217Ace/tabela-gara-de-nord.git`) and `APP_DIR` (default `/opt/tabela/app`) can be overridden through the environment.
+The script header says what it does not do: it does not start `ufw` (the firewall is configured once, by hand; see section 7), and the VAPID private key is never displayed. The variables `REPO_URL` (default `https://github.com/Andy217Ace/tabela-gara-de-nord.git`) and `APP_DIR` (default `/opt/tabela/app`) can be overridden through the environment.
 
 The steps, in the order of the code:
 
@@ -320,6 +320,8 @@ File: `deploy/tabela.service`, installed as `/etc/systemd/system/tabela.service`
 
 Note: `ReadWritePaths` is the only writable place. That is why `CAPTURE_DIR`, `BACKUP_DIR` and `REJECTED_DIR` must be under `/var/lib/tabela`, and `update.sh` warns when they are not.
 
+The unit sets `Environment=OMP_THREAD_LIMIT=1`: Tesseract is called from a thread, and without the limit OpenMP would occupy every core on each call. `update.sh` installs the unit on every deploy (`UNIT_SRC` → `UNIT_DST`).
+
 ### 5.2 The watchdog
 
 Files: `deploy/tabela-watchdog.service`, `deploy/tabela-watchdog.timer`, `deploy/tabela-watchdog.sudoers`, code in `app/watchdog.py`.
@@ -420,22 +422,25 @@ The test `test_nginx_admin_login_rate_limited_and_certbot_untouched` in `tests/t
 
 ## 7. Firewall
 
-What the documentation says (to verify on the server):
+The production server is the home server (Ubuntu 26.04 LTS), not a cloud machine. The firewall is `ufw`, active, with the default policy "deny incoming", configured once, by hand (`install.sh` does not enable `ufw`):
 
-- The README (the deploy section): "`ufw` is not enabled: the firewall is the Azure NSG." This is the only text in the repo about the server's firewall. Note: if the current server is no longer on Azure, this sentence is out of date. Uncertain: check which firewall is active on the real machine.
-- The `deploy/install.sh` header: "Never enables ufw (the cloud NSG is the firewall)."
-- The implementation plan `docs/superpowers/plans/2026-10-20-tabela-gara-de-nord.md`, installation step 2, mentions `ufw allow 80,443`. It is a plan, not a verified procedure, and it is not found in the README or the CHANGELOG.
-
-Ports needed, from the configuration:
-
-| Port | Publicly exposed | Reason |
+| Port | Who has access | Reason |
 |---|---|---|
-| 80 (TCP) | yes | Redirect to HTTPS for `tabelacfr.ddns.net` and `404` for the other HTTP requests in this block (`listen 80` in `nginx-tabela.conf`) |
-| 443 (TCP) | yes | The HTTPS site |
-| 8000 (TCP) | no | Uvicorn listens only on `127.0.0.1` (`--host 127.0.0.1` in `tabela.service`) |
-| SSH (usually 22) | uncertain | It does not appear in the repo. Check on the server |
+| 80 (TCP) | the internet | Redirect to HTTPS for `tabelacfr.ddns.net` and `404` for the other HTTP requests in this block (`listen 80` in `nginx-tabela.conf`) |
+| 443 (TCP) | the internet | The HTTPS site |
+| 22 (TCP, SSH) | only the local network `192.168.1.0/24` | Administration |
+| 3389 (TCP, RDP) | only the local network `192.168.1.0/24` | Administration |
+| 8000 (TCP) | nobody from outside | Uvicorn listens only on `127.0.0.1` (`--host 127.0.0.1` in `tabela.service`) |
 
-A verification recommendation, without changing anything: `sudo ufw status verbose` (if ufw is installed) and `sudo ss -tlnp` (to confirm that 8000 listens only on loopback).
+Check commands, without changes: `sudo ufw status verbose` and `sudo ss -tlnp` (8000 must listen only on loopback).
+
+### 7.1 fail2ban
+
+Three active jails: `sshd`, `nginx-tabela-probes` and `nginx-tabela-slow`. The probe filter (obvious scanner requests, answered with 4xx; `/.well-known/` is excluded) is in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban. The manual steps (package, copying the filter to `/etc/fail2ban/filter.d/`, the jail definition in `/etc/fail2ban/jail.d/`, restart, check with `fail2ban-client status`) are in `docs/en/administrare-operare.md`, section 15. The jail definitions and the `nginx-tabela-slow` filter exist only on the server, not in the repo.
+
+### 7.2 Headers and limits
+
+HSTS (`max-age=31536000`) and the `limit_req` limits (`tabela_api` 10 requests/s, burst 20, on `/api/`; `tabela_stats` 60 requests/min on the statistics routes; `tabela_admin_login` 5 requests/min) are in `deploy/nginx-tabela.conf` and `deploy/tabela-limits.conf` (section 6.2). The CSP and the other security headers are set in `app/api.py`.
 
 ## 8. TLS certificates (Let's Encrypt)
 
@@ -562,7 +567,7 @@ These are differences between code, configuration and documentation, found when 
 2. **The automatic rollback leaves the watchdog off.** `update.sh` disables the timer before the rollback and does not re-enable it. The watchdog stays off until the next successful `update.sh`. The manual procedure above includes the re-enabling.
 3. **Failure after the unit changes, before restart.** If `install_unit` changes `tabela.service` and the next step (watchdog) fails, `abort_before_restart` restores the code but not the unit. The new unit stays installed, although the process runs the old code. It is aligned the next time the script runs.
 4. **The shadow training units are not installed by any script.** They must be installed manually. See section 5.3.
-5. **The documented firewall.** The README says the firewall is the Azure NSG. If the server is no longer on Azure, the documentation must be updated. Uncertain: check the effective firewall on the server (section 7).
+5. **The firewall.** Documented in section 7 (ufw active, fail2ban with three jails). The jail definitions and the `nginx-tabela-slow` filter are not versioned in the repo.
 6. **`VAPID_SUBJECT`** has different values in the code, in `install.sh` and in `.env.example` (section 2.4). It does not break operation, but it must be known.
 7. **`TELEGRAM_STATE_PATH`** has the relative default `data/telegram_sent.json` in the code (dev and tests). The `tabela.service` unit sets it to `/var/lib/tabela/telegram_sent.json`, the only writable place under `ProtectSystem=strict`; `tests/test_deploy_static.py` checks this.
 8. **The certificates must exist before `install.sh`** (section 3, the end). Otherwise `nginx -t` fails.

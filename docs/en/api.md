@@ -7,7 +7,7 @@ the live page, by History, by Statistics and by the others) and the administrati
 (`/api/admin/*`). For each route you will find the method, the path, the authentication, the parameters with types
 and default values, the shape of the response, the error codes, the cache headers and the request limits.
 
-The document describes version **Beta 1.43** (`VERSION`). The interface is described in
+The document describes version **Beta 1.65** (schema 10) (`VERSION`). The interface is described in
 `docs/interfata.md`; deploy and nginx are described in `README.md`.
 
 ## How this document was verified
@@ -113,6 +113,13 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/stations/{name}/journeys` | nothing | A station's journeys (paginated) | 5.18 |
 | GET | `/api/system` | nothing (details for admin only) | The system state, the version, the disk | 5.19 |
 | GET | `/api/export/history.csv` | nothing | CSV export of the history over a range | 5.20 |
+| GET | `/api/stats/changes` | nothing | "What changed this week" and the threshold alerts | 5.21 |
+| GET | `/api/stats/heatmap` | nothing | Mean delay by weekday and hour | 5.21 |
+| GET | `/api/stats/reliable` | nothing | The most reliable trains | 5.21 |
+| GET | `/api/stats/dwell` | nothing | How long a train stays on the board | 5.21 |
+| GET | `/api/stats/platform-changes` | nothing | Platform changes | 5.21 |
+| GET | `/api/predict/peron` | nothing | Platform estimates for trains without an announced platform | 5.21 |
+| GET | `/api/trains/{no}/prediction` | nothing | Final-delay estimate for one train (hidden from the OpenAPI schema) | 5.21 |
 
 ### Administration
 
@@ -143,6 +150,13 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/admin/security` | admin | Security: banned IPs (fail2ban), ban history, requests/probes over 24 h and 7 days — from `security/snapshot.json` written by the root exporter; `available:false` + `reason` (`missing`/`invalid`/`stale`, with `age_s`) | — |
 | GET | `/api/admin/tools/server` | admin | The server state (load, memory, services) | 7.8 |
 | GET | `/api/admin/system` | admin | The details of the System page | 7.9 |
+| GET | `/api/admin/tools/nvme` | admin | NVMe disk state (from `nvme.json`) | 7.10 |
+| GET | `/api/admin/ocr-alt` | admin | The alternative-OCR journal (`#ocr2` page) | 7.10 |
+| GET | `/api/admin/ocr-alt/crop/{eid}/{col}` | admin | The crop of one cell (PNG) | 7.10 |
+| POST | `/api/admin/ocr-alt/{eid}/verdict` | admin + CSRF | The administrator's verdict for one event | 7.10 |
+| GET | `/api/admin/quality-daily/confirmation` | admin | Daily journey-confirmation rate | 7.10 |
+| GET | `/api/admin/quality-daily/reading` | admin | Daily reading quality | 7.10 |
+| GET | `/api/admin/quality-daily/coverage` | admin | Hourly board coverage | 7.10 |
 
 **Backups.** There is no HTTP route for downloading or creating a copy of the database.
 The backup is made only inside `POST /api/admin/tools/dupes/apply` and
@@ -290,7 +304,7 @@ The service state. Used by `deploy/update.sh` after a restart (see `README.md`).
 {
   "ok": true,
   "age_s": 0.004525,
-  "version": "Beta 1.43",
+  "version": "Beta 1.65",
   "boards": {
     "arrivals":   {"age_s": 0.004525, "ok": true, "stale": false},
     "departures": {"age_s": 0.004525, "ok": true, "stale": false}
@@ -305,6 +319,7 @@ The service state. Used by `deploy/update.sh` after a restart (see `README.md`).
 
 - `ok` is `true` if the last accepted reading is at most 180 seconds old.
 - `weather_age_s` is `null` if there is no weather observation. The weather does not influence `ok`.
+- `GET` and `HEAD` give the same status; external uptime monitors use `HEAD` by default (the response has no body).
 
 ### 5.3 `GET /api/changelog`
 
@@ -315,9 +330,9 @@ The version history, read from `CHANGELOG.md` (the `changelog()` function in `ap
 
 ```json
 {
-  "version": "Beta 1.43",
+  "version": "Beta 1.65",
   "entries": [
-    {"version": "Beta 1.43", "date": "2026-10-31",
+    {"version": "Beta 1.65", "date": "2026-11-23",
      "groups": [{"title": "Schimbat", "items": ["**Capturi scoase din git:** …"]}]}
   ]
 }
@@ -675,7 +690,7 @@ The system state, for the System page. The public variant is minimal.
 - **Response (200), public:**
 
 ```json
-{"version": "Beta 1.43", "schema": 9, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
+{"version": "Beta 1.65", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
  "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3}, "admin": false}
@@ -713,6 +728,24 @@ data,ora,tren,stație,întârziere_min,peron
 
 - The export contains only public data (what is shown on the History page), with no manual corrections
   and no administration notes.
+
+### 5.21 Advanced statistics and estimates
+
+All are public, read-only and answer JSON. Results are cached briefly (60 s for statistics, 300 s for
+estimates).
+
+| Path | Parameters | Returns |
+|---|---|---|
+| `GET /api/stats/changes` | `perioada` (`1`, `7`, `30`, `all`), `board`, `operator`, `tip`, `doar_confirmate`, `prag`, `min` (as for `/api/stats/overview`) | Routes and operators compared over the last 7 days against the 7 before (% on time), plus the threshold alerts (median > 15 min). Under the minimum number of history days: `status: "insufficient"`, no lists. |
+| `GET /api/stats/heatmap` | same | Mean delay by weekday (0 = Monday) and hour (0-23), per board, with one scale. A cell without a read delay has mean `null`, never 0. |
+| `GET /api/stats/reliable` | same | "The most reliable trains": at least 10 journeys with a read delay. |
+| `GET /api/stats/dwell` | `perioada`, `board` | How long a train stays on the board (median, mean, p90) by type and station; finished services only. It is the observed consultation window, not the real timetable. |
+| `GET /api/stats/platform-changes` | `perioada`, `board` | How often the announced platform changes. |
+| `GET /api/predict/peron` | none | Platform estimates for the trains on the board without an announced platform, from the observed history. The body has `estimates` (`arrivals`, `departures`), `note`, `backtest` (the measured accuracy) and `threshold`. Cached 300 s. Not official CFR information. |
+| `GET /api/trains/{no}/prediction` | `no`: integer | The final-delay estimate: `label`, `note`, `train_no`, `published`, `reason` and `estimates` (per board and station: `delay_min`, `low`, `high`, `n`, `basis`). If the quality gate is not passed: `published: false`, no figures. Cached 300 s. The route is declared with `include_in_schema=False`. |
+
+Invalid period: 422 `"Perioadă invalidă (1, 7, 30 sau all)."`; invalid board: 422
+`"Panou invalid (arrival sau departure)."`.
 
 ---
 
@@ -1077,6 +1110,27 @@ come from the request.
 The details of the System page. The same fields as `/api/system`, plus `disk.total_gb`,
 `ocr.expected_rows`, `poller.last_error_age_s` and `ocr_window`. For visitors without admin
 the route returns 401, and the page does not request it.
+
+### 7.10 Alternative OCR (`#ocr2`), daily quality and NVMe
+
+All need an admin session (or `Bearer`); only `POST …/verdict` also needs `X-CSRF-Token`.
+
+- **`GET /api/admin/ocr-alt`**: the journal of the readings made by the alternative OCR (the `#ocr2`
+  page). Parameters: `limit` (1-200, default 50), `before` (an event id, for the next page), `only`
+  (`all` or `unverified`); otherwise 422 `"Parametri invalizi."`. Response: `state` (`enabled`, `shadow`,
+  `model_path`, `model_loaded`, `since_start`), `totals`, `events` (each with `crops`, the crop URLs) and
+  `next`.
+- **`GET /api/admin/ocr-alt/crop/{eid}/{col}`**: the PNG crop of one cell; 404 `"Decupaj inexistent."`;
+  `Cache-Control: private, max-age=86400`.
+- **`POST /api/admin/ocr-alt/{eid}/verdict`**: the body is exactly `{"verdict": "correct" | "wrong" |
+  "unclear" | null}` (`null` clears the verdict; at most 1024 bytes). 422 `"Verdict invalid."`, 404
+  `"Eveniment necunoscut."`; response `{"ok": true, "verdict": …, "totals": …}`.
+- **`GET /api/admin/quality-daily/confirmation`** and **`/reading`**: `days` (1-90, default 14): the daily
+  journey-confirmation rate and the daily reading quality, with a trend.
+- **`GET /api/admin/quality-daily/coverage`**: `days` (1-90, default 7) and `threshold` (0-1, default
+  0.9): successful captures against expected ones (60/hour), per hour, with the gaps under the threshold.
+- **`GET /api/admin/tools/nvme`**: the NVMe disk state read from `nvme.json` (written by the root
+  collector); `available: false` if the file is missing or invalid; `generated_at`.
 
 ---
 
