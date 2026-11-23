@@ -63,7 +63,7 @@ multidict==7.2.1
     # via
     #   aiohttp
     #   yarl
-numpy==2.5.4
+numpy==2.5.5
     # via
     #   -r requirements.txt
     #   opencv-python-headless
