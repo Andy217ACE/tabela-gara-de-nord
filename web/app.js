@@ -505,11 +505,11 @@
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari" };
-  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "ocr2", "admin", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari"];
+  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
   // routes with a page title: i18n key title.<route>
-  var TITLES = ["istoric", "ocr", "ocr2", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari"];
+  var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;

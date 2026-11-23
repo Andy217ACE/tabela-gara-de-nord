@@ -2,6 +2,7 @@
 """Admin page #ocr2 („Alternativa OCR"): static checks + a real-browser run with the API mocked."""
 import base64
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,8 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4
 def test_static_route_lazy_and_i18n():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '"#ocr2": "ocr2"' in app and '"ocr2.js", "ocr2.css"' in app
-    assert '"ocr", "ocr2", "admin"' in app
+    for name in ("VIEWS", "TITLES"):  # registered as a view and with a page title
+        assert '"ocr2"' in re.search(r"var %s = \[[^\]]*\]" % name, app).group(0)
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert "ocr2" not in html
     sw = (WEB / "sw.js").read_text(encoding="utf-8")
@@ -33,7 +35,6 @@ def test_static_route_lazy_and_i18n():
     en = json.loads((WEB / "i18n" / "en.json").read_text(encoding="utf-8"))
     keys = lambda d: {k for k in d if k.startswith("ocr2.") or k == "title.ocr2"}  # noqa: E731
     assert keys(ro) == keys(en) and len(keys(ro)) > 30
-    import re
     used = set(re.findall(r'T\("(ocr2\.[A-Za-z.]*[A-Za-z])"', js)) | {"ocr2.verdict." + v for v in ("correct", "wrong", "unclear")}
     assert used <= keys(ro)
 
