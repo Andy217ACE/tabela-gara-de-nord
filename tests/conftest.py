@@ -39,3 +39,11 @@ EMPTY_OCR = {"expected_rows": 12, "last": None,
              "window": {"frames": 0, "full_frames": 0, "frames_retried": 0,
                         "lines_retried": 0, "lines_recovered": 0, "duration_ms_max": None,
                         "duration_ms_p50": None, "retry_ms_max": None}}
+
+
+@pytest.fixture(autouse=True)
+def _ocr_alt_journal_dir(tmp_path, monkeypatch):
+    """The alt-OCR journal never writes next to the real DB during tests."""
+    from app.ocr import alt_journal
+    monkeypatch.setenv("OCR_ALT_JOURNAL_DIR", str(tmp_path / "ocr_alt"))
+    alt_journal._last_prune = 0.0
