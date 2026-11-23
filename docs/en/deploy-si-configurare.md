@@ -436,7 +436,7 @@ Check commands, without changes: `sudo ufw status verbose` and `sudo ss -tlnp` (
 
 ### 7.1 fail2ban
 
-Three active jails: `sshd`, `nginx-tabela-probes` and `nginx-tabela-slow`. The probe filter (obvious scanner requests, answered with 4xx; `/.well-known/` is excluded) is in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban. The manual steps (package, copying the filter to `/etc/fail2ban/filter.d/`, the jail definition in `/etc/fail2ban/jail.d/`, restart, check with `fail2ban-client status`) are in `docs/en/administrare-operare.md`, section 15. The jail definitions and the `nginx-tabela-slow` filter exist only on the server, not in the repo.
+Three active jails: `sshd`, `nginx-tabela-probes` and `nginx-tabela-slow`. The probe filter (obvious scanner requests, answered with 4xx; `/.well-known/` is excluded) is in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban. The manual steps (package, copying the filter to `/etc/fail2ban/filter.d/`, the jail definition in `/etc/fail2ban/jail.d/`, restart, check with `fail2ban-client status`) are in `docs/en/administrare-operare.md`, section 15. The server's real configuration is in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, which never bans the home public IP): probes 3 in 10 min → 24 h; `nginx-tabela-slow` 5 in 24 h → 7 days; `sshd` 5 in 10 min → 1 h; increasing bans for repeat offenders (max 5 weeks); the LAN is ignored.
 
 ### 7.2 Headers and limits
 
@@ -567,7 +567,7 @@ These are differences between code, configuration and documentation, found when 
 2. **The automatic rollback leaves the watchdog off.** `update.sh` disables the timer before the rollback and does not re-enable it. The watchdog stays off until the next successful `update.sh`. The manual procedure above includes the re-enabling.
 3. **Failure after the unit changes, before restart.** If `install_unit` changes `tabela.service` and the next step (watchdog) fails, `abort_before_restart` restores the code but not the unit. The new unit stays installed, although the process runs the old code. It is aligned the next time the script runs.
 4. **The shadow training units are not installed by any script.** They must be installed manually. See section 5.3.
-5. **The firewall.** Documented in section 7 (ufw active, fail2ban with three jails). The jail definitions and the `nginx-tabela-slow` filter are not versioned in the repo.
+5. **The firewall.** Documented in section 7 (ufw active, fail2ban with three jails). The fail2ban configuration is versioned in `deploy/fail2ban/`.
 6. **`VAPID_SUBJECT`** has different values in the code, in `install.sh` and in `.env.example` (section 2.4). It does not break operation, but it must be known.
 7. **`TELEGRAM_STATE_PATH`** has the relative default `data/telegram_sent.json` in the code (dev and tests). The `tabela.service` unit sets it to `/var/lib/tabela/telegram_sent.json`, the only writable place under `ProtectSystem=strict`; `tests/test_deploy_static.py` checks this.
 8. **The certificates must exist before `install.sh`** (section 3, the end). Otherwise `nginx -t` fails.

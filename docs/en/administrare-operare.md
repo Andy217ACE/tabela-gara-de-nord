@@ -723,14 +723,14 @@ A summary for orientation, without secrets:
 
 **Firewall (the home server, Ubuntu).** `ufw` is active, with the default policy "deny incoming". Ports 80 and 443 are open to the internet. SSH (22) and RDP (3389) are allowed only from the local network `192.168.1.0/24`. Uvicorn listens only on `127.0.0.1:8000`. `install.sh` does not enable `ufw`: the firewall is configured once, by hand (`sudo ufw status verbose` shows the state).
 
-**fail2ban.** Three active jails: `sshd`, `nginx-tabela-probes` (obvious scanner requests: `.env`, `.git`, `wp-*`, `*.php` etc., answered with 4xx) and `nginx-tabela-slow` (clients that hold the connection or ask too often). The probe filter is versioned in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban; the manual steps:
+**fail2ban.** Three active jails: `sshd`, `nginx-tabela-probes` (obvious scanner requests: `.env`, `.git`, `wp-*`, `*.php` etc., answered with 4xx) and `nginx-tabela-slow` (slow scanners below the first jail's threshold: probes, 444/400 responses, unusual methods, proxy-style requests; 5 in 24 h → 7 days). The probe filter is versioned in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban; the manual steps:
 
 1. `sudo apt install fail2ban`;
 2. `sudo install -m 644 deploy/fail2ban/nginx-tabela-probes.local /etc/fail2ban/filter.d/`;
 3. define the jail in `/etc/fail2ban/jail.d/` (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` at the operator's choice) and restart with `sudo systemctl restart fail2ban`;
 4. check: `sudo fail2ban-client status` and `sudo fail2ban-client status nginx-tabela-probes`.
 
-The jail definitions and the `nginx-tabela-slow` filter are configured on the server and are not (yet) in the repo. For the admin, the `#sistem` page shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
+The server's complete configuration is versioned in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, which never bans the home public IP). For the admin, the `#sistem` page shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
 
 **External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram) and from the NVMe health timer.
 

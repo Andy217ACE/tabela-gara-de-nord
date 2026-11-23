@@ -723,14 +723,14 @@ Rezumat pentru orientare, fără secrete:
 
 **Firewall (serverul de acasă, Ubuntu).** `ufw` este activ, cu politica implicită „deny incoming”. Porturile 80 și 443 sunt deschise spre internet. SSH (22) și RDP (3389) sunt permise doar din rețeaua locală `192.168.1.0/24`. Uvicorn ascultă doar pe `127.0.0.1:8000`. `install.sh` nu activează `ufw`: firewall-ul se configurează o singură dată, de mână (`sudo ufw status verbose` arată starea).
 
-**fail2ban.** Trei jail-uri active: `sshd`, `nginx-tabela-probes` (cereri evidente de scanere: `.env`, `.git`, `wp-*`, `*.php` etc., cu răspuns 4xx) și `nginx-tabela-slow` (clienți care țin conexiunea sau cer prea des). Filtrul pentru probe este versionat în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban; pașii manuali:
+**fail2ban.** Trei jail-uri active: `sshd`, `nginx-tabela-probes` (cereri evidente de scanere: `.env`, `.git`, `wp-*`, `*.php` etc., cu răspuns 4xx) și `nginx-tabela-slow` (scanere lente, sub pragul primului jail: sonde, răspunsuri 444/400, metode neobișnuite, cereri de tip proxy; 5 în 24 h → 7 zile). Filtrul pentru probe este versionat în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban; pașii manuali:
 
 1. `sudo apt install fail2ban`;
 2. `sudo install -m 644 deploy/fail2ban/nginx-tabela-probes.local /etc/fail2ban/filter.d/`;
 3. în `/etc/fail2ban/jail.d/` se definește jail-ul (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` la alegerea operatorului) și se repornește cu `sudo systemctl restart fail2ban`;
 4. verificare: `sudo fail2ban-client status` și `sudo fail2ban-client status nginx-tabela-probes`.
 
-Definiția jail-urilor și filtrul `nginx-tabela-slow` sunt configurate pe server și nu sunt (încă) în repo. Pagina `#sistem` arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
+Configurația completă a serverului e versionată în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, care nu banează IP-ul public propriu). Pagina `#sistem` arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
 
 **Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram) și de la temporizatorul de sănătate NVMe.
 

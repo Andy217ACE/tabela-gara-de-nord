@@ -442,7 +442,7 @@ Comenzi de verificare, fără modificări: `sudo ufw status verbose` și `sudo s
 
 ### 7.1 fail2ban
 
-Trei jail-uri active: `sshd`, `nginx-tabela-probes` și `nginx-tabela-slow`. Filtrul pentru probe (cereri evidente de scanere, cu răspuns 4xx; `/.well-known/` este exclus) este în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban. Pașii manuali (pachet, copierea filtrului în `/etc/fail2ban/filter.d/`, definiția jail-ului în `/etc/fail2ban/jail.d/`, repornire, verificare cu `fail2ban-client status`) sunt în `docs/administrare-operare.md`, secțiunea 15. Definiția jail-urilor și filtrul `nginx-tabela-slow` sunt doar pe server, nu în repo.
+Trei jail-uri active: `sshd`, `nginx-tabela-probes` și `nginx-tabela-slow`. Filtrul pentru probe (cereri evidente de scanere, cu răspuns 4xx; `/.well-known/` este exclus) este în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban. Pașii manuali (pachet, copierea filtrului în `/etc/fail2ban/filter.d/`, definiția jail-ului în `/etc/fail2ban/jail.d/`, repornire, verificare cu `fail2ban-client status`) sunt în `docs/administrare-operare.md`, secțiunea 15. Configurația reală a serverului e în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, care nu banează IP-ul public propriu): probe 3 în 10 min → 24 h; `nginx-tabela-slow` 5 în 24 h → 7 zile; `sshd` 5 în 10 min → 1 h; ban crescător pentru recidiviști (maxim 5 săptămâni); LAN-ul e ignorat.
 
 ### 7.2 Antete și limite
 
@@ -573,7 +573,7 @@ Acestea sunt diferențe între cod, configurare și documentație, găsite la sc
 2. **Rollback-ul automat lasă watchdog-ul oprit.** `update.sh` dezactivează timer-ul înainte de rollback și nu îl mai reactivează. Watchdog-ul rămâne oprit până la următorul `update.sh` reușit. Procedura manuală de mai sus include reactivarea.
 3. **Eșec după schimbarea unității, înainte de restart.** Dacă `install_unit` schimbă `tabela.service`, iar pasul următor (watchdog) eșuează, `abort_before_restart` restaurează codul, dar nu unitatea. Unitatea nouă rămâne instalată, deși procesul rulează codul vechi. La următoarea rulare a scriptului se aliniază.
 4. **Unitățile de antrenare umbră nu sunt instalate de niciun script.** Trebuie instalate manual. Vezi secțiunea 5.3.
-5. **Firewall-ul.** Documentat în secțiunea 7 (ufw activ, fail2ban cu trei jail-uri). Definiția jail-urilor și filtrul `nginx-tabela-slow` nu sunt versionate în repo.
+5. **Firewall-ul.** Documentat în secțiunea 7 (ufw activ, fail2ban cu trei jail-uri). Configurația fail2ban e versionată în `deploy/fail2ban/`.
 6. **`VAPID_SUBJECT`** are valori diferite în cod, în `install.sh` și în `.env.example` (secțiunea 2.4). Nu strică funcționarea, dar trebuie știută.
 7. **`TELEGRAM_STATE_PATH`** are implicitul relativ `data/telegram_sent.json` în cod (dev și teste). Unitul `tabela.service` îl setează la `/var/lib/tabela/telegram_sent.json`, singurul loc scriptibil sub `ProtectSystem=strict`; `tests/test_deploy_static.py` verifică asta.
 8. **Certificatele trebuie să existe înainte de `install.sh`** (secțiunea 3, final). Altfel `nginx -t` eșuează.

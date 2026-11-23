@@ -1,0 +1,8 @@
+[INCLUDES]
+before = nginx-tabela-probes.local
+[Definition]
+failregex = ^<HOST> - \S+ \[\] "[A-Z]+ (?:https?://[^/" ]+)?/(?!\.well-known/)%(_probe)s[^"]*" 4\d\d 
+            ^<HOST> - \S+ \[\] "[^"]*" (?:444|400) 
+            ^<HOST> - \S+ \[\] "(?!(?:GET|HEAD|POST|DELETE) )[^"]*" \d{3} 
+            ^<HOST> - \S+ \[\] "[A-Z]+ https?://[^"]*" \d{3} 
+ignoreregex =
