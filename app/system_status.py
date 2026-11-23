@@ -129,10 +129,10 @@ def collect_status(store, settings, now: datetime, *, admin: bool = False) -> di
         },
         "disk": {"free_gb": disk["free_gb"]},
         "db": _db(db_path),
-        "tesseract": tesseract_info(getattr(settings, "tesseract_cmd", "tesseract")),
-        "security_updates": pending_security_updates(),
     }
-    if admin:
+    if admin:  # versions and pending updates stay admin-only: public, they'd be a target list
+        out["tesseract"] = tesseract_info(getattr(settings, "tesseract_cmd", "tesseract"))
+        out["security_updates"] = pending_security_updates()
         snap = ocr_stats.snapshot()
         out["poller"]["last_error_age_s"] = None if err is None else round(now.timestamp() - err[1])
         out["ocr"]["expected_rows"] = snap["expected_rows"]

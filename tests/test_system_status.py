@@ -170,8 +170,9 @@ def test_tesseract_and_security_updates_fields(store, tmp_path, monkeypatch):
     f = tmp_path / "updates"
     f.write_text("12 updates can be applied immediately.\n3 of these updates are security updates.\n")
     monkeypatch.setattr(system_status, "_UPDATES_FILE", str(f))
-    st = system_status.collect_status(store, _settings(tmp_path / "tabela.db"), NOW)
+    st = system_status.collect_status(store, _settings(tmp_path / "tabela.db"), NOW, admin=True)
     assert st["tesseract"] == {"version": "5.5.0", "langs": ["eng", "ron"]}
     assert st["security_updates"] == 3
+    assert "tesseract" not in system_status.collect_status(store, _settings(tmp_path / "tabela.db"), NOW)  # public: no versions
     monkeypatch.setattr(system_status, "_UPDATES_FILE", str(tmp_path / "missing"))
     assert system_status.pending_security_updates() is None
