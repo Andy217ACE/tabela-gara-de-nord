@@ -80,9 +80,18 @@ def browser():
         b.close()
 
 
-def _open(browser, base_url, w, h, theme, hash_):
+# Statistici builds its chart sections near the screen (Phase 1, statistici.js later()); these checks look at
+# every section, so they build them all at once the way printing does („beforeprint”).
+BUILD_ALL = """document.addEventListener('DOMContentLoaded', () => new MutationObserver(() => {
+  if (document.querySelector('#st-statistici .ss-defer-ph')) { dispatchEvent(new Event('beforeprint')); dispatchEvent(new Event('afterprint')); }
+}).observe(document.body, {childList: true, subtree: true}));"""
+
+
+def _open(browser, base_url, w, h, theme, hash_, eager=True):
     ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
     ctx.add_init_script(f"localStorage.setItem('tabela.theme', '{theme}');")
+    if eager:
+        ctx.add_init_script(BUILD_ALL)
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base_url) else r.abort())
     page = ctx.new_page()
     errors = []

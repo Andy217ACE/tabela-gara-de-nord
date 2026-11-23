@@ -170,13 +170,91 @@
   }
   function sp2Layer() { return layer("statSp2", "stat_sp2"); }
 
+  function s2h() {
+    return { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
+      dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } };
+  }
   function draw(d) {   // render + the lazy layer's additions (tooltips, expert mode, drill-down)
     render(d);
-    if (S2()) S2().enhance(v.ui, d, { el: el, tt: tt, api: API, query: function () { return query(v.p, {}); }, minutes: minutes,
-      dayText: S.dayText, getJSON: S.getJSON, board: function (b) { return BOARD_PL[b]; } });
+    if (S2()) S2().enhance(v.ui, d, s2h());
     if (App.statExport) App.statExport.enhance(v.ui, d, v.at); if (App.statSp3) App.statSp3.enhance(v.ui, d, { query: function () { return query(v.p, {}); } });
     syncFiltersH();
+    watchLater();
   }
+
+  // ---- detail sections built near the screen (summary + TOC first: short tasks, small DOM) ----
+  // later(fn, toc) keeps the section's place: a display:contents box (the figures stay items of the
+  // .ss-body grid) holding a placeholder of about a figure's height until fn() builds it.
+  function out() { return (v.ui && v.ui.out) || v.ui.body; }
+  function later(fn, toc) {
+    var box = el("div", "ss-defer");
+    var ph = el("div", "ss-defer-ph");
+    if (toc) ph.setAttribute("data-toc", tt(toc));   // its chip in the TOC until it is built (charts3 statisticiItems)
+    box.append(ph);
+    v.ui.body.append(box);
+    v.ui.later.push({ box: box, ph: ph, fn: fn });
+  }
+  function build(it) {
+    if (it.done || !v.ui || !it.box.isConnected) return;
+    it.done = true;
+    if (v.ui.io) v.ui.io.unobserve(it.ph);
+    v.ui.out = it.box;
+    try { it.fn(); } finally { v.ui.out = null; }
+    it.ph.remove();
+    var box = it.box;
+    if (S2()) S2().enhance({ body: box, quick: el("div"), fields: v.ui.fields, sp2: true }, v.data, s2h());   // help tips of the new nodes
+    if (App.statExport) App.statExport.enhance({ form: v.ui.form, body: box }, v.data, v.at);
+    if (C3()) C3().enhance(box, { url: chartUrl });
+    if (U()) U().reveal(box);
+    tocSoon();
+  }
+  function flushLater() {   // every section now (a jump to a chart / section, a TOC chip)
+    if (!v.ui) return;
+    v.ui.later.forEach(build);
+    v.ui.later = [];
+    tocNow();
+  }
+  window.addEventListener("beforeprint", flushLater);
+  // a filter change: every section down to the screen now (real heights above it: the reader stays where
+  // they were, and the morph has the new geometry of what is on screen)
+  function buildNear() {
+    if (!v.ui) return;
+    var reach = (window.innerHeight || 800) + 600;
+    v.ui.later.forEach(function (it) {
+      if (!it.done && it.ph.isConnected && it.ph.getBoundingClientRect().top < reach) build(it);
+    });
+  }   // „Tipărește” / Ctrl+P: the whole page, not placeholders
+  // one section per task: the main thread stays free between them (TBT)
+  function pump() {
+    if (!v.ui) return;
+    var it = v.ui.queue.shift();
+    if (it) build(it);
+    if (v.ui.queue.length) setTimeout(pump, 0);
+  }
+  function watchLater() {
+    var ui = v.ui;
+    if (!ui.later.length) return;
+    if (typeof IntersectionObserver === "undefined") { flushLater(); return; }   // fallback: all at once
+    ui.io = new IntersectionObserver(function (es) {
+      if (v.ui !== ui) return;
+      var was = ui.queue.length;
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var it = ui.later.filter(function (x) { return x.ph === e.target; })[0];
+        if (it && ui.queue.indexOf(it) < 0) ui.queue.push(it);
+      });
+      ui.queue.sort(function (a, b) { return ui.later.indexOf(a) - ui.later.indexOf(b); });
+      if (!was && ui.queue.length) setTimeout(pump, 0);
+    }, { rootMargin: "600px 0px" });
+    ui.later.forEach(function (it) { ui.io.observe(it.ph); });
+  }
+  var tocT = 0;
+  function tocNow() {
+    clearTimeout(tocT);
+    tocT = 0;
+    if (v.ui && C3() && v.ui.body.__c3nav) { C3().toc(v.ui.body); tocSect(); }
+  }
+  function tocSoon() { if (!tocT) tocT = setTimeout(tocNow, 120); }
 
   function presetsMenu() {
     var box = el("div", "ss-presets");
@@ -284,7 +362,15 @@
     ft.type = "button";
     ft.setAttribute("aria-expanded", "false");
     ft.hidden = true;
-    form.append(ft, fields, rs, presetsMenu());
+    // „Date actualizate…” and „Tipărește”: in place from the start (stat_export.js finds and fills them on the
+    // first draw), so the filter bar does not grow when the data arrives (CLS)
+    var upd = el("p", "ss-sp4-updated", " ");
+    upd.setAttribute("role", "status");
+    var pb = el("button", "btn btn-ghost btn-sm ss-exp-btn ss-sp4-print", tt("stats.sp4.print"));
+    pb.type = "button";
+    pb.setAttribute("aria-label", tt("stats.sp4.print"));
+    pb.addEventListener("click", function () { window.print(); });
+    form.append(ft, fields, rs, presetsMenu(), upd, pb);
     var mq = window.matchMedia ? window.matchMedia("(max-width: 599px)") : null;
     var panelOpen = false;
     function applyPanel() {
@@ -314,13 +400,33 @@
     var body = el("div", "ss-body");
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
-    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci };
-    window.addEventListener("resize", debounce(function () {
-      if (!v.data || $("view-statistici").hidden) return;
-      syncFiltersH();
-      var w = v.ui.body.clientWidth;
-      if (Math.abs(w - v.width) > 24) draw(v.data);
-    }, 200));
+    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci,
+             later: [], queue: [], io: null, out: null };
+    if (!resizeOn) {   // once: ensure() runs again after hide()
+      resizeOn = true;
+      window.addEventListener("resize", debounce(function () {
+        if (!v.ui || !v.data || $("view-statistici").hidden) return;
+        syncFiltersH();
+        var w = v.ui.body.clientWidth;
+        if (Math.abs(w - v.width) > 24) draw(v.data);
+      }, 200));
+    }
+  }
+  var resizeOn = false;
+
+  // leaving the page: drop the DOM, observers and listeners; the data stays cached (show() draws it again)
+  function hide() {
+    if (!v.ui) return;
+    if (v.ctrl) { v.ctrl.abort(); v.ctrl = null; v.key = null; }
+    if (v.ui.io) v.ui.io.disconnect();
+    if (v.ui.body.__c3toc) v.ui.body.__c3toc.disconnect();
+    clearTimeout(tocT);
+    tocT = 0;
+    var root = $("st-statistici");
+    root.classList.remove("is-loading");
+    root.removeAttribute("aria-busy");
+    root.replaceChildren();
+    v.ui = null;
   }
 
   function debounce(fn, ms) {
@@ -379,6 +485,7 @@
     var q = query(v.p);
     var url = API + (q ? "?" + q : "");
     var ttl = ((v.data && v.data.cache_ttl_s) || 60) * 1000;
+    if (v.data && !v.ui.body.firstChild && url === v.key) draw(v.data);   // back after hide(): the cached data at once
     if (url === v.key && v.data && Date.now() - v.at < ttl) return;
     v.key = url;
     if (v.ctrl) v.ctrl.abort();
@@ -390,7 +497,8 @@
     if (!v.data) {
       var wait = el("p", "sr-only", tt("stats.loading"));
       v.ui.body.replaceChildren(wait);
-      if (U()) v.ui.body.append(U().skeleton("hero", 4), U().skeleton("chart", 2), U().skeleton("cards", 1));
+      // the quick-summary cards come above the body: their skeleton goes there too (nothing moves when they arrive)
+      if (U()) { v.ui.quick.replaceChildren(U().skeleton("hero", 4)); v.ui.body.append(U().skeleton("chart", 2), U().skeleton("cards", 1)); }
     }
     var chartsReady = U() && U().charts ? U().charts() : Promise.resolve(null);
     chartsReady = chartsReady.then(function (c) { return Promise.all([stepsLayer(), sp2Layer(), layer("statExport", "stat_export"), layer("statSp3", "stat_sp3")]).then(function () { return c; }); });
@@ -403,7 +511,7 @@
         v.at = Date.now();
         setForm(v.p);
         draw(d);
-        if (snap && C3()) C3().morph(v.ui.body, snap);
+        if (snap && C3()) { buildNear(); C3().morph(v.ui.body, snap); }
         focusChart();
         applySect();
       })
@@ -424,6 +532,7 @@
   }
 
   function focusChart() {
+    if (v.focus && !v.ui.body.querySelector('[data-key="' + String(v.focus).replace(/[^a-z0-9-]/g, "") + '"]')) flushLater();   // the chart may not be built yet
     if (v.focus && C3()) C3().focusKey(v.ui.body, v.focus);
     v.focus = null;
   }
@@ -433,6 +542,7 @@
     if (!v.sectPending || !v.data || !v.ui) return;
     v.sectPending = false;
     if (!v.sect) return;
+    if (!v.ui.body.querySelector(SECTS[v.sect])) flushLater();   // a section not built yet
     var node = v.ui.body.querySelector(SECTS[v.sect]);
     if (!node) return;
     node.classList.add("ss-target");
@@ -503,7 +613,7 @@
     sec.append(host);
     var foot = el("div", "ss-fig-foot");
     sec.append(foot);
-    v.ui.body.append(sec);
+    out().append(sec);
     return { sec: sec, host: host, foot: foot, titleId: hid };
   }
 
@@ -915,7 +1025,7 @@
     when.textContent = tt("stats.summary.generated", { time: g && !isNaN(g) ? new Intl.DateTimeFormat(window.I18N.lang(), { timeStyle: "medium", timeZone: "Europe/Bucharest" }).format(g) : "—",
       ttl: d.cache_ttl_s || 60, max: p.on_time_max_min, min: p.min_sample });
     sec.append(when);
-    v.ui.body.append(sec);
+    out().append(sec);
   }
 
   // Hero strip (Beta 1.26): the numbers that matter first, counted up once on screen.
@@ -938,7 +1048,7 @@
     items.push({ label: tt("stats.hero.days"), cls: "ss-hero-v", value: c.days || 0,
       sub: c.first ? (c.first === c.last ? S.dayText(c.first) : S.dayText(c.first) + " – " + S.dayText(c.last)) : tt("stats.hero.no_day") });
     sec.append(U().hero(items));
-    v.ui.body.append(sec);
+    out().append(sec);
   }
 
   // Part-to-whole: on time / late / very late for one board (a donut, never a bar).
@@ -980,7 +1090,7 @@
       if (s.n && !s.sufficient) card.append(warn(tt("stats.warn.small_raw", { n: s.n, min: p.min_sample })));
       box.append(card);
     });
-    v.ui.body.append(box);
+    out().append(box);
   }
 
   function smallNote(n, min) {
@@ -1619,7 +1729,7 @@
       dl.append(el("dt", null, tt("stats.gl." + x[0] + ".t")), el("dd", null, tt("stats.gl." + x[0] + ".d", x[1])));
     });
     sec.append(dl);
-    v.ui.body.append(sec);
+    out().append(sec);
   }
 
   // ---- Probleme (Beta 1.19): deterministic findings computed on the server (app/stats_problems.py)
@@ -1644,7 +1754,7 @@
     var box = el("div", "ss-part");
     box.append(el("h2", "ss-part-h", text));
     if (sub) box.append(el("p", "ss-part-sub", sub));
-    v.ui.body.append(box);
+    out().append(box);
   }
 
   function coverageBox(c, d) {
@@ -1719,7 +1829,7 @@
       pr.items.forEach(function (it) { ol.append(problemItem(it)); });
       sec.append(ol);
     }
-    v.ui.body.append(sec);
+    out().append(sec);
   }
 
   function goodSection(d) {
@@ -1733,7 +1843,7 @@
     var ul = el("ul", "ss-good-list");
     good.forEach(function (s) { ul.append(el("li", null, s)); });
     sec.append(ul);
-    v.ui.body.append(sec);
+    out().append(sec);
   }
 
   function recurrentSection(d) {
@@ -1991,6 +2101,10 @@
 
   function render(d) {
     seq = 0;
+    if (v.ui.io) v.ui.io.disconnect();
+    v.ui.io = null;
+    v.ui.later = [];
+    v.ui.queue = [];
     v.ui.body.replaceChildren();
     v.ui.body.classList.toggle("ss-no-motion", !!reduceMotion);
     var boards = boardsOf(d);
@@ -2007,43 +2121,51 @@
       glossary(d);
       return;
     }
+    // drawn now: problems, what goes well, the part headings, the text summary, the glossary;
+    // every chart section is built when it comes near the screen (later())
     if (d.problems) {
       problemsSection(d);
       goodSection(d);
       if (d.problems.status === "ok") {
         sectionHeading(tt("stats.part.details"), tt("stats.part.details_sub"));
-        recurrentSection(d);
-        windowsSection(d, boards);
-        compareSection(d, boards);
-        bigSection(d, boards);
-        problemRoutesSection(d, boards);
-        growthSection(d, boards);
-        if (App.statSteps) App.statSteps.render(d, boards, { el: el, nf: nf, figure: figure, multiples: multiples, hbars: hbars, nLine: nLine, warn: warn, boardKey: boardKey, hashLink: hashLink, dataTable: dataTable });
-        trendSection(d, boards);
+        later(function () { recurrentSection(d); });
+        later(function () { windowsSection(d, boards); });
+        later(function () { compareSection(d, boards); });
+        later(function () { bigSection(d, boards); });
+        later(function () { problemRoutesSection(d, boards); });
+        later(function () { growthSection(d, boards); });
+        later(function () {
+          if (App.statSteps) App.statSteps.render(d, boards, { el: el, nf: nf, figure: figure, multiples: multiples, hbars: hbars, nLine: nLine, warn: warn, boardKey: boardKey, hashLink: hashLink, dataTable: dataTable });
+        });
+        later(function () { trendSection(d, boards); });
       }
       sectionHeading(tt("stats.part.charts"), tt("stats.part.charts_sub"));
     }
-    if (d.coverage.journeys && U()) heroStrip(d, boards);
+    if (d.coverage.journeys && U()) later(function () { heroStrip(d, boards); }, "charts.toc.figures");
     summary(d);
-    kpis(d, boards);
-    distributionSection(d, boards);
-    shareSection(d, boards);
-    dailySection(d, boards);
-    calendarSection(d, boards);
-    hourlySection(d, boards);
-    heatmapSection(d, boards);
-    if (App.statWeekdays) App.statWeekdays.section(d, boards, { figure: figure, el: el, nLine: nLine });
-    rankedSection(d, boards, "operators", tt("stats.fig.operators"), tt("stats.fig.operators.how"), "operators", tt("stats.share.operator"),
-      "care-operatori-sunt-cei-mai-punctu");
-    rankedSection(d, boards, "types", tt("stats.fig.types"), tt("stats.fig.types.how"), "types", tt("stats.filters.train_type"),
-      "ce-tipuri-de-tren-sunt-mai-punctua");
-    opcatSection(d);
-    routesSection(d, boards);
-    weatherSection(d);
-    trafficSection(d, boards);
-    platformsSection(d, boards);
+    later(function () { kpis(d, boards); });
+    later(function () { distributionSection(d, boards); }, "charts.toc.distribution");
+    later(function () { shareSection(d, boards); }, "charts.toc.split");
+    later(function () { dailySection(d, boards); }, "charts.toc.days");
+    later(function () { calendarSection(d, boards); }, "charts.toc.calendar");
+    later(function () { hourlySection(d, boards); }, "charts.toc.hours");
+    later(function () { heatmapSection(d, boards); }, "charts.toc.map");
+    later(function () { if (App.statWeekdays) App.statWeekdays.section(d, boards, { figure: figure, el: el, nLine: nLine }); });
+    later(function () {
+      rankedSection(d, boards, "operators", tt("stats.fig.operators"), tt("stats.fig.operators.how"), "operators", tt("stats.share.operator"),
+        "care-operatori-sunt-cei-mai-punctu");
+    }, "charts.toc.operators");
+    later(function () {
+      rankedSection(d, boards, "types", tt("stats.fig.types"), tt("stats.fig.types.how"), "types", tt("stats.filters.train_type"),
+        "ce-tipuri-de-tren-sunt-mai-punctua");
+    });
+    later(function () { opcatSection(d); }, "charts.toc.opcat");
+    later(function () { routesSection(d, boards); }, "charts.toc.routes");
+    later(function () { weatherSection(d); }, "charts.toc.weather");
+    later(function () { trafficSection(d, boards); }, "charts.toc.traffic");
+    later(function () { platformsSection(d, boards); });
     (App.statsExtra || []).forEach(function (x) { if (App.statExport) App.statExport.lazy(x, v.ui.body, v.p); else x(v.ui.body, v.p); });
-    qualitySection(d);
+    later(function () { qualitySection(d); }, "charts.toc.quality");
     glossary(d);
     if (U()) {
       U().stagger(v.ui.body.querySelector(".ss-prob-list"));
@@ -2058,8 +2180,11 @@
 
   // RO/EN switch: the filter labels and every chart are drawn again in the new language
   document.addEventListener("i18n:change", function () {
+    v.data = null;   // a page left (hide()) is fetched again in the new language on return
+    v.key = null;
     if (!v.ui) return;
     var p = v.p, wasShown = !!($("view-statistici") && !$("view-statistici").hidden);
+    if (v.ui.io) v.ui.io.disconnect();
     v.ui = null;
     v.data = null;
     v.key = null;
@@ -2067,5 +2192,16 @@
     if (wasShown && p) show(new URLSearchParams(query(p)));
   });
 
-  App.views.statistici = { show: show };
+  // a TOC chip of a section not built yet: build them all first, then the chip's own jump (to the real section)
+  $("st-statistici").addEventListener("click", function (e) {
+    var chip = e.target.closest ? e.target.closest(".c3-toc .c3-chip") : null;
+    if (!chip || !v.ui || !v.ui.later.some(function (it) { return !it.done; })) return;
+    e.stopPropagation();
+    var label = chip.textContent;
+    flushLater();
+    var again = [].filter.call($("st-statistici").querySelectorAll(".c3-toc .c3-chip"), function (b) { return b.textContent === label; })[0];
+    if (again) again.click();
+  }, true);
+
+  App.views.statistici = { show: show, hide: hide };
 })();

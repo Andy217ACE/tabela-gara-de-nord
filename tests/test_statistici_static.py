@@ -69,13 +69,14 @@ def test_series_tokens_in_every_theme_block():
 
 def test_index_and_sw_wiring():
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    assert '<link rel="stylesheet" href="statistici.css">' in html
+    assert 'href="statistici.css"' not in html   # loaded by app.js on the first #statistici (PAGE_CSS)
+    assert re.search(r'statistici: \["stats\.css", "statistici\.css"\]', (WEB / "app.js").read_text(encoding="utf-8"))
     assert '<script src="statistici.js" defer></script>' in html
     assert html.index('src="stats.js"') < html.index('src="statistici.js"')
     assert 'id="st-statistici"' in html and html.count("<footer") == 1
     sw = (WEB / "sw.js").read_text(encoding="utf-8")
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
-    assert '"/statistici.js"' in shell and '"/statistici.css"' in shell
+    assert '"/statistici.js"' in shell and '"/statistici.css"' not in shell   # lazy page CSS
     assert int(re.search(r'var VERSION = "v(\d+)"', sw).group(1)) >= 17
 
 

@@ -23,7 +23,7 @@ expect = sync_api.expect  # polls from Python: no eval under the page's CSP
 
 BUC = ZoneInfo("Europe/Bucharest")
 LAST = date(2026, 10, 20)
-DAYS = 210  # > one page of 200
+DAYS = 210  # > several pages of 50 (Phase 1: „Încarcă încă 50”)
 
 
 def _journey(c, board, no, day, t, delay, *, read=True, gone=True, station="BRASOV"):
@@ -128,23 +128,24 @@ def test_all_days_view(browser, base_url, w, h, theme):
         assert page.input_value("#h-date") == "" and page.is_visible("#h-date")
         assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
         count = page.text_content("#h-count")
-        assert "213 călătorii" in count and "perioada" in count and "afișate 200" in count
+        assert "213 călătorii" in count and "perioada" in count and "afișate 50" in count
         summary = page.text_content("#h-summary")
         assert "Sosiri" in summary and "Plecări" in summary and "N = " in summary
         assert "nu sunt 0" in summary and "calitate redusă" in summary
-        assert page.locator("#h-results .lq-badge").count() == 1
-        assert page.locator("#h-results .h-row").count() == 200
+        assert page.locator("#h-results .h-row").count() == 50
         first = page.text_content("#h-results .h-group-title")
         assert "20 octombrie 2026" in first
-        assert page.locator("#h-results a[href='#tren?nr=1621']").count() == 200
-        assert page.locator("#h-results .res-badge").count() == 200
+        assert page.locator("#h-results a[href='#tren?nr=1621']").count() == 50
+        assert page.locator("#h-results .res-badge").count() == 50
         assert page.locator("#h-results .delay-unread").count() > 0  # unknown is not 0
         assert page.evaluate(NO_HSCROLL)
         assert page.evaluate(COUNT_JS) == 1
         assert page.evaluate(INSIDE) == 0
-        page.click("#h-more")
-        expect(page.locator("#h-results .h-row")).to_have_count(213)
+        for n in (100, 150, 200, 213):   # 50 more per click
+            page.click("#h-more")
+            expect(page.locator("#h-results .h-row")).to_have_count(n)
         assert not page.is_visible("#h-more")
+        assert page.locator("#h-results .lq-badge").count() == 1
         assert "afișate" not in page.text_content("#h-count")
         assert page.evaluate(NO_HSCROLL)
         # detail (chart) opens from a row

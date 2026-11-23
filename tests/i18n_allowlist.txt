@@ -1,11 +1,11 @@
 # Format: path:line:reason (path relative to repo root, forward slashes). Lines listed here are CFR data (station/train/operator names) that must stay Romanian.
 web/panel.js:973:CFR data: station name "București Nord" (route label)
 web/panel.js:974:CFR data: station name "București Nord" (route label)
-web/statistici.js:1627:server enum protocol: Romanian severity words sent by app/stats_problems.py, mapped to dictionary keys
-web/statistici.js:1628:server enum protocol: Romanian coverage-level words sent by app/stats_problems.py, mapped to dictionary keys
-web/statistici.js:1629:server enum protocol: Romanian confidence words sent by app/stats_problems.py, mapped to dictionary keys
-web/index.html:79:static pre-JS fallback of the theme button; app.js rewrites it from theme.label (pinned by test_brand_theme)
-web/index.html:350:static pre-JS fallback of the footer credit; app.js rewrites it from footer.credit (pinned by test_panel_static)
+web/statistici.js:1737:server enum protocol: Romanian severity words sent by app/stats_problems.py, mapped to dictionary keys
+web/statistici.js:1738:server enum protocol: Romanian coverage-level words sent by app/stats_problems.py, mapped to dictionary keys
+web/statistici.js:1739:server enum protocol: Romanian confidence words sent by app/stats_problems.py, mapped to dictionary keys
+web/index.html:77:static pre-JS fallback of the theme button; app.js rewrites it from theme.label (pinned by test_brand_theme)
+web/index.html:348:static pre-JS fallback of the footer credit; app.js rewrites it from footer.credit (pinned by test_panel_static)
 web/index.html:8:static SEO head (meta description), Romanian default, edited by the head agent not this task
 web/index.html:25:static SEO head (og:title), Romanian default, edited by the head agent not this task
 web/index.html:26:static SEO head (og:description), Romanian default, edited by the head agent not this task

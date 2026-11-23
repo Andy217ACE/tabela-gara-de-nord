@@ -31,7 +31,8 @@
   var $ = function (id) { return document.getElementById(id); };
   var form, inputs = {}, timer = null, inflight = null, detailCtrl = null, lastQuery = null;
   var lastFocus = null, allBtn = null, lastJourney = null;
-  var PAGE = 200;                 // journeys per page (server max 200)
+  var PAGE = 50;                  // journeys per page (server max 200); „Încarcă încă 50” asks for the next ones
+  var released = false;           // hide() dropped the results: the next show() draws them again
   var allState = null;            // {q, next, groups: {day: tbody}, shown, ctrl}
 
   // ---- time helpers ------------------------------------------------------------
@@ -486,6 +487,11 @@
       var old = res.querySelector(".ui-skel");
       if (on && !res.firstChild) res.append(U.skeleton("table", 6));
       else if (!on && old) old.remove();
+      // the summary comes above the rows: its skeleton too, so the rows do not jump when it arrives (CLS)
+      var sum = $("h-summary");
+      var sk = sum.querySelector(".ui-skel");
+      if (on && !sum.firstChild) { sum.append(U.skeleton("hero", 3)); sum.hidden = false; }
+      else if (!on && sk) { sk.remove(); if (!sum.firstChild) sum.hidden = true; }
     }
     $("h-results").setAttribute("aria-busy", on ? "true" : "false");
     $("view-istoric").classList.toggle("is-loading", on);
@@ -864,9 +870,12 @@
 
   function showNow(params) {
     applyStatic();
+    var again = released;
+    released = false;
     if (lastQuery !== null && !Array.from(params.keys()).length) {
       // bare #istoric (nav link): keep the current filters, restore them in the URL
       syncHash(readForm());
+      if (again) search(true);
       return;
     }
     var q = queryFromParams(params);
@@ -875,7 +884,15 @@
     if (changed) writeForm(q);
     else syncScope();
     inputs.date.max = todayBucharest();
-    search(false);
+    search(again);
+  }
+
+  // leaving the page: drop the result rows (the filters stay in the form)
+  function hide() {
+    clearTimeout(timer);
+    if (inflight) { inflight.abort(); inflight = null; setLoading(false); }
+    clearResults();
+    released = true;
   }
 
   // Static markup of the view (index.html carries the Romanian source text): set from the dictionary.
@@ -917,7 +934,7 @@
   function onLangChange() {
     buildFmts();
     applyStatic();
-    if (lastQuery !== null) search(true);
+    if (lastQuery !== null && !released) search(true);
     var dlg = $("h-detail");
     if (dlg && dlg.open && lastJourney) openJourney(lastJourney.id, lastFocus, lastJourney.hint);
   }
@@ -971,7 +988,7 @@
     });
   }
 
-  App.views.istoric = { show: show };
+  App.views.istoric = { show: show, hide: hide };
   App.history = { delaySeries: delaySeries, readingSeries: readingSeries, todayBucharest: todayBucharest,
                   plural: plural, openJourney: openJourney, resultBadge: resultBadge,
                   titleCase: titleCase, dayLabel: dayLabel, localTime: localTime };
