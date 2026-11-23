@@ -35,6 +35,8 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # app.ocr.alt_reader (amprenta motorului) cand rulez ca script
+    sys.path.insert(0, str(ROOT))
 DEFAULT_WORKDIR = Path("/var/lib/tabela/shadow")
 DEFAULT_DB = Path("/var/lib/tabela/tabela.db")
 DEFAULT_IMG_ROOT = Path("/var/lib/tabela")
@@ -169,7 +171,8 @@ def _train_eval(clf, run: Path, workdir: Path, day: str, truth_file: Path | None
     P = clf.mlp_fit(Xtr, y_idx[tr], epochs=EPOCHS, log=lambda s: None)
     del Xtr
     model = workdir / f"model-{day}.npz"
-    np.savez_compressed(model, **P)
+    from app.ocr.alt_reader import engine_fingerprint  # aceeasi amprenta pe care o verifica aplicatia
+    np.savez_compressed(model, **P, engine_fp=engine_fingerprint())
     out.update(antrenat=True, model=str(model), epoci=EPOCHS)
     out["silver_test"] = _eval(clf, P, _unit(U[te]), d["y"][te], d["col"][te], d["mchar"][te],
                                d["mscore"][te], d["mmargin"][te])

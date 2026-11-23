@@ -96,7 +96,8 @@ def test_proba_masks_disallowed_characters():
 # --- model -------------------------------------------------------------------------------
 def test_model_roundtrip_and_shape_check(tmp_path):
     f = tmp_path / "model-2026-11-17.npz"
-    np.savez(f, W1=MODEL.W1, b1=MODEL.b1, W2=MODEL.W2, b2=MODEL.b2)
+    np.savez(f, W1=MODEL.W1, b1=MODEL.b1, W2=MODEL.W2, b2=MODEL.b2,
+             engine_fp=alt.engine_fingerprint())
     m = alt.AltModel.load(f)
     assert alt.read_cell(m, make_cell("3021"), "no")[0] == "3021"
     with pytest.raises(ValueError):
@@ -111,6 +112,37 @@ def test_stale_engine_fingerprint_disables_the_model(tmp_path):
     np.savez(f, W1=MODEL.W1, b1=MODEL.b1, W2=MODEL.W2, b2=MODEL.b2,
              engine_fp=alt.engine_fingerprint())
     assert alt.AltModel.load(f) is not None
+
+
+def test_model_without_engine_fingerprint_is_refused(tmp_path):
+    f = tmp_path / "model-vechi.npz"  # scris de scriptul de antrenare dinainte de amprenta
+    np.savez(f, W1=MODEL.W1, b1=MODEL.b1, W2=MODEL.W2, b2=MODEL.b2)
+    with pytest.raises(ValueError, match="amprenta"):
+        alt.AltModel.load(f)
+
+
+def test_get_model_with_unfingerprinted_model_turns_the_alternative_off(tmp_path, monkeypatch,
+                                                                         caplog):
+    f = tmp_path / "model-fara-amprenta.npz"
+    np.savez(f, W1=MODEL.W1, b1=MODEL.b1, W2=MODEL.W2, b2=MODEL.b2)
+    monkeypatch.setenv("OCR_ALT_MODEL", str(f))
+    monkeypatch.setenv("OCR_ALT", "1")
+    with caplog.at_level("WARNING"):
+        assert alt.get_model() is None
+    assert "alternativa oprita" in caplog.text
+    entries = [{"row": None}]
+    assert alt.apply(b"", entries)["reason"] == "no_model" and entries == [{"row": None}]
+
+
+def test_engine_fingerprint_ignores_modules_outside_the_glyph_pipeline(tmp_path):
+    for n in ("digits.py", "reader.py", "alt_journal.py", "stats.py", "truth.py"):
+        (tmp_path / n).write_text("x = 1", encoding="utf-8")
+    f0 = alt.engine_fingerprint(tmp_path)
+    for n in ("alt_journal.py", "stats.py", "truth.py"):
+        (tmp_path / n).write_text("x = 2", encoding="utf-8")
+    assert alt.engine_fingerprint(tmp_path) == f0  # jurnal/statistici: modelul ramane valid
+    (tmp_path / "digits.py").write_text("x = 2", encoding="utf-8")
+    assert alt.engine_fingerprint(tmp_path) != f0  # glifele se taie altfel: model invechit
 
 
 def test_get_model_without_or_with_broken_file(tmp_path, monkeypatch):

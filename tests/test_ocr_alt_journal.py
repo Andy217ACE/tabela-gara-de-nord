@@ -141,6 +141,43 @@ def test_same_row_same_values_is_recorded_once_per_15_min():
     assert j.totals()["events"] == 3
 
 
+def test_different_trains_at_the_same_row_are_both_recorded():
+    es = read_entries()
+    es[2]["fields"]["time"]["norm"] = "10:20"  # ora citita de cititor; alternativa propune nr.
+    _rec(es, NOW)
+    es[2]["fields"]["time"]["norm"] = "10:25"  # alt tren pe aceeasi pozitie, aceeasi propunere
+    _rec(es, NOW + timedelta(minutes=2))
+    evs, _ = j.list_events()
+    assert len(evs) == 2
+    assert [e["context"]["sched_time"] for e in evs] == ["10:25", "10:20"]
+    assert evs[0]["context"]["train_no"] == 7942
+
+
+def test_same_train_moved_to_another_row_is_recorded_once():
+    es = read_entries()
+    es[2]["fields"]["time"]["norm"] = "10:20"
+    _rec(es, NOW)
+    es[1]["fields"]["time"]["norm"] = "10:20"  # tabela a urcat randul: acelasi tren
+    _rec(es, NOW + timedelta(minutes=1), lines=(1,))
+    assert j.totals()["events"] == 1
+
+
+def test_failed_write_does_not_mark_the_row_as_seen(caplog):
+    es = read_entries()
+    (j.journal_dir() / "events.jsonl").mkdir(parents=True)  # scrierea esueaza
+    with caplog.at_level("WARNING"):
+        _rec(es, NOW)
+    (j.journal_dir() / "events.jsonl").rmdir()
+    _rec(es, NOW + timedelta(minutes=1))
+    assert j.totals()["events"] == 1
+
+
+def test_old_events_without_row_identity_still_list():
+    _seed([(_id(1), NOW)])  # context {} (fara train_no/sched_time), ca inainte
+    (ev,), _ = j.list_events()
+    assert ev["context"] == {} and j.totals()["events"] == 1
+
+
 def test_bad_cell_skips_only_that_line(caplog):
     es = read_entries()
     import numpy as np
