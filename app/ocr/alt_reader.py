@@ -87,12 +87,17 @@ def max_unread() -> int:
 
 
 # --- model ----------------------------------------------------------------------------------
-def engine_fingerprint() -> str:
-    """Amprenta motorului OCR de productie (fisierele app/ocr, fara acest modul)."""
-    here = Path(__file__).resolve()
+# Module din app/ocr care nu schimba cum se taie glifele: o modificare a lor nu invecheste modelul.
+_NOT_ENGINE = {"alt_reader.py", "alt_journal.py", "stats.py", "truth.py"}
+
+
+def engine_fingerprint(root: Path | None = None) -> str:
+    """Amprenta motorului OCR de productie (fisierele app/ocr care taie glifele). O calculeaza
+    la fel si antrenarea (scripts/nightly_shadow_train.py) si aplicatia, din acelasi cod."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parent
     h = hashlib.sha256()
-    for f in sorted(here.parent.rglob("*")):
-        if f.is_file() and f.suffix in (".py", ".npz", ".json") and f != here:
+    for f in sorted(root.rglob("*")):
+        if f.is_file() and f.suffix in (".py", ".npz", ".json") and f.name not in _NOT_ENGINE:
             h.update(f.name.encode("utf-8"))
             h.update(f.read_bytes())
     return h.hexdigest()[:16]
@@ -111,10 +116,10 @@ class AltModel:
 
     @classmethod
     def load(cls, path: Path | str) -> "AltModel":
-        """Citeste ``model-*.npz``. Daca fisierul poarta ``engine_fp`` (amprenta motorului la
-        antrenare) si ea nu se potriveste cu motorul curent, modelul e invechit: ValueError."""
+        """Citeste ``model-*.npz``. Fara ``engine_fp`` (amprenta motorului la antrenare) sau cu
+        alta amprenta decat motorul curent, modelul nu e de incredere: ValueError."""
         with np.load(path) as d:
-            if "engine_fp" in d.files and str(d["engine_fp"]) != engine_fingerprint():
+            if "engine_fp" not in d.files or str(d["engine_fp"]) != engine_fingerprint():
                 raise ValueError("modelul a fost antrenat pe alt motor OCR (amprenta difera)")
             return cls(d["W1"], d["b1"], d["W2"], d["b2"])
 
