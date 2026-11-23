@@ -451,3 +451,37 @@
   /* open panel: scrolls with the page */
   .ss-filters.ss-panel-open { position: static; }
 }
+
+/* ---------- operators and train categories (Beta 1.64) ---------- */
+.oc-bar { display: block; width: 100%; max-width: 100%; border-radius: 6px; background: var(--surface-2); }
+.oc-bar-lg { height: 28px; }
+.oc-bar-sm { height: 10px; }
+.oc-seg { fill: var(--seg); stroke: var(--surface); stroke-width: 0.4; vector-effect: non-scaling-stroke; }
+.oc-legend { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.oc-legend li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.oc-sw { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--seg); }
+.oc-matrix { margin-top: 8px; }
+.oc-table th, .oc-table td { white-space: nowrap; }
+.oc-table th[scope="row"] { white-space: normal; min-width: 7rem; }
+.oc-h { font-variant-numeric: tabular-nums; }
+.oc-h0 { color: var(--text-3); }
+.oc-h1 { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.oc-h2 { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.oc-h3 { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.oc-h4 { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+.oc-h5 { background: color-mix(in srgb, var(--accent) 40%, var(--surface)); font-weight: 700; }
+.oc-cards { margin: 8px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.oc-card { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.oc-card p { margin: 6px 0 0; font-size: 0.875rem; line-height: 1.45; overflow-wrap: anywhere; }
+.oc-card-h { margin: 0; font-size: 1rem; }
+.oc-name { max-width: 100%; padding: 4px 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; text-align: left; cursor: pointer; text-decoration: underline; overflow-wrap: anywhere; }
+.oc-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.oc-label { margin-top: 10px; color: var(--text-3); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.oc-vol { font-weight: 600; }
+.oc-sub { color: var(--text-2); }
+@media (min-width: 760px) {
+  .oc-cards { grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
+}
+@media (forced-colors: active) {
+  .oc-seg, .oc-sw { forced-color-adjust: none; }
+}

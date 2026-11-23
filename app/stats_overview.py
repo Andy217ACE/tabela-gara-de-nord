@@ -47,7 +47,7 @@ TEMP_BANDS = (("lt5", "sub 5 °C", None, 5), ("5-15", "5–15 °C", 5, 15),
 BOARD_PL = {"arrival": "Sosiri", "departure": "Plecări"}
 BOARD_AT = {"arrival": "la sosiri", "departure": "la plecări"}
 SETS = ("distribution", "hourly", "heatmap", "daily", "operators", "types", "routes",
-        "traffic", "platforms", "weather")
+        "traffic", "platforms", "weather", "operators_types")
 
 
 # ---- small helpers --------------------------------------------------------------------
@@ -436,6 +436,50 @@ def _options(js, field) -> list[dict]:
     return [{"name": k, "n": n} for k, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
+def _pct1(n, total) -> float:
+    return round(100.0 * n / total, 1) if total else 0.0
+
+
+def _operators_types(js, p, days) -> dict:
+    """Operators x train categories over the filtered journeys of all selected boards:
+    per-group volume, split over the other dimension, punctuality (via _summ), top routes."""
+    named = [j for j in js if j["operator"] and j["train_type"]]
+    cross = Counter((j["operator"], j["train_type"]) for j in named)
+
+    def side(field, other, other_key, other_out):
+        rows = [j for j in js if j[field]]
+        base = len(rows)
+        out = []
+        for k, g in _groups(rows, p, lambda j, f=field: j[f]).items():
+            mine = [j for j in rows if j[field] == k]
+            oc = Counter(j[other] for j in mine if j[other])
+            ot = sum(oc.values())
+            out.append({
+                "name": k, "journeys": g["journeys"], "share_pct": _pct1(g["journeys"], base),
+                "trains": len({j["train_no"] for j in mine}),
+                "per_day": round(g["journeys"] / days, 1) if days else 0.0,
+                "boards": {b: sum(1 for j in mine if j["board"] == b) for b in stats.BOARDS},
+                other_out: [{other_key: o, "journeys": n, "pct": _pct1(n, ot)}
+                            for o, n in sorted(oc.items(), key=lambda kv: (-kv[1], kv[0]))],
+                **{m: _summ(g["delays"], p)[m] for m in ("n", "on_time_pct", "median", "mean", "sufficient")},
+                "routes": [{"station": st, "journeys": n} for st, n in
+                           sorted(Counter(j["station"] for j in mine if j["station"]).items(),
+                                  key=lambda kv: (-kv[1], kv[0]))[:3]]})
+        out.sort(key=lambda e: (-e["journeys"], e["name"]))
+        return out
+
+    op_tot, ty_tot = Counter(), Counter()
+    for (o, t), n in cross.items():
+        op_tot[o] += n
+        ty_tot[t] += n
+    return {"total": len(js), "trains": len({j["train_no"] for j in js}),
+            "operators": side("operator", "train_type", "type", "types"),
+            "types": side("train_type", "operator", "operator", "operators"),
+            "matrix": [{"operator": o, "type": t, "journeys": n,
+                        "pct_of_operator": _pct1(n, op_tot[o]), "pct_of_type": _pct1(n, ty_tot[t])}
+                       for (o, t), n in sorted(cross.items(), key=lambda kv: (-kv[1], kv[0]))]}
+
+
 def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, today: date,
           filters: dict) -> dict:
     options = {"operators": _options(rows, "operator"), "types": _options(rows, "train_type")}
@@ -516,6 +560,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "daily": daily,
         "operators": operators,
         "types": types,
+        "operators_types": _operators_types(js, p, len({j["service_date"] for j in js})),
         "routes": routes,
         "traffic": traffic,
         "platforms": platforms,
@@ -713,6 +758,10 @@ def to_csv(d: dict, name: str) -> str:
                 for i, x in enumerate(d[name][b][lst], 1):
                     rows.append([b, lst, i, x["key"], x["journeys"], x["n"], x["mean"],
                                  x["median"], x["on_time_pct"]])
+    elif name == "operators_types":
+        head = ["operator", "type", "journeys", "pct_of_operator", "pct_of_type"]
+        rows = [[x["operator"], x["type"], x["journeys"], x["pct_of_operator"], x["pct_of_type"]]
+                for x in d[name]["matrix"]]
     elif name == "traffic":
         head = ["board", "hour", "journeys", "days"]
         rows = [[b, h, d[name][b][h], d[name]["days"]] for b in boards for h in range(24)]

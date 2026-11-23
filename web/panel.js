@@ -685,8 +685,10 @@
     tr.appendChild(cell("time", t.sched_time ? t.sched_time : unknown("time")));
 
     var train = el("span", "pnl-train");
-    var type = el("span", typeClass(t.train_type), t.train_type || "?");
-    type.title = T("board.typeTitle", { type: t.train_type || T("board.typeUnknown") });
+    var A = window.TabelaApp || {};
+    var abbr = A.typeAbbr ? A.typeAbbr(t.train_type) : t.train_type;
+    var type = el("span", typeClass(t.train_type), abbr || "?");
+    type.title = T("board.typeTitle", { type: (A.typeName && A.typeName(t.train_type)) || abbr || T("board.typeUnknown") });
     train.append(type, el("span", "pnl-no", String(t.train_no)));
     if (t.flagged) {
       var flag = el("span", "pnl-flag", "*");

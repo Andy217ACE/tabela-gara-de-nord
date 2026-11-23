@@ -390,3 +390,38 @@ def test_operator_filter_marks_global_counters(store):
 
 def test_api_period_with_dates_is_422(client):
     assert client.get("/api/stats/overview?perioada=7&from=2026-10-01").status_code == 422
+
+
+# ---- operators x categories (Beta 1.64) ------------------------------------------------
+
+def test_operators_types_payload(store):
+    c = store._conn
+    add(c, "departure", 1801, 14, "09:00", 3, operator="Softrans", ttype="RE", station="CLUJ")
+    c.commit()
+    ot = ov(store)["operators_types"]
+    assert ot["total"] == 16 and ot["trains"] == 4
+    ops = {o["name"]: o for o in ot["operators"]}
+    assert sum(o["share_pct"] for o in ot["operators"]) == pytest.approx(100, abs=0.1)
+    assert sum(t["share_pct"] for t in ot["types"]) == pytest.approx(100, abs=0.1)
+    assert [o["journeys"] for o in ot["operators"]] == sorted((o["journeys"] for o in ot["operators"]),
+                                                              reverse=True)
+    cfr = ops["CFR Calatori"]
+    assert cfr["boards"]["arrival"] + cfr["boards"]["departure"] == cfr["journeys"]
+    assert cfr["sufficient"] and ops["Transferoviar"]["sufficient"] is False
+    assert ops["Transferoviar"]["n"] < 5 and ops["Softrans"]["types"][0]["type"] == "RE"
+    assert len(cfr["routes"]) <= 3 and cfr["per_day"] > 0
+    for m in ot["matrix"]:
+        op_t = sum(x["journeys"] for x in ot["matrix"] if x["operator"] == m["operator"])
+        ty_t = sum(x["journeys"] for x in ot["matrix"] if x["type"] == m["type"])
+        assert m["pct_of_operator"] == pytest.approx(100 * m["journeys"] / op_t, abs=0.1)
+        assert m["pct_of_type"] == pytest.approx(100 * m["journeys"] / ty_t, abs=0.1)
+
+
+def test_operators_types_filters(store):
+    ot = ov(store, {"operator": "Transferoviar"})["operators_types"]
+    assert [o["name"] for o in ot["operators"]] == ["Transferoviar"]
+    assert {t["name"] for t in ot["types"]} == {"R"}
+    ot = ov(store, {"tip": "IR"})["operators_types"]
+    assert {m["type"] for m in ot["matrix"]} == {"IR"}
+    csv = so.to_csv(ov(store), "operators_types").splitlines()
+    assert csv[0].lstrip("\ufeff") == "operator,type,journeys,pct_of_operator,pct_of_type"

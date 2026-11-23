@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PRECACHE_LIMIT = 785_000      # Beta 1.59 (Statistici v3 sp2): measured 778595 B (+~18 KB over 1.55 with sp1 + sp2 shell code); ruling 18.11: budget raised to 785_000 (~6 KB margin). Beta 1.55: measured 760451 B + ~15 KB margin
+PRECACHE_LIMIT = 800_000      # Beta 1.64: measured 797269 B (operators x categories section, R-E/R-M helper, ro.json keys); budget 800_000.
+PRECACHE_OLD = 785_000      # Beta 1.59 (Statistici v3 sp2): measured 778595 B (+~18 KB over 1.55 with sp1 + sp2 shell code); ruling 18.11: budget raised to 785_000 (~6 KB margin). Beta 1.55: measured 760451 B + ~15 KB margin
 
 
 def read(name):

@@ -346,7 +346,7 @@
                  station: j.station, service_date: j.service_date };
     var train = el("button", "h-train");
     train.type = "button";
-    train.append(el("span", App.typeClass(j.train_type), j.train_type || "?"),
+    train.append(el("span", App.typeClass(j.train_type), App.typeAbbr(j.train_type) || "?"),
                  el("span", "t-no", String(j.train_no)));
     train.setAttribute("aria-label", T("history.row.train_aria", { type: j.train_type || "", no: j.train_no,
       board: boardLabel(j.board), time: j.sched_time || "", day: dayLabel(j.service_date) }));
