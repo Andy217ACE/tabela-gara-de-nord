@@ -596,3 +596,14 @@ def test_security_dir_created_with_lchown(server):
     sec = posix(server.data / "security")
     assert f"chown -h root:tabela {sec}" in calls
     assert f"chmod 750 {sec}" not in calls       # modul vine din mkdir (umask 027), nu din chmod
+
+
+def test_pip_uses_lock_as_constraints_when_present(server):
+    commit(server.work, 3, '{"ok":true}', "v3")
+    (server.work / "requirements.lock").write_text("fastapi==1\n", encoding="utf-8")
+    git(server.work, "add", "-A")
+    git(server.work, "commit", "-q", "-m", "lock")
+    git(server.work, "push", "-q", "origin", "main")
+    assert server.run().returncode == 0
+    pips = [c for c in server.log.read_text().splitlines() if c.startswith("pip install")]
+    assert pips and "-c " in pips[-1] and "requirements.lock" in pips[-1]

@@ -55,7 +55,7 @@ git -C "$APP_DIR" log -1 --oneline
 echo "== venv"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q -r "$APP_DIR/requirements.txt"
+"$VENV/bin/pip" install -q -r "$APP_DIR/requirements.txt" $([ -f "$APP_DIR/requirements.lock" ] && echo "-c $APP_DIR/requirements.lock")
 
 echo "== env file"
 if [ ! -f "$ENV_FILE" ]; then

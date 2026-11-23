@@ -67,6 +67,13 @@ fi
 
 git_() { git -C "$APP_DIR" "$@"; }
 
+# requirements.lock (fully pinned, Linux/py3.14) constrains the install when the checkout has it
+pip_install() {
+    local c=()
+    [ -f "$APP_DIR/requirements.lock" ] && c=(-c "$APP_DIR/requirements.lock")
+    "$PIP" install -q -r "$APP_DIR/requirements.txt" "${c[@]}"
+}
+
 CURRENT="$(git_ rev-parse --abbrev-ref HEAD)"
 if [ $# -ge 1 ] && [ -n "$1" ]; then
     BRANCH="$1"
@@ -303,12 +310,12 @@ restore_prev() {  # the original branch name at the original commit
 abort_before_restart() {
     echo "ERROR: $1; restoring $PREV - service NOT restarted (old code keeps running)" >&2
     restore_prev
-    "$PIP" install -q -r "$APP_DIR/requirements.txt" || true
+    pip_install || true
     exit 1
 }
 
 echo "== pip install"
-"$PIP" install -q -r "$APP_DIR/requirements.txt" || abort_before_restart "pip install failed"
+pip_install || abort_before_restart "pip install failed"
 
 env_add_missing LAST_IMAGE_PATH "$DATA_DIR/last.jpg" || abort_before_restart "cannot update $ENV_FILE"
 env_add_missing CAPTURE_DIR "$DATA_DIR/captures" || abort_before_restart "cannot update $ENV_FILE"
@@ -356,7 +363,7 @@ echo "(logs: journalctl -u tabela -n 100)" >&2
 # a missing unit (older install) is not an error
 $SYSTEMCTL disable --now tabela-watchdog.timer >/dev/null 2>&1 || true
 restore_prev
-"$PIP" install -q -r "$APP_DIR/requirements.txt" || echo "WARNING: pip install during rollback failed" >&2
+pip_install || echo "WARNING: pip install during rollback failed" >&2
 install_unit
 # not fatal: the health check below reports it, and the timer must still be restored
 $SYSTEMCTL restart tabela || echo "WARNING: rollback: systemctl restart tabela failed" >&2

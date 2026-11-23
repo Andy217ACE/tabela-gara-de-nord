@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"   # weekly: catches new advisories / upstream breakage
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - name: System packages (Tesseract + Romanian data)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ron
+      - name: Python dependencies (pinned like the server)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt -c requirements.lock pip-audit
+      - name: Playwright Chromium (browser tests run instead of skipping)
+        run: python -m playwright install --with-deps chromium
+      - name: Release consistency (VERSION / CHANGELOG RO+EN / CHARTS_V)
+        run: python scripts/check_release.py
+      - name: Dependency audit
+        run: pip-audit -r requirements.lock --no-deps --disable-pip
+      - name: Tests
+        run: python -m pytest -q
