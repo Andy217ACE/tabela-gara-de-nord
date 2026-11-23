@@ -417,9 +417,8 @@ def _canonical_names(row) -> tuple[str | None, str | None]:
     st_out = st if st and st != row["station"] and st_score >= canonical.DEFAULT_THRESHOLD \
         and st in canonical.seed_stations() else None
     op_src = row["operator_raw"] or row["operator"]
-    op, op_score = canonical.canonical_operator(op_src)
-    op_out = op if op and op != row["operator"] and op_score >= canonical.DEFAULT_THRESHOLD \
-        and op in canonical.known_operators() else None
+    op, _, op_ok = canonical.operator_match(op_src)
+    op_out = op if op_ok and op != row["operator"] else None
     return st_out, op_out
 
 

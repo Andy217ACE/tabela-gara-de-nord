@@ -39,10 +39,11 @@ def test_station_distinct_names_not_merged():
 
 
 @pytest.mark.parametrize("raw,want", [
-    ("CFR Calaitori", "CFR Calatori"), ("CFR CAleitori", "CFR Calatori"),
-    ("interRegional", "InterRegional"), ("Transfernviar", "Transferoviar"),
-    ("Sofirans Calat", "Softrans Calat"), ("Softrans!Calat", "Softrans Calat"),
-    ("Ferotrafic", "Ferotrafic"),
+    ("CFR Calaitori", "CFR Călători"), ("CFR CAleitori", "CFR Călători"),
+    ("interRegional", "InterRegional Călători"),
+    ("Transfernviar", "Transferoviar Călători"),
+    ("Sofirans Calat", "Softrans"), ("Softrans!Calat", "Softrans"),
+    ("Ferotrafic", "Ferotrafic TFI"),
 ])
 def test_operator_variants(raw, want):
     assert canonical.canonical_operator(raw)[0] == want

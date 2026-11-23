@@ -120,7 +120,7 @@ def test_migrate_v3_or_v4_to_v5_keeps_data_and_backfills(tmp_path, start):
     assert t["journeys"] == 2          # arrival + departure services
     assert t["observations"] == 0      # no OCR observations recorded before v5
     ops = json.loads(t["operators_json"])
-    assert ops == [{"operator": "CFR Calatori", "journeys": 2}]
+    assert ops == [{"operator": "CFR C\u0103l\u0103tori", "journeys": 2}]
     routes = json.loads(t["routes_json"])
     assert {(r["board"], r["station"], r["journeys"]) for r in routes} == {
         ("arrival", "Brasov", 1), ("departure", "Constanta", 1)}

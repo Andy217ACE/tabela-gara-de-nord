@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.64 — 2026-11-23
+### Schimbat
+- **Operatori cu numele oficial:** în loc de textul trunchiat de pe tabelă, aplicația arată `CFR Călători`, `Regio Călători`, `Transferoviar Călători`, `InterRegional Călători`, `Astra Trans Carpatic`, `Softrans`, `Ferotrafic TFI`. Lista din `data/operators.txt` are acum formatul `Nume oficial | alias | alias` (surse: ARF arf.gov.ro/ro/prezentare-otf, site-urile operatorilor, data.gov.ro); numele oficial și formele de pe tabelă sunt chei de potrivire.
+- **Potrivire OCR mai largă, măsurată:** pe 823.912 citiri reale comparate cu operatorul stabil al fiecărui tren, scor ≥ 0,82 e corect în 99,9999% din cazuri; între 0,65 și 0,82 cu o diferență ≥ 0,10 față de al doilea operator e corect în 100% din cele 1.626 de cazuri (fără diferență: 99,3%; sub 0,65: ≤ 93%). Scorul se calculează pe operator (cel mai bun dintre nume și aliasuri); o potrivire „moale” nu mai e marcată incertă.
+- **Migrare v10 (automată, cu copie de siguranță înainte):** serviciile, observațiile, calitatea, corecțiile și catalogul de trenuri trec la numele oficiale într-o singură trecere pe tabel; textul citit de OCR (`*_raw`) nu se atinge niciodată. Dacă operatorul stocat nu se potrivește dar textul citit da, se folosește textul citit.
+- **Căutare fără diacritice:** „calatori” găsește „Călători” (catalogul de trenuri și statisticile).
+- **Evaluarea față de adevărul de teren:** etichetele (text de pe tabelă) se compară cu numele oficial, deci rezultatele OCR rămân comparabile.
+### English
+- **Operators under their official names:** instead of the truncated board text the app shows `CFR Călători`, `Regio Călători`, `Transferoviar Călători`, `InterRegional Călători`, `Astra Trans Carpatic`, `Softrans`, `Ferotrafic TFI`. `data/operators.txt` is now `Official name | alias | alias` (sources: ARF arf.gov.ro/ro/prezentare-otf, operator sites, data.gov.ro); the official name and the board forms are match keys.
+- **Wider, measured OCR matching:** on 823,912 live readings vs each train number's stable operator, a score ≥ 0.82 is right 99.9999% of the time; 0.65–0.82 with a margin ≥ 0.10 over the runner-up operator is right for 100% of 1,626 (without the margin: 99.3%; below 0.65: ≤ 93%). Scores are computed per operator (best of name and aliases); a “soft” match is no longer flagged uncertain.
+- **Migration v10 (automatic, backup first):** services, observations, quality, corrections and the train catalog move to the official names in one pass per table; the OCR text (`*_raw`) is never touched. If the stored operator does not match but the raw text does, the raw text is used.
+- **Diacritic-insensitive search:** “calatori” finds “Călători” (train catalog and statistics).
+- **Truth-set evaluation:** labels (board text) are compared against the official name, so OCR accuracy results stay comparable.
+
 ## Beta 1.63 — 2026-11-23
 ### Adăugat
 - **Pagina admin „Alternativa OCR” (`#ocr2`):** starea alternativei (pornită, mod umbră, model), contoarele de la pornire și totalurile care rămân după repornire.

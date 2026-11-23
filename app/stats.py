@@ -15,7 +15,7 @@ import os
 from collections import defaultdict
 from datetime import date, timedelta
 
-from app import journeys
+from app import canonical, journeys
 from app import quality as dq
 
 ON_TIME_MAX_DEFAULT = 5     # env ON_TIME_MAX_MIN: delay <= this counts as "la timp"
@@ -322,8 +322,8 @@ def catalog(store, p: Params, query: str | None = None) -> dict:
         else:
             esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
             where.append(f"({journeys.STATION_SQL} LIKE ? ESCAPE '!'"
-                         " OR UPPER(COALESCE(q.operator_canonical, s.operator)) LIKE ? ESCAPE '!')")
-            args += [f"%{esc}%", f"%{esc}%"]
+                         " OR fold(COALESCE(q.operator_canonical, s.operator)) LIKE ? ESCAPE '!')")
+            args += [f"%{esc}%", f"%{canonical._fold(esc).lower()}%"]  # operators: no diacritics
     js = load(store, p, where, args)
     entries = train_entries(js, p, _catalog_extra(store))
     return {"params": p.echo(), "n": len(entries), "trains": entries}

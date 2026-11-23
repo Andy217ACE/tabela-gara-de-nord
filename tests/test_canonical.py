@@ -10,8 +10,8 @@ from app.canonical import (
     seed_stations,
 )
 
-OPERATORS = {"CFR Calatori", "Regio Calatori", "Transferoviar", "InterRegional",
-             "Astra Trans Ca", "Softrans Calat", "Ferotrafic"}
+OPERATORS = {"CFR Călători", "Regio Călători", "Transferoviar Călători",
+             "InterRegional Călători", "Astra Trans Carpatic", "Softrans", "Ferotrafic TFI"}
 
 
 def test_default_threshold():
@@ -23,20 +23,20 @@ def test_operator_list_only_seen_operators():
 
 
 @pytest.mark.parametrize("noisy, expected", [
-    ("“Mransferoviar", "Transferoviar"),
-    ("Transferovlar", "Transferoviar"),
-    ("Transfernviar", "Transferoviar"),
-    ("Transferbviar", "Transferoviar"),
-    ("CFR Calatorl", "CFR Calatori"),
-    ("CFR Catatori", "CFR Calatori"),
-    ("CFR Calaitori", "CFR Calatori"),
-    ("CFR CAlaitori", "CFR Calatori"),
-    ("GFR Calatori", "CFR Calatori"),
-    ("(SFR Calatari", "CFR Calatori"),
-    ("interRegional", "InterRegional"),
-    ("mterRegional", "InterRegional"),
-    ("Regio Calatori", "Regio Calatori"),
-    ("Astra Trans Ca", "Astra Trans Ca"),
+    ("“Mransferoviar", "Transferoviar Călători"),
+    ("Transferovlar", "Transferoviar Călători"),
+    ("Transfernviar", "Transferoviar Călători"),
+    ("Transferbviar", "Transferoviar Călători"),
+    ("CFR Calatorl", "CFR Călători"),
+    ("CFR Catatori", "CFR Călători"),
+    ("CFR Calaitori", "CFR Călători"),
+    ("CFR CAlaitori", "CFR Călători"),
+    ("GFR Calatori", "CFR Călători"),
+    ("(SFR Calatari", "CFR Călători"),
+    ("interRegional", "InterRegional Călători"),
+    ("mterRegional", "InterRegional Călători"),
+    ("Regio Calatori", "Regio Călători"),
+    ("Astra Trans Ca", "Astra Trans Carpatic"),
 ])
 def test_operator_noise_maps_to_canonical(noisy, expected):
     text, score = canonical_operator(noisy)
@@ -45,16 +45,16 @@ def test_operator_noise_maps_to_canonical(noisy, expected):
 
 
 def test_exact_operator_scores_one():
-    assert canonical_operator("Transferoviar") == ("Transferoviar", 1.0)
+    assert canonical_operator("Transferoviar") == ("Transferoviar Călători", 1.0)
 
 
 def test_distinct_operators_not_merged():
-    assert canonical_operator("Regio Calatori")[0] == "Regio Calatori"
-    assert canonical_operator("CFR Calatori")[0] == "CFR Calatori"
-    assert canonical_operator("Regio Calatorl")[0] == "Regio Calatori"
+    assert canonical_operator("Regio Calatori")[0] == "Regio Călători"
+    assert canonical_operator("CFR Calatori")[0] == "CFR Călători"
+    assert canonical_operator("Regio Calatorl")[0] == "Regio Călători"
 
 
-@pytest.mark.parametrize("unknown", ["Softrans", "Unknown Rail SA", "xq"])
+@pytest.mark.parametrize("unknown", ["Unknown Rail SA", "xq"])
 def test_unknown_operator_stays_raw_with_low_score(unknown):
     text, score = canonical_operator(unknown)
     assert text == unknown
@@ -62,7 +62,7 @@ def test_unknown_operator_stays_raw_with_low_score(unknown):
 
 
 def test_operator_raw_text_is_cleaned_when_unknown():
-    assert canonical_operator("  Softrans  .")[0] == "Softrans"
+    assert canonical_operator("  Unknown  Rail .")[0] == "Unknown Rail"
 
 
 def test_empty_operator():

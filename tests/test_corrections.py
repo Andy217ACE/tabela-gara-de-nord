@@ -300,8 +300,8 @@ def test_delete_with_applied_batch_needs_restore(db):
 
 # -- migration -------------------------------------------------------------------------------------
 
-def test_schema_is_v9_with_tables():
-    assert SCHEMA_VERSION == 9
+def test_schema_is_v10_with_tables():
+    assert SCHEMA_VERSION == 10
     s = _mem()
     names = {r[0] for r in s._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"corrections", "correction_batches", "correction_archive",
@@ -323,7 +323,7 @@ def test_migration_v8_to_v9_takes_backup_first(tmp_path, monkeypatch):
     c.close()
     s = Store(path)
     s.migrate()
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 10
     bks = list((tmp_path / "bk").glob("tabela-*-v8.db"))
     assert len(bks) == 1
     b = sqlite3.connect(bks[0])

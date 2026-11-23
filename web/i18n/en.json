@@ -607,7 +607,7 @@
   "stats.fig.hourly.nstrip_desc": "The number of journeys with a delay read in each hour.",
   "stats.fig.hourly.table": "Delay by scheduled hour",
   "stats.fig.operators": "Which operators are the most punctual?",
-  "stats.fig.operators.how": "each row is an operator, as written on the board; the bar shows what percentage of its journeys were on time. Operators with too few journeys appear without a bar, with N only.",
+  "stats.fig.operators.how": "each row is an operator, under its official name; the bar shows what percentage of its journeys were on time. Operators with too few journeys appear without a bar, with N only.",
   "stats.fig.platforms": "Which lines (platforms) are used the most?",
   "stats.fig.platforms.chart": "Journeys per line",
   "stats.fig.platforms.col": "Line",

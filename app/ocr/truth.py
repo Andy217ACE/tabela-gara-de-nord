@@ -25,6 +25,8 @@ import collections
 import json
 from pathlib import Path
 
+from app.canonical import canonical_operator
+
 FIELDS = ("no", "time", "type", "platform", "delay", "station", "operator")
 SKIP = "?"
 
@@ -54,6 +56,8 @@ def score(truth: dict, predictions: dict[str, dict[tuple[str, int], dict]]) -> d
                     exp = label.get(f, SKIP)
                     if exp == SKIP:
                         continue
+                    if f == "operator" and isinstance(exp, str):
+                        exp = canonical_operator(exp)[0]  # labels hold the board text
                     val = got.get(f)
                     if val == exp:
                         counts[f]["ok"] += 1

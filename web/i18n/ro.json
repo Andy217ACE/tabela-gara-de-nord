@@ -607,7 +607,7 @@
   "stats.fig.hourly.nstrip_desc": "Numărul de călătorii cu întârziere citită pe fiecare oră.",
   "stats.fig.hourly.table": "Întârzierea pe ora programată",
   "stats.fig.operators": "Care operatori sunt cei mai punctuali?",
-  "stats.fig.operators.how": "fiecare rând este un operator, cum apare scris pe tabelă; bara arată ce procent din călătoriile lui au fost la timp. Operatorii cu prea puține călătorii apar fără bară, doar cu N.",
+  "stats.fig.operators.how": "fiecare rând este un operator, cu numele oficial; bara arată ce procent din călătoriile lui au fost la timp. Operatorii cu prea puține călătorii apar fără bară, doar cu N.",
   "stats.fig.platforms": "Ce linii (peroane) se folosesc cel mai des?",
   "stats.fig.platforms.chart": "Călătorii pe linie",
   "stats.fig.platforms.col": "Linia",

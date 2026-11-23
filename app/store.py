@@ -21,6 +21,7 @@ from time import monotonic
 from zoneinfo import ZoneInfo
 
 from app import consensus, quality
+from app import canonical
 from app.canonical import _lev, near_name, seed_stations
 from app.endpoints import MAX_ENDPOINT_LEN, check_push_endpoint  # noqa: F401
 from app.models import Event, Row
@@ -51,7 +52,7 @@ REAPPEAR_QUIET_MIN = 10  # back on the board within this many minutes: no new 'a
 MIN_CONFIDENCE = 0.5  # rows below this never create/change services or emit events
 JITTER_MIN = 10  # sched_time misread tolerance (minutes) for matching a listed service
 STALE_MIN = 30  # no accepted reading for this long = an outage (poller down, board unreadable)
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 KNOWN_STATIONS_MAX = 2000  # cap on stations learned from the history
 COEXIST_RECHECK_S = 600  # a cached "never read together" (see Store._coexist) is re-queried after this many seconds
 HISTORY_MAX = 500  # history() returns at most HISTORY_MAX + 1 rows (the extra one flags truncation)
@@ -408,6 +409,9 @@ class Store:
             self._conn.execute("PRAGMA journal_mode = WAL")
             self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
+        # diacritic- and case-insensitive text search ("calatori" finds "Călători")
+        self._conn.create_function("fold", 1, lambda s: canonical._fold(s or "").lower(),
+                                   deterministic=True)
 
     def close(self) -> None:
         with self._lock:
@@ -438,6 +442,9 @@ class Store:
             if version < 9:  # v9: manual corrections (app.corrections)
                 from app import corrections
                 corrections.migrate_to_9(self._conn)
+            if version < 10:  # v10: official operator names (app.operator_names)
+                from app import operator_names
+                operator_names.migrate_to_10(self._conn)
 
     def _script(self, sql: str) -> None:
         try:

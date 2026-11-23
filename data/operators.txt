@@ -1,10 +1,12 @@
 # © 2026 Andy217Ace
-# Operatori văzuți efectiv pe tabela Gara de Nord (fixture + /api/board live, 2026-10-21).
-# Forma canonică = textul afișat pe tabelă (coloana trunchiază: „Astra Trans Ca”, „Softrans Calat”).
-CFR Calatori
-Regio Calatori
-Transferoviar
-InterRegional
-Astra Trans Ca
-Softrans Calat
-Ferotrafic
+# Operatori de transport feroviar de călători. Format: Nume oficial | alias | alias ...
+# Numele oficial (cel afișat în aplicație) este și el cheie de potrivire; aliasurile sunt
+# formele văzute pe tabelă (coloana trunchiază și fără diacritice: „Astra Trans Ca”, „Softrans Calat”).
+# Surse: ARF arf.gov.ro/ro/prezentare-otf, site-urile operatorilor, data.gov.ro.
+CFR Călători | CFR Calatori
+Regio Călători | Regio Calatori
+Transferoviar Călători | Transferoviar
+InterRegional Călători | InterRegional
+Astra Trans Carpatic | Astra Trans Ca
+Softrans | Softrans Calat
+Ferotrafic TFI | Ferotrafic
