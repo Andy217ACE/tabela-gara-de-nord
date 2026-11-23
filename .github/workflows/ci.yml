@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:   # lock.yml re-runs CI after pushing a refreshed lock
   schedule:
     - cron: "17 5 * * 1"   # weekly: catches new advisories / upstream breakage
 
@@ -39,3 +40,41 @@ jobs:
         run: pip-audit -r requirements.lock --no-deps --disable-pip
       - name: Tests
         run: python -m pytest -q
+
+  fail2ban:
+    # deploy/fail2ban filters against real nginx combined-format lines, and the jail files parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install fail2ban
+        run: sudo apt-get update && sudo apt-get install -y fail2ban
+      - name: Filters match probes and never normal traffic
+        run: |
+          set -eu
+          sudo cp deploy/fail2ban/nginx-tabela-*.local /etc/fail2ban/filter.d/
+          F=tests/fixtures/fail2ban
+          # check <filter> <log> <must_match_all|must_match_none>
+          check() {
+            out=$(fail2ban-regex "$2" "$1" 2>&1) || { echo "$out"; exit 1; }
+            line=$(echo "$out" | grep -E '^Lines: ' | head -1)
+            echo "$1 on $2 -> $line"
+            total=$(echo "$line" | sed -E 's/^Lines: ([0-9]+) lines.*/\1/')
+            matched=$(echo "$line" | sed -E 's/.* ([0-9]+) matched.*/\1/')
+            [ "$total" -gt 0 ]
+            if [ "$3" = all ]; then [ "$matched" -eq "$total" ]; else [ "$matched" -eq 0 ]; fi
+          }
+          check nginx-tabela-probes $F/should_match_probes.log all
+          check nginx-tabela-slow   $F/should_match.log all
+          check nginx-tabela-probes $F/should_not_match.log none
+          check nginx-tabela-slow   $F/should_not_match.log none
+      - name: Jail files parse (fail2ban-client -t)
+        run: |
+          set -eu
+          conf=$(mktemp -d)/fail2ban
+          cp -r /etc/fail2ban "$conf"
+          touch "$RUNNER_TEMP/access.log"
+          cp deploy/fail2ban/nginx-tabela-*.local "$conf/filter.d/"
+          cp deploy/fail2ban/jail.local "$conf/jail.local"
+          sed "s#/var/log/nginx/access.log#$RUNNER_TEMP/access.log#" deploy/fail2ban/jail-tabela.local > "$conf/jail.d/jail-tabela.local"
+          sudo fail2ban-client -c "$conf" -t

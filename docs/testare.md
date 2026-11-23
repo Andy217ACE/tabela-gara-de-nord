@@ -92,6 +92,11 @@ Cerința pentru această pagină menționa o convenție de tip lock: un director
 
 Dacă există un director de lock pe mașina ta, el ține de convenția ta de lucru (sau de un agent), nu de proiect. **Nesigur**: motivul exact al convenției nu e scris în repo. Ce se poate spune din cod: testele de browser pornesc uvicorn pe un port liber ales de sistem (`socket.bind(("127.0.0.1", 0))` în `tests/test_footer_browser.py`), iar bazele SQLite sunt în `tmp_path`. Deci două rulări paralele nu își calcă pe porturi sau pe baze. Ce ar putea intra în conflict este resursa comună (Chromium, CPU, Tesseract), iar asta nu e tratat în cod.
 
+### 3.2 CI: lock, fail2ban
+
+- **`requirements.lock`.** CI instalează cu `-c requirements.lock`, deci lock-ul trebuie să urmeze `requirements.txt` (`tests/test_requirements_lock.py`). Dependabot (pip) nu regenerează ieșirea `uv pip compile`, deci `.github/workflows/lock.yml` o face pe PR-urile `dependabot/pip/*`: rulează `uv pip compile` (cu `UV_NO_BUILD=1`, fără să execute cod din PR), face commit pe ramura PR-ului și relansează CI cu `workflow_dispatch` (un push cu `GITHUB_TOKEN` nu declanșează singur CI). Folosește `pull_request_target` (token cu drept de scriere), dar nu rulează nimic din PR și expune tokenul doar pasului de push. `opencv-python-headless` și `numpy` sunt excluse din Dependabot la minor/major (OCR-sensibile, se actualizează manual).
+- **fail2ban.** Job-ul `fail2ban` din `ci.yml` instalează fail2ban, rulează `fail2ban-regex` cu fiecare filtru din `deploy/fail2ban/` pe `tests/fixtures/fail2ban/` (`should_match_probes.log` și `should_match.log` trebuie potrivite integral, `should_not_match.log` deloc) și validează jail-urile cu `fail2ban-client -t`. Fixture-urile sunt în formatul nginx `combined` (formatul implicit, `deploy/nginx-tabela.conf` nu definește `log_format`). `tests/test_fail2ban_filters.py` repetă verificarea cu regex-uri Python, fără fail2ban (control rapid local; autoritar este CI).
+
 ## 4. Rularea unei părți din suită
 
 ```bash

@@ -356,6 +356,10 @@ Files: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`,
 | the nginx site and `tabela-limits.conf` | yes | no | |
 | `tabela-noip` (dynamic DNS) | no | no | yes (see section 9) |
 
+### 5.5 Tesseract
+
+On the server: Tesseract **5.5.0**, Ubuntu 26.04, apt package (`tesseract-ocr`, `tesseract-ocr-ron`), only the official `eng`, `ron` and `osd` models; users cannot upload models. The version and loaded languages are in `GET /api/system` (`tesseract.version`, `tesseract.langs`, read once at the first request), and `security_updates` shows the pending Ubuntu security updates (from `/var/lib/update-notifier/updates-available`; `null` if the file is missing). Manual check: `tesseract --version` and `tesseract --list-langs`. Update: `sudo apt-get update && sudo apt-get install --only-upgrade tesseract-ocr tesseract-ocr-ron`, then restart the service (the version is read at startup) and re-measure OCR (`docs/ocr.md`), because a new version can change the reading.
+
 ## 6. nginx
 
 ### 6.1 The site
