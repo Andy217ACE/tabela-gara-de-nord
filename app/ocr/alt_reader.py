@@ -38,7 +38,7 @@ import numpy as np
 from app import canonical
 from app.models import Row
 from app.normalize import clean_station, parse_time, strip_flag
-from app.ocr import digits, order, preprocess
+from app.ocr import alt_journal, digits, order, preprocess
 
 log = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ def recover(image_bytes: bytes, entries: list[dict], model: AltModel, *,
     budget = budget_s() if budget is None else budget
     todo = eligible(entries) if lines is None else list(lines)
     info = {"tried": 0, "recovered": 0, "lines": [], "secs": 0.0,
-            "reason": "no_eligible_lines" if not todo else "ok"}
+            "reason": "no_eligible_lines" if not todo else "ok", "cells": {}}
     if not todo:
         return info
     panels = _panels(image_bytes)
@@ -306,6 +306,7 @@ def recover(image_bytes: bytes, entries: list[dict], model: AltModel, *,
             f[col].update(raw=text, norm=int(text) if col == "no" else text,
                           conf=round(prob * 100, 1), check=ALT_MARK)
         e["state"] = "ok"
+        info["cells"][i] = {c: cells[c] for c in got}  # pentru jurnal, fara a decoda din nou
         e[ALT_MARK] = {"cols": sorted(got), "prob": round(min(p for _, p in got.values()), 4)}
         info["recovered"] += 1
         info["lines"].append(i)
@@ -339,6 +340,9 @@ def apply(image_bytes: bytes, entries: list[dict], model: AltModel | None = None
     except Exception:  # optional: cadrul ramane asa cum l-a lasat cititorul
         log.warning("OCR alt a esuat; cadrul ramane cum l-a citit cititorul", exc_info=True)
         return info | {"reason": "error"}
+    cells = info.pop("cells", {})  # celulele nu ies din apply (info ramane serializabil)
+    if info["lines"]:
+        alt_journal.record(work, info, cells, shadow())  # nu arunca niciodata
     if shadow():
         for i in info["lines"]:
             e = work[i]

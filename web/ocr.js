@@ -112,6 +112,9 @@
     h.id = "ocr-heading";
     head.appendChild(h);
     head.appendChild(el("p", "page-sub", T("ocr.subtitle")));
+    var alt = el("a", null, T("ocr2.link"));
+    alt.href = "#ocr2";
+    head.appendChild(alt);
     root.appendChild(head);
     var msg = el("p", "notice", "");
     msg.id = "ocr-msg";
