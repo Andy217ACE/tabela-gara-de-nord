@@ -82,6 +82,17 @@ def test_migration_merges_trains_and_maps_corrections(v9):
         ("station", "CFR CALATORI", "X")]
 
 
+def test_migration_skips_malformed_trains_json(v9):
+    c = v9._conn
+    c.execute("INSERT INTO trains(train_no, operators_json, routes_json, journeys, observations)"
+              " VALUES (2, 'not json', '[]', 1, 1), (3, '[1, {\"journeys\": 2}]', '[]', 1, 1)")
+    operator_names.migrate_to_10(c)
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 10
+    assert c.execute("SELECT operators_json FROM trains WHERE train_no=2").fetchone()[0] == "not json"
+    assert json.loads(c.execute("SELECT operators_json FROM trains WHERE train_no=3").fetchone()[0]) \
+        == [{"operator": "", "journeys": 2}]
+
+
 def test_migration_rerun_is_noop(v9):
     c = v9._conn
     operator_names.migrate_to_10(c)

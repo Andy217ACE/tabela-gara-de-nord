@@ -1265,7 +1265,7 @@
         desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
           return { label: key === "types" ? App.typeAbbr(x.key) : x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
-            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: x.key },
+            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: key === "types" ? App.typeAbbr(x.key) : x.key },
             valueText: x.sufficient ? pct(x.on_time_pct) : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"), valueExp: x.sufficient ? " · N = " + x.n : "",
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };

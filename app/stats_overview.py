@@ -454,6 +454,7 @@ def _operators_types(js, p, days) -> dict:
             mine = [j for j in rows if j[field] == k]
             oc = Counter(j[other] for j in mine if j[other])
             ot = sum(oc.values())
+            s = _summ(g["delays"], p)
             out.append({
                 "name": k, "journeys": g["journeys"], "share_pct": _pct1(g["journeys"], base),
                 "trains": len({j["train_no"] for j in mine}),
@@ -461,7 +462,7 @@ def _operators_types(js, p, days) -> dict:
                 "boards": {b: sum(1 for j in mine if j["board"] == b) for b in stats.BOARDS},
                 other_out: [{other_key: o, "journeys": n, "pct": _pct1(n, ot)}
                             for o, n in sorted(oc.items(), key=lambda kv: (-kv[1], kv[0]))],
-                **{m: _summ(g["delays"], p)[m] for m in ("n", "on_time_pct", "median", "mean", "sufficient")},
+                **{m: s[m] for m in ("n", "on_time_pct", "median", "mean", "sufficient")},
                 "routes": [{"station": st, "journeys": n} for st, n in
                            sorted(Counter(j["station"] for j in mine if j["station"]).items(),
                                   key=lambda kv: (-kv[1], kv[0]))[:3]]})

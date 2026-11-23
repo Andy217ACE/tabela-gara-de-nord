@@ -87,10 +87,13 @@ def _remap_trains(conn: sqlite3.Connection) -> None:
     if not _has(conn, "trains"):
         return
     for no, js in conn.execute("SELECT train_no, operators_json FROM trains").fetchall():
-        items = json.loads(js or "[]")
+        try:  # one malformed row must not block startup: leave it as it is
+            items = [it for it in json.loads(js or "[]") if isinstance(it, dict)]
+        except (ValueError, TypeError):
+            continue
         total: dict[str, int] = {}
         for it in items:
-            name = _official(it.get("operator")) or it.get("operator")
+            name = _official(it.get("operator")) or it.get("operator") or ""
             total[name] = total.get(name, 0) + int(it.get("journeys") or 0)
         new = json.dumps([{"operator": k, "journeys": v}
                           for k, v in sorted(total.items(), key=lambda kv: (-kv[1], kv[0]))],
