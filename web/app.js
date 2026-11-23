@@ -502,13 +502,13 @@
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
-    "#ocr": "ocr", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
+    "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari" };
-  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
+  var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "ocr2", "admin", "versiuni", "trenuri", "tren", "statistici",
     "clasamente", "statii", "statie", "sistem", "setari"];
   // routes with a page title: i18n key title.<route>
-  var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
+  var TITLES = ["istoric", "ocr", "ocr2", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
     "clasamente", "statii", "statie", "sistem", "setari"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
@@ -597,6 +597,7 @@
     var changed = name !== currentRoute;
     currentRoute = name;
     if (name === "ocr") loadOcrView();
+    if (name === "ocr2") loadLazyPage("ocr2", "ocr2.js", "ocr2.css");
     if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");
@@ -618,7 +619,7 @@
       window.scrollTo(0, 0);
       // page transition for every page except the live board (which is left exactly as it was)
       var ui2 = window.TabelaApp.ui2;
-      if (ui2 && name !== "tabela" && name !== "ocr") ui2.enterView($("view-" + name));
+      if (ui2 && name !== "tabela" && name !== "ocr" && name !== "ocr2") ui2.enterView($("view-" + name));
     }
   }
 
