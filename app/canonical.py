@@ -94,18 +94,23 @@ def station_names() -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _display_keys() -> dict[str, str]:
-    return {clean_station(n): k for k, n in station_names().items()}
+    return {_loose(clean_station(n)): k for k, n in station_names().items()}
+
+
+def _loose(s: str) -> str:
+    """Hyphens count as spaces, so "Cluj-Napoca" finds the CFR form "Cluj Napoca"."""
+    return " ".join(s.replace("-", " ").split())
 
 
 def station_key(text: str | None) -> str:
-    """The stored key for a key or a display name ("Cluj-Napoca" -> "CLUJ NAPOCA")."""
+    """The stored key for a key or a display name ("Brașov", "Cluj-Napoca" -> "CLUJ NAPOCA")."""
     raw = clean_station(text or "")
-    return _display_keys().get(raw, raw)
+    return _display_keys().get(_loose(raw), raw)
 
 
 def stations_matching(text: str | None) -> list[str]:
     """Keys whose display name contains `text`, diacritics/case ignored ("henri" -> airport)."""
-    q = clean_station(text or "")
+    q = _loose(clean_station(text or ""))
     return sorted(k for d, k in _display_keys().items() if q in d) if q else []
 
 
