@@ -773,6 +773,15 @@
       if (more.hidden) t.wrap.focus();   // the button is gone: keep the focus on the table, not <body>
     });
     fill(0);
+    // printing shows the whole list, not only the rows drawn so far
+    if (v.trPrint) window.removeEventListener("beforeprint", v.trPrint);
+    v.trPrint = function () {
+      if (!more.isConnected || more.hidden) return;
+      var from = v.trShown;
+      v.trShown = sorted.length;
+      fill(from);
+    };
+    window.addEventListener("beforeprint", v.trPrint);
     t.table.append(thead, tbody);
     v.body.append(t.wrap, more, status);
   }

@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   lock:
-    if: github.actor == 'dependabot[bot]' && startsWith(github.event.pull_request.head.ref, 'dependabot/pip/')
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'dependabot/pip/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

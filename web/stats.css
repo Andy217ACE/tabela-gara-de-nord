@@ -67,15 +67,7 @@
 .st-h2 { margin: 0 0 6px; font-size: 1.125rem; letter-spacing: -0.01em; }
 .st-explain { padding-top: 14px; border-top: 1px solid var(--border); }
 
-/* ---------- station / train links ---------- */
-.station-link {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 3px;
-  text-transform: none;
-}
-.station-link:hover { text-decoration-color: var(--accent); }
+/* ---------- train links (station links are in style.css: the board uses them before this file loads) ---------- */
 .st-train {
   display: inline-flex;
   align-items: center;
@@ -242,10 +234,6 @@ th[aria-sort] .st-sort { color: var(--accent); }
 .st-rank-stations:empty { display: none; }
 
 /* ---------- stations (#statii, #statie, links everywhere) ---------- */
-/* Panou / Carduri: the link keeps the look of the name (case, colour, weight); underline on hover only. */
-.station-link-plain { text-transform: inherit; text-decoration: none; }
-.station-link-plain:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
-.station-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 .st-field-q { flex: 3 1 14rem; }
 .page-links { margin: 6px 0 0; }
 .st-tag {

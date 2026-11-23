@@ -137,7 +137,7 @@ def test_station_links_everywhere_and_safe():
     for name, src in (("app.js", app), ("panel.js", panel), ("history.js", hist)):
         for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", 'setAttribute("style"'):
             assert bad not in src, (name, bad)
-    css = (WEB / "stats.css").read_text(encoding="utf-8")
+    css = (WEB / "style.css").read_text(encoding="utf-8")  # global: the board uses station links before stats.css loads
     assert re.search(r"\.station-link-plain\s*\{[^}]*text-decoration:\s*none", css)
     assert re.search(r"\.station-link:focus-visible\s*\{[^}]*outline", css)
 
