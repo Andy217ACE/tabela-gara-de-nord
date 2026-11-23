@@ -88,6 +88,18 @@
   document.documentElement.lang = v === "en" ? "en" : "ro";
 })();
 
+// Adresă spre altă pagină decât Tabela (#istoric…): tabela nu se pictează până la primul route() din
+// app.js (care scoate atributul), altfel apare o clipă și pagina sare (CLS).
+(function () {
+  var h = (location.hash || "").split("?")[0];
+  if (h && h !== "#" && h !== "#tabela") document.documentElement.setAttribute("data-deeplink", "");
+  // modul tabelei (Panou / Carduri) înainte de prima pictare, ca în panel.js restore(): fără schimbare de așezare
+  var v = null;
+  try { v = localStorage.getItem("tabela.view"); } catch (e) { /* ignore */ }
+  if (v !== "panou" && v !== "carduri") v = window.matchMedia && window.matchMedia("(min-width: 1024px)").matches ? "panou" : "carduri";
+  document.documentElement.dataset.view = v;
+})();
+
 // „Site pentru desktop” pe telefon: pagina e așezată mult mai lată decât ecranul (~980 px pe
 // un ecran de ~400 px) și afișată micșorată. Marcăm <html class="zoomed-out"> ca meniul de sus
 // (style.css) să fie mai mare, lizibil și ușor de apăsat. Doar pe ecrane tactile (pointer

@@ -29,9 +29,7 @@ var SHELL = [
   "/panel.js",
   "/weather.css",
   "/weather.js",
-  "/stats.css",
   "/stats.js",
-  "/statistici.css",
   "/stat_weekdays.js",
   "/statistici.js",
   "/stat_platform.js",
@@ -51,6 +49,7 @@ var SHELL = [
 ];
 // the other Fira Sans weights (500/600/700) load on demand (HTTP cache); offline they fall
 // back to the 400 weight (synthetic bold) — keeps the precache inside its budget
+// stats.css / statistici.css load with their pages (app.js PAGE_CSS): not precached, cached on first use
 // peron_est.js/.css (lazy, injected by app.js) are NOT precached (precache budget); the shell works without them
 // icon-512 / maskable are fetched by the browser from the manifest; not precached.
 // /i18n/en.json is NOT precached (budget): it is cached on first use (see dictFromNetwork), so the

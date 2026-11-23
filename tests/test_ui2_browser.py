@@ -12,7 +12,7 @@ from app import stats_overview  # noqa: E402
 from tests.test_footer_browser import COUNT_JS  # noqa: E402
 from app.store import Store  # noqa: E402
 from tests.test_statistici_browser import (  # noqa: E402,F401
-    NO_HSCROLL, _open, _serve, base_url, browser)
+    BUILD_ALL, NO_HSCROLL, _open, _serve, base_url, browser)
 from tests.test_stats_overview import add  # noqa: E402
 
 expect = sync_api.expect
@@ -143,6 +143,7 @@ def test_reduced_motion_turns_all_animation_off(browser, base_url):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, reduced_motion="reduce",
                               service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -217,6 +218,7 @@ def test_page_transition_and_live_board_untouched(browser, base_url):
 def test_skeleton_while_loading_then_content(browser, base_url):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     page = ctx.new_page()
     held = []
     page.route("**/api/stats/overview*", lambda route: held.append(route))  # hold the response

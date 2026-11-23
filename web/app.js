@@ -520,7 +520,8 @@
     "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
-  var currentRoute = null;
+  var currentRoute = null;   // route asked for by the address
+  var shownRoute = null;     // route whose view is on screen (differs while its stylesheet loads)
 
   // „Capturi OCR" (#ocr, admin only): not in the nav; ocr.js/ocr.css are loaded on demand.
   function loadOcrView() {
@@ -573,6 +574,31 @@
     document.head.appendChild(s);
   }
 
+  // Page stylesheets load on the first visit of a view, not with the board (render-blocking otherwise).
+  // Inserted before ui2.css so the cascade stays as with static <link>s; the view is shown once they load (no FOUC).
+  var STATS_CSS = ["stats.css"];
+  var PAGE_CSS = { trenuri: STATS_CSS, tren: STATS_CSS, statii: STATS_CSS, statie: STATS_CSS, clasamente: STATS_CSS,
+    statistici: ["stats.css", "statistici.css"] };
+  var cssDone = {};
+  function pageCssReady(name) {
+    var ready = true;
+    (PAGE_CSS[name] || []).forEach(function (href) {
+      if (cssDone[href] === true) return;
+      ready = false;
+      if (cssDone[href]) return;   // already loading
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      cssDone[href] = link;
+      link.onload = link.onerror = function () {   // a failed sheet must not block the page
+        cssDone[href] = true;
+        if (currentRoute === name) route();
+      };
+      document.head.insertBefore(link, document.querySelector('link[href="ui2.css"]'));
+    });
+    return ready;
+  }
+
   function parseHash() {
     var h = location.hash || "";
     var q = h.indexOf("?");
@@ -602,8 +628,17 @@
   function route() {
     var r = parseHash();
     var name = r.name;
-    var changed = name !== currentRoute;
     currentRoute = name;
+    if (!pageCssReady(name)) {   // route() runs again when the stylesheet is in
+      if (!shownRoute) VIEWS.forEach(function (v) { var sec = $("view-" + v); if (sec) sec.hidden = true; });   // first load: not the board meanwhile
+      return;
+    }
+    var changed = name !== shownRoute;
+    // a heavy view drops its DOM (and timers) when left; it is drawn again from its cached data on return
+    var prev = shownRoute && window.TabelaApp.views[shownRoute];
+    if (changed && prev && typeof prev.hide === "function") prev.hide();
+    shownRoute = name;
+    document.documentElement.removeAttribute("data-deeplink");   // theme-init.js kept the board unpainted until now
     if (name === "ocr") loadOcrView();
     if (name === "ocr2") loadLazyPage("ocr2", "ocr2.js", "ocr2.css");
     if (name === "admin") loadAdminView();

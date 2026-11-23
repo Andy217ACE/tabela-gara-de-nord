@@ -51,7 +51,8 @@ def test_wiring_index_and_service_worker():
     assert int(re.search(r'var VERSION = "v(\d+)"', sw).group(1)) >= 27
     # ui2.js loads right after app.js (App.el) and before the page scripts that use it
     assert html.index("ui2.js") < html.index("statistici.js")
-    assert html.index("ui2.css") > html.index("statistici.css")  # later in the cascade
+    # page sheets loaded later by app.js go in before ui2.css: it stays later in the cascade
+    assert "insertBefore(link, document.querySelector('link[href=\"ui2.css\"]'))" in read("app.js")
 
 
 def test_no_third_party_library_added():

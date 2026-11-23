@@ -496,7 +496,10 @@
     function load(force) {
       var url = cfg.url(v);
       if (!url) return;
-      if (!force && url === v.key && v.data) return;
+      if (!force && url === v.key && v.data) {
+        if (!v.body.firstChild) v.rerender();   // back after hide(): the cached data, drawn again
+        return;
+      }
       v.key = url;
       if (v.ctrl) v.ctrl.abort();
       var ctrl = new AbortController();
@@ -550,6 +553,14 @@
       v.rerender();
     };
     v.rerender = function () { if (v.data) { v.body.replaceChildren(); cfg.render(v, v.data); paint(); if (U()) U().reveal(v.body); } };
+    // leaving the page: drop its DOM (the data stays cached; show() draws it again)
+    v.hide = function () {
+      if (v.ctrl) { v.ctrl.abort(); v.ctrl = null; v.key = null; }
+      $(cfg.root).classList.remove("is-loading");
+      $(cfg.root).replaceChildren();
+      v.ui = null;
+      v.body = null;
+    };
     return v;
   }
 
@@ -580,6 +591,7 @@
   var TR_FIELDS = ["query", "prag", "min", "doar_confirmate"];
   var trSort = { key: "journeys", dir: -1 };
   var trHi = 5;    // common scale of the 14-day sparklines of the table being drawn
+  var TR_PAGE = 50;   // rows drawn at once (the whole list stays in memory: sorting and the counts use all of it)
 
   var TR_COLS = [
     { key: "train_no", get label() { return tt("stats.c.train"); }, get: function (e) { return e.train_no; },
@@ -730,18 +742,39 @@
     });
     thead.append(hr);
     var tbody = el("tbody");
-    sortEntries(list).forEach(function (e) {
-      var tr = el("tr", "st-row");
-      if (e.stats && e.stats.sufficient === false) tr.classList.add("st-row-small");
-      TR_COLS.forEach(function (c) { td(tr, c.cell(e), (c.num ? "st-num " : "") + (c.cls || "")); });
-      tr.addEventListener("click", function (ev) {
-        if (ev.target.closest("a, button")) return;
-        location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
+    var sorted = sortEntries(list);
+    // the first TR_PAGE rows, then „Încarcă încă 50”; sorting keeps the count, new data starts again
+    if (v.trShownKey !== v.key) { v.trShown = TR_PAGE; v.trShownKey = v.key; }
+    var more = el("button", "btn btn-ghost btn-sm st-more-btn");
+    more.type = "button";
+    var status = el("p", "h-count st-tr-shown");
+    status.setAttribute("role", "status");
+    function fill(from) {
+      sorted.slice(from, v.trShown).forEach(function (e) {
+        var tr = el("tr", "st-row");
+        if (e.stats && e.stats.sufficient === false) tr.classList.add("st-row-small");
+        TR_COLS.forEach(function (c) { td(tr, c.cell(e), (c.num ? "st-num " : "") + (c.cls || "")); });
+        tr.addEventListener("click", function (ev) {
+          if (ev.target.closest("a, button")) return;
+          location.hash = "#tren?nr=" + encodeURIComponent(e.train_no);
+        });
+        tbody.append(tr);
       });
-      tbody.append(tr);
+      var shown = Math.min(v.trShown, sorted.length);
+      var left = sorted.length - shown;
+      more.hidden = !left;
+      more.textContent = tt("stats.tr.more", { n: Math.min(TR_PAGE, left) });
+      status.textContent = left ? tt("stats.tr.shown", { n: shown, total: sorted.length }) : "";
+    }
+    more.addEventListener("click", function () {
+      var from = v.trShown;
+      v.trShown += TR_PAGE;
+      fill(from);
+      if (more.hidden) t.wrap.focus();   // the button is gone: keep the focus on the table, not <body>
     });
+    fill(0);
     t.table.append(thead, tbody);
-    v.body.append(t.wrap);
+    v.body.append(t.wrap, more, status);
   }
 
   var trenuri = makeView({
@@ -1543,11 +1576,11 @@
     [trenuri, tren, clasamente, statii, statie].forEach(function (view) { if (view.relang) view.relang(); });
   });
 
-  App.views.trenuri = { show: trenuri.show };
-  App.views.tren = { show: tren.show };
-  App.views.clasamente = { show: clasamente.show };
-  App.views.statii = { show: statii.show };
-  App.views.statie = { show: statie.show };
+  App.views.trenuri = { show: trenuri.show, hide: trenuri.hide };
+  App.views.tren = { show: tren.show, hide: tren.hide };
+  App.views.clasamente = { show: clasamente.show, hide: clasamente.hide };
+  App.views.statii = { show: statii.show, hide: statii.hide };
+  App.views.statie = { show: statie.show, hide: statie.hide };
   // shared with statistici.js (#statistici, Statistici v2)
   App.stats = { stationLink: stationLink, barChart: barChart, statsGrid: statsGrid, sampleWarn: sampleWarn,
                 getJSON: getJSON, errorText: errorText, plural: plural, pl: pl, titleCase: titleCase,

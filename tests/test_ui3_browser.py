@@ -16,7 +16,7 @@ from app import stats_overview  # noqa: E402
 from app.store import Store  # noqa: E402
 from tests.test_footer_browser import base_url as board_url  # noqa: E402,F401
 from tests.test_stats_overview import add  # noqa: E402
-from tests.test_statistici_browser import NO_HSCROLL, _open, _serve, browser  # noqa: E402,F401
+from tests.test_statistici_browser import BUILD_ALL, NO_HSCROLL, _open, _serve, browser  # noqa: E402,F401
 
 expect = sync_api.expect
 
@@ -475,6 +475,7 @@ def test_filter_change_morphs_the_charts_instead_of_redrawing(browser, base_url)
 def test_reduced_motion_disables_morph_tooltip_transitions_and_idle_pausing(browser, base_url):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, reduced_motion="reduce", service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base_url) else r.abort())
     page = ctx.new_page()
     errors = []
@@ -503,6 +504,7 @@ def test_reduced_motion_disables_morph_tooltip_transitions_and_idle_pausing(brow
 def test_charts_layer_is_lazy_and_page_changes_use_view_transitions(browser, base_url):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base_url) else r.abort())
     page = ctx.new_page()
     seen = []
@@ -528,6 +530,7 @@ def test_charts_layer_is_lazy_and_page_changes_use_view_transitions(browser, bas
 def test_page_still_works_when_the_chart_layer_cannot_load(browser, base_url):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     ctx.route("**/*", lambda r: r.abort() if "charts3." in r.request.url
               else (r.continue_() if r.request.url.startswith(base_url) else r.abort()))
     page = ctx.new_page()
@@ -568,6 +571,7 @@ _BOARD_SNAPSHOT = {}                            # base URL -> the /api/board ans
 
 def _tabela_shot(browser, board_url, w, h, theme, view, with_layer):
     ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     # „acum N s” is performance.now() minus the arrival time: it ticks every second and gains a digit
     # at 10 s, which widens the live pill by ~7 px between the two captures (the mask only covers the
     # pill's box at mask time). A frozen clock keeps the text and the box the same in both shots.

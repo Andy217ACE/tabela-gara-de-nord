@@ -499,11 +499,16 @@ svg { flex: none; }
 
 /* ecran de încărcare (până la primele date) */
 .boot {
+  position: absolute;   /* over the skeleton rows (#boards), out of the flow: hiding it moves nothing */
+  top: 52px;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 8px 0 4px;
   color: var(--text-2);
   font-size: 0.875rem;
 }
@@ -528,6 +533,10 @@ svg { flex: none; }
   color: var(--text-2);
   font-weight: 500;
 }
+
+/* weather slot (weather.css / weather.js): until the widget is built, its size, so the header row does not
+   wrap or grow later (CLS). Here, not in weather.css: that file belongs to the board's own round. */
+.wx-slot:empty { min-width: 5.5rem; min-height: 44px; }
 
 /* live indicator */
 
@@ -698,7 +707,9 @@ main {
   max-width: 1320px;
   margin: 0 auto;
   padding: 6px var(--gutter) 24px;
+  min-height: 100vh;   /* the footer starts below the fold: content arriving later never pushes it (CLS) */
 }
+html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another page is coming (app.js route()) */
 
 .banner {
   display: flex;
@@ -779,7 +790,7 @@ main {
 
 /* boards */
 
-.boards { margin-top: 8px; }
+.boards { position: relative; margin-top: 8px; }
 
 .boards[data-active="arrivals"] .board[data-board="departures"],
 .boards[data-active="departures"] .board[data-board="arrivals"] { display: none; }

@@ -74,6 +74,8 @@ html[data-view="panou"] #banner { display: none !important; }
 html[data-view="panou"] main { max-width: 1760px; }
 
 .pnl-root { margin-top: 8px; }
+/* until panel.js builds it: the Panou/Carduri switch's height, so the cards below do not jump (CLS) */
+html[data-view="carduri"] .pnl-root:empty { min-height: 48px; }
 
 /* comutatorul Panou / Carduri: control segmentat compact, aliniat la dreapta */
 .pnl-switch {

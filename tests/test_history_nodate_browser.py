@@ -25,7 +25,7 @@ expect = sync_api.expect
 
 LAST = date(2026, 10, 20)
 DAYS = 5
-PER_DAY = 50  # 250 journeys > one page of 200
+PER_DAY = 50  # 250 journeys > five pages of 50
 
 
 @pytest.fixture(scope="module")
@@ -84,19 +84,20 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
         assert page.input_value("#h-date") == ""                 # never pre-filled with today
         assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
         assert page.evaluate("location.hash") == "#istoric"
-        assert page.locator("#h-results .h-group").count() >= 2  # several days
+        assert page.locator("#h-results .h-group").count() == 1  # the first 50 = the newest day
         first = page.text_content("#h-results .h-group-title")
         assert "20 octombrie 2026" in first                      # newest first
         count = page.text_content("#h-count")
         assert "250 de călătorii" in count and "perioada" in count and "(5 zile)" in count
-        assert "afișate 200" in count and "Trenul" not in count
-        assert page.locator("#h-results .h-row").count() == 200
+        assert "afișate 50" in count and "Trenul" not in count
+        assert page.locator("#h-results .h-row").count() == 50
         summary = page.text_content("#h-summary")
         assert "Sosiri" in summary and "Plecări" in summary and "N = " in summary
         assert "calitate redusă" in summary
         assert page.evaluate(NO_HSCROLL) and page.evaluate(INSIDE) == 0
-        page.click("#h-more")
-        expect(page.locator("#h-results .h-row")).to_have_count(250)
+        for n in (100, 150, 200, 250):   # 50 more per click: several days
+            page.click("#h-more")
+            expect(page.locator("#h-results .h-row")).to_have_count(n)
         expect(page.locator("#h-results .h-group")).to_have_count(5)
         assert not page.is_visible("#h-more")
 
@@ -110,9 +111,9 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
 
         # „Toate zilele” brings every day back
         page.click("#h-alldays")
-        expect(page.locator("#h-results .h-row")).to_have_count(200)
+        expect(page.locator("#h-results .h-row")).to_have_count(50)
         assert page.input_value("#h-date") == ""
-        assert page.locator("#h-results .h-group").count() >= 2
+        assert page.locator("#h-results .h-group").count() == 1
         assert page.evaluate("location.hash") == "#istoric"
         assert page.evaluate(NO_HSCROLL) and page.evaluate(INSIDE) == 0
         assert errors == []
