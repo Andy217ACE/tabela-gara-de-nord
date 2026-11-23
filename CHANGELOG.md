@@ -5,6 +5,31 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.66 — 2026-11-24
+### Schimbat
+- **Pagini mult mai rapide pe telefon:** scorul Lighthouse mobil a urcat la 84–90 pe Tabelă, Istoric, Trenuri și Statistici (era 47–66), măsurat pe aceeași copie a bazei.
+- **Pagina nu mai „sare” la încărcare:** spațiu rezervat pentru lista de trenuri, antet, vreme, comutatorul Panou/Carduri și cardurile de cifre (CLS sub 0,01 pe telefon, era până la 0,87).
+- **Fiecare pagină își încarcă doar stilurile ei:** Tabela nu mai așteaptă foile de stil ale Statisticilor; pagina apare după ce stilul ei e gata, fără clipire.
+- **Paginile părăsite își eliberează memoria:** după o tură prin aplicație, Tabela rămâne la ~2.500 de elemente (era peste 34.000); la întoarcere pagina se redesenează din datele păstrate, cu filtrele neschimbate.
+- **Trenuri și Istoric afișează câte 50 de rânduri,** cu butonul „Încarcă încă 50”; sortarea și filtrele merg pe toate datele.
+- **Statistici desenează graficele pe măsură ce derulezi;** rezumatul, problemele și cuprinsul apar imediat. La tipărire sau la un link direct spre un grafic, totul se construiește dintr-odată.
+- **Alerta „Ce s-a schimbat”** din Statistici stă acum după cardurile de rezumat.
+### Adăugat
+- **CI verifică fail2ban:** filtrele reale rulează cu `fail2ban-regex` pe loguri de exemplu (atacurile trebuie prinse, traficul normal nu), iar configurația jail-urilor se încarcă cu `fail2ban-client -t`.
+- **`requirements.lock` se regenerează automat** pe PR-urile Dependabot pentru pachete Python; OpenCV și numpy nu se mai actualizează automat (pot schimba citirea OCR, se actualizează doar cu re-măsurare).
+- **Starea sistemului pentru admin** arată versiunea Tesseract, modelele încărcate și numărul de actualizări de securitate în așteptare (doar pentru admin, nu public).
+### English
+- **Much faster pages on phones:** the Lighthouse mobile score rose to 84–90 on Board, History, Trains and Statistics (was 47–66), measured on the same database copy.
+- **The page no longer jumps while loading:** space is reserved for the train list, header, weather, the Panel/Cards switch and the figure cards (CLS under 0.01 on phones, was up to 0.87).
+- **Each page loads only its own styles:** the Board no longer waits for the Statistics stylesheets; a page appears once its style is ready, without flashing.
+- **Pages you leave free their memory:** after a tour of the app the Board stays at ~2,500 elements (was over 34,000); on return the page is redrawn from kept data, filters unchanged.
+- **Trains and History show 50 rows at a time,** with a "Load 50 more" button; sorting and filters cover all data.
+- **Statistics draws its charts as you scroll;** the summary, problems and table of contents appear at once. When printing or following a direct link to a chart, everything is built at once.
+- **The "What changed" alert** in Statistics now sits after the summary cards.
+- **CI checks fail2ban:** the real filters run with `fail2ban-regex` on sample logs (attacks must match, normal traffic must not), and the jail configuration loads with `fail2ban-client -t`.
+- **`requirements.lock` is regenerated automatically** on Dependabot pull requests for Python packages; OpenCV and numpy are no longer auto-updated (they can change OCR reading; updated only with re-measurement).
+- **System status for the admin** shows the Tesseract version, the loaded models and the number of pending security updates (admin only, not public).
+
 ## Beta 1.65 — 2026-11-24
 ### Adăugat
 - **Testare automată pe GitHub (CI):** la fiecare push și PR rulează toată suita de teste (inclusiv testele în browser), o verificare de release (VERSION, CHANGELOG RO+EN și `CHARTS_V` sincronizate, `scripts/check_release.py`) și auditul dependențelor (`pip-audit`). Dependabot propune actualizări prin PR-uri (nu instalează nimic singur).

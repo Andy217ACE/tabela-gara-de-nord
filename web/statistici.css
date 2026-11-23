@@ -83,6 +83,13 @@
 
 .st-root.is-loading .ss-body { opacity: 0.55; transition: opacity var(--dur) var(--ease); }
 .ss-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+/* a section built later (statistici.js later()): the box adds nothing to the grid, the placeholder keeps about a
+   figure's height so the page below does not jump and the TOC can point at it */
+.ss-defer { display: contents; }
+/* the filter bar's „updated” line and print button exist before the lazy stat_export.css (same rules there) */
+.ss-sp4-updated { margin: 0; color: var(--text-3); font-size: 0.75rem; flex-basis: 100%; }
+.ss-sp4-print { white-space: nowrap; }
+.ss-defer-ph { grid-column: 1 / -1; min-height: 360px; border-radius: var(--radius-lg); background: var(--surface); }
 
 /* ---------- cards ---------- */
 .ss-summary,
@@ -409,7 +416,7 @@
 .st-root .c3-toc { top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px)); }
 
 /* ---------- direct links to sections (?sect=) ---------- */
-.ss-body > * { scroll-margin-top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px) + 64px); }
+.ss-body > *, .ss-defer > * { scroll-margin-top: calc(var(--c3-nav-h, 48px) + var(--ss-filters-h, 0px) + 64px); }
 .ss-target { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius); }
 .ss-card-link { color: inherit; text-decoration: none; }
 .ss-card-link:hover, .ss-card-link:focus-visible { text-decoration: underline; }

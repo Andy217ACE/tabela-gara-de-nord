@@ -10,7 +10,7 @@ import pytest as _pytest
 from app import stats_overview
 from app.store import Store
 from tests.test_stats_overview import seed, weather
-from tests.test_statistici_browser import _serve
+from tests.test_statistici_browser import BUILD_ALL, _serve
 
 
 def _open(browser, base_url, query="", init=None, ctx=None):  # noqa: F811
@@ -204,6 +204,7 @@ def stats_url(tmp_path_factory):
 def _stats_page(browser, url, lang):
     stats_overview.clear_cache()
     ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
+    ctx.add_init_script(BUILD_ALL)   # every Statistici section built at once (they are lazy)
     page = ctx.new_page()
     page.goto(url + "/?lang=" + lang + "#statistici")
     page.wait_for_selector(".ss-fig .ss-fig-title")
@@ -279,7 +280,7 @@ def test_history_and_follows_in_english(browser, base_url):  # noqa: F811
         page.evaluate("() => window.I18N.ready")
         page.wait_for_function("() => document.querySelector('#h-count').textContent.includes('journey')")
         assert page.locator("#istoric-heading").inner_text() == "History"
-        assert page.locator("#h-more").text_content() == "Load more"
+        assert page.locator("#h-more").text_content() == "Load 50 more"
         assert page.locator("#h-count").inner_text().startswith("1 journey")
         assert "1 journeys" not in page.locator("#h-count").inner_text()
         state["n"] = 2

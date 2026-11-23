@@ -64,7 +64,9 @@ def test_stats_css_served_and_themed(client):
 def test_index_has_stats_views_nav_and_assets():
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert '<script src="stats.js" defer></script>' in html
-    assert '<link rel="stylesheet" href="stats.css">' in html
+    # page CSS loads on the first visit of a stats view (app.js PAGE_CSS), not render-blocking on the board
+    assert 'href="stats.css"' not in html
+    assert '"stats.css"' in (WEB / "app.js").read_text(encoding="utf-8")
     for v in ("trenuri", "tren", "statistici", "clasamente"):
         assert f'id="view-{v}"' in html, v
     for route, label in (("trenuri", "Trenuri"), ("statistici", "Statistici"),
@@ -89,7 +91,7 @@ def test_sw_precaches_stats_and_bumped():
     m = re.search(r'var VERSION = "v(\d+)"', sw)
     assert m and int(m.group(1)) >= 9
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
-    assert '"/stats.js"' in shell and '"/stats.css"' in shell
+    assert '"/stats.js"' in shell and '"/stats.css"' not in shell   # page CSS: lazy, cached on first use
 
 
 def test_mobile_nav_scrolls_inside_not_page():
@@ -135,7 +137,7 @@ def test_station_links_everywhere_and_safe():
     for name, src in (("app.js", app), ("panel.js", panel), ("history.js", hist)):
         for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", 'setAttribute("style"'):
             assert bad not in src, (name, bad)
-    css = (WEB / "stats.css").read_text(encoding="utf-8")
+    css = (WEB / "style.css").read_text(encoding="utf-8")  # global: the board uses station links before stats.css loads
     assert re.search(r"\.station-link-plain\s*\{[^}]*text-decoration:\s*none", css)
     assert re.search(r"\.station-link:focus-visible\s*\{[^}]*outline", css)
 
@@ -143,7 +145,7 @@ def test_station_links_everywhere_and_safe():
 def test_sw_precache_still_complete():
     sw = (WEB / "sw.js").read_text(encoding="utf-8")
     shell = sw[sw.index("var SHELL"):sw.index("];", sw.index("var SHELL"))]
-    for f in ("/app.js", "/history.js", "/panel.js", "/stats.js", "/stats.css"):
+    for f in ("/app.js", "/history.js", "/panel.js", "/stats.js"):   # stats.css: lazy (app.js PAGE_CSS)
         assert f'"{f}"' in shell, f
 
 

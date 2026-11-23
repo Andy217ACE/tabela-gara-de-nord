@@ -47,9 +47,7 @@
   <link rel="stylesheet" href="weather.css">
   <script src="weather.js" defer></script>
   <script src="versions.js" defer></script>
-  <link rel="stylesheet" href="stats.css">
   <script src="stats.js" defer></script>
-  <link rel="stylesheet" href="statistici.css">
   <script src="stat_weekdays.js" defer></script>
   <script src="statistici.js" defer></script>
   <script src="stat_platform.js" defer></script>
@@ -142,12 +140,6 @@
         <span class="banner-text" id="banner-text"></span>
       </div>
 
-      <!-- ecran de încărcare: sigla mică până sosesc primele date (app.js îl ascunde) -->
-      <div class="boot" id="boot" aria-hidden="true">
-        <img class="logo logo-boot" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="" width="56" height="56" decoding="async">
-        <span class="boot-text" data-i18n="app.bootText">Se încarcă tabela…</span>
-      </div>
-
       <!-- mod „Panou" (web/panel.js): comutator Panou/Carduri + afișajul de gară -->
       <div id="panel-root" class="pnl-root"></div>
 
@@ -165,6 +157,12 @@
       </div>
 
       <div class="boards" id="boards" data-active="arrivals">
+        <!-- ecran de încărcare: sigla mică peste scheletul listei până sosesc primele date (app.js îl ascunde);
+             suprapus, nu în flux: dispariția lui nu mută pagina (CLS) -->
+        <div class="boot" id="boot" aria-hidden="true">
+          <img class="logo logo-boot" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="" width="56" height="56" decoding="async">
+          <span class="boot-text" data-i18n="app.bootText">Se încarcă tabela…</span>
+        </div>
         <section class="board" id="panel-arrivals" role="tabpanel" aria-labelledby="tab-arrivals" data-board="arrivals">
           <h2 class="board-title">
             <svg class="board-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
@@ -242,7 +240,7 @@
       <div class="h-summary" id="h-summary" hidden></div>
       <div class="h-results" id="h-results"></div>
       <p class="empty" id="h-empty" hidden></p>
-      <button class="btn btn-ghost h-more" type="button" id="h-more" hidden data-i18n="hist.more">Încarcă mai multe</button>
+      <button class="btn btn-ghost h-more" type="button" id="h-more" hidden data-i18n="hist.more">Încarcă încă 50</button>
 
       <dialog class="sheet" id="h-detail" aria-labelledby="h-detail-title">
         <div class="sheet-head">

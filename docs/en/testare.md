@@ -92,6 +92,11 @@ The requirement for this page mentioned a lock-style convention: a `.superpowers
 
 If a lock directory exists on your machine, it belongs to your own working convention (or to an agent), not to the project. **Uncertain**: the exact reason for the convention is not written in the repo. What can be said from the code: the browser tests start uvicorn on a free port chosen by the system (`socket.bind(("127.0.0.1", 0))` in `tests/test_footer_browser.py`), and the SQLite databases are in `tmp_path`. So two parallel runs do not step on each other's ports or databases. What could conflict is the shared resource (Chromium, CPU, Tesseract), and that is not handled in the code.
 
+### 3.2 CI: lock, fail2ban
+
+- **`requirements.lock`.** CI installs with `-c requirements.lock`, so the lock must follow `requirements.txt` (`tests/test_requirements_lock.py`). Dependabot (pip) does not regenerate `uv pip compile` output, so `.github/workflows/lock.yml` does it on `dependabot/pip/*` PRs: it runs `uv pip compile` (with `UV_NO_BUILD=1`, executing no PR code), commits to the PR branch and re-runs CI via `workflow_dispatch` (a push made with `GITHUB_TOKEN` does not trigger CI by itself). It uses `pull_request_target` (write token) but runs nothing from the PR and exposes the token only to the push step. `opencv-python-headless` and `numpy` are excluded from Dependabot for minor/major (OCR-sensitive, updated by hand).
+- **fail2ban.** The `fail2ban` job in `ci.yml` installs fail2ban, runs `fail2ban-regex` with each filter in `deploy/fail2ban/` against `tests/fixtures/fail2ban/` (`should_match_probes.log` and `should_match.log` must match completely, `should_not_match.log` not at all) and validates the jails with `fail2ban-client -t`. The fixtures use the nginx `combined` format (the default; `deploy/nginx-tabela.conf` defines no `log_format`). `tests/test_fail2ban_filters.py` repeats the check with Python regexes, without fail2ban (fast local check; CI is authoritative).
+
 ## 4. Running part of the suite
 
 ```bash

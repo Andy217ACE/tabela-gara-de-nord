@@ -1,0 +1,55 @@
+name: Lock refresh
+
+# Dependabot bumps requirements.txt but cannot regenerate requirements.lock (uv pip compile
+# output). This workflow does it on Dependabot pip PRs and pushes the commit to the PR branch.
+#
+# Why pull_request_target: for Dependabot PRs plain `pull_request` gets a read-only token, so it
+# could not push. pull_request_target gets a write token, which is dangerous only if PR code is
+# executed. Here nothing from the PR is executed: the PR head is checked out WITHOUT persisted
+# credentials, the only thing read from it is requirements.txt (data), uv runs with
+# UV_NO_BUILD=1 (no sdist build = no third-party setup.py), and the token is exposed only to the
+# final push step. Runs only for the dependabot[bot] actor on dependabot/pip/* branches.
+
+on:
+  pull_request_target:
+    paths: [requirements.txt]
+
+permissions:
+  contents: write   # push the lock commit
+  actions: write    # re-dispatch CI: a push made with GITHUB_TOKEN does not trigger workflows
+
+concurrency:
+  group: lock-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lock:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'dependabot/pip/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Regenerate requirements.lock
+        env:
+          UV_NO_BUILD: "1"
+          UV_CUSTOM_COMPILE_COMMAND: uv pip compile requirements.txt --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
+        run: |
+          pip install uv==0.13.9
+          uv pip compile requirements.txt --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
+      - name: Commit and push the lock, then re-run CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git diff --quiet requirements.lock && { echo "lock already current"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): refresh requirements.lock" requirements.lock
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          gh workflow run ci.yml --ref "$BRANCH"

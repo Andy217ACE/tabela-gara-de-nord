@@ -691,12 +691,14 @@ Starea sistemului, pentru pagina Sistem. Varianta publică e minimă.
 {"version": "Beta 1.65", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
- "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3}, "admin": false}
+ "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3},
+ "admin": false}
 ```
 
 - `admin` este `true` doar dacă cererea are un token Bearer valid sau o sesiune validă. Atunci
   pagina cere și `GET /api/admin/system` (secțiunea 7.9). Verificarea nu produce niciodată 401 sau
   503 pentru vizitatorii obișnuiți.
+- Doar în `GET /api/admin/system` (nu în răspunsul public, ca versiunile și actualizările lipsă să nu fie o listă de ținte): `tesseract.version` este versiunea Tesseract (`null` dacă nu poate fi citită), iar `tesseract.langs` lista modelelor traineddata încărcate (`[]` dacă nu se poate afla); ambele se citesc o singură dată și se păstrează. `security_updates` este numărul de actualizări de securitate Ubuntu în așteptare, citit din `/var/lib/update-notifier/updates-available` (fără apt, fără sudo); `null` dacă fișierul lipsește.
 - `stare` poate fi `live`, dar și alte valori (`app/system_status.py`).
 
 ### 5.20 `GET /api/export/history.csv`

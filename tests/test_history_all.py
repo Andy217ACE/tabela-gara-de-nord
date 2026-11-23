@@ -245,13 +245,13 @@ def test_index_has_all_days_selector_and_load_more():
     html = _web("index.html")
     assert 'id="h-alldays"' in html and "Toate zilele" in html and 'id="h-scope"' not in html
     assert 'id="h-date"' in html and 'id="h-date" name="date" required' not in html
-    assert 'id="h-more"' in html and "Încarcă mai multe" in html and 'id="h-summary"' in html
+    assert 'id="h-more"' in html and "Încarcă încă 50" in html and 'id="h-summary"' in html
     assert "style=" not in html
 
 
 def test_history_js_all_days_mode():
     js = _web("history.js")
-    assert 'p.set("all", "1")' in js and 'p.set("cursor", cursor)' in js and "var PAGE = 200" in js
+    assert 'p.set("all", "1")' in js and 'p.set("cursor", cursor)' in js and "var PAGE = 50" in js
     assert "#tren?nr=" in js and "openJourney(j.id" in js
     assert "history.sum.none_read" in js and "necunoscut, nu 0" in __import__("json").loads((Path(__file__).resolve().parent.parent / "web" / "i18n" / "ro.json").read_text(encoding="utf-8"))["history.sum.none_read"]
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", ".style.", "setAttribute(\"style\""):

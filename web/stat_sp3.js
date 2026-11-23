@@ -67,7 +67,9 @@
     });
     if (a.length > 5) ul.append(el("li", null, tt("stats.sp3.alert.more", { n: a.length - 5 })));
     b.append(ul, el("p", "ss-sp3-note", tt("stats.sp3.alert.note", { t: d.alert_threshold_min })));
-    host.prepend(b);
+    // after the summary cards, not above them: it arrives with a second request, and must not push them down (CLS)
+    var cards = host.querySelector(".ss-quick");
+    host.insertBefore(b, cards ? cards.nextSibling : host.firstChild);
   }
 
   // ---- „Ce s-a schimbat săptămâna asta” -------------------------------------------------------
