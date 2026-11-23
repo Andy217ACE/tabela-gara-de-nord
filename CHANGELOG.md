@@ -5,6 +5,35 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.65 — 2026-11-24
+### Adăugat
+- **Testare automată pe GitHub (CI):** la fiecare push și PR rulează toată suita de teste (inclusiv testele în browser), o verificare de release (VERSION, CHANGELOG RO+EN și `CHARTS_V` sincronizate, `scripts/check_release.py`) și auditul dependențelor (`pip-audit`). Dependabot propune actualizări prin PR-uri (nu instalează nimic singur).
+- **Instalări reproductibile:** `requirements.lock` fixează toate dependențele (inclusiv cele indirecte) pentru Linux / Python 3.14; `deploy/update.sh` și `install.sh` îl folosesc la instalare și la rollback.
+- **SECURITY.md, CONTRIBUTING.md** și șabloane pentru issue și PR.
+- **Documentul „Decizii de arhitectură”** (docs/decizii-arhitectura.md): de ce SQLite și nu Postgres, fără Redis/Docker, OCR în proces, fără rotație automată a cheii etc.
+- **Test nou:** fiecare rută a aplicației trebuie să apară în `docs/api.md`, ca documentația să nu mai rămână în urmă.
+- **Configurația fail2ban reală** e acum în `deploy/fail2ban/` (jail-uri, filtre, scriptul care nu banează IP-ul propriu).
+### Schimbat
+- **FastAPI 0.165.0** (Starlette 1.10.0), tzdata 2026.6.
+- **Documentația adusă la zi** (rămăsese la Beta 1.43): secțiunea „Securitate și fiabilitate” în README, firewall-ul real (ufw, fail2ban) în locul mențiunilor vechi despre Azure, rutele API lipsă (14), schema v10, pagina #ocr2, retenția copiilor de siguranță descrisă corect.
+- **`/api/health` răspunde și la HEAD**, ca monitoarele de uptime cu setări implicite să nu mai dea alarme false.
+- **Serviciul limitează firele OpenMP** (`OMP_THREAD_LIMIT=1`), ca Tesseract să nu ocupe toate nucleele.
+- **Alternativa OCR:** modelul poartă obligatoriu amprenta motorului de citire; un model fără amprentă sau cu altă amprentă e refuzat (alternativa rămâne oprită, citirea principală nu e afectată).
+- **Jurnalul alternativei OCR** deduplică după identitatea trenului (număr + oră), nu doar după poziția rândului, și salvează numărul și ora în context; o propunere se marchează ca văzută doar după ce a fost scrisă.
+### English
+- **Automated testing on GitHub (CI):** every push and PR runs the whole test suite (browser tests included), a release check (VERSION, CHANGELOG RO+EN and `CHARTS_V` in sync, `scripts/check_release.py`) and a dependency audit (`pip-audit`). Dependabot proposes updates as PRs (it installs nothing by itself).
+- **Reproducible installs:** `requirements.lock` pins every dependency (including indirect ones) for Linux / Python 3.14; `deploy/update.sh` and `install.sh` use it on install and on rollback.
+- **SECURITY.md, CONTRIBUTING.md** and issue/PR templates.
+- **"Architecture decisions" document** (docs/en/decizii-arhitectura.md): why SQLite and not Postgres, no Redis/Docker, in-process OCR, no automatic key rotation, etc.
+- **New test:** every app route must appear in `docs/api.md`, so the docs no longer fall behind.
+- **The real fail2ban configuration** is now in `deploy/fail2ban/` (jails, filters, the script that never bans the home IP).
+- **FastAPI 0.165.0** (Starlette 1.10.0), tzdata 2026.6.
+- **Docs brought up to date** (they were at Beta 1.43): a "Security and reliability" section in the README, the real firewall (ufw, fail2ban) instead of old Azure mentions, the missing API routes (14), schema v10, the #ocr2 page, backup retention described correctly.
+- **`/api/health` also answers HEAD**, so uptime monitors with default settings no longer raise false alarms.
+- **The service limits OpenMP threads** (`OMP_THREAD_LIMIT=1`), so Tesseract doesn't take every core.
+- **Alternative OCR:** the model must carry the reading engine's fingerprint; a model without it or with a different one is refused (the alternative stays off, the main reading is unaffected).
+- **The alternative-OCR journal** deduplicates by train identity (number + time), not just row position, and stores number and time in the context; a proposal is marked as seen only after it was written.
+
 ## Beta 1.64 — 2026-11-23
 ### Adăugat
 - **Secțiunea „Operatori și categorii” în Statistici:** ponderea fiecărui operator într-o bară 100 %, matricea operator × categorie (procent din operator sau din categorie), carduri pe operator și pe categorie (trenuri, călătorii pe zi, sosiri/plecări, împărțirea pe categorii, „La timp”, întârziere tipică, în medie, „din N călătorii”, primele 3 rute) și export CSV. Clic pe un nume aplică filtrul. Calculată pe serverul care deja filtrează după perioadă, panou, operator și tip.
