@@ -82,7 +82,7 @@
     if (d.types.length) {
       sec.append(el("h3", "ss-sub-title", tt("stats.dw.by_type")));
       sec.append(table(tt("stats.dw.t_type"), [tt("stats.dw.col_type")].concat(cols().slice(1)),
-        d.types.map(function (g) { return statsRow(g.train_type || "—", g); })));
+        d.types.map(function (g) { return statsRow((window.TabelaApp.typeAbbr(g.train_type)) || "—", g); })));
     }
     if (d.stations.length) {
       sec.append(el("h3", "ss-sub-title", tt("stats.dw.by_station")));

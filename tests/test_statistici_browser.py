@@ -126,8 +126,8 @@ def test_statistici_page(browser, base_url, w, h, theme):
         page.wait_for_function("""() => { window.scrollTo(0, document.documentElement.scrollHeight);
           return !!document.querySelector("[data-key='durata-pe-panou']") && !!document.querySelector("[data-key='peroane-schimbate']"); }""")
         page.wait_for_function("() => document.querySelectorAll('.ss-fig[aria-busy]').length === 0")
-        assert page.locator(".ss-fig").count() == 25
-        assert page.locator(".ss-how").count() == 26
+        assert page.locator(".ss-fig").count() == 26
+        assert page.locator(".ss-how").count() == 27
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")

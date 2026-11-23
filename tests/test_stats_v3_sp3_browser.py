@@ -118,7 +118,7 @@ def test_banner_changes_and_comparison(browser, full, w, h):
         banner = page.locator(".ss-sp3-alert")
         expect(banner).to_be_visible()
         expect(banner).to_contain_text("Slow")
-        expect(banner).to_contain_text("mediană")
+        expect(banner).to_contain_text("tipică")
         # the banner sits in the summary area, above the cards
         assert page.evaluate("""() => { const b = document.querySelector('.ss-sp3-alert'), c = document.querySelector('.ss-quick');
           return !!(b.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING); }""")

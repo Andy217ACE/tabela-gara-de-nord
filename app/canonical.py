@@ -2,7 +2,8 @@
 """Canonical operator / station names for noisy OCR text (difflib fuzzy match).
 
 A reading is mapped to the closest known name when the similarity ratio reaches
-the threshold; below it the cleaned raw text is returned together with its best
+the threshold (operators: or a softer score with a clear margin, see `operator_match`);
+otherwise the cleaned raw text is returned together with its best
 score so the caller can mark the value as uncertain. Nothing is invented: the
 known lists hold only names actually seen on the board (``data/*.txt``) plus the
 stations learned from the stored history.
@@ -19,6 +20,11 @@ from pathlib import Path
 from app.normalize import clean_station
 
 DEFAULT_THRESHOLD = 0.82
+# Measured on 823,912 live readings vs each train number's stable operator: >=0.82 is 99.9999%
+# right; 0.65-0.82 with a margin >=0.10 over the runner-up operator is 100% of 1,626 (99.3%
+# without the margin; <=93% below 0.65).
+OPERATOR_SOFT_THRESHOLD = 0.65
+OPERATOR_MARGIN = 0.10
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
@@ -47,8 +53,24 @@ def _load(name: str) -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=1)
+def _operator_table() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """(official name, aliases) per line of ``Official | alias | alias``."""
+    out = []
+    for ln in _load("operators.txt"):
+        official, *aliases = (p.strip() for p in ln.split("|"))
+        out.append((official, tuple(a for a in aliases if a)))
+    return tuple(out)
+
+
 def known_operators() -> tuple[str, ...]:
-    return _load("operators.txt")
+    """The official operator names."""
+    return tuple(o for o, _ in _operator_table())
+
+
+@lru_cache(maxsize=1)
+def operator_keys() -> tuple[tuple[str, str], ...]:
+    """(match key text, official name): the official name and every board alias."""
+    return tuple((k, o) for o, al in _operator_table() for k in (o, *al))
 
 
 @lru_cache(maxsize=1)
@@ -137,16 +159,41 @@ def _best(text: str, known: Iterable[str], words: bool = False) -> tuple[str | N
     return best, best_score
 
 
+def operator_match(text: str | None, known: Iterable[str] | None = None,
+                   threshold: float = DEFAULT_THRESHOLD) -> tuple[str, float, bool]:
+    """(name, score, accepted). The score is per official operator (best over its
+    name and aliases), so aliases of one operator never compete for the margin.
+    Accepted: score >= threshold, or (built-in list only) score >= OPERATOR_SOFT_THRESHOLD
+    with a margin >= OPERATOR_MARGIN over the second-best operator. Not accepted:
+    (cleaned raw text, best score)."""
+    raw = clean_operator(text)
+    k = _key(raw)
+    if not k:
+        return "", 0.0, False
+    pairs = operator_keys() if known is None else tuple((c, c) for c in known)
+    per: dict[str, float] = {}
+    for cand, official in pairs:
+        ck = _key(cand)
+        if not ck:
+            continue
+        sc = 1.0 if ck == k else difflib.SequenceMatcher(None, k, ck).ratio()
+        if sc > per.get(official, 0.0):
+            per[official] = sc
+    ranked = sorted(per.items(), key=lambda kv: (-kv[1], kv[0]))
+    if not ranked:
+        return raw, 0.0, False
+    (name, score), second = ranked[0], (ranked[1][1] if len(ranked) > 1 else 0.0)
+    if score >= threshold or (known is None and score >= OPERATOR_SOFT_THRESHOLD
+                              and score - second >= OPERATOR_MARGIN):
+        return name, score, True
+    return raw, score, False
+
+
 def canonical_operator(text: str | None, known: Iterable[str] | None = None,
                        threshold: float = DEFAULT_THRESHOLD) -> tuple[str, float]:
-    """(canonical name, score); below `threshold`: (cleaned raw text, best score)."""
-    raw = clean_operator(text)
-    if not _key(raw):
-        return "", 0.0
-    match, score = _best(raw, known_operators() if known is None else known)
-    if match is not None and score >= threshold:
-        return match, score
-    return raw, score
+    """(official name, score); not accepted: (cleaned raw text, best score)."""
+    name, score, _ = operator_match(text, known, threshold)
+    return name, score
 
 
 def canonical_station(text: str | None, known: Iterable[str], *,

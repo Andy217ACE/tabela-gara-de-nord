@@ -12,7 +12,7 @@ from datetime import date
 from app import predict as pr
 
 LABEL = "Estimare"
-NOTE = ("Estimare din istoricul observat (mediană, interval P25–P75, N afișat), nu întârziere "
+NOTE = ("Estimare din istoricul observat (întârziere tipică, interval P25–P75, N afișat), nu întârziere "
         "citită și nu promisiune. La plecări, întârzierea citită e cea anunțată înainte de plecare.")
 
 

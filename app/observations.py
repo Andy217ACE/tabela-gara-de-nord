@@ -29,6 +29,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from app import canonical
 from app.models import Row
 from app.store import JITTER_MIN, MIN_CONFIDENCE, TZ, service_date
 
@@ -494,9 +495,9 @@ def list_trains(store, query: str | None = None, limit: int = 50) -> list[dict]:
             where += " AND CAST(train_no AS TEXT) LIKE ? ESCAPE '!'"
             args = [query + "%"]
         else:
-            esc = query.lower().replace("!", "!!").replace("%", "!%").replace("_", "!_")
-            where += (" AND (lower(routes_json) LIKE ? ESCAPE '!'"
-                      " OR lower(operators_json) LIKE ? ESCAPE '!')")
+            esc = canonical._fold(query).lower().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            where += (" AND (fold(routes_json) LIKE ? ESCAPE '!'"
+                      " OR fold(operators_json) LIKE ? ESCAPE '!')")
             args = [f"%{esc}%", f"%{esc}%"]
     with store._lock:
         found = store._conn.execute(

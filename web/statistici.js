@@ -232,7 +232,7 @@
              get: function () { var c = fs.querySelector("input:checked"); return c ? c.value : ""; } };
   }
 
-  function selectField(name, label, allText) {
+  function selectField(name, label, allText, fmt) {
     var lab = el("label", "field ss-field ss-field-" + name);
     lab.append(el("span", "field-label", label));
     var s = el("select");
@@ -246,7 +246,7 @@
       all.value = "";
       var nodes = [all];
       list.forEach(function (o) {
-        var opt = el("option", null, o.name + (o.n ? " (" + o.n + ")" : ""));
+        var opt = el("option", null, (fmt ? fmt(o.name) : o.name) + (o.n ? " (" + o.n + ")" : ""));
         opt.value = o.name;
         nodes.push(opt);
       });
@@ -267,7 +267,7 @@
     var per = segmented("perioada", tt("stats.filters.period"), periods());
     var brd = segmented("board", tt("stats.filters.board"), boardOpts());
     var op = selectField("operator", tt("stats.filters.operator"), tt("stats.filters.all_operators"));
-    var tp = selectField("tip", tt("stats.filters.train_type"), tt("stats.filters.all_types"));
+    var tp = selectField("tip", tt("stats.filters.train_type"), tt("stats.filters.all_types"), App.typeAbbr);
     var chk = el("label", "ss-check");
     var ci = el("input");
     ci.type = "checkbox";
@@ -1021,13 +1021,13 @@
   var TYPE_SLOT = { IR: 1, IRN: 2, RE: 3, R: 4, RM: 5, IC: 6 };
 
   // list = [{key, journeys}] → segments: biggest first, at most `max` named slices + „Altele”
-  function shareSegments(list, max, slotOf) {
+  function shareSegments(list, max, slotOf, labelOf) {
     var rows = (list || []).filter(function (x) { return x.journeys > 0; })
       .sort(function (a, b) { return b.journeys - a.journeys; });
     var segs = [];
     var rest = 0;
     rows.forEach(function (x, i) {
-      if (i < max) segs.push({ label: x.key, value: x.journeys, slot: slotOf(x, i) });
+      if (i < max) segs.push({ label: labelOf ? labelOf(x.key) : x.key, value: x.journeys, slot: slotOf(x, i) });
       else rest += x.journeys;
     });
     if (rest) segs.push({ label: tt("stats.share.other"), value: rest, slot: "other" });
@@ -1064,12 +1064,12 @@
         addRows(tt("stats.share.board"), segs, tot);
       }
     }
-    [[tt("stats.share.by_type"), "types", function (x) { return TYPE_SLOT[String(x.key).toUpperCase()] || "other"; }, 6, tt("stats.share.type")],
+    [[tt("stats.share.by_type"), "types", function (x) { return TYPE_SLOT[String(x.key).toUpperCase()] || "other"; }, 6, tt("stats.share.type"), App.typeAbbr],
      [tt("stats.share.by_operator"), "operators", function (x, i) { return i + 1; }, 5, tt("stats.share.operator")]].forEach(function (g) {
       var pair = el("div", "ss-donut-pair");
       var made = 0;
       boards.forEach(function (b) {
-        var segs = shareSegments(d[g[1]][b], g[3], g[2]);
+        var segs = shareSegments(d[g[1]][b], g[3], g[2], g[5]);
         var tot = segs.reduce(function (a, x) { return a + x.value; }, 0);
         if (!tot) return;
         made += 1;
@@ -1264,16 +1264,159 @@
       hbars(cell, { board: b, max: 100, title: title + " — " + BOARD_PL[b],
         desc: tt("stats.ranked.desc", { what: firstCol.toLowerCase() }),
         rows: list.map(function (x) {
-          return { label: x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
-            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: x.key },
+          return { label: key === "types" ? App.typeAbbr(x.key) : x.key, value: x.sufficient ? x.on_time_pct : null, low: !x.sufficient, cls: x.sufficient ? tone("pct", x.on_time_pct) : "",
+            drill: { by: key === "operators" ? "operator" : "type", key: x.key, label: key === "types" ? App.typeAbbr(x.key) : x.key },
             valueText: x.sufficient ? pct(x.on_time_pct) : (x.n ? "N = " + x.n + " < " + p.min_sample : "N = 0"), valueExp: x.sufficient ? " · N = " + x.n : "",
             tip: x.sufficient ? tt("stats.ranked.tip_ok", { pct: pct(x.on_time_pct), median: minutes(x.median), n: x.n })
               : tt("stats.ranked.tip_small", { n: x.n, mean: minutes(x.mean) }) };
         }) });
-      list.forEach(function (x) { rows.push([BOARD_PL[b] + " — " + x.key, x.journeys, x.n, pct(x.on_time_pct), minutes(x.median), minutes(x.mean)]); });
+      list.forEach(function (x) { rows.push([BOARD_PL[b] + " — " + (key === "types" ? App.typeAbbr(x.key) : x.key), x.journeys, x.n, pct(x.on_time_pct), minutes(x.median), minutes(x.mean)]); });
     });
     f.foot.append(nLine(tt("stats.ranked.foot", { max: p.on_time_max_min, min: p.min_sample })));
     f.foot.append(dataTable(title, [firstCol].concat(tt("stats.col.ranked").split("|")), rows));
+  }
+
+  // ---- Beta 1.64: operators and train categories (from d.operators_types only) ----
+
+  function applyFilter(field, value) {   // same path as the filter form: address, form, reload
+    v.p = Object.assign({}, v.p);
+    v.p[field] = value;
+    setForm(v.p);
+    syncHash(v.p);
+    load();
+  }
+
+  function segBar(list, cls) {   // 100 % bar in a 0-100 viewBox; names and percentages are in the list below it
+    var root = svg("svg", { "class": "oc-bar " + cls, viewBox: "0 0 100 8", preserveAspectRatio: "none", "aria-hidden": "true", focusable: "false" });
+    var x = 0;
+    list.forEach(function (s) {
+      if (s.pct <= 0) return;
+      root.append(tip(svg("rect", { "class": "oc-seg ui-c-" + s.c, x: x, y: 0, width: s.pct, height: 8 }), s.label + " " + pct(s.pct)));
+      x += s.pct;
+    });
+    return root;
+  }
+
+  function segList(list) {
+    var ul = el("ul", "oc-legend");
+    list.forEach(function (s) {
+      var li = el("li");
+      li.append(el("span", "oc-sw ui-c-" + s.c), document.createTextNode(s.label + " " + pct(s.pct)));
+      ul.append(li);
+    });
+    return ul;
+  }
+
+  function opcatCard(g, kind, o, p) {
+    var isOp = kind === "op";
+    var li = el("li", "oc-card");
+    var h = el("h4", "oc-card-h");
+    var label = isOp ? g.name : App.typeAbbr(g.name) + (App.typeName(g.name) ? " · " + App.typeName(g.name) : "");
+    var b = el("button", "oc-name", label);
+    b.type = "button";
+    b.setAttribute("aria-label", tt("oc.card.filter", { name: label }));
+    b.addEventListener("click", function () { applyFilter(isOp ? "operator" : "tip", g.name); });
+    h.append(b);
+    li.append(h);
+    li.append(el("p", "oc-vol", tt("oc.card.volume", { n: nf.format(g.journeys), pct: pct(g.share_pct) })));
+    li.append(el("p", "oc-sub", tt("oc.card.trains", { trains: nf.format(g.trains), perday: nf.format(g.per_day) })
+      + " · " + tt("oc.card.boards", { arr: nf.format(g.boards.arrival), dep: nf.format(g.boards.departure) })));
+    var other = isOp ? o.types : o.operators;
+    var split = (isOp ? g.types : g.operators).map(function (x) {
+      var name = isOp ? x.type : x.operator;
+      var at = other.findIndex(function (y) { return y.name === name; });
+      return { label: isOp ? App.typeAbbr(name) : name, pct: x.pct, c: (at % 6) + 1 };
+    });
+    if (split.length) {
+      li.append(el("p", "oc-label", tt(isOp ? "oc.card.split" : "oc.card.served")), segBar(split, "oc-bar-sm"), segList(split));
+    }
+    if (g.sufficient) {
+      var q = el("p", "oc-punct");
+      q.append(el("strong", null, tt("oc.card.ontime", { pct: pct(g.on_time_pct) })),
+        document.createTextNode(" · " + tt("oc.card.median", { v: minutes(g.median) }) + " · " + tt("oc.card.mean", { v: minutes(g.mean) })
+          + " · " + tt("oc.card.of", { n: nf.format(g.n) })));
+      li.append(q);
+    } else li.append(el("p", "ss-n", tt("oc.card.small", { n: nf.format(g.n), min: p.min_sample })));
+    if (g.routes.length) {
+      li.append(el("p", "oc-label", tt("oc.card.routes")),
+        el("p", "oc-routes", g.routes.map(function (r) { return (S.titleCase ? S.titleCase(r.station) : r.station) + " (" + nf.format(r.journeys) + ")"; }).join(", ")));
+    }
+    return li;
+  }
+
+  function opcatSection(d) {
+    var o = d.operators_types, p = d.params;
+    if (!o || !o.operators.length) return;
+    var f = figure({ title: tt("oc.title"), key: "operatori-si-categorii", set: "operators_types", wide: true,
+      how: tt("oc.how", { min: p.min_sample }) });
+    // 1. share of operators
+    f.host.append(el("h3", "ss-rank-h", tt("oc.share.h")));
+    var shares = o.operators.map(function (x, i) { return { label: x.name, pct: x.share_pct, c: (i % 6) + 1 }; });
+    var bar = segBar(shares, "oc-bar-lg");
+    bar.removeAttribute("aria-hidden");
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", tt("oc.share.title") + ". " + shares.map(function (s) { return s.label + " " + pct(s.pct); }).join(", "));
+    f.host.append(bar, segList(shares));
+    f.host.append(dataTable(tt("oc.share.table"), [tt("oc.col.operator"), tt("oc.col.journeys"), tt("oc.col.share")],
+      o.operators.map(function (x) { return [x.name, x.journeys, pct(x.share_pct)]; })));
+    // 2. matrix operator x category, % of operator or % of category
+    f.host.append(el("h3", "ss-rank-h", tt("oc.matrix.h")));
+    var mode = segmented("oc-mode", tt("oc.matrix.mode"), [["op", tt("oc.matrix.by_op")], ["ty", tt("oc.matrix.by_ty")]]);
+    mode.set("op");
+    f.host.append(mode.node);
+    var cell = {};
+    o.matrix.forEach(function (m) { cell[m.operator + "\u0000" + m.type] = m; });
+    var wrap = el("div", "st-scroll oc-matrix");
+    wrap.tabIndex = 0;
+    wrap.setAttribute("role", "region");
+    wrap.setAttribute("aria-label", tt("oc.matrix.h"));
+    var t = el("table", "st-table ss-table oc-table");
+    var cap = el("caption", "sr-only");
+    var hr = el("tr");
+    var corner = el("th", null, tt("oc.col.operator"));
+    corner.scope = "col";
+    hr.append(corner);
+    o.types.forEach(function (ty) {
+      var th = el("th", "st-num", App.typeAbbr(ty.name));
+      th.scope = "col";
+      th.title = App.typeName(ty.name);
+      hr.append(th);
+    });
+    var thead = el("thead");
+    thead.append(hr);
+    var tb = el("tbody");
+    t.append(cap, thead, tb);
+    function bucket(x) { return x <= 0 ? 0 : x < 10 ? 1 : x < 25 ? 2 : x < 50 ? 3 : x < 75 ? 4 : 5; }
+    function fill() {
+      var key = mode.get() === "ty" ? "pct_of_type" : "pct_of_operator";
+      cap.textContent = tt(mode.get() === "ty" ? "oc.matrix.cap_ty" : "oc.matrix.cap_op");
+      var rows = o.operators.map(function (op) {
+        var tr = el("tr");
+        var th = el("th", null, op.name);
+        th.scope = "row";
+        tr.append(th);
+        o.types.forEach(function (ty) {
+          var m = cell[op.name + "\u0000" + ty.name];
+          var td = el("td", "st-num oc-h oc-h" + bucket(m ? m[key] : 0), m ? pct(m[key]) : "—");
+          if (m) td.title = op.name + " × " + App.typeAbbr(ty.name) + ": " + nf.format(m.journeys);
+          tr.append(td);
+        });
+        return tr;
+      });
+      tb.replaceChildren.apply(tb, rows);
+    }
+    mode.node.addEventListener("change", fill);
+    fill();
+    wrap.append(t);
+    f.host.append(wrap);
+    // 3 + 4. cards per operator and per category
+    [["oc.cards.ops", o.operators, "op"], ["oc.cards.types", o.types, "ty"]].forEach(function (c) {
+      f.host.append(el("h3", "ss-rank-h", tt(c[0])));
+      var ul = el("ul", "oc-cards");
+      c[1].forEach(function (g) { ul.append(opcatCard(g, c[2], o, p)); });
+      f.host.append(ul);
+    });
+    f.foot.append(nLine(tt("stats.ranked.foot", { max: p.on_time_max_min, min: p.min_sample })));
   }
 
   function routesSection(d, boards) {
@@ -1894,6 +2037,7 @@
       "care-operatori-sunt-cei-mai-punctu");
     rankedSection(d, boards, "types", tt("stats.fig.types"), tt("stats.fig.types.how"), "types", tt("stats.filters.train_type"),
       "ce-tipuri-de-tren-sunt-mai-punctua");
+    opcatSection(d);
     routesSection(d, boards);
     weatherSection(d);
     trafficSection(d, boards);

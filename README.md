@@ -107,7 +107,7 @@ same artwork is used (the train's face), for legibility in tabs.
   row interpretation do not depend on the engine: `read_board(image, engine=...)`.
 - The operator and station read are brought to the canonical form (`app/canonical.py`, `difflib`
   matching, default threshold 0.82): e.g. "Transferovlar" → "Transferoviar", "CFR Calatorl" →
-  "CFR Calatori". The known operators are in `data/operators.txt`, the stations in
+  "CFR Călători" (the official name; board forms such as "CFR Calatori" are aliases, and a softer score 0.65-0.82 is accepted with a margin of at least 0.10 over the runner-up operator). The known operators are in `data/operators.txt` (`Official name | alias`), the stations in
   `data/stations_seed.txt` plus those learned from history (stations seen on at least
   2 distinct trains, on at least 2 distinct service days). The lists contain only names actually seen on the board — they are completed by hand.
 - Below the threshold the text as read is kept and the row is marked `uncertain` (exposed in `/api/board`

@@ -740,11 +740,13 @@ Fișiere: `app/canonical.py`, `app/normalize.py`, `data/operators.txt`, `data/st
 
 | Fișier | Conținut | Număr de intrări (fără comentarii) |
 |---|---|---|
-| `data/operators.txt` | Operatori văzuți pe tablă (forma afișată) | 7 |
+| `data/operators.txt` | Operatori: nume oficial `|` aliasuri de pe tablă | 7 |
 | `data/stations_seed.txt` | Stații văzute pe tablă, forma `clean_station` | 46 |
 
-Operatorii din listă: `CFR Calatori`, `Regio Calatori`, `Transferoviar`, `InterRegional`,
-`Astra Trans Ca`, `Softrans Calat`, `Ferotrafic` (forma trunchiată a coloanei este canonică).
+Operatorii (nume oficiale): `CFR Călători`, `Regio Călători`, `Transferoviar Călători`,
+`InterRegional Călători`, `Astra Trans Carpatic`, `Softrans`, `Ferotrafic TFI`. Textul trunchiat de pe tablă
+(`CFR Calatori`, `Astra Trans Ca`, `Softrans Calat`...) rămâne alias. Se acceptă scor >= 0,82 sau
+0,65-0,82 cu o diferență >= 0,10 față de al doilea operator (măsurat pe 823.912 citiri).
 
 Stațiile **învățate** din istoric (`Store.known_stations`):
 

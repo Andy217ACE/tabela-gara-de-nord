@@ -276,7 +276,7 @@
       var title = el("p", "f-title");
       var seen = onBoard(f.train_no, f.date);
       if (seen.length) {
-        title.append(el("span", App.typeClass(seen[0].train_type), seen[0].train_type || "?"), document.createTextNode(" "));
+        title.append(el("span", App.typeClass(seen[0].train_type), App.typeAbbr(seen[0].train_type) || "?"), document.createTextNode(" "));
       }
       title.append(el("span", "t-no", String(f.train_no)));
       var sub = el("p", "f-sub");

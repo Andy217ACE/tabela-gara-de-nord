@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -300,8 +301,8 @@ def test_delete_with_applied_batch_needs_restore(db):
 
 # -- migration -------------------------------------------------------------------------------------
 
-def test_schema_is_v9_with_tables():
-    assert SCHEMA_VERSION == 9
+def test_schema_is_v10_with_tables():
+    assert SCHEMA_VERSION == 10
     s = _mem()
     names = {r[0] for r in s._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"corrections", "correction_batches", "correction_archive",
@@ -323,7 +324,7 @@ def test_migration_v8_to_v9_takes_backup_first(tmp_path, monkeypatch):
     c.close()
     s = Store(path)
     s.migrate()
-    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert s._conn.execute("PRAGMA user_version").fetchone()[0] == 10
     bks = list((tmp_path / "bk").glob("tabela-*-v8.db"))
     assert len(bks) == 1
     b = sqlite3.connect(bks[0])
@@ -452,3 +453,33 @@ def test_no_leak_in_public_api(client):
         assert "NOTA-SECRETA" not in text and "+corr" not in text and "correction" not in text, p
     paths = {getattr(r, "path", "") for r in client.app.routes}
     assert all(p.startswith("/api/admin/") for p in paths if "correction" in p)
+
+
+# -- operator names ------------------------------------------------------------------------------
+
+def test_operator_rule_stores_official_name():
+    r = corrections.validate_rule(rule(field="operator", wrong_value="astra trans ca",
+                                       correct_value="cfr calatori"))
+    assert r["correct_value"] == "CFR Călători" and r["wrong_value"] != r["correct_value"]
+
+
+def test_operator_rule_unknown_correct_value_lists_official_names():
+    with pytest.raises(CorrectionError) as e:
+        corrections.validate_rule(rule(field="operator", wrong_value="XQZ",
+                                       correct_value="Firma Inexistenta SRL"))
+    assert e.value.status == 422 and "CFR Călători" in str(e.value)
+
+
+def test_restore_maps_old_operator_forms_to_official(db):
+    s, ids = db
+    c = s._conn
+    rid = corrections.create_rule(s, corrections.validate_rule(rule()))["id"]
+    c.execute("INSERT INTO correction_batches(id, correction_id, applied_at, applied_by,"
+              " summary_json) VALUES ('B1', ?, 'now', 'x', '{}')", (rid,))
+    c.execute("INSERT INTO correction_archive(batch, table_name, row_id, data_json)"
+              " VALUES ('B1','services',?,?)",
+              (ids["a"], json.dumps({"before": {"operator": "CFR CALATORI"},
+                                     "after": {"operator": "CFR"}})))
+    corrections.restore(s, "B1")
+    assert c.execute("SELECT operator FROM services WHERE id=?",
+                     (ids["a"],)).fetchone()[0] == "CFR Călători"

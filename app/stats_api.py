@@ -217,7 +217,7 @@ async def stats_overview_v2(request: Request):
         return await run_in_threadpool(stats_compare.compare, _store(request), p, filters, today)
     d = await run_in_threadpool(overview_v2.overview, _store(request), p, filters, today, detail)
     if fmt == "csv":
-        return _csv(overview_v2.to_csv(d, set_name), f"statistici-{set_name}.csv")
+        return _csv(overview_v2.to_csv(d, set_name), "operatori-categorii.csv" if set_name == "operators_types" else f"statistici-{set_name}.csv")
     return d
 
 

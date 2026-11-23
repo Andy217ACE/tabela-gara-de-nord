@@ -284,7 +284,7 @@ def test_expert_mode_shows_them_and_is_remembered(browser, base_url):
         assert page.evaluate("localStorage.getItem('tabela.statsMode')") == "expert"
         for sel in (".ss-badge-conf", ".ss-badge-n", ".ss-card-s.ss-exp", ".ss-help-i"):
             expect(page.locator(sel).first).to_be_visible()
-        assert "mediană" in page.locator(".ss-card-s.ss-exp").first.inner_text().lower()
+        assert "tipică" in page.locator(".ss-card-s.ss-exp").first.inner_text().lower()
         page.reload()
         page.wait_for_selector(".ss-prob")
         assert page.evaluate("document.getElementById('st-statistici').dataset.mode") == "expert"

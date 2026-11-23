@@ -615,7 +615,7 @@ def test_migrate_live_v2_db_from_production_code(tmp_path):
     assert count(s, "services") == 4 and count(s, "events") == 5
     rows = s._conn.execute("SELECT operator, operator_raw, station_raw, uncertain"
                            " FROM services ORDER BY id").fetchall()
-    assert [tuple(r) for r in rows][2] == ("Transferbviar", "", "", 0)
+    assert [tuple(r) for r in rows][2] == ("Transferoviar C\u0103l\u0103tori", "", "", 0)
     board = s.current_board()
     assert {r["uncertain"] for r in board["arrivals"] + board["departures"]} == {False}
     assert s.history(date(2026, 10, 20))  # history query works on migrated rows

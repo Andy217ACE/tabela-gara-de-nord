@@ -47,7 +47,7 @@ TEMP_BANDS = (("lt5", "sub 5 °C", None, 5), ("5-15", "5–15 °C", 5, 15),
 BOARD_PL = {"arrival": "Sosiri", "departure": "Plecări"}
 BOARD_AT = {"arrival": "la sosiri", "departure": "la plecări"}
 SETS = ("distribution", "hourly", "heatmap", "daily", "operators", "types", "routes",
-        "traffic", "platforms", "weather")
+        "traffic", "platforms", "weather", "operators_types")
 
 
 # ---- small helpers --------------------------------------------------------------------
@@ -372,7 +372,7 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
             had = "a avut" if s["over_30"] == 1 else "au avut"
             out.append(f"{BOARD_PL[b]}: din {_pl(n, 'călătorie încheiată', 'călătorii încheiate')}"
                        f" cu întârziere citită, {s['on_time']} ({_fmt(s['on_time_pct'])} %) {were}"
-                       f" la timp (≤ {p.on_time} min); mediana {_fmt(s['median'])} min, iar "
+                       f" la timp (≤ {p.on_time} min); întârziere tipică {_fmt(s['median'])} min, iar "
                        f"{s['over_30']} {had} peste 30 min (N = {n}).")
     for b in boards:
         ok = [h for h in hourly[b] if h["sufficient"]]
@@ -383,12 +383,12 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
         worst = max(ok, key=lambda h: (h["median"], h["over_30"], -h["key"]))
         if worst["median"] <= p.on_time:
             most = max(ok, key=lambda h: (h["over_30"], -h["key"]))
-            out.append(f"{BOARD_PL[b]}: la fiecare oră cu destule date mediana e la timp "
+            out.append(f"{BOARD_PL[b]}: la fiecare oră cu destule date întârzierea tipică e la timp "
                        f"(≤ {p.on_time} min)" + (
                            f"; cele mai multe întârzieri peste 30 min: {_between(most['key'])} "
                            f"({most['over_30']} din N = {most['n']})." if most["over_30"] else "."))
             continue
-        line = (f"{BOARD_PL[b]}: cea mai mare întârziere mediană o au trenurile programate "
+        line = (f"{BOARD_PL[b]}: cea mai mare întârziere tipică o au trenurile programate "
                 f"{_between(worst['key'])} — {_fmt(worst['median'])} min, cu "
                 f"{worst['over_30']} peste 30 min (N = {worst['n']})")
         best = min(ok, key=lambda h: (h["median"], h["over_30"], h["key"]))
@@ -401,7 +401,7 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
         if r.get("worst") and (r["worst"][0]["median"] or 0) > p.on_time:
             e = r["worst"][0]
             way = "din" if b == "arrival" else "spre"
-            out.append(f"Cea mai mare întârziere mediană {BOARD_AT[b]}: trenurile {way} "
+            out.append(f"Cea mai mare întârziere tipică {BOARD_AT[b]}: trenurile {way} "
                        f"{e['key'].title()} — {_fmt(e['median'])} min "
                        f"(N = {e['n']}, {_pl(e['trains'], 'tren', 'trenuri')}).")
     per_hour = [sum(traffic[b][h] for b in boards) for h in range(24)]
@@ -434,6 +434,51 @@ def _insights(boards, by_board, hourly, problems, traffic, platforms, quality, p
 def _options(js, field) -> list[dict]:
     c = Counter(j[field] for j in js if j[field])
     return [{"name": k, "n": n} for k, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def _pct1(n, total) -> float:
+    return round(100.0 * n / total, 1) if total else 0.0
+
+
+def _operators_types(js, p, days) -> dict:
+    """Operators x train categories over the filtered journeys of all selected boards:
+    per-group volume, split over the other dimension, punctuality (via _summ), top routes."""
+    named = [j for j in js if j["operator"] and j["train_type"]]
+    cross = Counter((j["operator"], j["train_type"]) for j in named)
+
+    def side(field, other, other_key, other_out):
+        rows = [j for j in js if j[field]]
+        base = len(rows)
+        out = []
+        for k, g in _groups(rows, p, lambda j, f=field: j[f]).items():
+            mine = [j for j in rows if j[field] == k]
+            oc = Counter(j[other] for j in mine if j[other])
+            ot = sum(oc.values())
+            s = _summ(g["delays"], p)
+            out.append({
+                "name": k, "journeys": g["journeys"], "share_pct": _pct1(g["journeys"], base),
+                "trains": len({j["train_no"] for j in mine}),
+                "per_day": round(g["journeys"] / days, 1) if days else 0.0,
+                "boards": {b: sum(1 for j in mine if j["board"] == b) for b in stats.BOARDS},
+                other_out: [{other_key: o, "journeys": n, "pct": _pct1(n, ot)}
+                            for o, n in sorted(oc.items(), key=lambda kv: (-kv[1], kv[0]))],
+                **{m: s[m] for m in ("n", "on_time_pct", "median", "mean", "sufficient")},
+                "routes": [{"station": st, "journeys": n} for st, n in
+                           sorted(Counter(j["station"] for j in mine if j["station"]).items(),
+                                  key=lambda kv: (-kv[1], kv[0]))[:3]]})
+        out.sort(key=lambda e: (-e["journeys"], e["name"]))
+        return out
+
+    op_tot, ty_tot = Counter(), Counter()
+    for (o, t), n in cross.items():
+        op_tot[o] += n
+        ty_tot[t] += n
+    return {"total": len(js), "trains": len({j["train_no"] for j in js}),
+            "operators": side("operator", "train_type", "type", "types"),
+            "types": side("train_type", "operator", "operator", "operators"),
+            "matrix": [{"operator": o, "type": t, "journeys": n,
+                        "pct_of_operator": _pct1(n, op_tot[o]), "pct_of_type": _pct1(n, ty_tot[t])}
+                       for (o, t), n in sorted(cross.items(), key=lambda kv: (-kv[1], kv[0]))]}
 
 
 def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, today: date,
@@ -516,6 +561,7 @@ def build(rows: list[dict], weather: list[dict], extra: dict, p: stats.Params, t
         "daily": daily,
         "operators": operators,
         "types": types,
+        "operators_types": _operators_types(js, p, len({j["service_date"] for j in js})),
         "routes": routes,
         "traffic": traffic,
         "platforms": platforms,
@@ -713,6 +759,10 @@ def to_csv(d: dict, name: str) -> str:
                 for i, x in enumerate(d[name][b][lst], 1):
                     rows.append([b, lst, i, x["key"], x["journeys"], x["n"], x["mean"],
                                  x["median"], x["on_time_pct"]])
+    elif name == "operators_types":
+        head = ["operator", "type", "journeys", "pct_of_operator", "pct_of_type"]
+        rows = [[x["operator"], x["type"], x["journeys"], x["pct_of_operator"], x["pct_of_type"]]
+                for x in d[name]["matrix"]]
     elif name == "traffic":
         head = ["board", "hour", "journeys", "days"]
         rows = [[b, h, d[name][b][h], d[name]["days"]] for b in boards for h in range(24)]

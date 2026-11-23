@@ -132,6 +132,14 @@
     return ["ir", "irn", "re", "r", "rm"].indexOf(k) >= 0 ? "type type-" + k : "type";
   }
 
+  // Official CFR display of a category code (codes in data/filters/URLs stay IC, IR, IRN, R, RE, RM).
+  var TYPE_ABBR = { RE: "R-E", RM: "R-M" };
+  function typeAbbr(type) { var k = String(type || ""); return TYPE_ABBR[k.toUpperCase()] || k; }
+  function typeName(type) {
+    var k = String(type || "").toUpperCase();
+    return ["IC", "IR", "IRN", "R", "RE", "RM"].indexOf(k) >= 0 ? T("type.name." + k) : "";
+  }
+
   // ---- train card -------------------------------------------------------------
 
   function createCard(board) {
@@ -224,8 +232,8 @@
     // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
     c.station.title = t.station ? t.station + (unsure ? " (" + unsureText() + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
-    c.type.textContent = t.train_type || "?";
-    c.type.title = T("board.typeTitle", { type: t.train_type || T("board.typeUnknown") });
+    c.type.textContent = typeAbbr(t.train_type) || "?";
+    c.type.title = T("board.typeTitle", { type: typeName(t.train_type) || typeAbbr(t.train_type) || T("board.typeUnknown") });
     c.no.textContent = String(t.train_no);
     c.flag.hidden = !t.flagged;
     c.op.textContent = t.operator || "";
@@ -657,6 +665,8 @@
   window.TabelaApp.icon = icon;
   window.TabelaApp.ICONS = ICONS;
   window.TabelaApp.typeClass = typeClass;
+  window.TabelaApp.typeAbbr = typeAbbr;
+  window.TabelaApp.typeName = typeName;
   window.TabelaApp.refreshFollowButtons = refreshFollowButtons;
   window.TabelaApp.boardTrains = function () {
     return state.data ? state.data.arrivals.concat(state.data.departures) : [];

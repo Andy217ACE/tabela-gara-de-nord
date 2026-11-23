@@ -150,7 +150,7 @@
   function trainLink(e) {
     var a = el("a", "st-train");
     a.href = "#tren?nr=" + encodeURIComponent(e.train_no);
-    a.append(el("span", App.typeClass(e.train_type), e.train_type || "?"),
+    a.append(el("span", App.typeClass(e.train_type), App.typeAbbr(e.train_type) || "?"),
              el("span", "t-no", String(e.train_no)));
     a.setAttribute("aria-label", tt("stats.train_aria", { t: (e.train_type || "") + " " + e.train_no }));
     return a;

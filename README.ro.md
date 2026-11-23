@@ -105,7 +105,7 @@ simplificat din aceeași grafică (fața trenului), pentru lizibilitate în tabu
   interpretarea rândurilor nu depind de motor: `read_board(imagine, engine=...)`.
 - Operatorul și stația citite sunt aduse la forma canonică (`app/canonical.py`, potrivire
   `difflib`, prag implicit 0,82): ex. „Transferovlar” → „Transferoviar”, „CFR Calatorl” →
-  „CFR Calatori”. Operatorii cunoscuți sunt în `data/operators.txt`, stațiile în
+  „CFR Călători” (numele oficial; formele de pe tabelă, ca „CFR Calatori”, sunt aliasuri, iar un scor mai slab 0,65–0,82 se acceptă cu o diferență de cel puțin 0,10 față de al doilea operator). Operatorii cunoscuți sunt în `data/operators.txt` (`Nume oficial | alias`), stațiile în
   `data/stations_seed.txt` plus cele învățate din istoric (stații văzute în cel puțin
   2 trenuri distincte, în cel puțin 2 zile de serviciu distincte). Listele conțin doar nume văzute efectiv pe tabelă — se completează manual.
 - Sub prag se păstrează textul citit și rândul e marcat `uncertain` (expus în `/api/board`

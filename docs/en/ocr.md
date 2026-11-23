@@ -740,11 +740,13 @@ Files: `app/canonical.py`, `app/normalize.py`, `data/operators.txt`, `data/stati
 
 | File | Content | Number of entries (without comments) |
 |---|---|---|
-| `data/operators.txt` | Operators seen on the board (the displayed form) | 7 |
+| `data/operators.txt` | Operators: official name `|` board aliases | 7 |
 | `data/stations_seed.txt` | Stations seen on the board, in `clean_station` form | 46 |
 
-The operators in the list: `CFR Calatori`, `Regio Calatori`, `Transferoviar`, `InterRegional`,
-`Astra Trans Ca`, `Softrans Calat`, `Ferotrafic` (the truncated form of the column is canonical).
+The operators (official names): `CFR Călători`, `Regio Călători`, `Transferoviar Călători`,
+`InterRegional Călători`, `Astra Trans Carpatic`, `Softrans`, `Ferotrafic TFI`. The truncated board
+text (`CFR Calatori`, `Astra Trans Ca`, `Softrans Calat`...) is kept as an alias. Accepted: score >= 0.82, or
+0.65-0.82 with a margin >= 0.10 over the second-best operator (measured on 823,912 readings).
 
 The stations **learned** from the history (`Store.known_stations`):
 

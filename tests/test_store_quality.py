@@ -399,8 +399,8 @@ def test_backfill_flags_without_touching_raw_data_and_is_idempotent(tmp_path):
     assert 5014 not in hist and 5011 in hist
     # canonical names (raw kept)
     assert q(ids["adjud"])["station_canonical"] == "ADJUD"
-    assert q(ids["adjud"])["operator_canonical"] == "CFR Calatori"
-    assert hist[1574]["station"] == "ADJUD" and hist[1574]["operator"] == "CFR Calatori"
+    assert q(ids["adjud"])["operator_canonical"] == "CFR C\u0103l\u0103tori"
+    assert hist[1574]["station"] == "ADJUD" and hist[1574]["operator"] == "CFR C\u0103l\u0103tori"
     assert c.execute("SELECT station FROM services WHERE id=?", (ids["adjud"],)).fetchone()[0] \
         == "AD JUD"
     # reduced-quality period: 2026-10-21 before 11:31:51

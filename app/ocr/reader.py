@@ -1322,7 +1322,7 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
     operator_raw = canonical.clean_operator(cell["operator"][0])
     station, s_score = canonical.canonical_station(
         station_raw, ctx.known, preferred=ctx.seed)
-    operator, o_score = canonical.canonical_operator(operator_raw)
+    operator, o_score, o_ok = canonical.operator_match(operator_raw)
     delay = parse_delay(cell["delay"][0])  # None: unreadable cell (not "on time")
     norm = {"type": train_type, "no": _train_no(cell["no"][0]) or None,
             "station": station, "operator": operator, "time": sched,
@@ -1369,7 +1369,7 @@ def _assemble(board: str, j: int, tess: dict, cells: dict, boxes: dict, ctx: _Ct
         operator_raw=operator_raw,
         station_raw=station_raw,
         # any corrected/unknown station (score < 1) or unmatched operator is uncertain
-        uncertain=s_score < 1.0 or o_score < canonical.DEFAULT_THRESHOLD or time_fill is not None,
+        uncertain=s_score < 1.0 or not o_ok or time_fill is not None,
     )
     if time_fill is not None:  # completed, not read: below a confident new service's bar
         entry["row"] = dataclasses.replace(

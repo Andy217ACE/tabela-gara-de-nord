@@ -33,6 +33,7 @@ import sqlite3
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
 
+from app import canonical
 from app.models import Row
 from app.normalize import MAX_DELAY, PLATFORM_MAX, _TYPES
 from app.store import TZ, service_date
@@ -180,7 +181,13 @@ def norm_value(field: str, value, what: str, *, allow_empty: bool) -> str:
     if field == "station":
         return _name(v, what, 2, 60)
     if field == "operator":
-        return _name(v, what, 2, 40)
+        name, _, ok = canonical.operator_match(v)
+        if ok:
+            return name
+        if allow_empty:  # a *wrong* value may be an unrecognised text still stored as read
+            return _name(v, what, 2, 40)
+        raise CorrectionError(f"{what}: operator necunoscut. Operatori oficiali: "
+                              + ", ".join(canonical.known_operators()) + ".")
     if field == "time":
         m = _TIME.match(v)
         if not m:
@@ -883,6 +890,11 @@ def restore(store, batch: str, *, actor: str = "admin", ip: str | None = None) -
                 cols = {k: v for k, v in d["before"].items()
                         if k != "processing_version"
                         or cur["processing_version"] == d["after"]["processing_version"]}
+                for k in ("operator", "operator_canonical"):  # old snapshots: board/uppercase forms
+                    if isinstance(cols.get(k), str) and cols[k]:
+                        nm, _, ok = canonical.operator_match(cols[k])
+                        if ok:
+                            cols[k] = nm
                 if table == "services":
                     sids.append(cur["id"])
                     nos.add(cur["train_no"])

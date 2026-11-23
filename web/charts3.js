@@ -1054,7 +1054,7 @@
       [tt("charts.toc.distribution"), figBy("stats.fig.distribution")], [tt("charts.toc.split"), figBy("stats.fig.share")], [tt("charts.toc.days"), figBy("stats.fig.daily")],
       [tt("charts.toc.calendar"), figBy("charts.cal.title")], [tt("charts.toc.hours"), figBy("stats.fig.hourly")], [tt("charts.toc.map"), figBy("stats.fig.heatmap")],
       [tt("charts.toc.operators"), figBy("stats.fig.operators")], [tt("charts.toc.routes"), figBy("stats.fig.routes")], [tt("charts.toc.weather"), figBy("stats.fig.weather")],
-      [tt("charts.toc.traffic"), figBy("stats.fig.traffic")], [tt("charts.toc.quality"), figBy("stats.fig.quality")]];
+      [tt("charts.toc.traffic"), figBy("stats.fig.traffic")], [tt("charts.toc.quality"), figBy("stats.fig.quality")], [tt("charts.toc.opcat"), figBy("oc.title")]];
     return list.filter(function (r) { return r[1]; }).map(function (r) { return { label: r[0], el: r[1] }; })
       .sort(function (a, b) { return a.el.compareDocumentPosition(b.el) & 4 ? -1 : 1; });
   }

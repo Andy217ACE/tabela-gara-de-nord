@@ -250,7 +250,7 @@ Tabela live. Este cerută la fiecare 10 secunde de pagina principală (`refresh_
   "updated_at": "2026-10-31T22:50:17.970276+02:00",
   "arrivals": [
     {"delay_last_read_age_s": 0, "train_type": "IR", "train_no": 1636, "station": "BRASOV",
-     "operator": "CFR Calatori", "sched_time": "12:10", "delay_min": 5, "platform": 3,
+     "operator": "CFR Călători", "sched_time": "12:10", "delay_min": 5, "platform": 3,
      "flagged": false, "status": "listed", "service_date": "2026-10-31",
      "uncertain": false, "delay_read": true}
   ],
@@ -389,7 +389,7 @@ forma `AAAA-LL-ZZ_HH:MM_id`), `doar_confirmate` (`0`/`1`, implicit `0`), `prag` 
   "date": "2026-10-31",
   "services": [
     {"id": 1, "delay_known": true, "delay_seen": true, "board": "arrival",
-     "train_type": "IR", "train_no": 1636, "station": "BRASOV", "operator": "CFR Calatori",
+     "train_type": "IR", "train_no": 1636, "station": "BRASOV", "operator": "CFR Călători",
      "sched_time": "12:10", "max_delay": 5, "final_delay": 5, "platform": 3,
      "status": "listed", "first_seen": "2026-10-31T22:50:17.970276+02:00",
      "last_seen": "2026-10-31T22:50:17.970276+02:00", "uncertain": false,
@@ -532,7 +532,7 @@ Călătoriile: o apariție a unui tren pe un panou, cu rezultatul final (confirm
   "truncated": true,
   "journeys": [
     {"id": 1, "board": "arrival", "service_date": "2026-10-31", "train_type": "IR",
-     "train_no": 1636, "station": "BRASOV", "operator": "CFR Calatori", "sched_time": "12:10",
+     "train_no": 1636, "station": "BRASOV", "operator": "CFR Călători", "sched_time": "12:10",
      "status": "listed", "platform": 3, "uncertain": false,
      "result": {"state": "in_progress", "label": "În desfășurare (încă pe tabelă)",
                 "reason": null, "delay_known": true, "observed_delay": 5,
@@ -570,7 +570,7 @@ fără text brut OCR. Numărul de călătorii (`journeys`, servicii) și cel de 
   "trains": [
     {"train_no": 531, "first_seen": "2026-10-31T20:50:45+00:00",
      "last_seen": "2026-10-31T20:50:45+00:00",
-     "operators": [{"operator": "CFR Calatori", "journeys": 1}],
+     "operators": [{"operator": "CFR Călători", "journeys": 1}],
      "routes": [{"board": "departure", "station": "CONSTANTA", "journeys": 1}],
      "journeys": 1, "observations": 0}
   ],
