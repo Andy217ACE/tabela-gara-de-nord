@@ -7,7 +7,7 @@ pagină și pentru cine, navigarea, tema, service worker-ul, manifestul PWA, pol
 a conținutului (CSP) și motivele ei, stratul de grafice, deciziile de accesibilitate și modul în
 care sunt servite fișierele statice.
 
-Documentul descrie versiunea **Beta 1.43** (`VERSION`). Endpoint-urile pe care le apelează
+Documentul descrie versiunea **Beta 1.65** (`VERSION`). Endpoint-urile pe care le apelează
 paginile sunt descrise în `docs/api.md`.
 
 ## Cum a fost verificat documentul
@@ -63,11 +63,12 @@ Fiecare are o funcție `show(params)` apelată la schimbarea paginii.
 | `#versiuni` | **Versiuni** | `#view-versiuni` | toți | nu (link din subsol) | `versions.js` |
 | `#setari` | **Setări** | `#view-setari` | admin | nu (fără link în interfață) | `setari.js` (încărcat la prima vizită) |
 | `#ocr` | **Capturi OCR** | creat de `app.js` (`view-ocr`) | admin | nu | `ocr.js` (+ `ocr.css`), încărcat la cerere |
+| `#ocr2` | **Alternativa OCR** | creat de `ocr2.js` (`view-ocr2`) | admin | nu | `ocr2.js` (+ `ocr2.css`), încărcat la prima vizită |
 | `#admin` | **Administrare** | creat de `app.js` (`view-admin`) | admin | nu | `admin.js` (+ `admin.css`), încărcat la cerere |
 
 Observații:
 
-- Rutele `#sistem`, `#setari`, `#ocr` și `#admin` sunt încărcate la prima vizită (`loadLazyPage`,
+- Rutele `#sistem`, `#setari`, `#ocr`, `#ocr2` și `#admin` sunt încărcate la prima vizită (`loadLazyPage`,
   `loadOcrView`, `loadAdminView`). Nu sunt în precache-ul service worker-ului, „ca să nu crească
   bugetul”, cum scrie în `app.js`.
 - **Sistem**: pagina arată starea publică; dacă vizitatorul are sesiune de admin (`admin: true`),
@@ -341,8 +342,8 @@ stiluri inline), temele luminoasă și întunecată, alternativa accesibilă pen
 cere grafice doar dacă are: `stats.js` pentru `tren`, `clasamente` și `statie` (`charts: true`),
 și `statistici.js`. `charts3.js` spune același lucru în antet.
 
-**Regula `CHARTS_V`.** `CHARTS_V = "1.43"` din `ui2.js` trebuie să fie egal cu numărul versiunii din
-`VERSION` (`Beta 1.43` → `1.43`). Testul `test_lazy_not_in_precache_and_loader_matches_the_version`
+**Regula `CHARTS_V`.** `CHARTS_V = "1.65"` din `ui2.js` trebuie să fie egal cu numărul versiunii din
+`VERSION` (`Beta 1.65` → `1.65`). Testul `test_lazy_not_in_precache_and_loader_matches_the_version`
 din `tests/test_ui3_static.py` verifică asta: `CHARTS_V` se schimbă la fiecare deploy. Motivul
 scris de autori este „cache-buster”: dacă browserul ține minte un `charts3.js` vechi, parametrul
 forțează versiunea nouă. Cu antetele `no-cache` + `ETag` din aplicație, rolul exact e de siguranță;

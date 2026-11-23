@@ -80,7 +80,7 @@ The watchdog runs as `tabela`, not as root. The only root permission is a sudoer
 | Poller | `app/poller.py` | Asynchronous loop: requests the page, compares the image hash with the previous one, calls the OCR on a new image and passes the rows read further on. It has firm limits: at least 2 s between requests and at most 10 requests in 60 s (`MIN_GAP`, `MAX_PER_MIN`). |
 | Fetcher | `app/fetcher.py` | Downloads the page, extracts the image (JPEG or PNG in base64), refuses anything over 10 MB (`MAX_BYTES`) and computes the hash. |
 | OCR engine | `app/ocr/` | OpenCV for preprocessing and Tesseract for text, with templates for digits. It produces `Row` with confidence. `PROCESSING_VERSION` (in `app/observations.py`) is `ocr-tess-grid-5`. |
-| Store | `app/store.py` | The only gateway to SQLite for the board state. It migrates the schema (`SCHEMA_VERSION = 9`), applies `ingest` (diff against the state, events) and builds the LIVE board (`current_board`). |
+| Store | `app/store.py` | The only gateway to SQLite for the board state. It migrates the schema (`SCHEMA_VERSION = 10`), applies `ingest` (diff against the state, events) and builds the LIVE board (`current_board`). |
 | Manual corrections | `app/corrections.py` | Narrow rules that correct a wrongly read value, on new frames and retroactively. |
 | Captures and observations | `app/captures.py`, `app/observations.py` | Save the image of each new frame (on disk), one observation per OCR row and the train catalog. |
 | Quality | `app/quality.py` | Validation rules (confirmed delays, platforms, ghosts, suspicious events) and the quality tables. |
@@ -151,7 +151,7 @@ What happens, in short:
 
 ## 5. Deployment diagram
 
-The diagram shows the server as described in the repo and in the working instructions. The concrete host (the home server, with a private IP) does not appear here. The README still describes an Ubuntu 24.04 server with an Azure NSG firewall (see section 9).
+The diagram shows the server as described in the repo and in the working instructions. The concrete host (the home server, with a private IP) does not appear here.
 
 ```mermaid
 flowchart TB
@@ -322,7 +322,6 @@ The list covers all the modules in `app/` (including `app/ocr/`). The descriptio
 ## 9. What I could not verify
 
 - **The `tabela-noip` timer.** It does not exist in `deploy/`, in the README or in the CHANGELOG. Check on the server with `systemctl list-timers` and with `systemctl cat` for that unit.
-- **The current host.** The README (Deploy section) describes an Ubuntu 24.04 server with an Azure NSG firewall. The working instructions say the live server is the home one. The deployment diagram in section 5 follows the instructions. Confirm the host and update the README.
 - **The contents of `/etc/tabela.env`.** It is not in the repo. I do not know whether `TELEGRAM_STATE_PATH`, `CAPTURE_DIR` or `REJECTED_DIR` are set on the server. Check in `/etc/tabela.env` (without printing the secret values).
 - **The shadow training script.** I did not read `scripts/nightly_shadow_train.py` in full. The path `/var/lib/tabela/shadow` is confirmed from the header and from `DEFAULT_WORKDIR`, but the rotation mode of the files in `shadow/` is not verified.
 - **The exact shape of the fields in `observations.fields_json`.** I verified that it is a dictionary with fields, but not the internal structure of each entry. Check in `app/ocr/reader.py`.

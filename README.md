@@ -4,6 +4,8 @@
 
 # Tabela Gara de Nord
 
+[![CI](https://github.com/Andy217Ace/tabela-gara-de-nord/actions/workflows/ci.yml/badge.svg)](https://github.com/Andy217Ace/tabela-gara-de-nord/actions/workflows/ci.yml)
+
 A web application (PWA) that uses classic OCR (OpenCV + Tesseract, no AI) to read the arrivals/departures board at Gara de Nord in Bucharest, tracks trains, sends push notifications on delays or platform changes, and keeps a searchable history.
 
 Live: https://tabelacfr.ddns.net
@@ -11,6 +13,38 @@ Live: https://tabelacfr.ddns.net
 Status: **Beta** — versions and notes in [Releases](https://github.com/Andy217ACE/tabela-gara-de-nord/releases)
 and in `CHANGELOG.md`. The data is read by OCR from the CFR webcam image and may contain errors;
 values that could not be read appear as "—", not as 0.
+
+## Security and reliability
+
+What exists, where it lives, and where it is documented. Deliberate omissions (and why) are in
+[Architecture decisions](docs/en/decizii-arhitectura.md).
+
+| Feature | Where | Documentation |
+|---|---|---|
+| Strict CSP (no inline script/style) and security headers | `app/api.py`, `web/` | [Interface](docs/en/interfata.md), [API](docs/en/api.md) |
+| HSTS and rate limiting in nginx (`tabela_api` 10 r/s burst 20, `tabela_stats` 60 r/min, `tabela_admin_login` 5 r/min) | `deploy/nginx-tabela.conf`, `deploy/tabela-limits.conf` | [Deploy](docs/en/deploy-si-configurare.md) §6-7 |
+| Admin auth: one token, HMAC-signed session cookie with expiry, CSRF token, login throttling; manual rotation | `app/admin.py` | [API](docs/en/api.md) §6, [Key rotation](docs/en/admin-rotatie-cheie.md) |
+| Firewall (`ufw`, deny incoming; 80/443 public, SSH and RDP only from the LAN) | server | [Deploy](docs/en/deploy-si-configurare.md) §7 |
+| fail2ban: jails `sshd`, `nginx-tabela-probes`, `nginx-tabela-slow` | `deploy/fail2ban/` (manual install) | [Operations](docs/en/administrare-operare.md) §15 |
+| systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`, unprivileged user, one worker, `OMP_THREAD_LIMIT=1`) | `deploy/tabela.service` | [Deploy](docs/en/deploy-si-configurare.md) §5 |
+| SQLite in WAL mode (`synchronous=NORMAL`, `busy_timeout` 5000); OCR runs in a thread, off the event loop | `app/store.py`, `app/api.py` | [Data and schema](docs/en/date-si-schema.md) |
+| Backups: automatic before every schema migration, verified, with retention; `update.sh` rolls back automatically on a failed health check | `app/dbbackup.py`, `deploy/update.sh` | [Operations](docs/en/administrare-operare.md) §6 |
+| Monitoring: watchdog with Telegram alerts, NVMe health timer, security snapshot timer, external uptime checks (`/api/health` also answers `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operations](docs/en/administrare-operare.md) §10, §15 |
+| Data integrity: `processing_version` per observation, multi-frame consensus, delay-jump validation | `app/consensus.py`, `app/quality.py` | [OCR](docs/en/ocr.md), [Statistics and quality](docs/en/statistici-calatorii-calitate.md) |
+| OCR regression suite on labelled frames (about 59 frames, 1,416 rows) with strict thresholds | `tests/fixtures`, `app/ocr/truth.py` | [Testing](docs/en/testare.md) |
+| Offline PWA: the last board is served marked as stale | `web/sw.js` | [Interface](docs/en/interfata.md) |
+| CI on every push (pytest incl. browser tests, `pip-audit`, release-consistency check), Dependabot, pinned `requirements.lock` | `.github/`, `scripts/check_release.py` | [Testing](docs/en/testare.md), `SECURITY.md`, `CONTRIBUTING.md` |
+| A docs-vs-code test: every route must be in the API page | `tests/test_docs_routes.py` | [Testing](docs/en/testare.md) |
+
+Known gaps, stated honestly: there is **no off-site backup** yet (the owner's decision, deferred); OS
+updates and reboots are manual; the admin token is rotated by hand.
+
+### Pages
+
+`#` (Board/Panel), `#istoric`, `#statistici`, `#clasamente`, `#trenuri` / `#tren`, `#statii` /
+`#statie`, `#urmarite`, `#sistem` (service state; details for the admin), `#versiuni` (version history),
+and the admin-only `#ocr` (captures), `#ocr2` (alternative-OCR journal: crops and verdicts), `#admin` and
+`#setari`. The full list is in [Interface](docs/en/interfata.md).
 
 ## Detailed documentation
 
@@ -21,7 +55,7 @@ The README below stays a summary; the pages are the complete source. The English
 | Page | What it covers |
 |---|---|
 | [Architecture](docs/en/arhitectura.md) | Processes, the modules in `app/`, systemd units, nginx, the data path on the server |
-| [Data and database schema](docs/en/date-si-schema.md) | Every table and column, migrations v0–v9, ingest, service identity, retention, archives and restore |
+| [Data and database schema](docs/en/date-si-schema.md) | Every table and column, migrations v0–v10, ingest, service identity, retention, archives and restore |
 | [API](docs/en/api.md) | All public and admin routes: parameters, responses, errors, cache, limits, the security model |
 | [Interface](docs/en/interfata.md) | Pages and routes (#…), navigation, theme, service worker, CSP, charts, accessibility |
 | [OCR](docs/en/ocr.md) | The reading pipeline step by step, the real constants, delay rules, measurement, open problems |
@@ -31,6 +65,7 @@ The README below stays a summary; the pages are the complete source. The English
 | [Administration and operations](docs/en/administrare-operare.md) | The #admin page, corrections, merges, purge, backup and restore, Telegram, push, watchdog, runbooks |
 | [Deploy and configuration](docs/en/deploy-si-configurare.md) | Environment variables, install.sh, update.sh, systemd, nginx, certificates, the release process, rollback |
 | [Testing](docs/en/testare.md) | How to run the suite, the test layers, tests that depend on captures, how to add a test |
+| [Architecture decisions](docs/en/decizii-arhitectura.md) | Why SQLite and not Postgres, no Redis/Docker, in-process OCR, no API keys, manual rotation and updates, deferred off-site backup |
 | [Admin key rotation](docs/en/admin-rotatie-cheie.md) | Steps for changing `ADMIN_TOKEN` |
 | [Glossary](docs/en/glosar.md) | Romanian terms used in the code and data, with English equivalents |
 
@@ -242,7 +277,7 @@ live in separate tables (`app/quality.py`, each rule is tested on real cases):
   `--apply --backup-dir DIR` it first makes a full copy of the database, then reversibly archives
   the rows in `purged_rows`. With `--restore` it puts them back.
 
-## Deploy (Ubuntu 24.04 server)
+## Deploy (Ubuntu server)
 
 Live: https://tabelacfr.ddns.net (nginx + Let's Encrypt certificate, renewed by `certbot.timer`).
 
@@ -261,9 +296,7 @@ system user `tabela` (no login), the code in `/opt/tabela/app`, the venv in
 (root, `chmod 600`), starts the `tabela` service (a single uvicorn worker on
 `127.0.0.1:8000` — the poller runs in-process) and configures nginx (with `nginx -t` before
 the reload; the previous copy of the site ends up in `/root/backup-<date>/tabela.site.bak` and
-is restored automatically if the test fails). `ufw` is not enabled by the script. The production server is now the home server, not an Azure machine,
-  and its effective firewall is not described in the repo: to be checked on the server (see
-  [docs/en/deploy-si-configurare.md](docs/en/deploy-si-configurare.md), section 7).
+is restored automatically if the test fails). `ufw` is not enabled by the script: the production server is the home server (Ubuntu 26.04 LTS), where `ufw` is active with deny-incoming, 80/443 open and SSH/RDP only from the LAN, plus fail2ban (see [docs/en/deploy-si-configurare.md](docs/en/deploy-si-configurare.md), section 7).
 
 **On every deploy, bump the version and fill in the history:** in `VERSION` put
 `Beta 1.NN` with NN increased by 1 (e.g. `Beta 1.01` → `Beta 1.02`), and in `CHANGELOG.md`

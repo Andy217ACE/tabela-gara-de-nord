@@ -1,0 +1,27 @@
+[nginx-tabela-probes]
+enabled  = true
+filter   = nginx-tabela-probes
+backend  = auto
+logpath  = /var/log/nginx/access.log
+port     = http,https
+maxretry = 3
+findtime = 10m
+bantime  = 24h
+
+[sshd]
+# deja activ din defaults-debian.conf (SSH e permis doar din LAN, care e ignorat)
+enabled  = true
+maxretry = 5
+findtime = 10m
+bantime  = 1h
+
+# 2026-11-23: scanere lente (sub pragul de 3/10 min): sonde, 444/400, metode si cereri proxy, 5 in 24h -> 7 zile (crescator)
+[nginx-tabela-slow]
+enabled  = true
+filter   = nginx-tabela-slow
+backend  = auto
+logpath  = /var/log/nginx/access.log
+port     = http,https
+maxretry = 5
+findtime = 1d
+bantime  = 7d

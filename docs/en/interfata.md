@@ -7,7 +7,7 @@ page shows and for whom, navigation, the theme, the service worker, the PWA mani
 security policy (CSP) and its reasons, the chart layer, the accessibility decisions and the way
 static files are served.
 
-The document describes version **Beta 1.43** (`VERSION`). The endpoints that the
+The document describes version **Beta 1.65** (`VERSION`). The endpoints that the
 pages call are described in `docs/api.md`.
 
 ## How this document was verified
@@ -66,11 +66,12 @@ Each has a `show(params)` function called when the page changes.
 | `#versiuni` | **Version history** | `#view-versiuni` | everyone | no (link in the footer) | `versions.js` |
 | `#setari` | **Settings** | `#view-setari` | admin | no (no link in the interface) | `setari.js` (loaded on the first visit) |
 | `#ocr` | **OCR captures** | created by `app.js` (`view-ocr`) | admin | no | `ocr.js` (+ `ocr.css`), loaded on demand |
+| `#ocr2` | **OCR alternative** | created by `ocr2.js` (`view-ocr2`) | admin | no | `ocr2.js` (+ `ocr2.css`), loaded on the first visit |
 | `#admin` | **Administration** | created by `app.js` (`view-admin`) | admin | no | `admin.js` (+ `admin.css`), loaded on demand |
 
 Remarks:
 
-- The routes `#sistem`, `#setari`, `#ocr` and `#admin` are loaded on the first visit (`loadLazyPage`,
+- The routes `#sistem`, `#setari`, `#ocr`, `#ocr2` and `#admin` are loaded on the first visit (`loadLazyPage`,
   `loadOcrView`, `loadAdminView`). They are not in the service worker precache, "so the
   budget does not grow", as written in `app.js`.
 - **System**: the page shows the public state; if the visitor has an admin session (`admin: true`),
@@ -344,8 +345,8 @@ and promises that at the end `App.charts3` exists (or `null` if the files cannot
 asks for charts only if it has them: `stats.js` for `tren`, `clasamente` and `statie` (`charts: true`),
 and `statistici.js`. `charts3.js` says the same in its header.
 
-**The `CHARTS_V` rule.** `CHARTS_V = "1.43"` in `ui2.js` must be equal to the version number in
-`VERSION` (`Beta 1.43` → `1.43`). The test `test_lazy_not_in_precache_and_loader_matches_the_version`
+**The `CHARTS_V` rule.** `CHARTS_V = "1.65"` in `ui2.js` must be equal to the version number in
+`VERSION` (`Beta 1.65` → `1.65`). The test `test_lazy_not_in_precache_and_loader_matches_the_version`
 in `tests/test_ui3_static.py` checks this: `CHARTS_V` changes at every deploy. The reason
 written by the authors is "cache-buster": if the browser remembers an old `charts3.js`, the parameter
 forces the new version. With the `no-cache` + `ETag` headers from the application, the exact role is a safeguard;

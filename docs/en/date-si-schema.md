@@ -21,7 +21,7 @@ SQLite settings used by `Store` (`app/store.py`, `__init__`): `journal_mode = WA
 
 ## 2. The schema version
 
-The version is in `PRAGMA user_version`. The current value is `SCHEMA_VERSION = 9` (`app/store.py`, line 54). There is also a second "version", `dq_meta.version`, which is the version of the quality layer (`DQ_VERSION = "1"`, `app/quality.py`) and is unrelated to `user_version`.
+The version is in `PRAGMA user_version`. The current value is `SCHEMA_VERSION = 10` (`app/store.py`). There is also a second "version", `dq_meta.version`, which is the version of the quality layer (`DQ_VERSION = "1"`, `app/quality.py`) and is unrelated to `user_version`.
 
 `Store.migrate()` applies the steps in order. Each step is additive, atomic together with the version increase, and can be redone without effects (see the method docstring: "Never renumber a step").
 
@@ -36,6 +36,7 @@ The version is in `PRAGMA user_version`. The current value is `SCHEMA_VERSION = 
 | 6 → 7 | the tables `dq_meta`, `service_quality`, `event_quality`, `quality_periods`; `dq_meta.live_since` | `app/quality.migrate_to_7` | Beta 1.06 |
 | 7 → 8 | eight new columns in `weather_observations` (humidity, rain, gusts etc.) | `Store._migrate_to_8` | Beta 1.25 |
 | 8 → 9 | the tables `corrections`, `correction_batches`, `correction_archive`, `correction_audit` | `app/corrections.migrate_to_9` | Beta 1.29 |
+| 9 → 10 | no new structure: the operators in `services`, `observations`, quality, corrections and the `trains` catalog are rewritten to the official name ("CFR Calatori" → "CFR Călători"), one pass per table; the `*_raw` columns are never touched | `app/operator_names.migrate_to_10` | Beta 1.64 |
 
 Notes about the old versions:
 
@@ -54,7 +55,7 @@ If none of these succeeds, the migration stops with `BackupUnavailable`, and the
 
 ## 3. The tables
 
-Below are all the tables that `Store.migrate()` creates on a new database (verified: 17 tables, `user_version = 9`), plus the tables that appear at other times (section 3.3).
+Below are all the tables that `Store.migrate()` creates on a new database (verified: 17 tables, `user_version = 10`), plus the tables that appear at other times (section 3.3).
 
 Conventions: "NN" means `NOT NULL`. "DEF" is the default value. "FK" is the foreign key, with the `ON DELETE` action. The times in `services`, `events` and `runs` are Europe/Bucharest local time with offset (`isoformat()` from `_local`). The times in `observations`, `captures` and `weather_observations` are UTC (`app/observations.py`, docstring: "All timestamps written here are UTC ISO 8601").
 

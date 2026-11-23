@@ -25,6 +25,7 @@ Conventions:
 12. [OCR captures and disk space](#12-ocr-captures-and-disk-space)
 13. [Runbooks](#13-runbooks)
 14. [What I could not verify and inconsistencies](#14-what-i-could-not-verify-and-inconsistencies)
+15. [Firewall, fail2ban and external monitoring](#15-firewall-fail2ban-and-external-monitoring)
 
 ---
 
@@ -73,6 +74,7 @@ Note: `Bearer` bypasses CSRF, so it has the same rights as the session. Use it o
 | Page (hash) | File | What it does | Access |
 |---|---|---|---|
 | `#ocr` "OCR captures" | `web/ocr.js` | list of captures, image with the OCR rectangles, raw text versus normalized text, **manual corrections**, OCR state | admin |
+| `#ocr2` "OCR alternative" | `web/ocr2.js` | the alternative-OCR journal: crops, a correct / wrong / unclear verdict per event (`/api/admin/ocr-alt*`, see `docs/ocr.md` §19.6) | admin |
 | `#setari` | `web/setari.js` | capture retention and the free-space threshold (`app/admin_settings.py`) | admin |
 | `#admin` "Administration" | `web/admin.js` | "Duplicate train numbers" (report, apply, restore) and "Server (live)" | admin |
 | `#sistem` | `web/sistem.js` | server state; the details appear only for admin | public, with details for admin |
@@ -295,7 +297,7 @@ Checking a backup (without touching the database):
 # trebuie să scrie: ok
 ```
 
-Mind the retention: `dbbackup._prune` (used by `make_backup` and by migrations) deletes any `tabela-*.db` file in the directory beyond the first 5 in name order. The `tabela-before-merge-*` and `tabela-before-purge-*` copies have the same prefix, so they can be deleted by these routines, and the newest merge copies may be among those affected. See section 14.
+Backup retention: `dbbackup._prune` (used by `make_backup` and by migrations) works per family. It only recognises files with the exact form `tabela-<stamp>-v<N>.db` (a strict regular expression) and keeps the newest 5 of them; the order comes from the timestamp in the name. The `tabela-before-merge-*` and `tabela-before-purge-*` copies, like `.tmp` files, do not match and are never deleted by these routines; they do not count among the 5 kept.
 
 ### Restore
 
@@ -701,9 +703,9 @@ A summary for orientation, without secrets:
 - The interpreter path: I assume `/opt/tabela/venv/bin/python` from `deploy/tabela.service` and `deploy/update.sh`. Check on the server.
 - The exact location of `last.jpg` and of the README's `LAST_IMAGE_PATH` (I did not verify in the code).
 
-**Retention risk (to verify with a test):**
+**Backup retention (verified in the code):**
 
-- `app/dbbackup.py` `_prune` (used by `backup_api.make_backup` and by migrations) deletes any `tabela-*.db` in the backup directory, beyond the first 5 in name order, in descending order. The `tabela-before-merge-*.db` and `tabela-before-purge-*.db` copies have the same prefix, and "before" sorts ahead of the digits, so they are considered the newest. Possible effect: the merge and purge copies may be deleted by the restore and migration routines, and conversely, `scripts/merge_number_dups.py` keeps 10 copies of its own prefix. I did not run this scenario.
+- `app/dbbackup.py` `_prune` (used by `backup_api.make_backup` and by migrations) deletes only files of the family `tabela-<stamp>-v<N>.db`, beyond the newest 5. The `tabela-before-merge-*.db` and `tabela-before-purge-*.db` copies are not touched; `scripts/merge_number_dups.py` keeps 10 copies of its own family itself.
 - `scripts/purge_ghosts.py` has no retention for its copies.
 
 **Inconsistencies between code and documentation:**
@@ -714,3 +716,22 @@ A summary for orientation, without secrets:
 - Backups: `deploy/update.sh` keeps 5 (`BACKUP_KEEP`), `app/dbbackup.py` 5, `scripts/merge_number_dups.py` 10. The documentation does not say this everywhere.
 
 **Not verified in a browser:** the `#admin`, `#ocr`, `#setari`, `#sistem` pages and their exports (I read the JavaScript code and the API).
+
+---
+
+## 15. Firewall, fail2ban and external monitoring
+
+**Firewall (the home server, Ubuntu).** `ufw` is active, with the default policy "deny incoming". Ports 80 and 443 are open to the internet. SSH (22) and RDP (3389) are allowed only from the local network `192.168.1.0/24`. Uvicorn listens only on `127.0.0.1:8000`. `install.sh` does not enable `ufw`: the firewall is configured once, by hand (`sudo ufw status verbose` shows the state).
+
+**fail2ban.** Three active jails: `sshd`, `nginx-tabela-probes` (obvious scanner requests: `.env`, `.git`, `wp-*`, `*.php` etc., answered with 4xx) and `nginx-tabela-slow` (slow scanners below the first jail's threshold: probes, 444/400 responses, unusual methods, proxy-style requests; 5 in 24 h → 7 days). The probe filter is versioned in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban; the manual steps:
+
+1. `sudo apt install fail2ban`;
+2. `sudo install -m 644 deploy/fail2ban/nginx-tabela-probes.local /etc/fail2ban/filter.d/`;
+3. define the jail in `/etc/fail2ban/jail.d/` (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` at the operator's choice) and restart with `sudo systemctl restart fail2ban`;
+4. check: `sudo fail2ban-client status` and `sudo fail2ban-client status nginx-tabela-probes`.
+
+The server's complete configuration is versioned in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, which never bans the home public IP). For the admin, the `#sistem` page shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
+
+**External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram) and from the NVMe health timer.
+
+**What is missing, deliberately or not yet done:** there is no off-site backup; the decision belongs to the owner and is deferred. System updates are not automatic. See `docs/decizii-arhitectura.md`.

@@ -4,7 +4,7 @@
 #   sudo bash install.sh [branch]
 # Branch: the argument; otherwise the branch already checked out in /opt/tabela/app
 # (like update.sh). A first install (no repo yet) or a detached HEAD needs the argument.
-# Never prints the VAPID private key. Never enables ufw (the cloud NSG is the firewall).
+# Never prints the VAPID private key. Never enables ufw (the firewall is set up once by hand; see docs/deploy-si-configurare.md, section 7).
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/Andy217Ace/tabela-gara-de-nord.git}"
