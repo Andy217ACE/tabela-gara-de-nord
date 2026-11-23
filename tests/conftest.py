@@ -47,3 +47,4 @@ def _ocr_alt_journal_dir(tmp_path, monkeypatch):
     from app.ocr import alt_journal
     monkeypatch.setenv("OCR_ALT_JOURNAL_DIR", str(tmp_path / "ocr_alt"))
     alt_journal._last_prune = 0.0
+    alt_journal._last_seen.clear()

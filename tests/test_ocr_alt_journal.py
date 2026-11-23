@@ -116,3 +116,50 @@ def test_paging_and_unverified_filter():
     assert [e["id"] for e in page] == [_id(1)] and nxt is None
     page, _ = j.list_events(limit=10, only="unverified")
     assert [e["id"] for e in page] == [_id(5), _id(3), _id(2), _id(1)]
+
+
+def _rec(es, now, lines=(2,), cells=None):
+    """record() pe intrari gata recuperate (alt-marker setat) pentru liniile date."""
+    for i in lines:
+        es[i]["alt"] = {"cols": ["no"], "prob": 0.99}
+        es[i]["fields"]["no"]["norm"] = 7942
+    cells = cells or {i: {"no": make_cell("7942")} for i in lines}
+    j.record(es, {"lines": list(lines)}, cells, True, now=now)
+
+
+def test_same_row_same_values_is_recorded_once_per_15_min():
+    es = read_entries()
+    _rec(es, NOW)
+    _rec(es, NOW + timedelta(minutes=1))      # acelasi rand necitit, cadrul urmator: dublura
+    _rec(es, NOW + timedelta(minutes=14))
+    assert j.totals()["events"] == 1
+    _rec(es, NOW + timedelta(minutes=16))     # dupa 15 min se noteaza din nou
+    assert j.totals()["events"] == 2
+    es[2]["fields"]["no"]["norm"] = 7943      # alta valoare: se noteaza imediat
+    es[2]["alt"] = {"cols": ["no"], "prob": 0.99}
+    j.record(es, {"lines": [2]}, {2: {"no": make_cell("7943")}}, True, now=NOW + timedelta(minutes=17))
+    assert j.totals()["events"] == 3
+
+
+def test_bad_cell_skips_only_that_line(caplog):
+    es = read_entries()
+    import numpy as np
+    with caplog.at_level("WARNING"):
+        _rec(es, NOW, lines=(1, 2), cells={1: {"no": np.zeros((0, 0), np.uint8)}, 2: {"no": make_cell("7942")}})
+    evs, _ = j.list_events()
+    assert [e["row_index"] for e in evs] == [es[2]["row_index"]]
+
+
+def test_prune_removes_orphan_crops():
+    _seed([("20261123T110000-arrival-1", NOW - timedelta(hours=1))])
+    orphan = j.journal_dir() / "crops" / "20261123T100000-arrival-5_no.png"
+    orphan.write_bytes(b"x")
+    j.prune(NOW, force=True)
+    assert not orphan.exists()
+    assert j.crop_path("20261123T110000-arrival-1", "no") is not None
+
+
+def test_stale_cursor_returns_empty_page():
+    _seed([("20261123T110000-arrival-1", NOW - timedelta(hours=1)),
+           ("20261123T110100-arrival-1", NOW - timedelta(minutes=59))])
+    assert j.list_events(before="20261101T000000-arrival-1") == ([], None)

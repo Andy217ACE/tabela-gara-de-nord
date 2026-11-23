@@ -28,8 +28,11 @@ VERDICTS = ("correct", "wrong", "unclear")
 ID_RE = re.compile(r"^\d{8}T\d{6}-(arrival|departure)-\d{1,3}$")
 COL_RE = re.compile(r"^(no|time)$")
 
+DEDUP_S = 15 * 60  # in umbra acelasi rand necitit e propus la fiecare cadru: il notam o data
+
 _lock = threading.RLock()
 _last_prune = 0.0
+_last_seen: dict[tuple, tuple] = {}  # (board, row_index) -> (values, ts); doar in memorie
 
 
 def journal_dir() -> Path:
@@ -92,16 +95,26 @@ def record(work: list[dict], info: dict, cells: dict, shadow: bool,
             (d / "crops").mkdir(parents=True, exist_ok=True)
             lines = []
             for i in info.get("lines", []):
-                e = work[i]
-                cols = list(e["alt"]["cols"])
-                eid = f"{now:%Y%m%dT%H%M%S}-{e['board']}-{e['row_index']}"
-                for c in cols:
-                    (d / "crops" / f"{eid}_{c}.png").write_bytes(_png(cells[i][c]))
-                lines.append(json.dumps({
-                    "id": eid, "ts": now.isoformat(timespec="seconds"), "shadow": bool(shadow),
-                    "board": e["board"], "row_index": e["row_index"], "cols": cols,
-                    "values": {c: e["fields"][c]["norm"] for c in cols}, "prob": e["alt"]["prob"],
-                    "context": _context(e)}, ensure_ascii=False))
+                try:  # o celula stricata nu pierde restul liniilor cadrului
+                    e = work[i]
+                    cols = list(e["alt"]["cols"])
+                    values = {c: e["fields"][c]["norm"] for c in cols}
+                    key = (e["board"], e["row_index"])
+                    prev = _last_seen.get(key)
+                    if prev and prev[0] == values and (now - prev[1]).total_seconds() < DEDUP_S:
+                        continue
+                    eid = f"{now:%Y%m%dT%H%M%S}-{e['board']}-{e['row_index']}"
+                    pngs = {c: _png(cells[i][c]) for c in cols}
+                    for c, b in pngs.items():
+                        (d / "crops" / f"{eid}_{c}.png").write_bytes(b)
+                    lines.append(json.dumps({
+                        "id": eid, "ts": now.isoformat(timespec="seconds"), "shadow": bool(shadow),
+                        "board": e["board"], "row_index": e["row_index"], "cols": cols,
+                        "values": values, "prob": e["alt"]["prob"],
+                        "context": _context(e)}, ensure_ascii=False))
+                    _last_seen[key] = (values, now)
+                except Exception:
+                    log.warning("jurnalul alternativei OCR: linia %s sarita", i, exc_info=True)
             if lines:
                 with open(d / "events.jsonl", "a", encoding="utf-8") as fh:
                     fh.write("\n".join(lines) + "\n")
@@ -121,16 +134,15 @@ def prune(now: datetime | None = None, force: bool = False) -> None:
         evs = _events()
         cutoff = (now - timedelta(days=KEEP_DAYS)).isoformat(timespec="seconds")
         keep = [e for e in evs if e["ts"] >= cutoff][-MAX_EVENTS:]
-        if len(keep) == len(evs):
-            return
         d = journal_dir()
-        _write_atomic(d / "events.jsonl",
-                      "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in keep))
         kept = {e["id"] for e in keep}
-        for e in evs:
-            if e["id"] not in kept:
-                for c in e["cols"]:
-                    (d / "crops" / f"{e['id']}_{c}.png").unlink(missing_ok=True)
+        if len(keep) != len(evs):
+            _write_atomic(d / "events.jsonl",
+                          "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in keep))
+        # crop-urile fara eveniment (scoase acum sau ramase dupa o cadere) se sterg
+        for p in (d / "crops").glob("*.png") if (d / "crops").is_dir() else ():
+            if p.stem.rsplit("_", 1)[0] not in kept:
+                p.unlink(missing_ok=True)
         v = _verdicts()
         if any(k not in kept for k in v):
             _write_atomic(d / "verdicts.json", json.dumps({k: x for k, x in v.items() if k in kept}))
@@ -144,7 +156,9 @@ def list_events(limit: int = 50, before: str | None = None,
         evs, v = _events()[::-1], _verdicts()
     if before:
         ids = [e["id"] for e in evs]
-        evs = evs[ids.index(before) + 1:] if before in ids else evs
+        if before not in ids:
+            return [], None  # cursor scos de retentie: nu reluam lista de la inceput
+        evs = evs[ids.index(before) + 1:]
     out = []
     for e in evs:
         e["verdict"] = (v.get(e["id"]) or {}).get("verdict")
