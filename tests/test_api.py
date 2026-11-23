@@ -96,6 +96,11 @@ def test_board_and_health_report_each_panel(client):
     assert h["boards"]["arrivals"]["ok"] is False and h["boards"]["departures"]["ok"] is True
 
 
+def test_health_answers_head(client):
+    r = client.head("/api/health")
+    assert r.status_code == 200
+
+
 def test_health_false_without_data(client):
     r = client.get("/api/health")
     assert r.status_code == 200

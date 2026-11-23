@@ -949,6 +949,23 @@ verificată de om.
 Raportul compară clasificatorul cu motorul pe setul scris de mână, cu `SIGNIFICANT = 0.005`
 (0.5 puncte procentuale). Decizia este mereu „nu promovez”, cu motivul scris.
 
+### 19.6 Alternativa OCR în jurnal (`#ocr2`)
+
+Pe lângă clasificatorul experimental, `app/ocr/alt_reader.py` poate citi din nou celulele numărului și
+orei când Tesseract nu le citește. E oprită implicit (`OCR_ALT=1` o pornește; `OCR_ALT_SHADOW=1` o
+rulează „în umbră”: scrie în jurnal ce ar fi completat, dar nu schimbă nimic). Modelul (`OCR_ALT_MODEL`,
+un fișier `model-*.npz`) are amprentă obligatorie: un model fără amprentă nu se încarcă.
+
+`app/ocr/alt_journal.py` scrie un eveniment pentru fiecare rând propus (și în umbră, și când alternativa
+e activă), cu decupajele celulelor (PNG ×3), în `<directorul bazei>/ocr_alt/` (`OCR_ALT_JOURNAL_DIR`).
+Evenimentele cu aceeași identitate de tren nu se dublează în jurnal. Se păstrează 30 de zile și cel mult
+5000 de evenimente. `record` nu aruncă niciodată: o eroare se loghează, iar poller-ul merge mai departe.
+
+Pagina de administrare `#ocr2` (`web/ocr2.js`) arată starea alternativei, totalurile, evenimentele și
+decupajele și permite un verdict pe eveniment (`correct`, `wrong`, `unclear` sau fără verdict), prin
+`/api/admin/ocr-alt*` (vezi `docs/api.md`, secțiunea 7.10). Verdictele sunt dovada pe care se bazează
+decizia de a trece alternativa din umbră în activ.
+
 ---
 
 ## 20. Cum se măsoară acuratețea

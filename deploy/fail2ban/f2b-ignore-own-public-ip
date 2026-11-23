@@ -1,0 +1,8 @@
+#!/bin/sh
+# fail2ban ignorecommand: exit 0 (= ignore) if <ip> is the current public IP
+# of home (resolved from tabelacfr.ddns.net, dynamic Digi IP / hairpin NAT).
+ip="$1"
+[ -n "$ip" ] || exit 1
+own=$(timeout 3 getent ahostsv4 tabelacfr.ddns.net 2>/dev/null | awk 'NR==1{print $1}')
+[ -n "$own" ] && [ "$own" = "$ip" ] && exit 0
+exit 1

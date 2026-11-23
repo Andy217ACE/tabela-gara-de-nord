@@ -82,7 +82,18 @@ def _png(cell: np.ndarray) -> bytes:
 
 def _context(entry: dict) -> dict:
     f = entry["fields"]
-    return {k: f[k]["norm"] for k in ("type", "station", "operator", "platform", "delay")}
+    ctx = {k: f[k]["norm"] for k in ("type", "station", "operator", "platform", "delay")}
+    return ctx | {"train_no": f["no"]["norm"], "sched_time": f["time"]["norm"]}
+
+
+def _dedup_key(entry: dict, cols: list[str]) -> tuple:
+    """Identitatea randului: numarul si ora citite de cititor (nu propuse de alternativa), ca
+    un alt tren pe aceeasi pozitie sa nu fie luat drept dublura; fara ele, pozitia."""
+    f = entry["fields"]
+    ident = tuple(None if c in cols else f[c]["norm"] for c in ("no", "time"))
+    if ident == (None, None):
+        return (entry["board"], entry["row_index"])
+    return (entry["board"], *ident)
 
 
 def record(work: list[dict], info: dict, cells: dict, shadow: bool,
@@ -93,13 +104,13 @@ def record(work: list[dict], info: dict, cells: dict, shadow: bool,
         d = journal_dir()
         with _lock:
             (d / "crops").mkdir(parents=True, exist_ok=True)
-            lines = []
+            lines, seen = [], {}
             for i in info.get("lines", []):
                 try:  # o celula stricata nu pierde restul liniilor cadrului
                     e = work[i]
                     cols = list(e["alt"]["cols"])
                     values = {c: e["fields"][c]["norm"] for c in cols}
-                    key = (e["board"], e["row_index"])
+                    key = _dedup_key(e, cols)
                     prev = _last_seen.get(key)
                     if prev and prev[0] == values and (now - prev[1]).total_seconds() < DEDUP_S:
                         continue
@@ -112,12 +123,13 @@ def record(work: list[dict], info: dict, cells: dict, shadow: bool,
                         "board": e["board"], "row_index": e["row_index"], "cols": cols,
                         "values": values, "prob": e["alt"]["prob"],
                         "context": _context(e)}, ensure_ascii=False))
-                    _last_seen[key] = (values, now)
+                    seen[key] = (values, now)
                 except Exception:
                     log.warning("jurnalul alternativei OCR: linia %s sarita", i, exc_info=True)
             if lines:
                 with open(d / "events.jsonl", "a", encoding="utf-8") as fh:
                     fh.write("\n".join(lines) + "\n")
+                _last_seen.update(seen)  # doar dupa scriere: un esec nu ascunde randul 15 min
             prune(now)
     except Exception:
         log.warning("jurnalul alternativei OCR a esuat; poller-ul merge mai departe", exc_info=True)

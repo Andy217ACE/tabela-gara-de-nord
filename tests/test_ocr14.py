@@ -4,8 +4,8 @@
 Truth set: tests/fixtures/ocr_truth/truth.json — 59 real frames, 1416 lines (59 x 2 panels
 x 12 rows), every field checked by eye on the image (app/ocr/truth.py). The set started in
 Beta 1.16 as 16 captures / 384 lines (the 8 of tests/fixtures/ocr13 + 8 picked for the
-measured errors of the audit). The thresholds below were measured on that first set, not
-re-measured after it grew; a change that misreads more cells fails here.
+measured errors of the audit); the thresholds below are re-measured on the full set
+(24.11.2026, Beta 1.64); a change that misreads more cells, or reads fewer, fails here.
 
 Seam: a vertical joint between two LED modules of the board runs through the last
 digit of the train number. It cuts the thin "1" into its flag and its stem (two
@@ -27,15 +27,39 @@ from tests.ocr_truth_images import capture, read_frame
 FIX = Path(__file__).parent / "fixtures"
 TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
 
-# measured on this version (Tesseract 5.5, local); `wrong` is a published misread,
-# `unread` an honest gap. Beta 1.15 on the same set: wrong no 19, time 6, platform 5
-# (+3 unread), station 2, operator 1; ok no 365, time 378, platform 376.
-# Left wrong (Beta 1.16): number under glare (4), 8 read 3 (time 2, platform 1). The platform 1
-# was that release's count; the bound is now MAX_WRONG["platform"] = 0.
+# `wrong` is a published misread, `unread` an honest gap. Measured 24.11.2026 (Beta 1.64,
+# Tesseract 5.5, local, 59 frames / 1416 lines; 4 runs at 60 s and 8 s, identical counts):
+#              ok  wrong unread
+#   no       1408    0     7   (lines whose truth is "?" are not scored)
+#   time     1405    4     0
+#   type     1411    2     0
+#   platform 1396    0    19
+#   delay    1392    0    20
+#   station  1413    3     0
+#   operator 1416    0     0
+# The reading is deterministic, so MIN_OK / MAX_UNREAD leave only 3 lines (0.2 %) for another
+# Tesseract/OpenCV build; MAX_WRONG is the measured count (no tolerance: a new misread fails).
 MAX_WRONG = {"no": 0, "time": 4, "type": 2, "platform": 0, "delay": 0,
-             "station": 3, "operator": 5}
-MIN_OK = {"no": 379, "time": 381, "type": 383, "platform": 382, "delay": 374,
-          "station": 381, "operator": 382}
+             "station": 3, "operator": 0}
+MIN_OK = {"no": 1405, "time": 1402, "type": 1408, "platform": 1393, "delay": 1389,
+          "station": 1410, "operator": 1413}
+MAX_UNREAD = {"no": 10, "time": 3, "type": 3, "platform": 22, "delay": 23,
+              "station": 3, "operator": 3}
+
+# Production budget (OCR_FRAME_BUDGET_S = 8 s): the 10 slowest frames of the set (~40 s here).
+# The budget only limits the re-reads (the first pass always runs), so on this set it costs
+# little even when tight: the subset loses 1 line at 4 s, 2 at 3 s / 2 s / 1 s (measured).
+# At 8 s nothing is lost here (slowest frame 5.6 s under load); the bound allows 1 line so
+# a busy machine does not fail it, a re-read path ~3x slower does.
+BUDGET_FRAMES = [
+    "ocr_truth/2026_10_22_041108-d2858e3a", "ocr13/2026_10_22_151207-69c13b67",
+    "ocr_truth/srv/2026_10_25_061407-7494243c", "ocr_truth/srv/2026_10_22_051311-acf42e75",
+    "glare/c8457", "glare/c8458", "glare/c8467", "ocr13/2026_10_22_070049-e2db40a5",
+    "ocr_truth/srv/2026_10_22_041906-0901ecd4", "ocr_truth/2026_10_22_074142-d7908094"]
+MIN_OK_8S = {"no": 233, "time": 236, "type": 239, "platform": 238, "delay": 231,
+             "station": 240, "operator": 240}
+MAX_WRONG_8S = {"no": 0, "time": 1, "type": 0, "platform": 0, "delay": 0,
+                "station": 0, "operator": 0}
 
 _cache: dict[str, list] = {}
 
@@ -64,6 +88,20 @@ def test_field_accuracy_does_not_regress(result, field):
     misses = result["misses"][field]
     assert c["wrong"] <= MAX_WRONG[field], misses
     assert c["ok"] >= MIN_OK[field], misses
+    assert c["unread"] <= MAX_UNREAD[field], misses
+
+
+def test_production_budget_does_not_cut_the_reading(monkeypatch):
+    from app.ocr.reader import frame_budget
+    monkeypatch.delenv("OCR_FRAME_BUDGET_S", raising=False)
+    assert frame_budget() == 8.0  # the default the floors were measured at
+    preds = {f: truth.lines_of(read_board_debug(read_frame(f))[1]) for f in BUDGET_FRAMES}
+    r = truth.score({"frames": {f: TRUTH["frames"][f] for f in BUDGET_FRAMES}}, preds)
+    c = r["counts"]
+    short = sum(max(0, MIN_OK_8S[f] - c[f]["ok"]) for f in truth.FIELDS)
+    assert short <= 1, (short, r["misses"])  # lines the 8 s budget left unread
+    for f in truth.FIELDS:
+        assert c[f]["wrong"] <= MAX_WRONG_8S[f], r["misses"][f]
 
 
 def test_score_counts_unread_and_wrong_separately():

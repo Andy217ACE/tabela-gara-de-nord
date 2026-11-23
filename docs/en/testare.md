@@ -4,12 +4,13 @@ This page describes the test suite of the Tabela Gara de Nord project: how to pr
 
 The page was written from the code in the `docs/documentatie-detaliata` branch. Where a statement could not be verified from the repo, it is marked **uncertain**. The full suite was not run when the page was written.
 
-Reference numbers (counted with `grep`, not with `pytest --collect-only`):
+Reference numbers (Beta 1.65, `pytest --collect-only -q`):
 
-- 90 `tests/test_*.py` files, plus `tests/conftest.py`, `tests/ocr_truth_images.py` and `tests/__init__.py`;
-- about 1,200 `def test_` definitions (a parametrized test can produce several cases at run time);
-- the retro report of 26.10.2026 (`.superpowers/sdd/task-RETRO-report.md`) mentions "1334 tests pass" at that date. The figure is historical, not verified now;
-- suite duration: "~18 min" from the documentation requirement. **Uncertain**: there is no duration measurement in the repo; it has to be timed on your machine.
+- 149 `tests/test_*.py` files, plus `tests/conftest.py`, `tests/ocr_truth_images.py` and `tests/__init__.py`;
+- 2512 collected tests (parametrized cases are counted separately);
+- full-suite duration: tens of minutes on a laptop, because of the browser and OCR tests. There is no versioned measurement: time it on your machine.
+
+**CI (GitHub Actions).** `.github/workflows/ci.yml` runs on every push and pull request: the `pytest` suite, including the browser tests (Playwright, Chromium), `pip-audit` on the dependencies and the release-consistency check (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` and the numbers in the code). Dependabot proposes dependency updates. Dependencies are pinned in `requirements.txt` (direct) and `requirements.lock` (transitive too). One test (`tests/test_docs_routes.py`) requires every route registered in the application to appear in `docs/api.md`, so the documentation cannot fall behind. The OCR regression runs on labelled frames (`tests/fixtures`, `app/ocr/truth.py`: about 59 frames and 1,416 labelled rows), with strict thresholds and a production time-budget test.
 
 ## Contents
 

@@ -949,6 +949,24 @@ verified by a human.
 The report compares the classifier with the engine on the hand-written set, with `SIGNIFICANT = 0.005`
 (0.5 percentage points). The decision is always "do not promote", with the reason written.
 
+### 19.6 The alternative OCR in the journal (`#ocr2`)
+
+Besides the experimental classifier, `app/ocr/alt_reader.py` can read the number and time cells again
+when Tesseract does not read them. It is off by default (`OCR_ALT=1` turns it on; `OCR_ALT_SHADOW=1` runs
+it "in the shadow": it writes to the journal what it would have filled in, but changes nothing). The
+model (`OCR_ALT_MODEL`, a `model-*.npz` file) has a mandatory fingerprint: a model without one is not
+loaded.
+
+`app/ocr/alt_journal.py` writes one event per proposed row (both in the shadow and when the alternative is
+active), with the cell crops (PNG x3), in `<database directory>/ocr_alt/` (`OCR_ALT_JOURNAL_DIR`).
+Events with the same train identity are not duplicated in the journal. 30 days and at most 5000 events are
+kept. `record` never raises: an error is logged and the poller carries on.
+
+The administration page `#ocr2` (`web/ocr2.js`) shows the alternative's state, the totals, the events and
+the crops, and lets the administrator give a verdict per event (`correct`, `wrong`, `unclear` or none)
+through `/api/admin/ocr-alt*` (see `docs/api.md`, section 7.10). The verdicts are the evidence for the
+decision to move the alternative from the shadow to active.
+
 ---
 
 ## 20. How accuracy is measured

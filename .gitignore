@@ -1,4 +1,5 @@
 .superpowers/
+graphify-out/
 .venv/
 venv/
 *.db

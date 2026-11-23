@@ -79,6 +79,11 @@ def test_unit_sets_telegram_state_path_under_read_write_paths():
     assert state == "/var/lib/tabela/telegram_sent.json"
 
 
+def test_unit_limits_openmp_threads_for_tesseract():
+    service = _unit_section(_read(DEPLOY / "tabela.service"), "Service")
+    assert "Environment=OMP_THREAD_LIMIT=1" in service
+
+
 def test_code_default_for_telegram_state_path_is_unchanged():
     # dev and tests rely on the relative default; only the unit points to the state dir
     text = _read(ROOT / "app" / "telegram.py")

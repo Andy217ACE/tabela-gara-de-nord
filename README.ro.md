@@ -4,6 +4,8 @@
 
 # Tabela Gara de Nord
 
+[![CI](https://github.com/Andy217Ace/tabela-gara-de-nord/actions/workflows/ci.yml/badge.svg)](https://github.com/Andy217Ace/tabela-gara-de-nord/actions/workflows/ci.yml)
+
 Aplicație web (PWA) care citește prin OCR clasic (OpenCV + Tesseract, fără AI) tabela de sosiri/plecări din Gara de Nord București, urmărește trenurile, trimite notificări push la întârzieri sau schimbări de linie și păstrează un istoric căutabil.
 
 Live: https://tabelacfr.ddns.net
@@ -11,6 +13,39 @@ Live: https://tabelacfr.ddns.net
 Stare: **Beta** — versiuni și note în [Releases](https://github.com/Andy217ACE/tabela-gara-de-nord/releases)
 și în `CHANGELOG.md`. Datele sunt citite prin OCR de pe imaginea camerei web CFR și pot conține erori;
 valorile necitite apar ca „—”, nu ca 0.
+
+## Securitate și fiabilitate
+
+Ce există, unde se află și unde e documentat. Omisiunile deliberate (și motivele lor) sunt în
+[Decizii de arhitectură](docs/decizii-arhitectura.md).
+
+| Funcție | Unde | Documentație |
+|---|---|---|
+| CSP strict (fără script/stil inline) și antete de securitate | `app/api.py`, `web/` | [Interfața](docs/interfata.md), [API](docs/api.md) |
+| HSTS și limitarea cererilor în nginx (`tabela_api` 10 c/s burst 20, `tabela_stats` 60 c/min, `tabela_admin_login` 5 c/min) | `deploy/nginx-tabela.conf`, `deploy/tabela-limits.conf` | [Deploy](docs/deploy-si-configurare.md) §6-7 |
+| Autentificare admin: un singur token, cookie de sesiune semnat HMAC cu expirare, token CSRF, limitarea încercărilor; rotație manuală | `app/admin.py` | [API](docs/api.md) §6, [Rotația cheii](docs/admin-rotatie-cheie.md) |
+| Firewall (`ufw`, deny incoming; 80/443 publice, SSH și RDP doar din LAN) | server | [Deploy](docs/deploy-si-configurare.md) §7 |
+| fail2ban: jail-uri `sshd`, `nginx-tabela-probes`, `nginx-tabela-slow` | `deploy/fail2ban/` (instalare manuală) | [Operare](docs/administrare-operare.md) §15 |
+| Întărire systemd (`NoNewPrivileges`, `ProtectSystem=strict`, utilizator fără privilegii, un worker, `OMP_THREAD_LIMIT=1`) | `deploy/tabela.service` | [Deploy](docs/deploy-si-configurare.md) §5 |
+| SQLite în mod WAL (`synchronous=NORMAL`, `busy_timeout` 5000); OCR-ul rulează într-un fir, în afara buclei de evenimente | `app/store.py`, `app/api.py` | [Date și schemă](docs/date-si-schema.md) |
+| Copii de siguranță: automat înainte de fiecare migrare de schemă, verificate, cu retenție; `update.sh` face rollback automat dacă verificarea de sănătate eșuează | `app/dbbackup.py`, `deploy/update.sh` | [Operare](docs/administrare-operare.md) §6 |
+| Monitorizare: watchdog cu alerte Telegram, temporizator de sănătate NVMe, temporizator de snapshot de securitate, verificări externe de uptime (`/api/health` răspunde și la `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operare](docs/administrare-operare.md) §10, §15 |
+| Integritatea datelor: `processing_version` pe observație, consens pe mai multe cadre, validarea salturilor de întârziere | `app/consensus.py`, `app/quality.py` | [OCR](docs/ocr.md), [Statistici și calitate](docs/statistici-calatorii-calitate.md) |
+| Suita de regresie OCR pe cadre etichetate (aproximativ 59 de cadre, 1416 rânduri), cu praguri stricte | `tests/fixtures`, `app/ocr/truth.py` | [Testare](docs/testare.md) |
+| PWA offline: ultima tabelă e servită marcată ca veche | `web/sw.js` | [Interfața](docs/interfata.md) |
+| CI la fiecare push (pytest cu teste de browser, `pip-audit`, verificarea coerenței versiunii), Dependabot, `requirements.lock` fixat | `.github/`, `scripts/check_release.py` | [Testare](docs/testare.md), `SECURITY.md`, `CONTRIBUTING.md` |
+| Test documentație față de cod: fiecare rută trebuie să fie în pagina API | `tests/test_docs_routes.py` | [Testare](docs/testare.md) |
+
+Lacune cunoscute, spuse deschis: **nu există încă o copie de siguranță în afara serverului** (decizia
+proprietarului, amânată); actualizările de sistem și repornirile sunt manuale; tokenul de administrare se
+schimbă de mână.
+
+### Pagini
+
+`#` (Tabelă/Panou), `#istoric`, `#statistici`, `#clasamente`, `#trenuri` / `#tren`, `#statii` /
+`#statie`, `#urmarite`, `#sistem` (starea serviciului; detalii pentru admin), `#versiuni` (istoricul
+versiunilor) și, doar pentru admin, `#ocr` (capturi), `#ocr2` (jurnalul alternativei OCR: decupaje și
+verdicte), `#admin` și `#setari`. Lista completă e în [Interfața](docs/interfata.md).
 
 ## Documentație detaliată
 
@@ -20,7 +55,7 @@ README-ul de mai jos rămâne rezumatul; paginile sunt sursa completă.
 | Pagină | Ce acoperă |
 |---|---|
 | [Arhitectura](docs/arhitectura.md) | Procesele, modulele din `app/`, unitățile systemd, nginx, calea datelor pe server |
-| [Date și schema bazei](docs/date-si-schema.md) | Fiecare tabel și coloană, migrările v0–v9, ingestul, identitatea serviciilor, retenția, arhivele și restaurarea |
+| [Date și schema bazei](docs/date-si-schema.md) | Fiecare tabel și coloană, migrările v0–v10, ingestul, identitatea serviciilor, retenția, arhivele și restaurarea |
 | [API](docs/api.md) | Toate rutele publice și de administrare: parametri, răspunsuri, erori, cache, limite, modelul de securitate |
 | [Interfața](docs/interfata.md) | Paginile și rutele (#…), navigarea, tema, service worker, CSP, grafice, accesibilitate |
 | [OCR](docs/ocr.md) | Pipeline-ul de citire pas cu pas, constantele reale, regulile întârzierii, măsurarea, problemele deschise |
@@ -30,6 +65,7 @@ README-ul de mai jos rămâne rezumatul; paginile sunt sursa completă.
 | [Administrare și operare](docs/administrare-operare.md) | Pagina #admin, corecții, fuziuni, purjare, backup și restaurare, Telegram, push, watchdog, runbook-uri |
 | [Deploy și configurare](docs/deploy-si-configurare.md) | Variabilele de mediu, install.sh, update.sh, systemd, nginx, certificate, procesul de release, rollback |
 | [Testare](docs/testare.md) | Cum rulezi suita, straturile de teste, testele care depind de capturi, cum adaugi un test |
+| [Decizii de arhitectură](docs/decizii-arhitectura.md) | De ce SQLite și nu Postgres, fără Redis/Docker, OCR în proces, fără chei API, rotație și actualizări manuale, backup off-site amânat |
 | [Rotația cheii de administrare](docs/admin-rotatie-cheie.md) | Pașii pentru schimbarea `ADMIN_TOKEN` |
 
 ## Ce face
@@ -240,7 +276,7 @@ stau în tabele separate (`app/quality.py`, fiecare regulă e testată pe cazuri
   `--apply --backup-dir DIR` face întâi o copie completă a bazei, apoi arhivează reversibil
   rândurile în `purged_rows`. Cu `--restore` le pune la loc.
 
-## Deploy (server Ubuntu 24.04)
+## Deploy (server Ubuntu)
 
 Live: https://tabelacfr.ddns.net (nginx + certificat Let's Encrypt, reînnoit de `certbot.timer`).
 
@@ -259,9 +295,7 @@ utilizatorul de sistem `tabela` (fără login), codul în `/opt/tabela/app`, ven
 (root, `chmod 600`), pornește serviciul `tabela` (un singur worker uvicorn pe
 `127.0.0.1:8000` — poller-ul rulează în proces) și configurează nginx (cu `nginx -t` înainte
 de reload; copia anterioară a site-ului ajunge în `/root/backup-<data>/tabela.site.bak` și
-e restaurată automat dacă testul eșuează). `ufw` nu se activează în script. Serverul de producție este acum serverul de acasă, nu o mașină Azure,
-  iar firewall-ul lui efectiv nu e descris în repo: de verificat pe server (vezi
-  [docs/deploy-si-configurare.md](docs/deploy-si-configurare.md), secțiunea 7).
+e restaurată automat dacă testul eșuează). `ufw` nu se activează în script: serverul de producție este serverul de acasă (Ubuntu 26.04 LTS), unde `ufw` este activ cu deny-incoming, 80/443 deschise și SSH/RDP doar din LAN, plus fail2ban (vezi [docs/deploy-si-configurare.md](docs/deploy-si-configurare.md), secțiunea 7).
 
 **La fiecare deploy crește versiunea și completează istoricul:** în `VERSION` se trece
 `Beta 1.NN` cu NN mărit cu 1 (ex. `Beta 1.01` → `Beta 1.02`), iar în `CHANGELOG.md` se

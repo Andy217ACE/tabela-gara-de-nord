@@ -1,0 +1,14 @@
+# Tabela CFR - configurare locala fail2ban (nu editati jail.conf).
+[DEFAULT]
+# Niciodata LAN-ul / localhost.
+ignoreip = 127.0.0.1/8 ::1 192.168.1.0/24
+ignoreself = true
+# IP-ul public propriu (dinamic) - rezolvat la fiecare decizie din tabelacfr.ddns.net.
+ignorecommand = /usr/local/sbin/f2b-ignore-own-public-ip <ip>
+banaction = nftables
+banaction_allports = nftables[type=allports]
+# Recidivisti: ban-ul creste exponential (24h, 48h, 96h ...) pana la max 5 saptamani.
+bantime.increment = true
+bantime.factor = 1
+bantime.maxtime = 5w
+bantime.overalljails = true

@@ -125,6 +125,16 @@ def test_run_nu_atinge_productie_si_scrie_raport(env):
     assert data["antrenare"]["scris_de_mana"]["n"] == 4
 
 
+def test_modelul_antrenat_poarta_amprenta_motorului_si_se_incarca_in_aplicatie(env):
+    from app.ocr import alt_reader as alt
+    rep = shadow.run(env.work, env.db, env.img_root, [env.truth], clf=_fake_clf(),
+                     now=env.now)
+    model = rep["antrenare"]["model"]
+    with np.load(model) as d:
+        assert str(d["engine_fp"]) == alt.engine_fingerprint()
+    assert alt.AltModel.load(model) is not None
+
+
 def test_fara_set_scris_de_mana_raportul_il_spune(env):
     rep = shadow.run(env.work, env.db, env.img_root, [env.work / "lipsa.json"],
                      clf=_fake_clf(), now=env.now)
