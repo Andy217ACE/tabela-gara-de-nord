@@ -4,7 +4,7 @@
 
 /* ---------- 1. categorii tren: insigna cu umplere usoara (contrast din tokenii --t-*, >= 4.5:1) ---------- */
 .type {
-  background: color-mix(in srgb, var(--c) 10%, var(--surface));
+  background: color-mix(in srgb, var(--c) 4%, var(--surface));
   white-space: nowrap;
 }
 .type-ic { --c: var(--accent); }
