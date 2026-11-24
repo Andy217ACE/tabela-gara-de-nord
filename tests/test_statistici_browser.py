@@ -87,11 +87,19 @@ BUILD_ALL = """document.addEventListener('DOMContentLoaded', () => new MutationO
 }).observe(document.body, {childList: true, subtree: true}));"""
 
 
+# phones (≤ 700 px, Beta 1.67): the page shows its section headings first; these tests check the
+# content, so every group is opened as soon as it is drawn (the two levels: test_nav_mobile_browser.py)
+OPEN_ALL = """document.addEventListener('DOMContentLoaded', () => new MutationObserver(() => {
+  document.querySelectorAll('.ss-acc-btn[aria-expanded="false"]').forEach(b => b.click());
+}).observe(document.body, {childList: true, subtree: true}));"""
+
+
 def _open(browser, base_url, w, h, theme, hash_, eager=True):
     ctx = browser.new_context(viewport={"width": w, "height": h}, service_workers="block")
     ctx.add_init_script(f"localStorage.setItem('tabela.theme', '{theme}');")
     if eager:
         ctx.add_init_script(BUILD_ALL)
+    ctx.add_init_script(OPEN_ALL)
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base_url) else r.abort())
     page = ctx.new_page()
     errors = []

@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]   # branches with a PR are tested by pull_request: one run per commit, not two
   pull_request:
   workflow_dispatch:   # lock.yml re-runs CI after pushing a refreshed lock
   schedule:
@@ -9,6 +10,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:   # a newer push to the same branch/PR cancels the run it makes obsolete
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   test:

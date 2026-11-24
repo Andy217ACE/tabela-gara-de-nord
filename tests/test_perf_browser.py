@@ -149,7 +149,8 @@ def test_istoric_asks_for_50_at_a_time(browser, base_url):
 
 
 def test_statistici_builds_chart_sections_near_the_screen(browser, base_url):
-    ctx, page, errors = _open(browser, base_url, 412, 900, "dark", "#statistici", eager=False)
+    # 720 px: the narrowest width with TOC chips (phones get the two-level page, test_nav_mobile_browser.py)
+    ctx, page, errors = _open(browser, base_url, 720, 900, "dark", "#statistici", eager=False)
     try:
         page.wait_for_selector("#st-statistici .ss-defer-ph")
         page.wait_for_selector("#st-statistici .c3-toc .c3-chip")

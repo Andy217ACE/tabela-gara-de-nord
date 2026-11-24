@@ -43,6 +43,21 @@
   var jobs = [load("ro")];
   if (active === "en") jobs.push(load("en"));
 
+  // Numele stațiilor: cheia stocată (BRASOV) → nume afișat (Brașov), același în ro și en.
+  var stations = {};
+  // at most ~2.5 s of waiting: a hung request must not keep the whole app from starting (names fall back to Title Case)
+  jobs.push(Promise.race([
+    fetch("/api/station-names").then(function (r) { return r.ok ? r.json() : {}; }),
+    new Promise(function (resolve) { setTimeout(function () { resolve({}); }, 2500); })
+  ]).catch(function () { return {}; }).then(function (d) { stations = d || {}; }));
+
+  // Singurul helper de afișare a unei stații; cheie necunoscută (citire greșită) → Title Case.
+  function station(name) {
+    var s = String(name || "");
+    if (Object.prototype.hasOwnProperty.call(stations, s)) return stations[s];
+    return s.toLowerCase().replace(/(^|[\s\-.])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); });
+  }
+
   // Completează data-i18n="cheie" (textContent) și data-i18n-attr="atribut:cheie;atribut2:cheie2".
   function applyDom(root) {
     var scope = root || document, i, n, list, parts, p, c;
@@ -72,6 +87,7 @@
 
   window.I18N = {
     t: t,
+    station: station,
     applyDom: applyDom,
     setLang: setLang,
     lang: function () { return active; },

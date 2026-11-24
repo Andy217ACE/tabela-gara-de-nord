@@ -97,6 +97,7 @@ def test_toggle_switches_language_and_url(browser, base_url):  # noqa: F811
         page.goto(base_url + "/")
         page.evaluate("() => window.I18N && window.I18N.ready")
         btn = page.locator(".navbar [data-lang-toggle]")
+        page.click("#nav-more-btn")   # phones (Beta 1.67): the switch is in the „Mai mult” menu
         assert btn.is_visible()
         assert page.evaluate("() => document.documentElement.scrollWidth") <= 360
         assert page.evaluate("document.documentElement.lang") == "ro"

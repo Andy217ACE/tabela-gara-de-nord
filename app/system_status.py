@@ -12,9 +12,11 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
+from app import perf
 from app.ocr import stats as ocr_stats
 from app.store import SCHEMA_VERSION
 from app.version import __version__
@@ -108,6 +110,49 @@ def _db(db_path: str) -> dict:
     return {"size_mb": _mb(db_path), "wal_mb": 0.0 if wal is None else wal}
 
 
+QUALITY_TTL_S = 300  # the 7-day scan is cached: the page may be reloaded often
+_quality_cache: tuple[object, float, dict] | None = None
+_quality_lock = threading.Lock()  # (store, monotonic time, result)
+
+
+def _pct(part: int, whole: int) -> float | None:
+    return round(100.0 * part / whole, 1) if whole else None
+
+
+def ocr_quality(store, now: datetime) -> dict:
+    """Aggregate reading quality over the last 24 h and 7 days: distinct frames (captures)
+    and the share read without error; read rows (observations) and the share validated
+    `ok`. Counts only, nothing per train or per row. Cached QUALITY_TTL_S seconds."""
+    global _quality_cache
+    c = _quality_cache
+    if c and c[0] is store and time.monotonic() - c[1] < QUALITY_TTL_S:
+        return c[2]
+    with _quality_lock:   # one recompute at a time: concurrent requests after expiry wait for it
+        c = _quality_cache
+        if c and c[0] is store and time.monotonic() - c[1] < QUALITY_TTL_S:
+            return c[2]
+        # timestamps are stored as UTC ISO strings: a string comparison is a time comparison
+        s24, s7 = ((now - d).astimezone(timezone.utc).isoformat(timespec="seconds")
+                   for d in (timedelta(hours=24), timedelta(days=7)))
+        # shortcut: ~0.4 s on the live DB with a cold cache, at most once per QUALITY_TTL_S; a covering
+        # index (observed_at, validation_state) would remove it if #sistem traffic grows
+        with store._lock:   # one pass per table covers both windows
+            f = store._conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(ok != 0), 0), COALESCE(SUM(captured_at >= ?1), 0),"
+                " COALESCE(SUM(captured_at >= ?1 AND ok != 0), 0) FROM captures WHERE captured_at >= ?2",
+                (s24, s7)).fetchone()
+            r = store._conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(validation_state = 'ok'), 0), COALESCE(SUM(observed_at >= ?1), 0),"
+                " COALESCE(SUM(observed_at >= ?1 AND validation_state = 'ok'), 0) FROM observations"
+                " WHERE observed_at >= ?2", (s24, s7)).fetchone()
+        out = {"h24": {"frames": f[2], "frames_ok_pct": _pct(f[3], f[2]),
+                       "rows": r[2], "rows_ok_pct": _pct(r[3], r[2])},
+               "d7": {"frames": f[0], "frames_ok_pct": _pct(f[1], f[0]),
+                      "rows": r[0], "rows_ok_pct": _pct(r[1], r[0])}}
+        _quality_cache = (store, time.monotonic(), out)
+        return out
+
+
 def collect_status(store, settings, now: datetime, *, admin: bool = False) -> dict:
     """The status payload (see module doc). `admin=True` adds the details."""
     age = store.last_ok_age(now)
@@ -132,6 +177,9 @@ def collect_status(store, settings, now: datetime, *, admin: bool = False) -> di
         },
         "disk": {"free_gb": disk["free_gb"]},
         "db": _db(db_path),
+        "ocr_quality": ocr_quality(store, now),
+        "perf": {"window_s": perf.WINDOW_S, "routes": perf.routes_summary(include_admin=admin),
+                 "ocr_cycle": perf.ocr_summary()},
     }
     if admin:  # versions and pending updates stay admin-only: public, they'd be a target list
         out["tesseract"] = tesseract_info(getattr(settings, "tesseract_cmd", "tesseract"))

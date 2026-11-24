@@ -61,6 +61,7 @@ Fiecare are o funcție `show(params)` apelată la schimbarea paginii.
 | `#statie?nume=<nume>` | **Stație** | `#view-statie` | toți | nu (cade sub „Stații”) | `stats.js` (`statie`) |
 | `#sistem` | **Sistem** | `#view-sistem`, creată de `sistem.js` | toți (detalii pentru admin) | da | `sistem.js` (încărcat la prima vizită) |
 | `#versiuni` | **Versiuni** | `#view-versiuni` | toți | nu (link din subsol) | `versions.js` |
+| `#cum` | **Cum funcționează?** | `#view-cum`, creată de `cum.js` | toți | nu (link din subsol) | `cum.js` (+ `cum.css`), încărcat la prima vizită |
 | `#setari` | **Setări** | `#view-setari` | admin | nu (fără link în interfață) | `setari.js` (încărcat la prima vizită) |
 | `#ocr` | **Capturi OCR** | creat de `app.js` (`view-ocr`) | admin | nu | `ocr.js` (+ `ocr.css`), încărcat la cerere |
 | `#ocr2` | **Alternativa OCR** | creat de `ocr2.js` (`view-ocr2`) | admin | nu | `ocr2.js` (+ `ocr2.css`), încărcat la prima vizită |

@@ -32,8 +32,7 @@ CASES = {
     "android-desktop-site-landscape": (dict(viewport={"width": 915, "height": 412},
                                             device_scale_factor=2.625,
                                             user_agent=ANDROID_DESKTOP_UA, **PHONE), True),
-    "phone-390": (dict(viewport={"width": 390, "height": 844}, device_scale_factor=3, **PHONE), False),
-    "phone-430": (dict(viewport={"width": 430, "height": 932}, device_scale_factor=3, **PHONE), False),
+    # phones in portrait (≤ 700 px) have the bottom bar since Beta 1.67: tests/test_nav_mobile_browser.py
     "landscape-844": (dict(viewport={"width": 844, "height": 390}, device_scale_factor=3, **PHONE), False),
     "landscape-915": (dict(viewport={"width": 915, "height": 412}, device_scale_factor=2.625, **PHONE), False),
     "tablet-768": (dict(viewport={"width": 768, "height": 1024}, device_scale_factor=2, **PHONE), False),
@@ -151,7 +150,7 @@ def test_top_menu_visible_and_reachable(browser, base_url, case, theme):  # noqa
                                            ("#tren?nr=1636", "#trenuri"),
                                            ("#clasamente", "#clasamente")])
 def test_deep_link_highlights_parent_and_reveals_it(browser, base_url, hash_, active):  # noqa: F811
-    ctx, page, errors = _open(browser, base_url, "phone-390", "dark")
+    ctx, page, errors = _open(browser, base_url, "android-desktop-site", "dark")   # the top bar scrolls inside itself
     try:
         page.goto(base_url + "/" + hash_)
         page.wait_for_timeout(400)

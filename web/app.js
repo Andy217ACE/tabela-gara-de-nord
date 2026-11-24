@@ -216,12 +216,13 @@
 
     // A2 canonicalisation: `uncertain` = station/operator did not match a known name
     var unsure = t.uncertain === true;
-    c.stationLink.textContent = t.station ? t.station.toLowerCase() : "—";
+    var name = t.station ? window.I18N.station(t.station) : "";   // display name; the key stays in the URL
+    c.stationLink.textContent = name || "—";
     if (t.station) {
       var href = "#statie?nume=" + encodeURIComponent(t.station);
       if (c.stationLink.getAttribute("href") !== href) c.stationLink.setAttribute("href", href);
       c.stationLink.setAttribute("aria-label", T(fromBoard ? "board.stationPageFrom" : "board.stationPageTo",
-        { name: t.station + (unsure ? " (" + unsureText() + ")" : "") }));
+        { name: name + (unsure ? " (" + unsureText() + ")" : "") }));
       c.station.removeAttribute("aria-label");
     } else {
       c.stationLink.removeAttribute("href");
@@ -230,7 +231,7 @@
     }
     c.station.classList.toggle("is-uncertain", unsure && !!t.station);
     // full name as tooltip: long names are clamped to 2 lines / ellipsis by CSS
-    c.station.title = t.station ? t.station + (unsure ? " (" + unsureText() + ")" : "") : "";
+    c.station.title = t.station ? name + (unsure ? " (" + unsureText() + ")" : "") : "";
     c.type.className = typeClass(t.train_type);
     c.type.textContent = typeAbbr(t.train_type) || "?";
     c.type.title = T("board.typeTitle", { type: typeName(t.train_type) || typeAbbr(t.train_type) || T("board.typeUnknown") });
@@ -265,7 +266,7 @@
     c.plat.setAttribute("aria-label", known ? T("board.platAria", { p: t.platform }) : T("board.platNone"));
     c.plat.title = known ? T("board.platAria", { p: t.platform }) : T("board.platNoneTitle");
 
-    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + (t.station || "");
+    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + name;
     applyFollow(c);
 
     var sig = (read ? d : "?") + "|" + (known ? t.platform : "-");
@@ -515,12 +516,12 @@
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
-    "#sistem": "sistem", "#setari": "setari" };
+    "#sistem": "sistem", "#setari": "setari", "#cum": "cum" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
   // routes with a page title: i18n key title.<route>
   var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;   // route asked for by the address
@@ -624,6 +625,95 @@
     else if (ar.right > nr.right - pad) nav.scrollLeft += ar.right - (nr.right - pad);
   }
 
+  // ---- phones (≤ 700 px, style.css): bottom bar = 4 sections + „Mai mult” ----------
+  // The menu is filled from the .mainnav links that are not in the bar (one list of routes),
+  // plus Versiuni/Setări; on phones the language switch moves into it as well.
+  var NAV_BAR = ["tabela", "istoric", "trenuri", "statistici"];
+  var PHONE_MQ = "(max-width: 700px)";
+  function initMoreNav() {
+    var btn = $("nav-more-btn"), menu = $("nav-more-menu");
+    if (!btn || !menu) return;
+    function item(a) { var li = el("li"); li.append(a); menu.append(li); }
+    document.querySelectorAll(".mainnav .nav-item").forEach(function (a) {
+      if (NAV_BAR.indexOf(a.dataset.route) >= 0) return;
+      var c = a.cloneNode(true);
+      c.className = "nav-more-link";
+      c.removeAttribute("aria-current");
+      item(c);
+    });
+    [["versiuni", "title.versiuni", ["M5 6h14", "M5 12h14", "M5 18h9"]],
+     ["setari", "title.setari", ["M4 7h16", "M4 17h16", "M15 4.5v5", "M9 14.5v5"]],
+     ["cum", "title.cum", ["M12 8v.01", "M11 12h1v5h1", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"]]].forEach(function (r) {
+      var a = el("a", "nav-more-link");
+      a.href = "#" + r[0];
+      a.dataset.route = r[0];
+      var ic = icon(r[2]);
+      ic.setAttribute("class", "nav-icon");
+      var s = el("span", null, T(r[1]));
+      s.setAttribute("data-i18n", r[1]);
+      a.append(ic, s);
+      item(a);
+    });
+    var langLi = el("li", "nav-more-lang");
+    menu.append(langLi);
+    var lang = document.querySelector(".navbar > [data-lang-toggle]"), home = lang && lang.parentNode;
+    var mq = window.matchMedia ? window.matchMedia(PHONE_MQ) : null;
+    function setOpen(on) {
+      menu.hidden = !on;
+      btn.setAttribute("aria-expanded", on ? "true" : "false");
+    }
+    function placeLang() {
+      if (!lang) return;
+      if (mq && mq.matches) langLi.append(lang); else home.append(lang);
+      if (!(mq && mq.matches)) setOpen(false);
+    }
+    placeLang();
+    if (mq) {
+      if (mq.addEventListener) mq.addEventListener("change", placeLang);
+      else if (mq.addListener) mq.addListener(placeLang);
+    }
+    btn.addEventListener("click", function () { setOpen(menu.hidden); });
+    menu.addEventListener("click", function (e) { if (e.target.closest("a")) setOpen(false); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || menu.hidden) return;
+      setOpen(false);
+      btn.focus();
+    });
+    document.addEventListener("click", function (e) {
+      if (!menu.hidden && !btn.parentNode.contains(e.target)) setOpen(false);
+    });
+    window.addEventListener("hashchange", function () { setOpen(false); });
+  }
+
+  // Phones: a filter form collapses behind „Filtre (n)” (n = fields with a value); on wider
+  // screens the button is hidden and the form always open (style.css). Returns {button, sync}:
+  // call sync() after setting the fields from code (no input event then).
+  var filtSeq = 0;
+  function filterToggle(form) {
+    var btn = el("button", "btn btn-ghost filt-toggle");
+    btn.type = "button";
+    if (!form.id) form.id = "filt-form-" + (++filtSeq);
+    btn.setAttribute("aria-controls", form.id);
+    form.classList.add("filt-collapsible");
+    function count() {
+      return [].filter.call(form.elements, function (i) {
+        if (i.tagName === "BUTTON" || i.tagName === "FIELDSET") return false;
+        return i.type === "checkbox" || i.type === "radio" ? i.checked : String(i.value || "").trim() !== "";
+      }).length;
+    }
+    function sync() {
+      btn.textContent = T("stats.mobile.filters", { n: count() });
+      btn.setAttribute("aria-expanded", form.classList.contains("filt-open") ? "true" : "false");
+    }
+    btn.addEventListener("click", function () { form.classList.toggle("filt-open"); sync(); });
+    form.addEventListener("input", sync);
+    form.addEventListener("change", sync);
+    form.addEventListener("reset", function () { setTimeout(sync, 0); });
+    document.addEventListener("i18n:change", sync);
+    sync();
+    return { button: btn, sync: sync };
+  }
+
   function setTitle(name) {
     document.title = name === "tabela" ? "Tabela Gara de Nord"
       : (TITLES.indexOf(name) >= 0 ? T("title." + name) : "Tabela Gara de Nord") + " · Tabela Gara de Nord";
@@ -648,11 +738,12 @@
     if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");
+    if (name === "cum") loadLazyPage("cum", "cum.js", "cum.css");
     VIEWS.forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
     });
-    document.querySelectorAll(".nav-item").forEach(function (a) {
+    document.querySelectorAll(".nav-item, .nav-more-link").forEach(function (a) {
       if (a.dataset.route === (NAV_PARENT[name] || name)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
@@ -702,6 +793,7 @@
   window.TabelaApp.refresh = refresh;
   window.TabelaApp.el = el;
   window.TabelaApp.icon = icon;
+  window.TabelaApp.filterToggle = filterToggle;
   window.TabelaApp.ICONS = ICONS;
   window.TabelaApp.typeClass = typeClass;
   window.TabelaApp.typeAbbr = typeAbbr;
@@ -846,6 +938,7 @@
   }
 
   function init() {
+    initMoreNav();   // before initLang: its links get the dictionary texts too
     initLang();
     initPeronEst();
     loadConfig();

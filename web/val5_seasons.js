@@ -54,7 +54,7 @@
     } else {
       d.estimates.forEach(function (e) {
         var row = el("p", "val5-row", [
-          e.station, T("val5.pred.median", { v: fmt(Math.round(e.delay_min * 10) / 10) }),
+          window.I18N.station(e.station), T("val5.pred.median", { v: fmt(Math.round(e.delay_min * 10) / 10) }),
           T("val5.pred.interval", { low: fmt(Math.round(e.low * 10) / 10), high: fmt(Math.round(e.high * 10) / 10) }),
           T("val5.pred.n", { n: e.n })].join(" · "));
         box.append(row);

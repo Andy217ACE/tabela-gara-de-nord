@@ -126,6 +126,15 @@
         <span data-i18n="nav.system">Sistem</span>
       </a>
     </nav>
+    <!-- telefon (≤ 700 px): bara de jos are Tabelă/Istoric/Trenuri/Statistici + „Mai mult”;
+         app.js umple meniul cu restul legăturilor din .mainnav (o singură listă de rute) -->
+    <div class="nav-more">
+      <button type="button" class="nav-more-btn" id="nav-more-btn" aria-expanded="false" aria-controls="nav-more-menu">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>
+        <span data-i18n="nav.more">Mai mult</span>
+      </button>
+      <ul class="nav-more-menu" id="nav-more-menu" hidden></ul>
+    </div>
     <button type="button" class="lang-toggle" data-lang-toggle aria-label="Switch language / Schimbă limba" data-i18n-attr="aria-label:nav.langAria">EN</button>
   </div>
 
@@ -347,6 +356,7 @@
     <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
     <span class="footer-meteo">Meteo: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> · CC BY 4.0 (valori de model)</span>
+    <a class="footer-how" href="#cum" data-i18n="footer.how">Cum funcționează?</a>
     <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor" data-i18n-attr="title:footer.versionsTitle">Versiuni</a>
   </footer>
 </body>

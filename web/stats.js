@@ -491,7 +491,13 @@
         load();
       });
       v.body = el("div", "st-body");
-      root.replaceChildren(v.ui.form, v.body);
+      // phones: the filters collapse behind „Filtre (n)” (cfg.collapse; app.js filterToggle)
+      v.filt = cfg.collapse && App.filterToggle ? App.filterToggle(v.ui.form) : null;
+      if (v.filt) {
+        var set = v.ui.set;
+        v.ui.set = function (p) { set(p); v.filt.sync(); };
+        root.replaceChildren(v.filt.button, v.ui.form, v.body);
+      } else root.replaceChildren(v.ui.form, v.body);
     }
     function load(force) {
       if (!v.body) return;   // hidden meanwhile (a debounce timer of the filter form can fire after hide())
@@ -788,7 +794,7 @@
   }
 
   var trenuri = makeView({
-    root: "st-trenuri", route: "trenuri", fields: TR_FIELDS,
+    root: "st-trenuri", route: "trenuri", fields: TR_FIELDS, collapse: true,
     url: function (v) {
       var q = toSearch(v.p, TR_FIELDS).toString();
       return "/api/trains/stats" + (q ? "?" + q : "");

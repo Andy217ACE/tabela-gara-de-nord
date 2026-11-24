@@ -42,7 +42,7 @@ updates and reboots are manual; the admin token is rotated by hand.
 ### Pages
 
 `#` (Board/Panel), `#istoric`, `#statistici`, `#clasamente`, `#trenuri` / `#tren`, `#statii` /
-`#statie`, `#urmarite`, `#sistem` (service state; details for the admin), `#versiuni` (version history),
+`#statie`, `#urmarite`, `#sistem` (service state; details for the admin), `#versiuni` (version history), `#cum` (how it works, in plain language),
 and the admin-only `#ocr` (captures), `#ocr2` (alternative-OCR journal: crops and verdicts), `#admin` and
 `#setari`. The full list is in [Interface](docs/en/interfata.md).
 

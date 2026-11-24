@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import journeys, stations, stats
+from app import canonical, journeys, stations, stats
 from app import stats_overview as overview_v2
 from app import stats_changes, stats_compare, stats_heatmap
 
@@ -277,6 +277,12 @@ def _station_name(name: str) -> str:
     if not canon:
         raise _bad("Nume de stație invalid.")
     return canon
+
+
+@router.get("/api/station-names")
+async def station_names():
+    """Key -> Romanian display name; the frontend renders every station through it."""
+    return canonical.station_names()
 
 
 @router.get("/api/stations")

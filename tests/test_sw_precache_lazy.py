@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parent.parent / "web"
-LAZY = ("admin.js", "ocr.js", "sistem.js", "setari.js", "sezoane.js", "versions.js")
+LAZY = ("admin.js", "ocr.js", "sistem.js", "setari.js", "sezoane.js", "versions.js", "cum.js", "cum.css")
 
 
 def _sw():

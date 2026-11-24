@@ -1,6 +1,7 @@
 // © 2026 Andy217Ace
 // Tabela Gara de Nord — the "System" page (#sistem): is the board alive? when was the last
-// successful read, the rate of unread rows in the last hour, disk space, database size.
+// successful read, the rate of unread rows in the last hour, disk space, database size,
+// reading quality over 24 h / 7 d and in-memory timings (OCR cycle, p50/p95 per API route).
 // Data: GET /api/system (public); for admins also GET /api/admin/system (details, if the
 // session is an admin one). A missing value is shown as "unknown" (sistem.unknown), never 0.
 // DOM built with createElement/textContent only (CSP: no inline styles/scripts).
@@ -90,6 +91,46 @@
       d.db && d.db.wal_mb != null ? T("sistem.row.wal", { v: d.db.wal_mb }) : null));
     list.appendChild(row(T("sistem.row.uptime"), uptime(d.uptime_s)));
     box.appendChild(list);
+    if (d.ocr_quality) box.appendChild(qualityBlock(d.ocr_quality));
+    if (d.perf) box.appendChild(perfBlock(d.perf));
+  }
+
+  // --- reading quality (24 h / 7 d) and timings (since restart) ---------------------------
+  var MAX_ROUTES = 8;  // busiest routes shown; the API returns all of them
+
+  function pct(v) { return v == null ? T("sistem.unknown") : v + " %"; }
+
+  function qualityBlock(q) {
+    var sec = el("div", "sys-block");
+    sec.appendChild(el("h2", "sys-block-title", T("sistem.quality.title")));
+    var list = el("ul", "sys-list");
+    [["h24", "sistem.quality.h24"], ["d7", "sistem.quality.d7"]].forEach(function (p) {
+      var w = q[p[0]] || {};
+      list.appendChild(row(T(p[1]), pct(w.frames_ok_pct),
+        T("sistem.quality.sub", { frames: num(w.frames), rows: num(w.rows), rowsPct: pct(w.rows_ok_pct) })));
+    });
+    sec.appendChild(list);
+    return sec;
+  }
+
+  function ms(v) { return num(v, "ms"); }
+
+  function perfBlock(p) {
+    var sec = el("div", "sys-block");
+    sec.appendChild(el("h2", "sys-block-title", T("sistem.perf.title")));
+    sec.appendChild(el("p", "sys-note", T("sistem.perf.note")));
+    var list = el("ul", "sys-list");
+    var c = p.ocr_cycle || {};
+    list.appendChild(row(T("sistem.perf.ocrCycle"), c.n ? ms(c.p50_ms) + " / " + ms(c.p95_ms) : T("sistem.unknown"),
+      T("sistem.perf.ocrSub", { last: ms(c.last_ms), n: num(c.n) })));
+    (p.routes || []).slice(0, MAX_ROUTES).forEach(function (r) {
+      var li = row(r.route, ms(r.p50_ms) + " / " + ms(r.p95_ms), T("sistem.perf.requests", { n: r.n }));
+      li.firstChild.classList.add("sys-route");
+      list.appendChild(li);
+    });
+    if (!(p.routes || []).length) list.appendChild(row(T("sistem.perf.routes"), T("sistem.perf.noRoutes")));
+    sec.appendChild(list);
+    return sec;
   }
 
   // "Data quality per day" (stat_quality_daily.js/.css) is loaded on demand, for admins only
@@ -119,6 +160,10 @@
     list.appendChild(row(T("sistem.admin.retried"), num(w.frames_retried)));
     list.appendChild(row(T("sistem.admin.duration"), num(w.duration_ms_p50, "ms")));
     list.appendChild(row(T("sistem.admin.diskTotal"), num(d.disk && d.disk.total_gb, "GB")));
+    // version details stay on the admin endpoint (public, they would be a target list)
+    if (d.tesseract) list.appendChild(row(T("sistem.admin.tesseract"), num(d.tesseract.version),
+      (d.tesseract.langs || []).length ? T("sistem.admin.langs", { v: d.tesseract.langs.join(", ") }) : null));
+    if ("security_updates" in d) list.appendChild(row(T("sistem.admin.secUpdates"), num(d.security_updates)));
     box.appendChild(list);
     loadQualityDaily(function () { App.statQualityDaily.mount(box); });  // data quality per day (admin)
     box.hidden = false;

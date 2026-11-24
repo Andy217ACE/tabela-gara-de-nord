@@ -5,6 +5,25 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.68 — 2026-11-24
+### Adăugat
+- **Navigație nouă pe telefon:** o bară jos cu Tabelă, Istoric, Trenuri, Statistici și „Mai mult” (Urmărite, Clasamente, Stații, Sistem, Versiuni, Setări, Cum funcționează?, limba). Pe tabletă și desktop meniul rămâne sus.
+- **Pagina „Cum funcționează?”** (`#cum`, din subsol și din „Mai mult”): pe înțelesul oricui, de unde vin datele (camera web CFR citită prin OCR), ce înseamnă întârzierea, cum se fac istoricul și statisticile, limitele, confidențialitatea și unde raportezi o problemă.
+- **Numele stațiilor cu diacritice** pe toate paginile (Brașov, Aeroport Henri Coandă); „Cluj Napoca” rămâne scris ca la CFR. Cheile din adrese, statistici și exporturi rămân neschimbate. Sursa: `data/stations.txt`; endpoint nou `GET /api/station-names`, câmp `display_name` în `/api/stations`. Căutarea găsește și după numele afișat (`Brașov`, `Cluj-Napoca`, `cluj napoca`).
+- **Pagina Sistem arată calitatea citirii** pe ultimele 24 h și 7 zile (cadre citite, rânduri sigure) și **viteza**: durata ciclului OCR și timpii tipic/lent (p50/p95) pe cererile API, măsurați în memorie (pornesc de la zero la repornire). Pentru admin: versiunea Tesseract, limbile și actualizările de securitate în așteptare.
+### Schimbat
+- **Pe telefon, filtrele** din Istoric și Trenuri se strâng sub butonul „Filtre (n)”.
+- **Statistici pe telefon** arată întâi titlurile secțiunilor, care se deschid la apăsare (pagina scade de la ~18.700 la ~3.200 px cu secțiunile închise).
+- **Istoric pe telefon** e cam de două ori mai scurt (50 de rânduri: ~6.800 px, era ~13.100); butonul „Încarcă încă N” arată câte călătorii au rămas.
+- **Testele automate** rulează o singură dată pe commit (înainte de două ori pe ramurile cu PR), iar rulările depășite se opresc singure.
+### English
+- **New phone navigation:** a bottom bar with Board, History, Trains, Statistics and "More" (Followed, Rankings, Stations, System, Versions, Settings, How it works, language). Tablet and desktop keep the top menu.
+- **"How it works" page** (`#cum`, from the footer and "More"): in plain language, where the data comes from (the CFR webcam read with OCR), what "delay" means, how history and statistics are built, the limits, privacy and where to report a problem.
+- **Station names with diacritics** on every page (Brașov, Aeroport Henri Coandă); "Cluj Napoca" stays as CFR writes it. Keys in URLs, statistics and exports are unchanged. Source: `data/stations.txt`; new endpoint `GET /api/station-names`, `display_name` field in `/api/stations`. Search also matches the display name.
+- **The System page shows reading quality** over the last 24 h and 7 days and **speed**: OCR cycle duration and typical/slow (p50/p95) API times, measured in memory (reset on restart). For admins: Tesseract version, languages and pending security updates.
+- **On phones, filters** in History and Trains collapse behind "Filters (n)"; **Statistics** lists section headings first, opened on tap; **History** is about half as long, and "Load N more" shows how many journeys are left.
+- **CI** runs once per commit (was twice on branches with a PR) and cancels superseded runs.
+
 ## Beta 1.67 — 2026-11-24
 ### Schimbat
 - **Accesibilitate (WCAG 2.2 AA):** toate linkurile și butoanele au o zonă de atingere de cel puțin 24×24 px (linkuri de stație și tren, sortări, câmpuri, bife); fiecare pagină are un singur titlu principal și titluri fără salturi de nivel (inclusiv Setări și Statistici).

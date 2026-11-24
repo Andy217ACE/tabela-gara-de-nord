@@ -15,6 +15,7 @@ import httpx
 from app.fetcher import FetchError, fetch_board_image, image_hash
 from app.models import Row
 from app.ocr import alt_reader
+from app import perf
 from app.ocr import stats as ocr_stats
 from app.ocr.reader import DelayVotes, OcrError, read_board, read_board_debug
 from app.rejected import save_rejected
@@ -244,4 +245,6 @@ async def run_poller(
                     await asyncio.to_thread(save_rejected, rejected_dir, data, ts,
                                             dict(rejected))
                 await capture(data, rows, debug, ts, dur_ms, error)
+            # „Sistem” page: whole cycle of a new image (OCR, store, capture), also when OCR failed
+            perf.record_ocr_cycle((time.perf_counter() - t0) * 1000)
         await pause(tracker.next_poll_delay(clock(), last_change))

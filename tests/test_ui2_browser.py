@@ -230,7 +230,8 @@ def test_skeleton_while_loading_then_content(browser, base_url):
         assert page.evaluate(NO_HSCROLL)
         for r in held:
             r.continue_()
-        page.wait_for_selector("#st-statistici .ss-fig", timeout=15000)
+        # attached: at 390 px the sections sit in closed groups (two levels, Beta 1.67)
+        page.wait_for_selector("#st-statistici .ss-fig", state="attached", timeout=15000)
         expect(page.locator("#st-statistici .ui-skel")).to_have_count(0)
     finally:
         ctx.close()

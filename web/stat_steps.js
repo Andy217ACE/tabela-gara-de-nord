@@ -114,7 +114,7 @@
         tt("stats.ch.top_c").split("|"),
         c.top.map(function (t) {
           var a = h.hashLink({ label: t.train_type + " " + t.train_no, href: t.href }, "ss-plink");
-          return [a, t.station ? t.station.charAt(0) + t.station.slice(1).toLowerCase() : "—", t.date, t.sched_time || "—",
+          return [a, t.station ? window.I18N.station(t.station) : "—", t.date, t.sched_time || "—",
             t.changes, t.values.join(" → ")];
         })));
       f.foot.append(box);

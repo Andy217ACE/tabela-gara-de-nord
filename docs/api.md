@@ -109,6 +109,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/stations` | nimic | Lista stațiilor | 5.18 |
 | GET | `/api/stations/{name}` | nimic | Detaliul unei stații | 5.18 |
 | GET | `/api/stations/{name}/journeys` | nimic | Călătoriile unei stații (paginat) | 5.18 |
+| GET | `/api/station-names` | nimic | Numele afișate ale stațiilor (cheie → nume cu diacritice) | 5.18 |
 | GET | `/api/system` | nimic (detalii doar pentru admin) | Starea sistemului, versiunea, discul | 5.19 |
 | GET | `/api/export/history.csv` | nimic | Export CSV al istoricului pe interval | 5.20 |
 | GET | `/api/stats/changes` | nimic | „Ce s-a schimbat săptămâna asta” și alertele pe prag | 5.21 |
@@ -654,7 +655,7 @@ suficient.
 - **Răspuns (200), fără date:** `{"params": {…}, "eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": [], "stations": {"eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": []}}`.
 - Cu date, `most_delayed` și `most_punctual` sunt liste de `{train_no, board, station, stats}`.
 
-### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`
+### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`, `GET /api/station-names`
 
 Stațiile afișate pe tablă: originea trenurilor la sosiri și destinația la plecări. Întârzierea
 e cea afișată pe tabla din București Nord, nu cea a stației de destinație (text inclus în răspuns).
@@ -681,6 +682,8 @@ Nume invalid: 422 `"Nume de stație invalid."`; nevăzut pe tablă: 404
 călătorie, pentru pagina următoare). Răspunsul: `params`, `name`, `n`, `next_before` (`null` la
 ultima pagină), `journeys`. `format=csv` dă `statie-<slug>-calatorii.csv`.
 
+**`GET /api/station-names`:** obiect JSON `{CHEIE: "Nume afișat"}`, de exemplu `{"BRASOV": "Brașov"}`. Sursa e `data/stations.txt`, o linie pe stație în formatul `CHEIE | Nume afișat` (cheia = forma stocată, majuscule fără diacritice, exact cum o dă tabela; `#` începe un comentariu). Cheile din URL-uri, statistici și exporturi nu se schimbă; aplicația afișează doar numele. `GET /api/stations` și `GET /api/stations/{name}` adaugă câmpul `display_name`, iar căutarea acceptă și numele afișat (`Brașov`, `Cluj-Napoca`, `cluj napoca`). O cheie lipsă din fișier se afișează ca text citit (Title Case).
+
 ### 5.19 `GET /api/system`
 
 Starea sistemului, pentru pagina Sistem. Varianta publică e minimă.
@@ -692,6 +695,11 @@ Starea sistemului, pentru pagina Sistem. Varianta publică e minimă.
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
  "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3},
+ "ocr_quality": {"h24": {"frames": 1180, "frames_ok_pct": 99.2, "rows": 20400, "rows_ok_pct": 96.5},
+                 "d7": {"frames": 8100, "frames_ok_pct": 98.9, "rows": 140000, "rows_ok_pct": 96.1}},
+ "perf": {"window_s": 86400,
+          "routes": [{"route": "/api/board", "n": 412, "p50_ms": 3.1, "p95_ms": 9.8}],
+          "ocr_cycle": {"n": 60, "p50_ms": 1830.0, "p95_ms": 2410.5, "last_ms": 1795.2}},
  "admin": false}
 ```
 
@@ -699,6 +707,16 @@ Starea sistemului, pentru pagina Sistem. Varianta publică e minimă.
   pagina cere și `GET /api/admin/system` (secțiunea 7.9). Verificarea nu produce niciodată 401 sau
   503 pentru vizitatorii obișnuiți.
 - Doar în `GET /api/admin/system` (nu în răspunsul public, ca versiunile și actualizările lipsă să nu fie o listă de ținte): `tesseract.version` este versiunea Tesseract (`null` dacă nu poate fi citită), iar `tesseract.langs` lista modelelor traineddata încărcate (`[]` dacă nu se poate afla); ambele se citesc o singură dată și se păstrează. `security_updates` este numărul de actualizări de securitate Ubuntu în așteptare, citit din `/var/lib/update-notifier/updates-available` (fără apt, fără sudo); `null` dacă fișierul lipsește.
+- `ocr_quality` — calitatea citirii, doar agregate: pentru ultimele 24 h (`h24`) și 7 zile (`d7`),
+  `frames` = imagini distincte capturate, `frames_ok_pct` = procentul citit fără eroare,
+  `rows` = rânduri citite, `rows_ok_pct` = procentul validat `ok`. Procentele sunt `null` fără date.
+  Calculat din `captures`/`observations` și păstrat 5 minute.
+- `perf` — timpi măsurați în memorie (un singur proces), resetați la repornire; contează doar
+  ultimele `window_s` secunde. `routes`: per șablon de rută (de ex. `/api/trains/{train_no}`, nu
+  calea cu ID-uri sau parametri), cele mai folosite primele, cu `n`, `p50_ms`, `p95_ms` (timpul
+  până la primul octet al răspunsului), cel mult 1000 de măsurători pe rută; rutele `/api/admin/*`
+  apar doar în `GET /api/admin/system`. `ocr_cycle`: durata procesării fiecărei imagini noi
+  (OCR, salvare, captură), ultimele 500, cu `n`, `p50_ms`, `p95_ms`, `last_ms` (`null` fără date).
 - `stare` poate fi `live`, dar și alte valori (`app/system_status.py`).
 
 ### 5.20 `GET /api/export/history.csv`
@@ -1108,7 +1126,8 @@ vin din cerere.
 ### 7.9 `GET /api/admin/system`
 
 Detaliile paginii Sistem. Aceleași câmpuri ca la `/api/system`, plus `disk.total_gb`,
-`ocr.expected_rows`, `poller.last_error_age_s` și `ocr_window`. Pentru vizitatorii fără admin
+`ocr.expected_rows`, `poller.last_error_age_s`, `ocr_window`, `tesseract`, `security_updates`
+(vezi 5.19), iar `perf.routes` include și rutele `/api/admin/*`. Pentru vizitatorii fără admin
 ruta returnează 401, iar pagina nu o cere.
 
 ### 7.10 OCR alternativ (`#ocr2`), calitatea pe zi și NVMe

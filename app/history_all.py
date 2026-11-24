@@ -27,8 +27,7 @@ import re
 import time
 from datetime import date
 
-from app import journeys, quality, stats
-from app.normalize import clean_station
+from app import journeys, quality, stations, stats
 
 PAGE_MAX = 200
 AGG_TTL_S = 60.0  # summary/quality cache for the every-train view (see module doc)
@@ -119,10 +118,9 @@ def _where(train: int | None, p: stats.Params, station, time_from, time_to):
         where.append("s.service_date <= ?")
         args.append(p.date_to.isoformat())
     if station:
-        q = clean_station(station) or station.strip().upper()
-        esc = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-        where.append(f"{journeys.STATION_SQL} LIKE ? ESCAPE '!'")
-        args.append(f"%{esc}%")
+        sql, sargs = stations.search_sql(journeys.STATION_SQL, station)
+        where.append(sql)
+        args.extend(sargs)
     if time_from:
         where.append("s.sched_time >= ?")
         args.append(time_from)

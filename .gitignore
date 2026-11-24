@@ -10,6 +10,7 @@ __pycache__/
 data/*
 !data/operators.txt
 !data/stations_seed.txt
+!data/stations.txt
 !tests/fixtures/*.db
 
 # capturi reale (repo public): imaginile setului de adevar sunt locale

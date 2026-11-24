@@ -111,6 +111,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/stations` | nothing | The list of stations | 5.18 |
 | GET | `/api/stations/{name}` | nothing | The detail of a station | 5.18 |
 | GET | `/api/stations/{name}/journeys` | nothing | A station's journeys (paginated) | 5.18 |
+| GET | `/api/station-names` | nothing | Station display names (key → name with diacritics) | 5.18 |
 | GET | `/api/system` | nothing (details for admin only) | The system state, the version, the disk | 5.19 |
 | GET | `/api/export/history.csv` | nothing | CSV export of the history over a range | 5.20 |
 | GET | `/api/stats/changes` | nothing | "What changed this week" and the threshold alerts | 5.21 |
@@ -656,7 +657,7 @@ sample.
 - **Response (200), with no data:** `{"params": {…}, "eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": [], "stations": {"eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": []}}`.
 - With data, `most_delayed` and `most_punctual` are lists of `{train_no, board, station, stats}`.
 
-### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`
+### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`, `GET /api/station-names`
 
 The stations shown on the board: the trains' origin on arrivals and the destination on departures. The delay
 is the one shown on the București Nord board, not that of the destination station (text included in the response).
@@ -683,6 +684,8 @@ An invalid name: 422 `"Nume de stație invalid."` (Invalid station name); not se
 id, for the next page). The response: `params`, `name`, `n`, `next_before` (`null` on the
 last page), `journeys`. `format=csv` gives `statie-<slug>-calatorii.csv`.
 
+**`GET /api/station-names`:** a JSON object `{KEY: "Display name"}`, for example `{"BRASOV": "Brașov"}`. The source is `data/stations.txt`, one line per station in the format `KEY | Display name` (the key is the stored form, uppercase without diacritics, exactly as the board gives it; `#` starts a comment). Keys in URLs, statistics and exports do not change; the app only displays the name. `GET /api/stations` and `GET /api/stations/{name}` add a `display_name` field, and search also accepts the display name (`Brașov`, `Cluj-Napoca`, `cluj napoca`). A key missing from the file is displayed as the read text (Title Case).
+
 ### 5.19 `GET /api/system`
 
 The system state, for the System page. The public variant is minimal.
@@ -694,6 +697,11 @@ The system state, for the System page. The public variant is minimal.
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
  "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3},
+ "ocr_quality": {"h24": {"frames": 1180, "frames_ok_pct": 99.2, "rows": 20400, "rows_ok_pct": 96.5},
+                 "d7": {"frames": 8100, "frames_ok_pct": 98.9, "rows": 140000, "rows_ok_pct": 96.1}},
+ "perf": {"window_s": 86400,
+          "routes": [{"route": "/api/board", "n": 412, "p50_ms": 3.1, "p95_ms": 9.8}],
+          "ocr_cycle": {"n": 60, "p50_ms": 1830.0, "p95_ms": 2410.5, "last_ms": 1795.2}},
  "admin": false}
 ```
 
@@ -701,6 +709,16 @@ The system state, for the System page. The public variant is minimal.
   the page also requests `GET /api/admin/system` (section 7.9). The check never produces 401 or
   503 for ordinary visitors.
 - Only in `GET /api/admin/system` (not in the public response, so versions and missing updates are not a target list): `tesseract.version` is the Tesseract version (`null` if it cannot be read) and `tesseract.langs` the list of loaded traineddata models (`[]` if unknown); both are read once and cached. `security_updates` is the number of pending Ubuntu security updates, read from `/var/lib/update-notifier/updates-available` (no apt, no sudo); `null` if the file is missing.
+- `ocr_quality` — reading quality, aggregates only: for the last 24 h (`h24`) and 7 days (`d7`),
+  `frames` = distinct captured images, `frames_ok_pct` = the share read without error,
+  `rows` = rows read, `rows_ok_pct` = the share validated `ok`. Percentages are `null` without data.
+  Computed from `captures`/`observations` and cached for 5 minutes.
+- `perf` — timings measured in memory (a single process), reset on restart; only the last
+  `window_s` seconds count. `routes`: per route template (e.g. `/api/trains/{train_no}`, not the
+  path with IDs or query parameters), busiest first, with `n`, `p50_ms`, `p95_ms` (time to the
+  first byte of the response), at most 1000 samples per route; `/api/admin/*` routes appear only in
+  `GET /api/admin/system`. `ocr_cycle`: processing time of each new image (OCR, store, capture),
+  the last 500, with `n`, `p50_ms`, `p95_ms`, `last_ms` (`null` without data).
 - `stare` can be `live`, but also other values (`app/system_status.py`).
 
 ### 5.20 `GET /api/export/history.csv`
@@ -1110,7 +1128,8 @@ come from the request.
 ### 7.9 `GET /api/admin/system`
 
 The details of the System page. The same fields as `/api/system`, plus `disk.total_gb`,
-`ocr.expected_rows`, `poller.last_error_age_s` and `ocr_window`. For visitors without admin
+`ocr.expected_rows`, `poller.last_error_age_s`, `ocr_window`, `tesseract`, `security_updates`
+(see 5.19), and `perf.routes` also includes the `/api/admin/*` routes. For visitors without admin
 the route returns 401, and the page does not request it.
 
 ### 7.10 Alternative OCR (`#ocr2`), daily quality and NVMe
