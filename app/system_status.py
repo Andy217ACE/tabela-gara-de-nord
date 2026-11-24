@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -110,7 +111,8 @@ def _db(db_path: str) -> dict:
 
 
 QUALITY_TTL_S = 300  # the 7-day scan is cached: the page may be reloaded often
-_quality_cache: tuple[object, float, dict] | None = None  # (store, monotonic time, result)
+_quality_cache: tuple[object, float, dict] | None = None
+_quality_lock = threading.Lock()  # (store, monotonic time, result)
 
 
 def _pct(part: int, whole: int) -> float | None:
@@ -125,21 +127,30 @@ def ocr_quality(store, now: datetime) -> dict:
     c = _quality_cache
     if c and c[0] is store and time.monotonic() - c[1] < QUALITY_TTL_S:
         return c[2]
-    out = {}
-    for key, delta in (("h24", timedelta(hours=24)), ("d7", timedelta(days=7))):
+    with _quality_lock:   # one recompute at a time: concurrent requests after expiry wait for it
+        c = _quality_cache
+        if c and c[0] is store and time.monotonic() - c[1] < QUALITY_TTL_S:
+            return c[2]
         # timestamps are stored as UTC ISO strings: a string comparison is a time comparison
-        since = (now - delta).astimezone(timezone.utc).isoformat(timespec="seconds")
-        with store._lock:
-            frames, frames_ok = store._conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(ok != 0), 0) FROM captures WHERE captured_at >= ?",
-                (since,)).fetchone()
-            rows, rows_ok = store._conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(validation_state = 'ok'), 0) FROM observations"
-                " WHERE observed_at >= ?", (since,)).fetchone()
-        out[key] = {"frames": frames, "frames_ok_pct": _pct(frames_ok, frames),
-                    "rows": rows, "rows_ok_pct": _pct(rows_ok, rows)}
-    _quality_cache = (store, time.monotonic(), out)
-    return out
+        s24, s7 = ((now - d).astimezone(timezone.utc).isoformat(timespec="seconds")
+                   for d in (timedelta(hours=24), timedelta(days=7)))
+        # shortcut: ~0.4 s on the live DB with a cold cache, at most once per QUALITY_TTL_S; a covering
+        # index (observed_at, validation_state) would remove it if #sistem traffic grows
+        with store._lock:   # one pass per table covers both windows
+            f = store._conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(ok != 0), 0), COALESCE(SUM(captured_at >= ?1), 0),"
+                " COALESCE(SUM(captured_at >= ?1 AND ok != 0), 0) FROM captures WHERE captured_at >= ?2",
+                (s24, s7)).fetchone()
+            r = store._conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(validation_state = 'ok'), 0), COALESCE(SUM(observed_at >= ?1), 0),"
+                " COALESCE(SUM(observed_at >= ?1 AND validation_state = 'ok'), 0) FROM observations"
+                " WHERE observed_at >= ?2", (s24, s7)).fetchone()
+        out = {"h24": {"frames": f[2], "frames_ok_pct": _pct(f[3], f[2]),
+                       "rows": r[2], "rows_ok_pct": _pct(r[3], r[2])},
+               "d7": {"frames": f[0], "frames_ok_pct": _pct(f[1], f[0]),
+                      "rows": r[0], "rows_ok_pct": _pct(r[1], r[0])}}
+        _quality_cache = (store, time.monotonic(), out)
+        return out
 
 
 def collect_status(store, settings, now: datetime, *, admin: bool = False) -> dict:

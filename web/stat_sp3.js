@@ -188,7 +188,8 @@
     }
     function near() {
       if (!box.isConnected) window.removeEventListener("scroll", near);
-      else if (box.getBoundingClientRect().top < window.innerHeight + 100) run();
+      // getClientRects: a box in a closed group (phones) is display:none, its rect top is 0
+      else if (box.getClientRects().length && box.getBoundingClientRect().top < window.innerHeight + 100) run();
     }
     if (!window.IntersectionObserver) { run(); return; }
     io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) run(); }, { rootMargin: "100px" });

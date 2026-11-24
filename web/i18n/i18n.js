@@ -45,10 +45,11 @@
 
   // Numele stațiilor: cheia stocată (BRASOV) → nume afișat (Brașov), același în ro și en.
   var stations = {};
-  jobs.push(fetch("/api/station-names")
-    .then(function (r) { return r.ok ? r.json() : {}; })
-    .catch(function () { return {}; })
-    .then(function (d) { stations = d || {}; }));
+  // at most ~2.5 s of waiting: a hung request must not keep the whole app from starting (names fall back to Title Case)
+  jobs.push(Promise.race([
+    fetch("/api/station-names").then(function (r) { return r.ok ? r.json() : {}; }),
+    new Promise(function (resolve) { setTimeout(function () { resolve({}); }, 2500); })
+  ]).catch(function () { return {}; }).then(function (d) { stations = d || {}; }));
 
   // Singurul helper de afișare a unei stații; cheie necunoscută (citire greșită) → Title Case.
   function station(name) {
