@@ -50,6 +50,14 @@ def test_states_have_their_romanian_labels():
         assert key in JS and ro[key] == label
 
 
+def test_quality_perf_and_admin_version_rows_render_only_from_payload():
+    # public blocks drawn from /api/system; version details only if the admin payload has them
+    assert "if (d.ocr_quality) box.appendChild(qualityBlock(d.ocr_quality))" in JS
+    assert "if (d.perf) box.appendChild(perfBlock(d.perf))" in JS
+    assert "if (d.tesseract)" in JS and '"security_updates" in d' in JS
+    assert "/* --- H1 (Beta 1.68)" in CSS and "/* --- end H1 --- */" in CSS
+
+
 sync_api = pytest.importorskip("playwright.sync_api")
 
 import uvicorn  # noqa: E402
@@ -117,5 +125,9 @@ def test_sistem_page_at_390px_live_and_no_horizontal_scroll(browser, base_url):
         assert page.inner_text(".sys-badge") == "LIVE"
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
         assert "Ultima citire reușită" in page.inner_text("#sys-body")
+        body = page.inner_text("#sys-body")
+        assert "Calitatea citirii" in body and "Ultimele 7 zile" in body
+        assert "Viteză" in body and "se resetează la repornirea serverului" in body
+        assert page.locator(".sys-block").count() == 2
     finally:
         page.close()
