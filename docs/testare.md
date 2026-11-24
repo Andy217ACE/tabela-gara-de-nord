@@ -28,8 +28,8 @@ Numere de referință (Beta 1.65, `pytest --collect-only -q`):
 
 Fișierele de dependențe:
 
-- `requirements.txt` (runtime, pentru aplicație): `fastapi==0.156.0`, `uvicorn[standard]==0.54.0`, `opencv-python-headless==5.0.0.93`, `numpy==2.5.4`, `pytesseract==0.3.13`, `pywebpush==2.5.0`, `py-vapid==1.9.6`, `cryptography==50.0.2`, `httpx==0.28.1`, `tzdata==2026.5`.
-- `requirements-dev.txt`: include `requirements.txt` (`-r requirements.txt`) și adaugă `pytest`, `pytest-asyncio` și `playwright==1.64.0`. Comentariul din fișier spune că Playwright este opțional: testele de browser din `tests/test_footer_browser.py` și restul fișierelor `*_browser.py` sar când lipsește.
+- `requirements.txt` (runtime, pentru aplicație): `fastapi==0.165.0`, `uvicorn[standard]==0.54.0`, `opencv-python-headless==5.1.0.95`, `numpy==2.5.5`, `pytesseract==0.3.13`, `pywebpush==2.5.0`, `py-vapid==1.9.6`, `cryptography==50.0.2`, `httpx==0.28.1`, `tzdata==2026.6`.
+- `requirements-dev.txt`: include `requirements.txt` (`-r requirements.txt`) și adaugă `pytest`, `pytest-asyncio` și `playwright==1.65.2`. Comentariul din fișier spune că Playwright este opțional: testele de browser din `tests/test_footer_browser.py` și restul fișierelor `*_browser.py` sar când lipsește.
 
 Pași, din README (secțiunea „Rulare (dezvoltare)”):
 

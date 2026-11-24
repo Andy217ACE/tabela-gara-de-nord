@@ -67,11 +67,11 @@ numpy==2.5.5
     # via
     #   -r requirements.txt
     #   opencv-python-headless
-opencv-python-headless==5.0.0.93
+opencv-python-headless==5.1.0.95
     # via -r requirements.txt
 opentelemetry-api==1.45.2
     # via fastapi
-packaging==26.3
+packaging==26.4
     # via pytesseract
 pillow==13.0.0
     # via pytesseract

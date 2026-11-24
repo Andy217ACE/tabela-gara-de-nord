@@ -28,8 +28,8 @@ Reference numbers (Beta 1.65, `pytest --collect-only -q`):
 
 The dependency files:
 
-- `requirements.txt` (runtime, for the application): `fastapi==0.156.0`, `uvicorn[standard]==0.54.0`, `opencv-python-headless==5.0.0.93`, `numpy==2.5.4`, `pytesseract==0.3.13`, `pywebpush==2.5.0`, `py-vapid==1.9.6`, `cryptography==50.0.2`, `httpx==0.28.1`, `tzdata==2026.5`.
-- `requirements-dev.txt`: includes `requirements.txt` (`-r requirements.txt`) and adds `pytest`, `pytest-asyncio` and `playwright==1.64.0`. The comment in the file says Playwright is optional: the browser tests in `tests/test_footer_browser.py` and the other `*_browser.py` files are skipped when it is missing.
+- `requirements.txt` (runtime, for the application): `fastapi==0.165.0`, `uvicorn[standard]==0.54.0`, `opencv-python-headless==5.1.0.95`, `numpy==2.5.5`, `pytesseract==0.3.13`, `pywebpush==2.5.0`, `py-vapid==1.9.6`, `cryptography==50.0.2`, `httpx==0.28.1`, `tzdata==2026.6`.
+- `requirements-dev.txt`: includes `requirements.txt` (`-r requirements.txt`) and adds `pytest`, `pytest-asyncio` and `playwright==1.65.2`. The comment in the file says Playwright is optional: the browser tests in `tests/test_footer_browser.py` and the other `*_browser.py` files are skipped when it is missing.
 
 Steps, from the README ("Rulare (dezvoltare)" section):
 
