@@ -111,6 +111,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/stations` | nothing | The list of stations | 5.18 |
 | GET | `/api/stations/{name}` | nothing | The detail of a station | 5.18 |
 | GET | `/api/stations/{name}/journeys` | nothing | A station's journeys (paginated) | 5.18 |
+| GET | `/api/station-names` | nothing | Station display names (key → name with diacritics) | 5.18 |
 | GET | `/api/system` | nothing (details for admin only) | The system state, the version, the disk | 5.19 |
 | GET | `/api/export/history.csv` | nothing | CSV export of the history over a range | 5.20 |
 | GET | `/api/stats/changes` | nothing | "What changed this week" and the threshold alerts | 5.21 |
@@ -656,7 +657,7 @@ sample.
 - **Response (200), with no data:** `{"params": {…}, "eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": [], "stations": {"eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": []}}`.
 - With data, `most_delayed` and `most_punctual` are lists of `{train_no, board, station, stats}`.
 
-### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`
+### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`, `GET /api/station-names`
 
 The stations shown on the board: the trains' origin on arrivals and the destination on departures. The delay
 is the one shown on the București Nord board, not that of the destination station (text included in the response).
@@ -682,6 +683,8 @@ An invalid name: 422 `"Nume de stație invalid."` (Invalid station name); not se
 **`GET /api/stations/{name}/journeys`:** `limit` (1–500, default 100) and `before` (journey
 id, for the next page). The response: `params`, `name`, `n`, `next_before` (`null` on the
 last page), `journeys`. `format=csv` gives `statie-<slug>-calatorii.csv`.
+
+**`GET /api/station-names`:** a JSON object `{KEY: "Display name"}`, for example `{"BRASOV": "Brașov"}`. The source is `data/stations.txt`, one line per station in the format `KEY | Display name` (the key is the stored form, uppercase without diacritics, exactly as the board gives it; `#` starts a comment). Keys in URLs, statistics and exports do not change; the app only displays the name. `GET /api/stations` and `GET /api/stations/{name}` add a `display_name` field, and search also accepts the display name (`Brașov`, `Cluj-Napoca`, `cluj napoca`). A key missing from the file is displayed as the read text (Title Case).
 
 ### 5.19 `GET /api/system`
 

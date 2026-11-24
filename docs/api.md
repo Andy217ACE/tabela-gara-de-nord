@@ -109,6 +109,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/stations` | nimic | Lista stațiilor | 5.18 |
 | GET | `/api/stations/{name}` | nimic | Detaliul unei stații | 5.18 |
 | GET | `/api/stations/{name}/journeys` | nimic | Călătoriile unei stații (paginat) | 5.18 |
+| GET | `/api/station-names` | nimic | Numele afișate ale stațiilor (cheie → nume cu diacritice) | 5.18 |
 | GET | `/api/system` | nimic (detalii doar pentru admin) | Starea sistemului, versiunea, discul | 5.19 |
 | GET | `/api/export/history.csv` | nimic | Export CSV al istoricului pe interval | 5.20 |
 | GET | `/api/stats/changes` | nimic | „Ce s-a schimbat săptămâna asta” și alertele pe prag | 5.21 |
@@ -654,7 +655,7 @@ suficient.
 - **Răspuns (200), fără date:** `{"params": {…}, "eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": [], "stations": {"eligible": 0, "below_min": 0, "most_delayed": [], "most_punctual": []}}`.
 - Cu date, `most_delayed` și `most_punctual` sunt liste de `{train_no, board, station, stats}`.
 
-### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`
+### 5.18 `GET /api/stations`, `GET /api/stations/{name}`, `GET /api/stations/{name}/journeys`, `GET /api/station-names`
 
 Stațiile afișate pe tablă: originea trenurilor la sosiri și destinația la plecări. Întârzierea
 e cea afișată pe tabla din București Nord, nu cea a stației de destinație (text inclus în răspuns).
@@ -680,6 +681,8 @@ Nume invalid: 422 `"Nume de stație invalid."`; nevăzut pe tablă: 404
 **`GET /api/stations/{name}/journeys`:** `limit` (1–500, implicit 100) și `before` (id de
 călătorie, pentru pagina următoare). Răspunsul: `params`, `name`, `n`, `next_before` (`null` la
 ultima pagină), `journeys`. `format=csv` dă `statie-<slug>-calatorii.csv`.
+
+**`GET /api/station-names`:** obiect JSON `{CHEIE: "Nume afișat"}`, de exemplu `{"BRASOV": "Brașov"}`. Sursa e `data/stations.txt`, o linie pe stație în formatul `CHEIE | Nume afișat` (cheia = forma stocată, majuscule fără diacritice, exact cum o dă tabela; `#` începe un comentariu). Cheile din URL-uri, statistici și exporturi nu se schimbă; aplicația afișează doar numele. `GET /api/stations` și `GET /api/stations/{name}` adaugă câmpul `display_name`, iar căutarea acceptă și numele afișat (`Brașov`, `Cluj-Napoca`, `cluj napoca`). O cheie lipsă din fișier se afișează ca text citit (Title Case).
 
 ### 5.19 `GET /api/system`
 
