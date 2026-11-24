@@ -125,6 +125,9 @@ def test_all_days_view(browser, base_url, w, h, theme):
     ctx, page, errors = _open(browser, base_url, w, h, theme, "#istoric?train=1621")
     try:
         page.wait_for_selector("#h-results .h-group")
+        if w <= 700:   # phones (Beta 1.67): filters collapsed behind „Filtre (n)”, n = the train filter
+            assert not page.is_visible("#h-date") and page.text_content("#view-istoric .filt-toggle") == "Filtre (1)"
+            page.click("#view-istoric .filt-toggle")
         assert page.input_value("#h-date") == "" and page.is_visible("#h-date")
         assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
         count = page.text_content("#h-count")

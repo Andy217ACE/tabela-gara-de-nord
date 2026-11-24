@@ -81,6 +81,8 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
     ctx, page, errors = _open(browser, base_url, w, h, "light", "#istoric")
     try:
         page.wait_for_selector("#h-results .h-group")
+        if w <= 700:   # phones (Beta 1.67): the filters open behind „Filtre (n)”
+            page.click("#view-istoric .filt-toggle")
         assert page.input_value("#h-date") == ""                 # never pre-filled with today
         assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
         assert page.evaluate("location.hash") == "#istoric"
