@@ -130,13 +130,13 @@
     </nav>
     <!-- telefon (≤ 700 px): bara de jos are Tabelă/Istoric/Trenuri/Statistici + „Mai mult”;
          app.js umple meniul cu restul legăturilor din .mainnav (o singură listă de rute) -->
-    <div class="nav-more">
+    <nav class="nav-more" aria-label="Mai mult" data-i18n-attr="aria-label:nav.moreAria">
       <button type="button" class="nav-more-btn" id="nav-more-btn" aria-expanded="false" aria-controls="nav-more-menu">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>
         <span data-i18n="nav.more">Mai mult</span>
       </button>
       <ul class="nav-more-menu" id="nav-more-menu" hidden></ul>
-    </div>
+    </nav>
     <button type="button" class="lang-toggle" data-lang-toggle aria-label="Switch language / Schimbă limba" data-i18n-attr="aria-label:nav.langAria">EN</button>
   </div>
 

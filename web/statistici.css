@@ -526,9 +526,11 @@
 .ss-acc-btn[aria-expanded="false"]::after { transform: rotate(-45deg); }
 .ss-acc h2 { flex: 1 1 auto; min-width: 0; }
 @media screen {   /* printing: every section, as before */
-  .ss-acc-off { display: none !important; }
   .ss-acc-closed:is(.ss-problems, .ss-good, .ss-glossary) > :not(.ss-fig-head):not(h2),
   .ss-part.ss-acc-closed .ss-part-sub { display: none; }
+}
+@media screen and (max-width: 700px) {   /* a group built closed stays shown above it after a resize */
+  .ss-acc-off { display: none !important; }
 }
 @media (max-width: 700px) {
   #st-statistici .c3-toc { display: none; }   /* the heading list is the table of contents here */

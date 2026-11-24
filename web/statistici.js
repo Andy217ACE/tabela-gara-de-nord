@@ -262,7 +262,7 @@
   // A part heading (.ss-part) gathers the sections after it; Probleme / Ce merge bine / Glosar fold
   // their own content. A closed group is display:none: its later() sections and charts are built
   // only once it is opened (the IntersectionObservers see them then). Desktop: untouched.
-  var accOpen = {};   // heading text → open, kept across redraws (filter change, rotation)
+  var accOpen = {};   // group position → open, kept across redraws (filter change, rotation, language)
   var accMq = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
   function accordion(body) {
     v.ui.acc = [];
@@ -279,7 +279,7 @@
     v.ui.acc.forEach(function (g) {
       var h = g.head.querySelector("h2");
       if (!h) return;
-      var key = h.textContent;
+      var key = v.ui.acc.indexOf(g);   // position, not text: survives a language switch
       var btn = el("button", "ss-acc-btn");
       btn.type = "button";
       while (h.firstChild) btn.append(h.firstChild);

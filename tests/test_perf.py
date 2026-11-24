@@ -113,3 +113,10 @@ def test_middleware_overhead_is_negligible():
         perf.record_route("/api/board", 1.0)
     per_call_us = (time.perf_counter() - t0) / n * 1e6
     assert per_call_us < 50, per_call_us
+
+
+def test_push_follow_routes_only_with_include_admin():
+    for r in ("/api/push/subscribe", "/api/follow", "/api/follows", "/api/board"):
+        perf.record_route(r, 1.0)
+    assert [r["route"] for r in perf.routes_summary()] == ["/api/board"]
+    assert len(perf.routes_summary(include_admin=True)) == 4

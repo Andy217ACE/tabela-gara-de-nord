@@ -679,6 +679,10 @@
       setOpen(false);
       btn.focus();
     });
+    // keyboard focus leaving the whole widget (Tab past the last link) closes it
+    btn.parentNode.addEventListener("focusout", function (e) {
+      if (e.relatedTarget && !btn.parentNode.contains(e.relatedTarget)) setOpen(false);
+    });
     document.addEventListener("click", function (e) {
       if (!menu.hidden && !btn.parentNode.contains(e.target)) setOpen(false);
     });
