@@ -1,0 +1,29 @@
+/* © 2026 Andy217Ace
+   Beta 1.69 finisaj: badge categorii, changelog compact, tranzitii fine. Doar tokeni din style.css.
+   Incarcat dupa style.css/ui2.css; nu modifica logica, doar aspect. */
+
+/* ---------- 1. categorii tren: insigna cu umplere usoara (contrast din tokenii --t-*, >= 4.5:1) ---------- */
+.type {
+  background: color-mix(in srgb, var(--c) 4%, var(--surface));
+  white-space: nowrap;
+}
+.type-ic { --c: var(--accent); }
+
+/* ---------- 2. "Ce s-a schimbat": compact ---------- */
+.v-timeline { gap: 10px; }
+.v-entry { padding: 12px 16px; }
+.v-entry::before { top: 16px; }
+.v-title { font-size: 1.0625rem; }
+.v-group { margin: 10px 0 4px; }
+.v-items li + li { margin-top: 2px; }
+.v-items { line-height: 1.45; }
+.v-more { margin-top: 6px; }
+
+/* ---------- 3. tranzitii discrete (doar fara reduced-motion) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .btn, button, a, .nav-item, .lang-toggle, [role="button"] {
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease,
+      box-shadow 160ms ease, opacity 160ms ease;
+  }
+  .btn:active, button:active, [role="button"]:active { opacity: 0.8; }
+}
