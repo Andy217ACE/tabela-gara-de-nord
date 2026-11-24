@@ -352,7 +352,10 @@
 
   function announce(text) {
     if (text === state.lastAnnounce) return;
+    // first state is the page load itself: announce only a problem, not "all fine"
+    var first = !state.lastAnnounce;
     state.lastAnnounce = text;
+    if (first && text === T("app.announce.ok")) return;
     $("sr-status").textContent = text;
   }
 
@@ -593,6 +596,7 @@
       link.onload = link.onerror = function () {   // a failed sheet must not block the page
         cssDone[href] = true;
         if (currentRoute === name) route();
+        if (!link.sheet) { link.remove(); delete cssDone[href]; }   // failed: retried on the next visit
       };
       document.head.insertBefore(link, document.querySelector('link[href="ui2.css"]'));
     });
