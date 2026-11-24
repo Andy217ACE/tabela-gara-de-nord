@@ -1,6 +1,6 @@
 fastapi==0.165.0
 uvicorn[standard]==0.54.0
-opencv-python-headless==5.0.0.93
+opencv-python-headless==5.1.0.95
 numpy==2.5.5
 pytesseract==0.3.13
 pywebpush==2.5.0
