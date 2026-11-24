@@ -35,6 +35,8 @@ var SHELL = [
   "/stat_platform.js",
   "/stat_dwell.js",
   "/ui2.css",
+  "/polish.css",
+  "/print.css",
   "/ui2.js",
   "/manifest.webmanifest",
   "/favicon.ico",

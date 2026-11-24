@@ -129,7 +129,7 @@
 
   function typeClass(type) {
     var k = String(type || "").toLowerCase();
-    return ["ir", "irn", "re", "r", "rm"].indexOf(k) >= 0 ? "type type-" + k : "type";
+    return ["ic", "ir", "irn", "re", "r", "rm"].indexOf(k) >= 0 ? "type type-" + k : "type";
   }
 
   // Official CFR display of a category code (codes in data/filters/URLs stay IC, IR, IRN, R, RE, RM).

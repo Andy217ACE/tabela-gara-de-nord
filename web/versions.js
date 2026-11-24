@@ -56,7 +56,7 @@
     return GROUP_KIND[k] ? T("versions.group." + k) : plain(t);
   }
 
-  var OPEN_FIRST = 3;   // the newest versions start open; older ones are one click away
+  var OPEN_FIRST = 1;   // only the latest version starts open; older ones are one click away
   var dateFmts = {};
 
   function niceDate(iso) {
