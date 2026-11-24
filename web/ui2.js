@@ -472,6 +472,7 @@
     } catch (e) { vt = false; fn(); return; }
     var done = function () { vt = false; };
     t.finished.then(done, done);
+    t.ready.catch(function () {});   // a newer route change skips this one: expected, not an error
   }
 
   // lazy chart layer (charts3.js/css): pages with charts only, never in the SW shell; resolves null if it can't load
