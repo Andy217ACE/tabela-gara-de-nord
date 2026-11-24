@@ -476,7 +476,7 @@
   }
 
   // lazy chart layer (charts3.js/css): pages with charts only, never in the SW shell; resolves null if it can't load
-  var CHARTS_V = "1.67";
+  var CHARTS_V = "1.68";
   var chartsP = null;
   function charts() {
     if (App.charts3) return Promise.resolve(App.charts3);
