@@ -1903,6 +1903,8 @@ body .station-link, body .st-train, body .st-back, body .ss-card-link, body .foo
   margin-block: -5px;
   min-width: 24px;
 }
+/* panel cells clip with an ellipsis: inline-block would wrap long names and change the row height */
+body .pnl-board .station-link, body .pnl-board .st-train { display: inline; }
 body .ss-card-link { min-width: 24px; text-align: center; }
 body .pnl-sortbtn, body .st-sort { padding-block: 5px; margin-block: -5px; min-height: 24px; min-width: 24px; }
 body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
