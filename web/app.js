@@ -129,7 +129,7 @@
 
   function typeClass(type) {
     var k = String(type || "").toLowerCase();
-    return ["ir", "irn", "re", "r", "rm"].indexOf(k) >= 0 ? "type type-" + k : "type";
+    return ["ic", "ir", "irn", "re", "r", "rm"].indexOf(k) >= 0 ? "type type-" + k : "type";
   }
 
   // Official CFR display of a category code (codes in data/filters/URLs stay IC, IR, IRN, R, RE, RM).
@@ -678,6 +678,10 @@
       if (e.key !== "Escape" || menu.hidden) return;
       setOpen(false);
       btn.focus();
+    });
+    // keyboard focus leaving the whole widget (Tab past the last link) closes it
+    btn.parentNode.addEventListener("focusout", function (e) {
+      if (e.relatedTarget && !btn.parentNode.contains(e.relatedTarget)) setOpen(false);
     });
     document.addEventListener("click", function (e) {
       if (!menu.hidden && !btn.parentNode.contains(e.target)) setOpen(false);

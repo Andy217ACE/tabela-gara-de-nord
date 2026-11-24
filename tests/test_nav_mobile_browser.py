@@ -91,6 +91,12 @@ def test_more_menu_keyboard(browser, base_url):  # noqa: F811
         page.keyboard.press("Escape")
         assert btn.get_attribute("aria-expanded") == "false" and not menu.is_visible()
         assert page.evaluate("document.activeElement.id") == "nav-more-btn"
+        # Tab past the last element (the language switch) leaves the widget and closes it
+        btn.click()
+        menu.locator("[data-lang-toggle]").focus()
+        page.keyboard.press("Tab")
+        assert not menu.is_visible() and btn.get_attribute("aria-expanded") == "false"
+        assert page.locator("nav.nav-more").get_attribute("aria-label")
         # a link of the menu: navigates, closes the menu, marks itself and the „Mai mult” button
         btn.click()
         menu.locator(".nav-more-link[data-route='clasamente']").click()
@@ -156,6 +162,9 @@ def test_statistici_two_levels(browser, base_url):  # noqa: F811
           .some(s => s.getClientRects().length > 0)""")
         part.click()
         assert part.get_attribute("aria-expanded") == "false"
+        # a closed group built on the phone is shown again once the window is wider than 700 px
+        page.set_viewport_size({"width": 1000, "height": 800})
+        assert page.locator(".ss-acc-off").evaluate_all("ms => ms.length > 0 && ms.every(m => getComputedStyle(m).display !== 'none')")
         assert not errors, errors
     finally:
         ctx.close()

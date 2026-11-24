@@ -55,12 +55,16 @@ def _summary(samples: list[tuple[float, float]], now: float) -> dict:
     return {"n": len(vals), "p50_ms": r(percentile(vals, .5)), "p95_ms": r(percentile(vals, .95))}
 
 
+PRIVATE_ROUTES = ("/api/admin", "/api/push", "/api/follow")
+
+
 def routes_summary(*, include_admin: bool = False, now: float | None = None) -> list[dict]:
-    """[{route, n, p50_ms, p95_ms}], busiest first. Admin routes only with `include_admin`."""
+    """[{route, n, p50_ms, p95_ms}], busiest first. Admin routes, and push/follow ones (their
+    counts would reveal usage volumes), only with `include_admin`."""
     now = time.time() if now is None else now
     with _lock:
         items = [(k, list(v)) for k, v in _routes.items()
-                 if include_admin or not k.startswith("/api/admin")]
+                 if include_admin or not k.startswith(PRIVATE_ROUTES)]
     out = [{"route": k} | _summary(v, now) for k, v in items]
     return sorted((x for x in out if x["n"]), key=lambda x: -x["n"])
 

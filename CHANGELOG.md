@@ -5,6 +5,30 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.69 — 2026-11-24
+### Schimbat
+- **Insignele de categorie a trenului** (IR, IC, R, RE…) sunt mai clare și la fel peste tot; IC are culoarea lui. Contrast de cel puțin 4,5:1 în ambele teme.
+- **„Ce s-a schimbat”** e mai compactă: doar ultima versiune e deschisă, restul se desfac la cerere.
+- **Tranziții discrete** la butoane și linkuri (apăsare, focus), doar dacă telefonul nu cere „mișcare redusă”.
+- **Tipărire curată** pentru Tabelă, Istoric, Trenuri și Statistici: negru pe alb, fără meniu, filtre și butoane, rândurile nu se rup între pagini.
+- **Meniul „Mai mult”** de pe telefon se închide când focusul de la tastatură iese din el și e anunțat ca zonă de navigare.
+- **Statistici:** secțiunile închise pe telefon reapar după rotire sau pe ecran lat; grupurile deschise rămân deschise la schimbarea limbii.
+- **Pagina Sistem** nu mai arată public numărul de cereri pentru notificări și trenuri urmărite (rămâne pentru admin).
+- **Dependențe:** OpenCV 5.1.0.95 (citirea și trăsăturile alternativei OCR identice pe cele 79 de cadre reale de test), packaging 26.4; `lock.yml` folosește setup-python v7.
+### Adăugat
+- **Scanare de securitate CodeQL** (Python și JavaScript) la fiecare PR, pe main și săptămânal.
+- CI: rulările de pe main nu mai sunt anulate de push-uri noi.
+### English
+- **Train category badges** (IR, IC, R, RE…) are clearer and consistent; IC has its own colour. Contrast at least 4.5:1 in both themes.
+- **"What changed"** is more compact: only the latest version starts open.
+- **Subtle transitions** on buttons and links, only when the device does not ask for reduced motion.
+- **Clean printing** for Board, History, Trains and Statistics: black on white, no menu, filters or buttons, rows not split across pages.
+- **The phone "More" menu** closes when keyboard focus leaves it and is announced as a navigation landmark.
+- **Statistics:** groups closed on a phone show again after rotating or on a wide screen; open groups stay open when the language changes.
+- **The System page** no longer shows public request counts for push and followed-train routes (admin only).
+- **Dependencies:** OpenCV 5.1.0.95 (OCR reading and alt-model features identical on all 79 real test frames), packaging 26.4; `lock.yml` uses setup-python v7.
+- **CodeQL security scanning** (Python and JavaScript) on every PR, on main and weekly; CI runs on main are no longer cancelled by newer pushes.
+
 ## Beta 1.68 — 2026-11-24
 ### Adăugat
 - **Navigație nouă pe telefon:** o bară jos cu Tabelă, Istoric, Trenuri, Statistici și „Mai mult” (Urmărite, Clasamente, Stații, Sistem, Versiuni, Setări, Cum funcționează?, limba). Pe tabletă și desktop meniul rămâne sus.
