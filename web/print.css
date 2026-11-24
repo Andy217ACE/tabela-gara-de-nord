@@ -6,8 +6,9 @@
       animation: none !important; transition: none !important; }
   body, main, section, article, div, td, th, li, p, h1, h2, h3, span { color: #000 !important; }
   nav, .navbar, .mainnav, .bottom-nav, footer, .pnl-credit, .skip-link, .lang-toggle,
-  button, [role="button"], .btn, .filters, .ss-filters, .h-more, form, dialog, [role="dialog"],
-  [aria-live], .toast,
+  /* buttons that carry data stay (train no., headings, names, column labels, dates, chart legend items) */
+  button:not(.h-train):not(.oc-name):not(.st-sort):not(.st-jbtn):not(.ss-acc-btn), .btn,
+  .filters, .ss-filters, .h-more, form, dialog, [role="dialog"], .toast,
   .topbar, .tabs, .pe-toggle, .pe-note, .pnl-controls, .pnl-boardseg, .pnl-filters, .pnl-switch,
   .pnl-actions, .pnl-detail, [role="search"] { display: none !important; }
   .view[hidden] { display: none !important; }

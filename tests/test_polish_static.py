@@ -35,5 +35,9 @@ def test_no_inline_styles_or_raw_colors_in_polish():
 def test_print_hides_chrome():
     css = read("print.css")
     assert css.strip().split("*/", 1)[1].lstrip().startswith("@media print")
-    for sel in ("nav", ".bottom-nav", "button", ".filters", "footer"):
+    for sel in ("nav", ".bottom-nav", "button:not(", ".filters", "footer"):
         assert sel in css
+    # data inside buttons / live regions must print (train numbers, headings, column labels, counts)
+    for keep in (".h-train", ".oc-name", ".st-sort", ".st-jbtn", ".ss-acc-btn"):
+        assert keep in css
+    assert "[aria-live]" not in css and '[role="button"]' not in css

@@ -19,7 +19,9 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
+    permissions:   # job-level block replaces the workflow one: list everything the job needs
+      contents: read
+      actions: read
       security-events: write   # upload results to the Security tab
     strategy:
       fail-fast: false

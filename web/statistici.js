@@ -279,7 +279,10 @@
     v.ui.acc.forEach(function (g) {
       var h = g.head.querySelector("h2");
       if (!h) return;
-      var key = v.ui.acc.indexOf(g);   // position, not text: survives a language switch
+      // stable key, not text (survives a language switch) and not the plain position ("Ce merge bine"
+      // can come and go with the filters): the fixed sections by class, the parts by their own order
+      var fixed = ["ss-problems", "ss-good", "ss-glossary"].filter(function (k) { return g.head.classList.contains(k); })[0];
+      var key = fixed || "part" + v.ui.acc.filter(function (x) { return x.head.classList.contains("ss-part"); }).indexOf(g);
       var btn = el("button", "ss-acc-btn");
       btn.type = "button";
       while (h.firstChild) btn.append(h.firstChild);
