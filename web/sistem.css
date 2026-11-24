@@ -21,3 +21,9 @@
 .sys-sub { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--muted, inherit); }
 .sys-admin { margin-top: 1.5rem; }
 .sys-admin-title { font-size: var(--fs-lg); margin: 0 0 .5rem; }
+/* --- H1 (Beta 1.68): reading quality + timings blocks --- */
+.sys-block { margin-top: 1.5rem; }
+.sys-block-title { font-size: var(--fs-lg); margin: 0 0 .25rem; }
+.sys-note { margin: 0; font-size: var(--fs-xs); color: var(--muted, inherit); }
+.sys-route { font-family: var(--font-mono, monospace); overflow-wrap: anywhere; }
+/* --- end H1 --- */
