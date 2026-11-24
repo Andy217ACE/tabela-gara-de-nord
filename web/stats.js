@@ -490,7 +490,6 @@
         load();
       });
       v.body = el("div", "st-body");
-      v.body.setAttribute("aria-live", "polite");
       root.replaceChildren(v.ui.form, v.body);
     }
     function load(force) {

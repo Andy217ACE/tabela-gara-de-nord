@@ -971,7 +971,7 @@
         a.addEventListener("click", function () { v.sect = sect; v.sectPending = true; applySect(); });
         val.append(a);
       } else val.textContent = value;
-      c.append(el("h3", "ss-card-t", title), val, el("p", "ss-card-s", sub));
+      c.append(el("h2", "ss-card-t", title), val, el("p", "ss-card-s", sub));
       sec.append(c);
     }
     card(tt("stats.sum.on_time"), pct(f.pct), f.n ? tt("stats.sum.on_time_sub", { ok: f.ok, n: f.n }) : tt("stats.sum.none"), "probleme", "pct", f.pct);
