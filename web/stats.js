@@ -175,6 +175,7 @@
   // list pages: „Nu am putut încărca …” + the reason + a retry button (a refetch of the same URL)
   function loadFailed(v, what, e) {
     var box = el("div", "st-error");
+    box.setAttribute("role", "alert");   // the page body is no longer aria-live: announce the failure itself
     box.append(notice(tt("stats.err.load", { what: what, why: errorText(e) }), "notice-error"));
     var b = el("button", "btn btn-ghost btn-sm st-retry", tt("stats.err.retry"));
     b.type = "button";
