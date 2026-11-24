@@ -513,12 +513,12 @@
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
-    "#sistem": "sistem", "#setari": "setari" };
+    "#sistem": "sistem", "#setari": "setari", "#cum": "cum" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
   // routes with a page title: i18n key title.<route>
   var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;   // route asked for by the address
@@ -645,6 +645,7 @@
     if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");
+    if (name === "cum") loadLazyPage("cum", "cum.js", "cum.css");
     VIEWS.forEach(function (v) {
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;

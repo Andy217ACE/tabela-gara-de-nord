@@ -1,0 +1,22 @@
+/* © 2026 Andy217Ace — pagina „Cum funcționează?” (#cum). Tokens come from style.css; no inline styles. */
+.view-cum { max-width: 44rem; margin: 0 auto; padding: 0 var(--gutter, 16px) 2rem; }
+.view-cum h2 { margin: 1.75rem 0 .5rem; font-size: var(--fs-lg, 1.125rem); }
+.view-cum p { margin: 0 0 .75rem; line-height: 1.55; overflow-wrap: anywhere; }
+.view-cum a { color: var(--text); text-underline-offset: 2px; }
+
+/* the data path as numbered steps: a column on phones, a row from 40rem */
+.cum-flow { list-style: none; counter-reset: cum; display: grid; gap: .5rem; margin: 1rem 0 0; padding: 0; }
+.cum-step { counter-increment: cum; position: relative; padding: .75rem 1rem .75rem 3rem;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.cum-step::before { content: counter(cum); position: absolute; left: .9rem; top: .75rem; width: 1.5rem; height: 1.5rem;
+  border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: .8125rem;
+  line-height: 1.5rem; text-align: center; }
+.cum-step-title { display: block; }
+.cum-step-text { display: block; color: var(--text-2); font-size: var(--fs-sm, .8125rem); }
+@media (min-width: 40rem) {
+  .cum-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cum-step { padding: 2.75rem .75rem .75rem; }
+  .cum-step::before { left: .75rem; }
+}
+.cum-links { margin: 0; padding-left: 1.25rem; }
+.cum-links li { margin: 0 0 .4rem; }

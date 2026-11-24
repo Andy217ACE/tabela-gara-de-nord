@@ -64,6 +64,7 @@ Each has a `show(params)` function called when the page changes.
 | `#statie?nume=<name>` | **Station** | `#view-statie` | everyone | no (falls under "Stations") | `stats.js` (`statie`) |
 | `#sistem` | **System** | `#view-sistem`, created by `sistem.js` | everyone (details for admin) | yes | `sistem.js` (loaded on the first visit) |
 | `#versiuni` | **Version history** | `#view-versiuni` | everyone | no (link in the footer) | `versions.js` |
+| `#cum` | **How it works** | `#view-cum`, created by `cum.js` | everyone | no (link in the footer) | `cum.js` (+ `cum.css`), loaded on the first visit |
 | `#setari` | **Settings** | `#view-setari` | admin | no (no link in the interface) | `setari.js` (loaded on the first visit) |
 | `#ocr` | **OCR captures** | created by `app.js` (`view-ocr`) | admin | no | `ocr.js` (+ `ocr.css`), loaded on demand |
 | `#ocr2` | **OCR alternative** | created by `ocr2.js` (`view-ocr2`) | admin | no | `ocr2.js` (+ `ocr2.css`), loaded on the first visit |
