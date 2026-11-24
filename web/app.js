@@ -593,6 +593,7 @@
       link.onload = link.onerror = function () {   // a failed sheet must not block the page
         cssDone[href] = true;
         if (currentRoute === name) route();
+        if (!link.sheet) { link.remove(); delete cssDone[href]; }   // failed: retried on the next visit
       };
       document.head.insertBefore(link, document.querySelector('link[href="ui2.css"]'));
     });

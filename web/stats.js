@@ -494,6 +494,7 @@
       root.replaceChildren(v.ui.form, v.body);
     }
     function load(force) {
+      if (!v.body) return;   // hidden meanwhile (a debounce timer of the filter form can fire after hide())
       var url = cfg.url(v);
       if (!url) return;
       if (!force && url === v.key && v.data) {
