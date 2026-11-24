@@ -8,7 +8,7 @@ pytest.importorskip("playwright.sync_api")
 from tests.test_footer_browser import base_url, browser  # noqa: E402,F401  (shared fixtures)
 
 
-@pytest.mark.parametrize("hash_", ["", "#statistici", "#trenuri", "#statii"])
+@pytest.mark.parametrize("hash_", ["", "#statistici", "#trenuri", "#statii", "#cum"])
 def test_no_csp_violations_on_main_pages(browser, base_url, hash_):  # noqa: F811
     ctx = browser.new_context(viewport={"width": 1280, "height": 800}, service_workers="block")
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base_url) else r.abort())

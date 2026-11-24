@@ -43,7 +43,7 @@ schimbă de mână.
 ### Pagini
 
 `#` (Tabelă/Panou), `#istoric`, `#statistici`, `#clasamente`, `#trenuri` / `#tren`, `#statii` /
-`#statie`, `#urmarite`, `#sistem` (starea serviciului; detalii pentru admin), `#versiuni` (istoricul
+`#statie`, `#urmarite`, `#sistem` (starea serviciului; detalii pentru admin), `#cum` (cum funcționează, pe înțelesul oricui), `#versiuni` (istoricul
 versiunilor) și, doar pentru admin, `#ocr` (capturi), `#ocr2` (jurnalul alternativei OCR: decupaje și
 verdicte), `#admin` și `#setari`. Lista completă e în [Interfața](docs/interfata.md).
 
