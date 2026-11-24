@@ -625,6 +625,95 @@
     else if (ar.right > nr.right - pad) nav.scrollLeft += ar.right - (nr.right - pad);
   }
 
+  // ---- phones (≤ 700 px, style.css): bottom bar = 4 sections + „Mai mult” ----------
+  // The menu is filled from the .mainnav links that are not in the bar (one list of routes),
+  // plus Versiuni/Setări; on phones the language switch moves into it as well.
+  var NAV_BAR = ["tabela", "istoric", "trenuri", "statistici"];
+  var PHONE_MQ = "(max-width: 700px)";
+  function initMoreNav() {
+    var btn = $("nav-more-btn"), menu = $("nav-more-menu");
+    if (!btn || !menu) return;
+    function item(a) { var li = el("li"); li.append(a); menu.append(li); }
+    document.querySelectorAll(".mainnav .nav-item").forEach(function (a) {
+      if (NAV_BAR.indexOf(a.dataset.route) >= 0) return;
+      var c = a.cloneNode(true);
+      c.className = "nav-more-link";
+      c.removeAttribute("aria-current");
+      item(c);
+    });
+    [["versiuni", "title.versiuni", ["M5 6h14", "M5 12h14", "M5 18h9"]],
+     ["setari", "title.setari", ["M4 7h16", "M4 17h16", "M15 4.5v5", "M9 14.5v5"]],
+     ["cum", "title.cum", ["M12 8v.01", "M11 12h1v5h1", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"]]].forEach(function (r) {
+      var a = el("a", "nav-more-link");
+      a.href = "#" + r[0];
+      a.dataset.route = r[0];
+      var ic = icon(r[2]);
+      ic.setAttribute("class", "nav-icon");
+      var s = el("span", null, T(r[1]));
+      s.setAttribute("data-i18n", r[1]);
+      a.append(ic, s);
+      item(a);
+    });
+    var langLi = el("li", "nav-more-lang");
+    menu.append(langLi);
+    var lang = document.querySelector(".navbar > [data-lang-toggle]"), home = lang && lang.parentNode;
+    var mq = window.matchMedia ? window.matchMedia(PHONE_MQ) : null;
+    function setOpen(on) {
+      menu.hidden = !on;
+      btn.setAttribute("aria-expanded", on ? "true" : "false");
+    }
+    function placeLang() {
+      if (!lang) return;
+      if (mq && mq.matches) langLi.append(lang); else home.append(lang);
+      if (!(mq && mq.matches)) setOpen(false);
+    }
+    placeLang();
+    if (mq) {
+      if (mq.addEventListener) mq.addEventListener("change", placeLang);
+      else if (mq.addListener) mq.addListener(placeLang);
+    }
+    btn.addEventListener("click", function () { setOpen(menu.hidden); });
+    menu.addEventListener("click", function (e) { if (e.target.closest("a")) setOpen(false); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || menu.hidden) return;
+      setOpen(false);
+      btn.focus();
+    });
+    document.addEventListener("click", function (e) {
+      if (!menu.hidden && !btn.parentNode.contains(e.target)) setOpen(false);
+    });
+    window.addEventListener("hashchange", function () { setOpen(false); });
+  }
+
+  // Phones: a filter form collapses behind „Filtre (n)” (n = fields with a value); on wider
+  // screens the button is hidden and the form always open (style.css). Returns {button, sync}:
+  // call sync() after setting the fields from code (no input event then).
+  var filtSeq = 0;
+  function filterToggle(form) {
+    var btn = el("button", "btn btn-ghost filt-toggle");
+    btn.type = "button";
+    if (!form.id) form.id = "filt-form-" + (++filtSeq);
+    btn.setAttribute("aria-controls", form.id);
+    form.classList.add("filt-collapsible");
+    function count() {
+      return [].filter.call(form.elements, function (i) {
+        if (i.tagName === "BUTTON" || i.tagName === "FIELDSET") return false;
+        return i.type === "checkbox" || i.type === "radio" ? i.checked : String(i.value || "").trim() !== "";
+      }).length;
+    }
+    function sync() {
+      btn.textContent = T("stats.mobile.filters", { n: count() });
+      btn.setAttribute("aria-expanded", form.classList.contains("filt-open") ? "true" : "false");
+    }
+    btn.addEventListener("click", function () { form.classList.toggle("filt-open"); sync(); });
+    form.addEventListener("input", sync);
+    form.addEventListener("change", sync);
+    form.addEventListener("reset", function () { setTimeout(sync, 0); });
+    document.addEventListener("i18n:change", sync);
+    sync();
+    return { button: btn, sync: sync };
+  }
+
   function setTitle(name) {
     document.title = name === "tabela" ? "Tabela Gara de Nord"
       : (TITLES.indexOf(name) >= 0 ? T("title." + name) : "Tabela Gara de Nord") + " · Tabela Gara de Nord";
@@ -654,7 +743,7 @@
       var sec = $("view-" + v);
       if (sec) sec.hidden = v !== name;
     });
-    document.querySelectorAll(".nav-item").forEach(function (a) {
+    document.querySelectorAll(".nav-item, .nav-more-link").forEach(function (a) {
       if (a.dataset.route === (NAV_PARENT[name] || name)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
@@ -704,6 +793,7 @@
   window.TabelaApp.refresh = refresh;
   window.TabelaApp.el = el;
   window.TabelaApp.icon = icon;
+  window.TabelaApp.filterToggle = filterToggle;
   window.TabelaApp.ICONS = ICONS;
   window.TabelaApp.typeClass = typeClass;
   window.TabelaApp.typeAbbr = typeAbbr;
@@ -848,6 +938,7 @@
   }
 
   function init() {
+    initMoreNav();   // before initLang: its links get the dictionary texts too
     initLang();
     initPeronEst();
     loadConfig();

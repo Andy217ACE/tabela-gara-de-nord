@@ -374,7 +374,8 @@ def test_copy_link_to_a_chart_and_open_it(browser, base_url):
 
 # ---- section chips (scroll-spy) --------------------------------------------------------------
 
-@pytest.mark.parametrize("w,h", [(1280, 800), (360, 780)])
+# narrowest width with chips: phones (≤ 700 px) list the section headings instead (Beta 1.67)
+@pytest.mark.parametrize("w,h", [(1280, 800), (720, 780)])
 def test_section_chips_scroll_and_follow(browser, base_url, w, h):
     stats_overview.clear_cache()
     ctx, page, errors = _open(browser, base_url, w, h, "dark", "#statistici")

@@ -666,7 +666,8 @@
   var navH = 0;
   function syncNavH() {
     var nav = document.querySelector(".navbar");
-    var v = nav ? nav.offsetHeight : 0;
+    // phones: the menu is a bottom bar (style.css), nothing to stick under at the top
+    var v = nav && getComputedStyle(nav).position !== "fixed" ? nav.offsetHeight : 0;
     if (v === navH) return;
     navH = v;
     document.documentElement.style.setProperty("--c3-nav-h", v + "px");

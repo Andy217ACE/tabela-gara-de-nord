@@ -492,3 +492,48 @@
 @media (forced-colors: active) {
   .oc-seg, .oc-sw { forced-color-adjust: none; }
 }
+
+/* ==== Beta 1.67 (F) — phones (≤ 700 px): section headings first, a section opens on tap ==== */
+/* (statistici.js accordion(): .ss-acc heads with a button in their h2; .ss-acc-off = closed group member) */
+.ss-acc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ss-acc-btn::after {
+  content: "";
+  flex: none;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 4px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast, 0.15s) ease;
+}
+.ss-acc-btn[aria-expanded="false"]::after { transform: rotate(-45deg); }
+.ss-acc h2 { flex: 1 1 auto; min-width: 0; }
+@media screen {   /* printing: every section, as before */
+  .ss-acc-off { display: none !important; }
+  .ss-acc-closed:is(.ss-problems, .ss-good, .ss-glossary) > :not(.ss-fig-head):not(h2),
+  .ss-part.ss-acc-closed .ss-part-sub { display: none; }
+}
+@media (max-width: 700px) {
+  #st-statistici .c3-toc { display: none; }   /* the heading list is the table of contents here */
+  .ss-acc { margin-top: 0; }
+  .ss-part.ss-acc { padding: 0 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .ss-acc-btn::after { transition: none; } }
+/* ==== end Beta 1.67 (F) ==== */

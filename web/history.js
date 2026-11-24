@@ -29,6 +29,7 @@
   function boardLabel(b) { return b === "arrival" ? T("history.arrival") : b === "departure" ? T("history.departure") : ""; }
 
   var $ = function (id) { return document.getElementById(id); };
+  var filt = null;                // phones: „Filtre (n)” toggle (app.js filterToggle)
   var form, inputs = {}, timer = null, inflight = null, detailCtrl = null, lastQuery = null;
   var lastFocus = null, allBtn = null, lastJourney = null;
   var PAGE = 50;                  // journeys per page (server max 200); „Încarcă încă 50” asks for the next ones
@@ -103,6 +104,7 @@
   // „Toate zilele” is pressed while no day is picked; pressing it clears the day.
   function syncScope() {
     allBtn.setAttribute("aria-pressed", inputs.date.value ? "false" : "true");
+    if (filt) filt.sync();
   }
 
   function queryFromParams(params) {
@@ -365,8 +367,8 @@
     cell(tr, T("history.col.details"), "h-op", acts);
     cell(tr, T("history.col.max_delay"), "h-max",
          known ? delayBadge(j.max_read_delay, T("history.delay.max_title"), true)
-               : delayBadge(null, "", false));
-    cell(tr, T("history.col.last_delay"), "h-last", journeyDelay(j));
+               : delayBadge(null, "", false)).dataset.short = T("history.col.max_short");
+    cell(tr, T("history.col.last_delay"), "h-last", journeyDelay(j)).dataset.short = T("history.col.last_short");
     var hasPlat = j.platform != null && j.platform !== "";
     var plat = el("span", hasPlat ? "plat plat-sm" : "plat plat-sm plat-unknown", hasPlat ? String(j.platform) : "—");
     plat.setAttribute("aria-label", hasPlat ? T("history.row.platform_aria", { platform: j.platform }) : T("history.row.platform_unannounced"));
@@ -417,10 +419,16 @@
     allState.shown += list.length;
   }
 
+  // „Încarcă încă N”: the real number left when fewer than a page remain
+  function moreText() {
+    var left = allState ? allState.total - allState.shown : 0;
+    return T("history.more", { n: left > 0 ? Math.min(PAGE, left) : PAGE });
+  }
+
   function renderAll(q, data) {
     clearResults();
     var list = Array.isArray(data.journeys) ? data.journeys : [];
-    allState = { q: q, next: data.next || null, groups: {}, shown: 0, ctrl: null };
+    allState = { q: q, next: data.next || null, groups: {}, shown: 0, ctrl: null, total: data.total || 0 };
     if (!data.total) {
       $("h-count").textContent = (q.train ? T("history.count.train", { no: q.train }) + " " : "") +
         tp("history.journeys", 0) + (q.date ? " · " + dayLabel(q.date) : "");
@@ -441,6 +449,7 @@
       U.reveal($("h-results"));
     }
     allCount(q, data);
+    $("h-more").textContent = moreText();
     $("h-more").hidden = !allState.next;
   }
 
@@ -457,6 +466,7 @@
         if (allState !== st) return;
         appendJourneys(Array.isArray(data && data.journeys) ? data.journeys : []);
         st.next = (data && data.next) || null;
+        if (data && data.total) st.total = data.total;
         allCount(st.q, data || {});
         $("h-error").hidden = true;
       })
@@ -469,7 +479,7 @@
         if (allState !== st) return;
         st.ctrl = null;
         btn.disabled = false;
-        btn.textContent = T("history.more");
+        btn.textContent = moreText();
         var hadFocus = document.activeElement === btn;
         btn.hidden = !st.next;
         if (hadFocus && btn.hidden) { // last page: keep keyboard focus on the page, not <body>
@@ -923,7 +933,7 @@
       opts[2].textContent = T("history.board_departures");
     }
     setText("#h-reset", "history.reset");
-    if (!allState || !allState.ctrl) setText("#h-more", "history.more");
+    if (!allState || !allState.ctrl) $("h-more").textContent = moreText();
     $("h-detail-close").setAttribute("aria-label", T("history.close"));
     if (!$("h-detail").open) setText("#h-detail-title", "history.train");
   }
@@ -943,6 +953,10 @@
     if (I) I.ready.then(applyStatic);
     FIELDS.forEach(function (f) { inputs[f] = $("h-" + f); });
     allBtn = $("h-alldays");
+    if (App.filterToggle) {
+      filt = App.filterToggle(form);
+      form.before(filt.button);
+    }
     inputs.date.value = "";            // all days by default — never pre-filled with today
     inputs.date.max = todayBucharest();
     syncScope();

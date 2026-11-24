@@ -699,6 +699,91 @@ html.zoomed-out .mainnav { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
 html.zoomed-out .nav-item { min-height: 88px; padding: 0 24px; gap: 12px; font-size: 1.75rem; border-radius: 18px; }
 html.zoomed-out .nav-icon { width: 36px; height: 36px; }
 
+/* ==== Beta 1.67 (F) — phones (≤ 700 px): bottom navigation ==== */
+/* The bar moves to the bottom: Tabelă/Istoric/Trenuri/Statistici + „Mai mult” (menu filled by
+   app.js from the other .mainnav links). Pure CSS from the first paint: no layout shift.
+   Not for „Site pentru desktop” (laid out ~980 px wide: the top bar stays). */
+.nav-more { display: none; }
+@media (max-width: 700px) {
+  :root { --topnav-h: 0px; --nav-h: 58px; }
+  body { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+  .navbar {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    border-bottom: 0;
+    border-top: 1px solid var(--border);
+    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  .navbar .mainnav { flex: 4 1 0; gap: 0; margin: 0; padding: 0; overflow: visible; }
+  .navbar > .lang-toggle { display: none; }
+  .mainnav .nav-item:not([data-route="tabela"]):not([data-route="istoric"]):not([data-route="trenuri"]):not([data-route="statistici"]) { display: none; }
+  .mainnav .nav-item,
+  .nav-more-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--nav-h);
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 0;
+    font-size: 0.6875rem;
+    letter-spacing: 0;
+  }
+  .mainnav .nav-item span,
+  .nav-more-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .mainnav .nav-item[aria-current="page"] { background: transparent; box-shadow: inset 0 2px 0 var(--accent); border-radius: 0; }
+  .nav-more { display: flex; flex: 1 1 0; min-width: 0; }
+  .nav-more-btn {
+    display: flex;
+    align-items: center;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .nav-more-btn[aria-expanded="true"],
+  .nav-more:has(.nav-more-link[aria-current="page"]) .nav-more-btn { color: var(--accent); }
+  .nav-more-menu {
+    position: absolute;
+    right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: calc(100% + 8px);
+    width: min(16rem, calc(100vw - 16px));
+    max-height: calc(100dvh - var(--nav-h) - 96px);
+    overflow-y: auto;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-overlay);
+  }
+  .nav-more-menu[hidden] { display: none; }
+  .nav-more-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--tap);
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .nav-more-link:hover { background: var(--surface-hover); }
+  .nav-more-link[aria-current="page"] { color: var(--accent); background: var(--surface-2); }
+  .nav-more-lang { padding: 6px 4px 2px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .nav-more-lang .lang-toggle { width: 100%; margin: 0; }
+}
+/* ==== end Beta 1.67 (F) bottom navigation ==== */
+
 /* ---------- main ---------- */
 
 main {
@@ -1411,6 +1496,42 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
 .h-train:hover { text-decoration-color: var(--accent); }
 
 .plat-sm { width: 2.25rem; height: 2.25rem; font-size: var(--fs-base); }
+
+/* ==== Beta 1.67 (F) — phones (≤ 700 px): collapsible filters + denser Istoric cards ==== */
+.filt-toggle { display: none; }
+@media (max-width: 700px) {
+  .filt-toggle { display: flex; justify-content: center; width: 100%; margin: 0 0 10px; }
+  .filt-collapsible:not(.filt-open) { display: none; }
+  .filt-collapsible.filt-open { margin-bottom: 10px; }
+
+  /* Istoric card in 3 lines: time · station · platform / panel · train · actions / badges with short
+     labels (wrapping flex: each line ends with an item that takes the rest of the width) */
+  .h-table tbody { gap: 6px; }
+  .h-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 6px 10px 6px 12px; }
+  .h-row .h-time { order: 1; flex: 0 0 3.4rem; font-size: 1.125rem; }
+  .h-row .h-station { order: 2; flex: 1 1 calc(100% - 5.3rem - 16px); }   /* the rest of line 1 */
+  .h-row .h-plat { order: 3; flex: none; }
+  .h-row .h-board { order: 4; flex: 0 0 3.4rem; }
+  .h-row .h-trn { order: 5; flex: none; }
+  .h-row .h-op { order: 6; flex: 1 1 auto; min-width: 45%; display: flex; justify-content: flex-end; }
+  .h-row .h-max { order: 7; }
+  .h-row .h-last { order: 8; }
+  .h-row .h-status { order: 9; }
+  .h-train { min-height: 28px; padding-block: 0; }
+  .plat-sm { width: 1.875rem; height: 1.875rem; font-size: 0.9375rem; }
+  .h-row .h-max,
+  .h-row .h-last,
+  .h-row .h-status { display: inline-flex; gap: 4px; font-size: 0.75rem; }
+  .h-row .h-max { margin-top: 0; }
+  .h-row .h-max::before,
+  .h-row .h-last::before { content: attr(data-short); flex: none; }
+  .h-row .h-status::before { content: none; }
+  .h-row .h-status { margin-left: auto; }
+  .h-row .delay,
+  .h-row .res-badge { padding: 1px 7px; font-size: 0.75rem; }
+  .h-row .delay svg { width: 12px; height: 12px; }
+}
+/* ==== end Beta 1.67 (F) filters + Istoric ==== */
 
 /* ---------- detail sheet ---------- */
 

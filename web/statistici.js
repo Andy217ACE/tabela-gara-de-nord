@@ -178,6 +178,7 @@
     render(d);
     if (S2()) S2().enhance(v.ui, d, s2h());
     if (App.statExport) App.statExport.enhance(v.ui, d, v.at); if (App.statSp3) App.statSp3.enhance(v.ui, d, { query: function () { return query(v.p, {}); } });
+    accordion(v.ui.body);   // after the layers above: their boxes join the groups too
     syncFiltersH();
     watchLater();
   }
@@ -221,7 +222,8 @@
     if (!v.ui) return;
     var reach = (window.innerHeight || 800) + 600;
     v.ui.later.forEach(function (it) {
-      if (!it.done && it.ph.isConnected && it.ph.getBoundingClientRect().top < reach) build(it);
+      // getClientRects: a section in a closed group (phones, accordion()) is not on screen at all
+      if (!it.done && it.ph.isConnected && it.ph.getClientRects().length && it.ph.getBoundingClientRect().top < reach) build(it);
     });
   }   // „Tipărește” / Ctrl+P: the whole page, not placeholders
   // one section per task: the main thread stays free between them (TBT)
@@ -255,6 +257,51 @@
     if (v.ui && C3() && v.ui.body.__c3nav) { C3().toc(v.ui.body); tocSect(); }
   }
   function tocSoon() { if (!tocT) tocT = setTimeout(tocNow, 120); }
+
+  // ---- phones (≤ 700 px): two levels — the section headings first, a section opens on tap ----
+  // A part heading (.ss-part) gathers the sections after it; Probleme / Ce merge bine / Glosar fold
+  // their own content. A closed group is display:none: its later() sections and charts are built
+  // only once it is opened (the IntersectionObservers see them then). Desktop: untouched.
+  var accOpen = {};   // heading text → open, kept across redraws (filter change, rotation)
+  var accMq = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
+  function accordion(body) {
+    v.ui.acc = [];
+    if (!accMq || !accMq.matches) return;
+    var part = null;
+    [].slice.call(body.children).forEach(function (c) {
+      var self = c.matches(".ss-problems, .ss-good, .ss-glossary");
+      if (self || c.classList.contains("ss-part")) {
+        var g = { head: c, members: [] };
+        v.ui.acc.push(g);
+        part = self ? part : g;
+      } else if (part) part.members.push(c);
+    });
+    v.ui.acc.forEach(function (g) {
+      var h = g.head.querySelector("h2");
+      if (!h) return;
+      var key = h.textContent;
+      var btn = el("button", "ss-acc-btn");
+      btn.type = "button";
+      while (h.firstChild) btn.append(h.firstChild);
+      h.append(btn);
+      g.open = function (on) {
+        accOpen[key] = on;
+        btn.setAttribute("aria-expanded", on ? "true" : "false");
+        g.head.classList.add("ss-acc");
+        g.head.classList.toggle("ss-acc-closed", !on);
+        g.members.forEach(function (m) { m.classList.toggle("ss-acc-off", !on); });
+      };
+      btn.addEventListener("click", function () { g.open(btn.getAttribute("aria-expanded") !== "true"); });
+      g.open(!!accOpen[key]);
+    });
+  }
+  // a jump to a section / chart (?sect=, ?grafic=) opens the group holding it first
+  function accReveal(node) {
+    if (!node || !v.ui || !v.ui.acc) return;
+    v.ui.acc.forEach(function (g) {
+      if (g.open && (g.head.contains(node) || g.members.some(function (m) { return m.contains(node); }))) g.open(true);
+    });
+  }
 
   function presetsMenu() {
     var box = el("div", "ss-presets");
@@ -533,6 +580,7 @@
 
   function focusChart() {
     if (v.focus && !v.ui.body.querySelector('[data-key="' + String(v.focus).replace(/[^a-z0-9-]/g, "") + '"]')) flushLater();   // the chart may not be built yet
+    if (v.focus) accReveal(v.ui.body.querySelector('[data-key="' + String(v.focus).replace(/[^a-z0-9-]/g, "") + '"]'));
     if (v.focus && C3()) C3().focusKey(v.ui.body, v.focus);
     v.focus = null;
   }
@@ -545,6 +593,7 @@
     if (!v.ui.body.querySelector(SECTS[v.sect])) flushLater();   // a section not built yet
     var node = v.ui.body.querySelector(SECTS[v.sect]);
     if (!node) return;
+    accReveal(node);
     node.classList.add("ss-target");
     node.scrollIntoView({ block: "start" });
     setTimeout(function () { node.classList.remove("ss-target"); }, 2000);
