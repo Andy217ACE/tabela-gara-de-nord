@@ -1895,7 +1895,7 @@ html[data-view="panou"] .pe-note { display: none !important; }
 /* ===== a11y 2.5.8 (WCAG 2.2 AA): every control is a >= 24x24 CSS px target =====
    Padding grows the hit area, the equal negative margin keeps the layout unchanged.
    `body` prefix outranks the per-page stylesheets that load later. */
-body .station-link, body .st-train, body .st-back, body .ss-card-link, body .footer-version, body .live-src a {
+body .station-link, body .st-train, body .st-back, body .ss-card-link, body .footer-version, body .footer-how, body .live-src a {
   display: inline-block;
   padding-block: 5px;
   margin-block: -5px;
