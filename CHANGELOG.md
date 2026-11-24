@@ -5,6 +5,25 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.67 — 2026-11-24
+### Schimbat
+- **Accesibilitate (WCAG 2.2 AA):** toate linkurile și butoanele au o zonă de atingere de cel puțin 24×24 px (linkuri de stație și tren, sortări, câmpuri, bife); fiecare pagină are un singur titlu principal și titluri fără salturi de nivel (inclusiv Setări și Statistici).
+- **Cititoarele de ecran** nu mai anunță „Tabela este actualizată” la deschidere și nu mai recitesc toată pagina Statistici la fiecare redesenare; problemele și revenirile se anunță în continuare.
+- **„Mișcare redusă”** din setările telefonului oprește toate animațiile și tranzițiile.
+- **Dependențe:** numpy 2.5.5, playwright 1.65.2.
+### Reparat
+- Filtrele din Trenuri, Clasamente și Stații nu mai dau eroare dacă se aplică după ce ai părăsit pagina.
+- O foaie de stil care nu s-a putut încărca se reîncearcă la următoarea vizită.
+- Starea Tesseract din `#sistem` nu mai rămâne blocată pe „eroare” după o verificare ratată.
+- `install.sh`: calea către `requirements.lock` e citată.
+- Testele automate nu mai pică uneori la schimbarea rapidă a paginii (tranziția anulată era raportată ca eroare).
+### English
+- **Accessibility (WCAG 2.2 AA):** every link and button has a touch target of at least 24×24 px (station and train links, sort buttons, inputs, checkboxes); each page has a single main heading and no skipped heading levels (including Settings and Statistics).
+- **Screen readers** no longer announce "Board is up to date" on load or re-read the whole Statistics page on each redraw; problems and recoveries are still announced.
+- **"Reduce motion"** in the phone settings turns off all animations and transitions.
+- **Dependencies:** numpy 2.5.5, playwright 1.65.2.
+- Fixed: Trains, Rankings and Stations filters no longer throw if they fire after you left the page; a stylesheet that failed to load is retried on the next visit; Tesseract status in `#sistem` no longer sticks on "error" after one failed probe; `install.sh` quotes the `requirements.lock` path; CI no longer fails at random on fast page changes (a skipped transition was reported as an error).
+
 ## Beta 1.66 — 2026-11-24
 ### Schimbat
 - **Pagini mult mai rapide pe telefon:** scorul Lighthouse mobil a urcat la 84–90 pe Tabelă, Istoric, Trenuri și Statistici (era 47–66), măsurat pe aceeași copie a bazei.
