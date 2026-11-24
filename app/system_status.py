@@ -66,7 +66,10 @@ def tesseract_info(cmd: str) -> dict:
 
         m = re.search(r"tesseract\s+v?(\d[\w.\-]*)", run("--version"))
         langs = [x.strip() for x in run("--list-langs").splitlines()[1:] if x.strip()]
-        _tess_info = {"version": m.group(1) if m else None, "langs": langs}
+        info = {"version": m.group(1) if m else None, "langs": langs}
+        if not info["version"]:
+            return info   # failed probe (missing binary, timeout): not cached, retried on the next call
+        _tess_info = info
     return _tess_info
 
 

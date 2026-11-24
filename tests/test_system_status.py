@@ -176,3 +176,22 @@ def test_tesseract_and_security_updates_fields(store, tmp_path, monkeypatch):
     assert "tesseract" not in system_status.collect_status(store, _settings(tmp_path / "tabela.db"), NOW)  # public: no versions
     monkeypatch.setattr(system_status, "_UPDATES_FILE", str(tmp_path / "missing"))
     assert system_status.pending_security_updates() is None
+
+
+def test_tesseract_info_failed_probe_not_cached(monkeypatch):
+    monkeypatch.setattr(system_status, "_tess_info", None)
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        if len(calls) <= 2:
+            raise OSError("missing")
+        out = "tesseract 5.5.0\n" if cmd[1] == "--version" else "List of available languages (1):\neng\n"
+        return SimpleNamespace(returncode=0, stdout=out, stderr="")
+
+    monkeypatch.setattr(system_status.subprocess, "run", fake_run)
+    assert system_status.tesseract_info("tesseract")["version"] is None
+    assert system_status.tesseract_info("tesseract") == {"version": "5.5.0", "langs": ["eng"]}
+    n = len(calls)
+    system_status.tesseract_info("tesseract")
+    assert len(calls) == n   # success is cached

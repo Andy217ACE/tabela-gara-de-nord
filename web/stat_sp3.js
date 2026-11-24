@@ -59,7 +59,7 @@
     var b = el("section", "ss-sp3 ss-sp3-alert");
     b.setAttribute("role", "status");
     b.setAttribute("aria-label", tt("stats.sp3.alert.title"));
-    b.append(el("h3", "ss-sp3-h", tt("stats.sp3.alert.title")));
+    b.append(el("h2", "ss-sp3-h", tt("stats.sp3.alert.title")));
     var ul = el("ul", "ss-sp3-list");
     a.slice(0, 5).forEach(function (x) {
       ul.append(el("li", null, tt("stats.sp3.alert.item", { kind: tt("stats.sp3.kind." + x.kind), name: S.titleCase(x.key),
@@ -76,7 +76,7 @@
 
   function changeList(title, items, cls) {
     var col = el("div", "ss-sp3-col " + cls);
-    col.append(el("h4", "ss-sp3-h4", title));
+    col.append(el("h3", "ss-sp3-h4", title));
     if (!items.length) {
       col.append(el("p", "ss-sp3-note", tt("stats.sp3.changes.none")));
       return col;
@@ -95,7 +95,7 @@
   }
 
   function changes(sec, d) {
-    sec.replaceChildren(el("h3", "ss-sp3-h", tt("stats.sp3.changes.title")));
+    sec.replaceChildren(el("h2", "ss-sp3-h", tt("stats.sp3.changes.title")));
     if (d.status !== "ok") {
       sec.append(insufficient(d));
       return;
@@ -110,7 +110,7 @@
   // ---- 7 days against the 7 before ------------------------------------------------------------
 
   function compare(sec, d) {
-    sec.replaceChildren(el("h3", "ss-sp3-h", tt("stats.sp3.compare.title")));
+    sec.replaceChildren(el("h2", "ss-sp3-h", tt("stats.sp3.compare.title")));
     if (d.status !== "ok") {
       sec.append(insufficient(d));
       return;

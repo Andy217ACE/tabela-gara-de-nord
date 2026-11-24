@@ -159,3 +159,10 @@ def test_nginx_rate_limits_expensive_endpoints():
     for p in ("stats", "trains/stats", "stations", "journeys"):
         assert p in loc.group(1).split("|"), p
     assert site.index("location ~ ^/api/(stats") < site.index("location /api/ {")
+
+
+def test_late_load_after_hide_and_css_retry_guards():
+    js = (WEB / "stats.js").read_text(encoding="utf-8")
+    assert "if (!v.body) return;" in js.split("function load(force)")[1][:200]   # debounce timer after hide()
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "delete cssDone[href]" in app   # a failed page stylesheet is retried on the next visit
