@@ -65,7 +65,7 @@
   function mount(container) {
     lastContainer = container;
     clear(container);
-    container.appendChild(el("h2", "setari-title", T("settings.title")));
+    container.appendChild(el("h1", "setari-title", T("settings.title")));
     var status = el("p", "setari-status", "");
     status.setAttribute("role", "status");
     container.appendChild(status);

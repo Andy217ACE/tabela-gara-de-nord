@@ -352,7 +352,10 @@
 
   function announce(text) {
     if (text === state.lastAnnounce) return;
+    // first state is the page load itself: announce only a problem, not "all fine"
+    var first = !state.lastAnnounce;
     state.lastAnnounce = text;
+    if (first && text === T("app.announce.ok")) return;
     $("sr-status").textContent = text;
   }
 

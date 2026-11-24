@@ -1893,3 +1893,35 @@ html[data-view="panou"] .pe-note { display: none !important; }
 .station-link-plain { text-transform: inherit; text-decoration: none; }
 .station-link-plain:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .station-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+/* ===== a11y 2.5.8 (WCAG 2.2 AA): every control is a >= 24x24 CSS px target =====
+   Padding grows the hit area, the equal negative margin keeps the layout unchanged.
+   `body` prefix outranks the per-page stylesheets that load later. */
+body .station-link, body .st-train, body .st-back, body .ss-card-link, body .footer-version, body .live-src a {
+  display: inline-block;
+  padding-block: 5px;
+  margin-block: -5px;
+  min-width: 24px;
+}
+body .ss-card-link { min-width: 24px; text-align: center; }
+body .pnl-sortbtn, body .st-sort { padding-block: 5px; margin-block: -5px; min-height: 24px; min-width: 24px; }
+body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+body .setari-save { min-height: 24px; }
+body input[type="checkbox"], body input[type="radio"] { min-width: 24px; min-height: 24px; }
+/* ===== end a11y 2.5.8 ===== */
+
+/* ===== a11y: reduced motion (belt and braces over the per-component blocks) ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* ===== end a11y reduced motion ===== */
+
+/* a11y: the settings view now has the page h1 (was an h2) */
+.setari-title { font-size: 1.5rem; margin: 0 0 12px; }
