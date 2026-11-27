@@ -1,6 +1,5 @@
 # © 2026 Andy217Ace
-"""WCAG 2.2 AA spot checks in a real browser (no axe vendored: three targeted assertions are
-enough and keep the repo small): target size >= 24px (2.5.8), exactly one h1 and no skipped
+"""WCAG 2.2 AA spot checks in a real browser (axe-core runs separately in test_axe_wcag22_browser.py): target size >= 24px (2.5.8), exactly one h1 and no skipped
 heading levels per view, prefers-reduced-motion kills transitions/animations."""
 import pytest
 

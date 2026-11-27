@@ -707,6 +707,8 @@ html.zoomed-out .nav-icon { width: 36px; height: 36px; }
 @media (max-width: 700px) {
   :root { --topnav-h: 0px; --nav-h: 58px; }
   body { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+  /* WCAG 2.4.11: keyboard focus scrolls above the fixed bottom bar, never under it */
+  html { scroll-padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); }
   .navbar {
     position: fixed;
     top: auto;

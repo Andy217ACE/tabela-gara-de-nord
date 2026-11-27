@@ -1,0 +1,51 @@
+{
+ "_note": "Phone 390x844, 4x CPU throttle, cold cache, seeded DB + weather enabled. Measured 2026-11-28 on a shared dev PC (Beta 1.74): LCP 0.65-3.3 s, CLS <=0.036, TBT 0.9-2.1 s (noisy: parallel load), bytes/requests deterministic. Bytes = +15%, requests +4, LCP/TBT ~1.5x worst seen, CLS = 'good' threshold 0.1. Tighten after a CI baseline.",
+ "tabela": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 505000,
+  "css_bytes": 162000,
+  "requests": 39
+ },
+ "istoric": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 505000,
+  "css_bytes": 162000,
+  "requests": 39
+ },
+ "trenuri": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 505000,
+  "css_bytes": 173000,
+  "requests": 40
+ },
+ "statistici": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 615000,
+  "css_bytes": 223000,
+  "requests": 52
+ },
+ "statii": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 505000,
+  "css_bytes": 173000,
+  "requests": 40
+ },
+ "sistem": {
+  "lcp": 5000,
+  "cls": 0.1,
+  "tbt": 3500,
+  "js_bytes": 517000,
+  "css_bytes": 165000,
+  "requests": 41
+ }
+}

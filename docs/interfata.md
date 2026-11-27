@@ -441,6 +441,24 @@ Cum sunt verificate: testele `tests/test_*_browser.py` (de exemplu `test_touch_t
 `test_empty_states_browser`, `test_nav_browser`, `test_a11y_browser`, `test_contrast_browser`), verificarea
 pe Firefox și WebKit din `test_cross_browser.py` și `design-system/` (nu le-am rulat aici).
 
+### 8.1 WCAG 2.2 AA: criterii noi și verificarea automată
+
+`tests/test_axe_wcag22_browser.py` rulează axe-core 4.10.2 (copie fixată în `tests/vendor/`, cu SHA256 verificat; MPL-2.0; aplicația nu o servește și nu încarcă nimic de pe CDN) cu etichetele `wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa`, pe 12 rute (Tabelă, Istoric, Urmărite, Trenuri, Stații, Statistici, Clasamente, Versiuni, Sistem, Setări, Cum funcționează, Admin cu formularul de login), în tema luminoasă și întunecată, la 1280 și 390 px. Nicio regulă nu este dezactivată; rezultat la scriere: 0 încălcări. Contrastul rămâne verificat și separat de `test_contrast_browser`.
+
+| Criteriu (nivel) | Stare | Verificat prin |
+|---|---|---|
+| 2.4.11 Focus neacoperit (AA) | **Reparat**: pe telefon, focusul de la tastatură intra sub bara de navigare fixă de jos; `html { scroll-padding-bottom }` în blocul ≤ 700 px din `style.css` | `test_focus_obscured_browser` (Tab pe 11 rute, 390 px) |
+| 2.5.7 Mișcări de tragere (AA) | N/A: nicio funcție nu cere tragere; indicatorul graficelor (`charts3.js`) e doar o presiune/trecere cu cursorul, cu alternativă la tastatură și tabel | citirea `web/*.js` (fără `draggable`, `dragstart`, `touchmove`, glisoare) |
+| 2.5.8 Dimensiune țintă (AA) | Corect pe toate rutele publice | `test_a11y_browser`, `test_touch_targets_browser`, regula axe `target-size` |
+| 3.2.6 Ajutor consecvent (A) | Corect: linkul „Cum funcționează?” e în subsolul comun, în aceeași poziție relativă pe fiecare pagină | `test_consistent_help_link_on_every_route` |
+| 3.3.7 Introducere redundantă (A) | N/A: nu există fluxuri în mai mulți pași; filtrele își păstrează valorile în aceeași pagină | citirea formularelor din `index.html` |
+| 3.3.8 Autentificare accesibilă (AA) | Corect: login-ul Admin are un singur câmp parolă, cu etichetă, `autocomplete="current-password"`, lipire permisă, fără test cognitiv sau captcha | `web/admin.js` (`showLogin`) + axe pe `#admin`; nu am rulat un login real cu manager de parole |
+| 4.1.1 Parsare | Eliminat în WCAG 2.2 | N/A |
+
+Stare pe pagini: toate cele 12 rute trec axe (ambele teme, ambele lățimi), țintele de 24 px și focusul neacoperit (telefon, fără Admin). Ce nu am verificat: cititoare de ecran reale, mărire 400 %, WebKit/Firefox cu axe.
+
+Performanța frontend: `tests/test_perf_budgets_browser.py` și `tests/perf_budgets.json` (vezi `docs/testare.md`).
+
 ---
 
 ## 9. Servirea fișierelor statice
