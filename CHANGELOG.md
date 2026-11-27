@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.72 — 2026-11-27
+### Adăugat
+- **Test intern (temporar, 7 zile):** serverul citește la 3 minute harta publică a trenurilor în circulație (Infofer) într-o bază separată, ca să măsurăm dacă întârzierea la sosire se poate estima mai devreme decât apare pe tabelă. Nimic nu apare pe site; se oprește cu o comandă (vezi documentația de administrare).
+### Schimbat
+- **README** rescris complet și mult mai detaliat (română și engleză): funcții, cum funcționează, diagrame, date, administrare, securitate, rulare, teste, deploy.
+- **Teste:** testul barei de jos pe telefon așteaptă marcarea paginii curente în loc de un timp fix (pica uneori pe GitHub).
+### English
+- **Internal test (temporary, 7 days):** every 3 minutes the server reads the public map of running trains (Infofer) into a separate database, to measure whether arrival delays can be estimated earlier than the board shows them. Nothing is shown on the site; it stops with one command (see the operations docs).
+- **README** fully rewritten and much more detailed (Romanian and English): features, how it works, diagrams, data, administration, security, running, tests, deploy.
+- **Tests:** the phone bottom-bar test waits for the current page to be marked instead of a fixed delay (it sometimes failed on GitHub).
+
 ## Beta 1.71 — 2026-11-27
 ### Adăugat
 - **Admin: „Vizitatori online”** — cine a folosit site-ul în ultimele 5 minute (IP mascat, browser și sistem, fără boți și scanere), în memorie, reîmprospătat la 30 s. `GET /api/admin/visitors`.
