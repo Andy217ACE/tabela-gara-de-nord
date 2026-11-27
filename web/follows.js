@@ -125,8 +125,7 @@
     }).catch(function () { return null; });
   }
 
-  // keys.auth of a subscription: the server's proof that this browser owns the endpoint
-  // (read from the browser each time, never stored on the device).
+  // keys.auth = proof of ownership for the server (read from the browser, never stored)
   function authOf(sub) {
     var j = sub && sub.toJSON ? sub.toJSON() : sub;
     return (j && j.keys && j.keys.auth) || "";
@@ -162,7 +161,7 @@
     return pushKey().then(function (key) {
       return reg.pushManager.getSubscription().then(function (sub) {
         if (sub && !force && sameKey(sub, key)) return { sub: sub, old: null };
-        var oldAuth = authOf(sub);  // read before unsubscribe: proves the old one is ours
+        var oldAuth = authOf(sub);  // before unsubscribe
         // the browser refuses a second key while one subscription exists: drop it first
         return (sub ? sub.unsubscribe() : Promise.resolve()).then(function () {
           return reg.pushManager.subscribe({ userVisibleOnly: true,
@@ -175,19 +174,10 @@
   function registerSubscription(r) {
     var json = r.sub.toJSON ? r.sub.toJSON() : r.sub;
     var body = { endpoint: json.endpoint, keys: json.keys };
-    var req;
-    if (r.old) {
-      // 403: the server does not know the old subscription (or not as ours): plain subscribe
-      req = api("POST", "/api/push/resubscribe",
-                Object.assign({ old_endpoint: r.old, old_auth: r.oldAuth }, body))
-        .catch(function (e) {
-          if (e.status === 403) return api("POST", "/api/push/subscribe", body);
-          throw e;
-        });
-    } else {
-      req = api("POST", "/api/push/subscribe", body);
-    }
-    return req
+    var plain = function () { return api("POST", "/api/push/subscribe", body); };
+    // 403: old subscription unknown or not ours -> plain subscribe
+    return (r.old ? api("POST", "/api/push/resubscribe", Object.assign({ old_endpoint: r.old, old_auth: r.oldAuth }, body))
+      .catch(function (e) { if (e.status !== 403) throw e; return plain(); }) : plain())
       .then(function () {
         state.endpoint = json.endpoint;
         saveEndpoint(json.endpoint);
@@ -267,7 +257,7 @@
     return currentAuth().then(function (auth) {
       return api("GET", "/api/follows?endpoint=" + encodeURIComponent(state.endpoint),
                  undefined, { "X-Push-Auth": auth })
-        .catch(function (e) { if (e.status === 403) return null; throw e; });  // not ours / gone: nothing followed
+        .catch(function (e) { if (e.status === 403) return null; throw e; });  // not ours / gone
     }).then(function (data) {
       state.follows = Array.isArray(data && data.follows) ? data.follows : [];
     });
