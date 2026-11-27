@@ -5,6 +5,17 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.73 — 2026-11-27
+### Reparat
+- **Notificări push:** abonările făcute cu o cheie de notificare veche erau refuzate de serviciul push (eroare 403), deci notificările nu mai ajungeau. Acum aplicația reface singură abonarea la deschidere și păstrează trenurile urmărite (rută nouă `POST /api/push/resubscribe`). Testul de notificare din Administrare spune „cheie veche” și reface abonarea pe loc.
+### Schimbat
+- **Documentație** adusă la zi (română și engleză): CI, bara de jos pe telefon și „Mai mult”, limba, tipărirea, accesibilitatea, Ubuntu 26.04, copia zilnică de siguranță și excepțiile fail2ban pentru vizitatorii reali.
+- **CI:** fiecare actualizare pe `main` își duce testele până la capăt (fără rulări anulate).
+### English
+- **Push notifications:** subscriptions created with an old notification key were rejected by the push service (error 403), so notifications stopped arriving. The app now renews the subscription when it opens and keeps followed trains (new route `POST /api/push/resubscribe`). The admin push test reports "old key" and renews the subscription on the spot.
+- **Documentation** brought up to date (Romanian and English): CI, the phone bottom bar and "More", language, printing, accessibility, Ubuntu 26.04, the daily backup and the fail2ban exceptions for real visitors.
+- **CI:** every push to `main` runs its tests to completion (no cancelled runs).
+
 ## Beta 1.72 — 2026-11-27
 ### Adăugat
 - **Test intern (temporar, 7 zile):** serverul citește la 3 minute harta publică a trenurilor în circulație (Infofer) într-o bază separată, ca să măsurăm dacă întârzierea la sosire se poate estima mai devreme decât apare pe tabelă. Nimic nu apare pe site; se oprește cu o comandă (vezi documentația de administrare).
