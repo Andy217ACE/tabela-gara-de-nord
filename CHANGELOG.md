@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.74 — 2026-11-28
+### Adăugat
+- **Administrare:** pagină internă, doar pentru administrator, pentru testul de 7 zile cu harta trenurilor în circulație, cu link din pagina Administrare. Nu apare în meniu și nimic nu e public.
+- **Starea colectării:** OK sau problemă (nicio citire reușită în 10 minute sau peste 20% eșuate într-o zi), ultima citire, zilele scurse din 7 și citirile pe oră din ultimele 24 h.
+- **Acum:** trenurile de pe tabela de sosiri văzute pe hartă, cu întârzierea de acolo lângă cea de pe tabelă și poziția veche marcată.
+- **Acuratețe preliminară** la 60, 30 și 15 minute înainte de sosire, față de tabelă și de model; decizia rămâne după cele 7 zile.
+- **Actualizare automată** la 60 de secunde cât timp pagina e deschisă; răspunsul nu se păstrează în cache, în română și engleză.
+### English
+- **Administration:** an internal, admin-only page for the 7-day test with the map of running trains, linked from the Administration page. It is not in the menu and nothing is public.
+- **Collection health:** OK or problem (no successful read in 10 minutes or more than 20% failed in a day), the last read, the days elapsed out of 7 and the reads per hour over the last 24 h.
+- **Now:** the arrival board's trains seen on the map, with their delay there next to the board's and old positions marked.
+- **Preliminary accuracy** at 60, 30 and 15 minutes before arrival, against the board and the model; the decision comes after the 7 days.
+- **Automatic refresh** every 60 seconds while the page is open; the response is never cached; Romanian and English.
+
 ## Beta 1.73 — 2026-11-27
 ### Reparat
 - **Notificări push:** abonările făcute cu o cheie de notificare veche erau refuzate de serviciul push (eroare 403), deci notificările nu mai ajungeau. Acum aplicația reface singură abonarea la deschidere și păstrează trenurile urmărite (rută nouă `POST /api/push/resubscribe`). Testul de notificare din Administrare spune „cheie veche” și reface abonarea pe loc.

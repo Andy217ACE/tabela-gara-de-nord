@@ -516,12 +516,12 @@
   var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
-    "#sistem": "sistem", "#setari": "setari", "#cum": "cum" };
+    "#sistem": "sistem", "#setari": "setari", "#cum": "cum", "#infofer": "infofer" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "infofer", "cum"];
   // routes with a page title: i18n key title.<route>
   var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "infofer", "cum"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;   // route asked for by the address
@@ -739,6 +739,7 @@
     document.documentElement.removeAttribute("data-deeplink");   // theme-init.js kept the board unpainted until now
     if (name === "ocr") loadOcrView();
     if (name === "ocr2") loadLazyPage("ocr2", "ocr2.js", "ocr2.css");
+    if (name === "infofer") loadLazyPage("infofer", "infofer.js", "infofer.css");   // admin only, never precached
     if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");
@@ -761,7 +762,7 @@
       window.scrollTo(0, 0);
       // page transition for every page except the live board (which is left exactly as it was)
       var ui2 = window.TabelaApp.ui2;
-      if (ui2 && name !== "tabela" && name !== "ocr" && name !== "ocr2") ui2.enterView($("view-" + name));
+      if (ui2 && name !== "tabela" && name !== "ocr" && name !== "ocr2" && name !== "infofer") ui2.enterView($("view-" + name));
     }
   }
 

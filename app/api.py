@@ -36,6 +36,7 @@ from app import (admin, captures, corrections, corrections_api, export, history_
                  telegram, trains_api, weather)
 from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice noi #statistici)
 from app import ocr_alt_api  # noqa: E402  (#ocr2, admin)
+from app import infofer_api  # noqa: E402  (#infofer, admin, spike intern)
 from app import line_prediction, stats_overview  # noqa: E402  (Val 5: sezoane CSV, estimare per tren)
 from app.config import Settings, get_settings
 from app import perf, visitors
@@ -560,6 +561,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(admin.router)       # /api/admin/* (auth, „Capturi OCR")
     app.include_router(corrections_api.router)  # /api/admin/corrections* (admin only, v9)
     app.include_router(ocr_alt_api.router)  # /api/admin/ocr-alt* (admin only, #ocr2)
+    app.include_router(infofer_api.router)  # /api/admin/infofer (admin only, #infofer)
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(stats_platform.router)  # /api/stats/platform-changes
     app.include_router(stats_dwell.router)     # /api/stats/dwell

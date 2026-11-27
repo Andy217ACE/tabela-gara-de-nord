@@ -79,7 +79,8 @@ def server(tmp_path):
 
 
 def _open(browser, base, old_key):  # noqa: F811
-    ctx = browser.new_context(service_workers="block")
+    # bypass_csp: wait_for_function polls via eval, which the strict CSP blocks (intermittent EvalError in CI)
+    ctx = browser.new_context(service_workers="block", bypass_csp=True)
     ctx.add_init_script(STUB % (list(old_key), EP_OLD, EP_NEW))
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.startswith(base) else r.abort())
     page = ctx.new_page()
