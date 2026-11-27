@@ -37,7 +37,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --require-hashes -r requirements.lock   # every runtime dependency verified by hash
-          pip install -r requirements-dev.txt -c requirements.lock   # test tools: pinned versions, no hashes
+          pip install -r requirements-dev.txt   # test tools (a hashed -c constraint would force hash mode on them)
       - name: Playwright Chromium + Firefox + WebKit (browser tests run instead of skipping)
         run: python -m playwright install --with-deps chromium firefox webkit
       - name: Release consistency (VERSION / CHANGELOG RO+EN / CHARTS_V)
@@ -88,7 +88,9 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install bandit (version pinned in requirements-dev.txt)
-        run: pip install "$(grep -E '^bandit==' requirements-dev.txt)"
+        run: |
+          grep -E '^bandit==' requirements-dev.txt > "$RUNNER_TEMP/tools.txt"
+          pip install -r "$RUNNER_TEMP/tools.txt"
       - name: Bandit
         run: bandit -q -r app scripts -ll -iii
 
