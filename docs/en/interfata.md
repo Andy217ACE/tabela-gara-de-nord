@@ -445,6 +445,24 @@ How they are verified: the `tests/test_*_browser.py` tests (for example `test_to
 `test_empty_states_browser`, `test_nav_browser`, `test_a11y_browser`, `test_contrast_browser`), the
 Firefox and WebKit check in `test_cross_browser.py` and `design-system/` (I did not run them here).
 
+### 8.1 WCAG 2.2 AA: new criteria and automated checks
+
+`tests/test_axe_wcag22_browser.py` runs axe-core 4.10.2 (a pinned copy in `tests/vendor/`, SHA256-checked; MPL-2.0; the app does not serve it and loads nothing from a CDN) with the tags `wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa` on 12 routes (Board, History, Followed, Trains, Stations, Statistics, Rankings, Versions, System, Settings, How it works, Admin with its login form), in the light and dark theme, at 1280 and 390 px. No rule is disabled; result when written: 0 violations. Contrast is still also checked separately by `test_contrast_browser`.
+
+| Criterion (level) | Status | Verified by |
+|---|---|---|
+| 2.4.11 Focus Not Obscured (AA) | **Fixed**: on phones keyboard focus could land under the fixed bottom nav bar; `html { scroll-padding-bottom }` in the <= 700 px block of `style.css` | `test_focus_obscured_browser` (Tab through 11 routes, 390 px) |
+| 2.5.7 Dragging Movements (AA) | N/A: nothing requires dragging; the chart tooltip (`charts3.js`) is just press/hover, with a keyboard alternative and a table | reading `web/*.js` (no `draggable`, `dragstart`, `touchmove`, sliders) |
+| 2.5.8 Target Size (AA) | Pass on all public routes | `test_a11y_browser`, `test_touch_targets_browser`, axe `target-size` |
+| 3.2.6 Consistent Help (A) | Pass: the "How it works?" link is in the shared footer, same relative position on every page | `test_consistent_help_link_on_every_route` |
+| 3.3.7 Redundant Entry (A) | N/A: no multi-step flows; filters keep their values within the page | reading the forms in `index.html` |
+| 3.3.8 Accessible Authentication (AA) | Pass: the Admin login is a single labelled password field, `autocomplete="current-password"`, paste allowed, no cognitive test or captcha | `web/admin.js` (`showLogin`) + axe on `#admin`; I did not run a real password-manager login |
+| 4.1.1 Parsing | Removed in WCAG 2.2 | N/A |
+
+Status per page: all 12 routes pass axe (both themes, both widths), 24 px targets and focus-not-obscured (phone, Admin excluded). Not verified: real screen readers, 400 % zoom, axe on Firefox/WebKit.
+
+Frontend performance: `tests/test_perf_budgets_browser.py` and `tests/perf_budgets.json` (see `docs/testare.md`).
+
 ---
 
 ## 9. Serving static files
