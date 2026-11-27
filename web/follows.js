@@ -76,11 +76,11 @@
 
   // ---- HTTP -----------------------------------------------------------------------------
 
-  function api(method, url, body) {
+  function api(method, url, body, headers) {
     var ctrl = new AbortController();
     var to = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
     var opts = { method: method, signal: ctrl.signal, cache: "no-store",
-                 headers: { Accept: "application/json" } };
+                 headers: Object.assign({ Accept: "application/json" }, headers) };
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);
@@ -125,6 +125,17 @@
     }).catch(function () { return null; });
   }
 
+  // keys.auth of a subscription: the server's proof that this browser owns the endpoint
+  // (read from the browser each time, never stored on the device).
+  function authOf(sub) {
+    var j = sub && sub.toJSON ? sub.toJSON() : sub;
+    return (j && j.keys && j.keys.auth) || "";
+  }
+
+  function currentAuth() {
+    return currentSubscription().then(authOf);
+  }
+
   function pushKey() {
     return api("GET", "/api/push/key").then(function (data) { return data.key; }, function (e) {
       if (e.status === 404) throw new Error(T("follows.err.not_enabled"));
@@ -151,11 +162,12 @@
     return pushKey().then(function (key) {
       return reg.pushManager.getSubscription().then(function (sub) {
         if (sub && !force && sameKey(sub, key)) return { sub: sub, old: null };
+        var oldAuth = authOf(sub);  // read before unsubscribe: proves the old one is ours
         // the browser refuses a second key while one subscription exists: drop it first
         return (sub ? sub.unsubscribe() : Promise.resolve()).then(function () {
           return reg.pushManager.subscribe({ userVisibleOnly: true,
                                              applicationServerKey: urlBase64ToUint8Array(key) });
-        }).then(function (s) { return { sub: s, old: sub ? sub.endpoint : null }; });
+        }).then(function (s) { return { sub: s, old: sub ? sub.endpoint : null, oldAuth: oldAuth }; });
       });
     });
   }
@@ -163,8 +175,19 @@
   function registerSubscription(r) {
     var json = r.sub.toJSON ? r.sub.toJSON() : r.sub;
     var body = { endpoint: json.endpoint, keys: json.keys };
-    if (r.old) body.old_endpoint = r.old;
-    return api("POST", r.old ? "/api/push/resubscribe" : "/api/push/subscribe", body)
+    var req;
+    if (r.old) {
+      // 403: the server does not know the old subscription (or not as ours): plain subscribe
+      req = api("POST", "/api/push/resubscribe",
+                Object.assign({ old_endpoint: r.old, old_auth: r.oldAuth }, body))
+        .catch(function (e) {
+          if (e.status === 403) return api("POST", "/api/push/subscribe", body);
+          throw e;
+        });
+    } else {
+      req = api("POST", "/api/push/subscribe", body);
+    }
+    return req
       .then(function () {
         state.endpoint = json.endpoint;
         saveEndpoint(json.endpoint);
@@ -209,7 +232,7 @@
     var ep = state.endpoint;
     return currentSubscription().then(function (sub) {
       var tasks = [];
-      if (ep) tasks.push(api("POST", "/api/push/unsubscribe", { endpoint: ep }).catch(function () { return null; }));
+      if (ep) tasks.push(api("POST", "/api/push/unsubscribe", { endpoint: ep, auth: authOf(sub) }).catch(function () { return null; }));
       if (sub) tasks.push(sub.unsubscribe().catch(function () { return false; }));
       return Promise.all(tasks);
     }).then(function () {
@@ -241,15 +264,20 @@
       state.follows = [];
       return Promise.resolve();
     }
-    return api("GET", "/api/follows?endpoint=" + encodeURIComponent(state.endpoint))
-      .then(function (data) {
-        state.follows = Array.isArray(data && data.follows) ? data.follows : [];
-      });
+    return currentAuth().then(function (auth) {
+      return api("GET", "/api/follows?endpoint=" + encodeURIComponent(state.endpoint),
+                 undefined, { "X-Push-Auth": auth })
+        .catch(function (e) { if (e.status === 403) return null; throw e; });  // not ours / gone: nothing followed
+    }).then(function (data) {
+      state.follows = Array.isArray(data && data.follows) ? data.follows : [];
+    });
   }
 
   function follow(no, date) {
     return ensureSubscription().then(function (ep) {
-      return api("POST", "/api/follow", { endpoint: ep, train: no, date: date });
+      return currentAuth().then(function (auth) {
+        return api("POST", "/api/follow", { endpoint: ep, auth: auth, train: no, date: date });
+      });
     }).then(function () {
       if (!isFollowed(no, date)) state.follows.push({ train_no: no, date: date });
     });
@@ -257,10 +285,11 @@
 
   function unfollow(no, date) {
     if (!state.endpoint) return Promise.resolve();
-    return api("DELETE", "/api/follow", { endpoint: state.endpoint, train: no, date: date })
-      .then(function () {
-        state.follows = state.follows.filter(function (f) { return key(f.train_no, f.date) !== key(no, date); });
-      });
+    return currentAuth().then(function (auth) {
+      return api("DELETE", "/api/follow", { endpoint: state.endpoint, auth: auth, train: no, date: date });
+    }).then(function () {
+      state.follows = state.follows.filter(function (f) { return key(f.train_no, f.date) !== key(no, date); });
+    });
   }
 
   // ---- UI -------------------------------------------------------------------------------------

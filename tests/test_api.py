@@ -172,41 +172,79 @@ def test_train_rejects_non_int_and_bad_date(client):
 
 # -- push / follow --------------------------------------------------------
 
+AUTH = SUB["keys"]["auth"]
+
+
+def _follows(client, ep=EP, auth=AUTH):
+    return client.get("/api/follows", params={"endpoint": ep}, headers={"X-Push-Auth": auth})
+
+
 def test_follow_unfollow_roundtrip(client):
     assert client.post("/api/push/subscribe", json=SUB).status_code == 200
-    r = client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
+    r = client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
     assert r.status_code == 200, r.text
-    assert client.post("/api/follow",
-                       json={"endpoint": EP, "train": 531, "date": "2026-10-21"}).status_code == 200
-    r = client.get("/api/follows", params={"endpoint": EP})
-    assert r.json()["follows"] == [{"train_no": 1636, "date": "2026-10-20", "on_board": False},
-                                   {"train_no": 531, "date": "2026-10-21", "on_board": False}]
+    assert client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 531,
+                                            "date": "2026-10-21"}).status_code == 200
+    assert _follows(client).json()["follows"] == [
+        {"train_no": 1636, "date": "2026-10-20", "on_board": False},
+        {"train_no": 531, "date": "2026-10-21", "on_board": False}]
     r = client.request("DELETE", "/api/follow",
-                       json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
+                       json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
     assert r.status_code == 200
-    assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == \
-        [{"train_no": 531, "date": "2026-10-21", "on_board": False}]
-    assert client.post("/api/push/unsubscribe", json={"endpoint": EP}).status_code == 200
-    assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == []
+    assert _follows(client).json()["follows"] == [
+        {"train_no": 531, "date": "2026-10-21", "on_board": False}]
+    assert client.post("/api/push/unsubscribe", json={"endpoint": EP, "auth": AUTH}).status_code == 200
+    assert client.app.state.store.get_subscription(EP) is None
+
+
+def test_endpoint_alone_is_not_enough(client):
+    """Knowing the endpoint URL does not let anyone read, change or delete its follows."""
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
+    for auth in (None, "", "b" * 10, AUTH + "x"):
+        body = {"endpoint": EP, "train": 531, "date": "2026-10-20"}
+        if auth is not None:
+            body["auth"] = auth
+        assert client.post("/api/follow", json=body).status_code == 403
+        assert client.request("DELETE", "/api/follow", json=dict(body, train=1636)).status_code == 403
+        assert client.post("/api/push/unsubscribe", json=body).status_code == 403
+        r = client.get("/api/follows", params={"endpoint": EP},
+                       headers={} if auth is None else {"X-Push-Auth": auth})
+        assert r.status_code == 403
+    # re-keying an existing subscription is refused too (else the proof could be replaced)
+    r = client.post("/api/push/subscribe",
+                    json={"endpoint": EP, "keys": {"p256dh": "x" * 20, "auth": "z" * 10}})
+    assert r.status_code == 403
+    assert [f["train_no"] for f in _follows(client).json()["follows"]] == [1636]
+
+
+def test_unknown_and_wrong_proof_look_the_same(client):
+    client.post("/api/push/subscribe", json=SUB)
+    known = client.post("/api/follow", json={"endpoint": EP, "auth": "nu", "train": 1,
+                                             "date": "2026-10-20"})
+    unknown = client.post("/api/follow", json={"endpoint": EP_NEW, "auth": "nu", "train": 1,
+                                               "date": "2026-10-20"})
+    assert known.status_code == unknown.status_code == 403
+    assert known.json() == unknown.json()
 
 
 def test_follow_past_date_rejected(client):
     client.post("/api/push/subscribe", json=SUB)
-    r = client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-19"})
+    r = client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-19"})
     assert r.status_code == 422
     assert "dat" in r.json()["detail"].lower()
 
 
 def test_follow_unknown_subscription_rejected(client):
-    r = client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
-    assert r.status_code == 422
+    r = client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
+    assert r.status_code == 403
 
 
 @pytest.mark.parametrize("body", [
-    {"endpoint": EP, "train": "x", "date": "2026-10-20"},
-    {"endpoint": EP, "train": True, "date": "2026-10-20"},
-    {"endpoint": EP, "train": 1636, "date": "20.10.2026"},
-    {"endpoint": EP, "train": 1636},
+    {"endpoint": EP, "auth": AUTH, "train": "x", "date": "2026-10-20"},
+    {"endpoint": EP, "auth": AUTH, "train": True, "date": "2026-10-20"},
+    {"endpoint": EP, "auth": AUTH, "train": 1636, "date": "20.10.2026"},
+    {"endpoint": EP, "auth": AUTH, "train": 1636},
     [1, 2],
 ])
 def test_follow_bad_body(client, body):
@@ -233,42 +271,73 @@ def test_oversized_body_413(client):
 def test_bad_endpoint_rejected(client, ep):
     r = client.post("/api/push/subscribe", json={"endpoint": ep, "keys": SUB["keys"]})
     assert r.status_code == 422
-    assert client.get("/api/follows", params={"endpoint": ep}).status_code == 422
+    assert _follows(client, ep).status_code == 422
 
 
 EP_NEW = "https://fcm.googleapis.com/fcm/send/new"
+NEW_KEYS = {"p256dh": "q" * 20, "auth": "b" * 10}
 
 
 def test_resubscribe_moves_follows(client):
     client.post("/api/push/subscribe", json=SUB)
-    client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
-    r = client.post("/api/push/resubscribe",
-                    json={"old_endpoint": EP, "endpoint": EP_NEW, "keys": SUB["keys"]})
-    assert r.status_code == 200 and r.json() == {"ok": True}
-    assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == []
-    assert client.get("/api/follows", params={"endpoint": EP_NEW}).json()["follows"] ==         [{"train_no": 1636, "date": "2026-10-20", "on_board": False}]
+    client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
+    r = client.post("/api/push/resubscribe", json={"old_endpoint": EP, "old_auth": AUTH,
+                                                   "endpoint": EP_NEW, "keys": NEW_KEYS})
+    assert r.status_code == 200 and r.json() == {"ok": True, "dropped": 0}
+    assert _follows(client, EP).status_code == 403      # gone
+    assert _follows(client, EP_NEW, NEW_KEYS["auth"]).json()["follows"] == [
+        {"train_no": 1636, "date": "2026-10-20", "on_board": False}]
     assert client.app.state.store.get_subscription(EP) is None
 
 
-def test_resubscribe_unknown_old_acts_as_subscribe(client):
-    r = client.post("/api/push/resubscribe",
-                    json={"old_endpoint": EP, "endpoint": EP_NEW, "keys": SUB["keys"]})
-    assert r.status_code == 200
-    assert client.app.state.store.get_subscription(EP_NEW) is not None
+@pytest.mark.parametrize("old_auth", [None, "", "b" * 10, 123])
+def test_resubscribe_needs_proof_of_old(client, old_auth):
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
+    body = {"old_endpoint": EP, "endpoint": EP_NEW, "keys": NEW_KEYS}
+    if old_auth is not None:
+        body["old_auth"] = old_auth
+    assert client.post("/api/push/resubscribe", json=body).status_code == 403
+    assert len(_follows(client).json()["follows"]) == 1
+    assert client.app.state.store.get_subscription(EP_NEW) is None
+
+
+def test_resubscribe_unknown_old_is_403_like_wrong_proof(client):
+    r = client.post("/api/push/resubscribe", json={"old_endpoint": EP, "old_auth": AUTH,
+                                                   "endpoint": EP_NEW, "keys": NEW_KEYS})
+    assert r.status_code == 403
+    client.post("/api/push/subscribe", json=SUB)
+    r2 = client.post("/api/push/resubscribe", json={"old_endpoint": EP, "old_auth": "nu",
+                                                    "endpoint": EP_NEW, "keys": NEW_KEYS})
+    assert r2.status_code == 403 and r.json() == r2.json()
+
+
+def test_resubscribe_caps_follows(client):
+    store = client.app.state.store
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/push/subscribe", json={"endpoint": EP_NEW, "keys": NEW_KEYS})
+    for i in range(20):
+        store.follow(EP, 1000 + i, "2099-01-02")
+    for i in range(3):
+        store.follow(EP_NEW, 2000 + i, "2099-01-01")
+    r = client.post("/api/push/resubscribe", json={"old_endpoint": EP, "old_auth": AUTH,
+                                                   "endpoint": EP_NEW, "keys": NEW_KEYS})
+    assert r.json() == {"ok": True, "dropped": 3}
+    assert len(store.list_follows(EP_NEW)) == 20
 
 
 @pytest.mark.parametrize("body", [
-    {"old_endpoint": "https://10.0.0.1/x", "endpoint": EP_NEW, "keys": SUB["keys"]},
-    {"old_endpoint": EP, "endpoint": "http://push.example.com/x", "keys": SUB["keys"]},
-    {"endpoint": EP_NEW, "keys": SUB["keys"]},
-    {"old_endpoint": EP, "endpoint": EP_NEW},
-    {"old_endpoint": EP, "endpoint": EP_NEW, "keys": {"p256dh": "", "auth": "a"}},
+    {"old_endpoint": "https://10.0.0.1/x", "old_auth": AUTH, "endpoint": EP_NEW, "keys": NEW_KEYS},
+    {"old_endpoint": EP, "old_auth": AUTH, "endpoint": "http://push.example.com/x", "keys": NEW_KEYS},
+    {"endpoint": EP_NEW, "old_auth": AUTH, "keys": NEW_KEYS},
+    {"old_endpoint": EP, "old_auth": AUTH, "endpoint": EP_NEW},
+    {"old_endpoint": EP, "old_auth": AUTH, "endpoint": EP_NEW, "keys": {"p256dh": "", "auth": "a"}},
 ])
 def test_resubscribe_validation_keeps_old(client, body):
     client.post("/api/push/subscribe", json=SUB)
-    client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
+    client.post("/api/follow", json={"endpoint": EP, "auth": AUTH, "train": 1636, "date": "2026-10-20"})
     assert client.post("/api/push/resubscribe", json=body).status_code == 422
-    assert len(client.get("/api/follows", params={"endpoint": EP}).json()["follows"]) == 1
+    assert len(_follows(client).json()["follows"]) == 1
 
 
 def test_resubscribe_oversized_413(client):

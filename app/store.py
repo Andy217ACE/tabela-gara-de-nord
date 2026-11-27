@@ -10,6 +10,7 @@ ingested. A frame where no panel is usable is a failed run (`ok=0`).
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import re
 import sqlite3
@@ -1251,34 +1252,69 @@ class Store:
         )
         return self._sub_id(endpoint)
 
+    def _proved(self, endpoint: str, auth) -> int | None:
+        """Id of the subscription `endpoint` when `auth` equals its stored keys.auth (constant
+        time), else None; unknown and mismatching look the same to the caller."""
+        r = self._conn.execute("SELECT id, auth FROM subscriptions WHERE endpoint=?",
+                               (endpoint,)).fetchone()
+        ok = r is not None and isinstance(auth, str) and             hmac.compare_digest(r["auth"].encode(), auth.encode())
+        return r["id"] if ok else None
+
+    def owns(self, endpoint: str, auth) -> bool:
+        """True when `auth` is the keys.auth stored for `endpoint` (proof of ownership)."""
+        with self._lock:
+            return self._proved(endpoint, auth) is not None
+
+    def _check_rekey(self, endpoint: str, auth: str) -> None:
+        # an existing subscription keeps its keys: re-keying it would hand it to whoever knows the URL
+        if self._sub_id(endpoint) is not None and self._proved(endpoint, auth) is None:
+            raise PermissionError("abonare deținută de alt client")
+
     def subscribe(self, endpoint: str, p256dh: str, auth: str) -> int:
         self._check_sub(endpoint, p256dh, auth)
         with self._lock:
+            self._check_rekey(endpoint, auth)
             return self._upsert_sub(endpoint, p256dh, auth)
 
-    def resubscribe(self, old_endpoint: str, endpoint: str, p256dh: str, auth: str) -> int:
+    def resubscribe(self, old_endpoint: str, old_auth: str, endpoint: str, p256dh: str,
+                    auth: str, *, today: date | None = None) -> tuple[int, int]:
         """Register `endpoint` and move the follows of `old_endpoint` to it, then drop the
         old subscription, atomically. Used when the browser had to re-subscribe because the
-        VAPID key changed (the old endpoint gets 403 forever). Unknown old: like subscribe()."""
+        VAPID key changed (the old endpoint gets 403 forever). `old_auth` must be the old
+        subscription's keys.auth (PermissionError otherwise, also for an unknown old one).
+        The merge keeps at most MAX_FOLLOWS follows dated `today - 1` or later, the soonest
+        first (service_date, train_no); returns (subscription id, follows dropped by the cap)."""
         check_push_endpoint(old_endpoint)
         self._check_sub(endpoint, p256dh, auth)
+        cutoff = ((today or _today()) - timedelta(days=1)).isoformat()
         with self._lock:
             c = self._conn
             c.execute("BEGIN IMMEDIATE")
             try:
+                old = self._proved(old_endpoint, old_auth)
+                if old is None:
+                    raise PermissionError("dovadă de abonare invalidă")
+                if endpoint != old_endpoint:  # same endpoint: the proven owner may change keys
+                    self._check_rekey(endpoint, auth)
                 sid = self._upsert_sub(endpoint, p256dh, auth)
-                old = self._sub_id(old_endpoint)
-                if old is not None and old != sid:
-                    # shortcut: a merge may exceed MAX_FOLLOWS; the next follow() call enforces it again
+                dropped = 0
+                if old != sid:
                     c.execute("INSERT OR IGNORE INTO follows(subscription_id, train_no, service_date)"
-                              " SELECT ?, train_no, service_date FROM follows WHERE subscription_id=?"
-                              " ORDER BY rowid", (sid, old))
+                              " SELECT ?, train_no, service_date FROM follows WHERE subscription_id=?",
+                              (sid, old))
                     c.execute("DELETE FROM subscriptions WHERE id=?", (old,))
+                    c.execute("DELETE FROM follows WHERE subscription_id=? AND service_date < ?",
+                              (sid, cutoff))
+                    dropped = c.execute(
+                        "DELETE FROM follows WHERE subscription_id=? AND rowid NOT IN"
+                        " (SELECT rowid FROM follows WHERE subscription_id=?"
+                        "  ORDER BY service_date, train_no LIMIT ?)",
+                        (sid, sid, MAX_FOLLOWS)).rowcount
                 c.execute("COMMIT")
             except BaseException:
                 c.execute("ROLLBACK")
                 raise
-            return sid
+            return sid, dropped
 
     def unsubscribe(self, endpoint: str) -> None:
         with self._lock:  # follows go via ON DELETE CASCADE

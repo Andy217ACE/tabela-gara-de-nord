@@ -162,6 +162,16 @@ def _check_push_endpoint(endpoint) -> str:
     return endpoint
 
 
+# Proof of ownership: the subscription's keys.auth, which only the browser and this server know
+# (the endpoint URL is also seen by the push service). Unknown endpoint and wrong proof look alike.
+_NOT_OWNER = "Abonare necunoscută sau dovadă de abonare invalidă."
+
+
+async def _check_owner(store: Store, endpoint: str, auth) -> None:
+    if not await run_in_threadpool(store.owns, endpoint, auth):
+        raise _bad(_NOT_OWNER, 403)
+
+
 def _sub_keys(body: dict) -> tuple:
     keys = body.get("keys")
     if not isinstance(keys, dict):
@@ -483,9 +493,10 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
                 "events": store_of(request).train_events(n, day)}
 
     @app.get("/api/follows")
-    def follows(request: Request):
+    async def follows(request: Request):
         ep = _check_push_endpoint(request.query_params.get("endpoint"))
-        return {"follows": store_of(request).list_follows(ep)}
+        await _check_owner(store_of(request), ep, request.headers.get("x-push-auth"))  # header: not logged
+        return {"follows": await run_in_threadpool(store_of(request).list_follows, ep)}
 
     @app.get("/api/push/key")
     def push_key(request: Request):
@@ -503,6 +514,8 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         p256dh, auth = _sub_keys(body)
         try:
             await run_in_threadpool(store_of(request).subscribe, ep, p256dh, auth)
+        except PermissionError:
+            raise _bad(_NOT_OWNER, 403) from None
         except ValueError:
             raise _bad("Abonare invalidă.") from None
         return {"ok": True}
@@ -510,21 +523,26 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     @app.post("/api/push/resubscribe")
     async def resubscribe(request: Request):
         """The browser re-subscribed with the current VAPID key: move the follows of
-        `old_endpoint` to the new subscription and drop the old one (unknown old: subscribe)."""
+        `old_endpoint` (proven by `old_auth`, its keys.auth) to the new subscription, at most
+        MAX_FOLLOWS, and drop the old one. `dropped`: follows cut by the cap."""
         body = await _json_body(request)
         old = _check_push_endpoint(body.get("old_endpoint"))
         ep = _check_push_endpoint(body.get("endpoint"))
         p256dh, auth = _sub_keys(body)
         try:
-            await run_in_threadpool(store_of(request).resubscribe, old, ep, p256dh, auth)
+            _, dropped = await run_in_threadpool(store_of(request).resubscribe, old,
+                                                 body.get("old_auth"), ep, p256dh, auth)
+        except PermissionError:
+            raise _bad(_NOT_OWNER, 403) from None
         except ValueError:
             raise _bad("Abonare invalidă.") from None
-        return {"ok": True}
+        return {"ok": True, "dropped": dropped}
 
     @app.post("/api/push/unsubscribe")
     async def unsubscribe(request: Request):
         body = await _json_body(request)
         ep = _check_push_endpoint(body.get("endpoint"))
+        await _check_owner(store_of(request), ep, body.get("auth"))
         await run_in_threadpool(store_of(request).unsubscribe, ep)
         return {"ok": True}
 
@@ -535,7 +553,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         d = body.get("date")
         if not isinstance(d, str):
             raise _bad("Data lipsește (format AAAA-LL-ZZ).")
-        return ep, n, _parse_date(d, default_today=False)
+        day = _parse_date(d, default_today=False)
+        await _check_owner(store_of(request), ep, body.get("auth"))
+        return ep, n, day
 
     @app.post("/api/follow")
     async def follow(request: Request):

@@ -113,3 +113,21 @@ def test_current_key_subscription_is_kept(browser, server):  # noqa: F811
     finally:
         ctx.close()
     assert len(store.list_follows(EP_OLD)) == 1
+
+
+def test_wrong_old_proof_falls_back_to_plain_subscribe(browser, server):  # noqa: F811
+    """The server refuses to move follows without the old keys.auth (403); the client then
+    just registers the new subscription, and the old one's follows stay where they were."""
+    base, store = server
+    store.unsubscribe(EP_OLD)
+    store.subscribe(EP_OLD, "p" * 20, "someone-else")
+    store.follow(EP_OLD, 1636, "2099-01-01")
+    ctx, page = _open(browser, base, bytes([4]) + bytes(64))
+    try:
+        page.wait_for_function("localStorage.getItem('tabela.push.endpoint') === '%s'" % EP_NEW,
+                               timeout=10000)
+    finally:
+        ctx.close()
+    assert store.get_subscription(EP_NEW) is not None
+    assert [f["train_no"] for f in store.list_follows(EP_OLD)] == [1636]
+    assert store.list_follows(EP_NEW) == []
