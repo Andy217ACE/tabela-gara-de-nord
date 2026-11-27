@@ -833,11 +833,13 @@ dacă browserul trimite cookie-ul.
 
 ### 6.4 Protecția împotriva ghicirii cheii
 
-- Fiecare încercare greșită (login sau Bearer) e înregistrată pe IP. După **5 încercări greșite în
-  60 de secunde** pe același IP, răspunsul este 429 `"Prea multe încercări. Reîncearcă peste un minut."`
-  cu `Retry-After: 60`.
-- Limita globală: **30 de încercări greșite în 60 de secunde**, de la toți clienții. Scopul e să
-  nu se ocolească limita pe IP cu rotație de adrese.
+- Fiecare încercare greșită (login sau Bearer) e numărată pe IP. După **5 încercări greșite**
+  IP-ul primește 429 `"Prea multe încercări. Reîncearcă mai târziu."` cu `Retry-After: 60`; fiecare
+  greșeală nouă dublează așteptarea (maximum 3600 s). O autentificare reușită șterge contorul IP-ului.
+- Plafonul global: peste **30 de încercări greșite în 60 de secunde** de la toți clienții, fiecare
+  greșeală e întârziată 3 s. Nu blochează niciodată, deci un atacator nu poate bloca administratorul.
+- 2FA opțional (`ADMIN_TOTP_SECRET`): login-ul cere și `"code"` (6 cifre); fără el răspunde 401
+  `"totp_required"`, iar `GET /api/admin/session` are `"totp": true`. Vezi `docs/admin-rotatie-cheie.md`.
 - Fiecare încercare greșită e întârziată cu 0,5 secunde.
 - nginx limitează în plus `POST /api/admin/login` la 5 pe minut pe IP (burst 5).
 - Verificarea sesiunii (`GET /api/admin/session`) nu e considerată încercare greșită.
@@ -958,7 +960,7 @@ e JSON).
 
 - **200:** corpul `{"ok": true}` și antetul `Set-Cookie` descris în 6.3.
 - **401:** `{"detail": "Autentificare necesară."}` cu `WWW-Authenticate: Bearer`.
-- **429:** `{"detail": "Prea multe încercări. Reîncearcă peste un minut."}` cu `Retry-After: 60`.
+- **429:** `{"detail": "Prea multe încercări. Reîncearcă mai târziu."}` cu `Retry-After` (secunde).
 
 Verificat în test: a șasea încercare greșită consecutivă dă 429 (secvența 401, 401, 401, 401, 401,
 429, 429).

@@ -28,6 +28,7 @@
   var root = null;
   var built = false;
   var loggedIn = false;
+  var needCode = false;  // the server asks for a 2FA code (ADMIN_TOTP_SECRET set)
   var serverTimer = null;
   var serverBusy = false;
 
@@ -175,6 +176,19 @@
     input.maxLength = 200;
     label.appendChild(input);
     form.appendChild(label);
+    var codeLabel = el("label", "field");
+    codeLabel.appendChild(el("span", "field-label", T("admin.login.code")));
+    var code = el("input");
+    code.id = "admin-totp";
+    code.name = "code";
+    code.autocomplete = "one-time-code";
+    code.inputMode = "numeric";
+    code.pattern = "[0-9]{6}";
+    code.maxLength = 6;
+    codeLabel.appendChild(code);
+    codeLabel.hidden = !needCode;
+    code.required = needCode;
+    form.appendChild(codeLabel);
     var btn = el("button", "btn", T("admin.login.submit"));
     btn.type = "submit";
     form.appendChild(btn);
@@ -185,14 +199,22 @@
       btn.disabled = true;
       api("/api/admin/login", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: input.value })
+        body: JSON.stringify(needCode ? { token: input.value, code: code.value } : { token: input.value })
       }).then(function (r) {
         btn.disabled = false;
+        code.value = "";
+        if (r.status === 401 && detailOf(r.data) === "totp_required") {
+          codeLabel.hidden = false;
+          needCode = code.required = true;
+          message(T("admin.msg.codeRequired"), false);
+          code.focus();
+          return;
+        }
         input.value = "";
         if (r.status === 200) { message(""); loadAll(); return; }
         if (r.status === 429) message(T("admin.msg.tooMany"), true);
         else if (r.status === 503) disabled();
-        else message(T("admin.msg.wrongKey"), true);
+        else message(T(needCode ? "admin.msg.wrongKeyOrCode" : "admin.msg.wrongKey"), true);
         input.focus();
       }).catch(function () {
         btn.disabled = false;
@@ -1064,7 +1086,7 @@
         message("");
         if (!loggedIn || !$("admin-dupes")) loadAll();
         else syncTimer();
-      } else showLogin();
+      } else { needCode = !!r.data.totp; showLogin(); }
     }).catch(function () { message(T("admin.msg.noServer"), true); });
   }
 

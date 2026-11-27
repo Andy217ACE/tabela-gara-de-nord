@@ -7,8 +7,14 @@ answers 503 „Administrare dezactivată."). A request is authenticated by
 ``POST /api/admin/login`` (HttpOnly, Secure, SameSite=Strict, 12 h). The cookie
 holds an expiry and an HMAC of it keyed by the token, never the token itself;
 changing ADMIN_TOKEN invalidates every session. Comparisons use
-``hmac.compare_digest``. Wrong credentials are delayed and limited to
-FAIL_LIMIT per minute per client IP (then 429). The token is never logged.
+``hmac.compare_digest``. Wrong credentials are delayed; after FAIL_LIMIT failures a
+client IP is refused (429) for a backoff that doubles with each further failure. A
+global ceiling only slows failures down, so an attacker cannot lock the admin out. A
+success clears the IP's count. The token is never logged.
+
+Optional 2FA (OFF unless env ADMIN_TOTP_SECRET holds a base32 secret): the login then
+also needs a TOTP code (RFC 6238, ±1 step, each code accepted once) and a Bearer token is
+accepted only from the server itself (loopback). See docs/admin-rotatie-cheie.md.
 """
 from __future__ import annotations
 
@@ -17,13 +23,14 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import shutil
 import subprocess
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import datetime
 from urllib.parse import urlsplit
 
@@ -32,7 +39,7 @@ from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.notifier import KeyMismatch, SubscriptionGone
-from app import visitors, admin_settings, admin_tools, captures, observations, security_status
+from app import visitors, admin_settings, admin_tools, captures, observations, security_status, totp
 from app.ocr import stats as ocr_stats
 from app.store import TZ
 
@@ -43,8 +50,13 @@ SESSION_S = 12 * 3600
 MIN_TOKEN_LEN = 12  # the operator's chosen key; nginx + FAIL_LIMIT slow guessing
 STRICT_TOKEN_LEN = 24  # ADMIN_TOKEN_STRICT=1
 MAX_SETTINGS_BODY = 1024
-FAIL_LIMIT = 5
-GLOBAL_FAIL_LIMIT = 30  # wrong keys per FAIL_WINDOW_S from ALL clients (IP rotation)
+FAIL_LIMIT = 5  # failures per IP before it is refused
+BLOCK_BASE_S = 60.0  # refusal after the FAIL_LIMIT-th failure, doubled for each one after
+BLOCK_MAX_S = 3600.0
+FAIL_FORGET_S = 3600.0  # an IP quiet this long after its block is forgotten
+MAX_TRACKED_IPS = 10000
+GLOBAL_FAIL_LIMIT = 30  # wrong keys per FAIL_WINDOW_S from ALL clients (IP rotation) ...
+GLOBAL_SLOW_DELAY_S = 3.0  # ... above it every failure waits this long (never a block)
 FAIL_WINDOW_S = 60.0
 FAIL_DELAY_S = 0.5
 MAX_LOGIN_BODY = 1024
@@ -54,9 +66,11 @@ DUPES_RESTORE_CONFIRM = "RESTAUREAZA"
 TESSERACT_CACHE_S = 300.0
 NO_STORE = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
 
-_failures: dict[str, deque] = {}
-_global_failures: deque = deque(maxlen=GLOBAL_FAIL_LIMIT * 2)
+_failures: OrderedDict[str, tuple[int, float]] = OrderedDict()  # ip -> (failures, blocked until)
+_global_failures: deque = deque(maxlen=GLOBAL_FAIL_LIMIT)
+_totp_last = [-1]  # last accepted TOTP counter (replay protection; one worker)
 _fail_lock = threading.Lock()
+LOOPBACK = ("127.0.0.1", "::1")
 
 
 def strict_key() -> bool:
@@ -66,7 +80,34 @@ def strict_key() -> bool:
 
 def admin_token() -> str | None:
     t = os.environ.get("ADMIN_TOKEN", "").strip()
+    if totp_on() and totp_key() is None:
+        log.error("admin: ADMIN_TOTP_SECRET is not valid base32 (>= 16 chars); administration disabled")
+        return None
     return t if len(t) >= (STRICT_TOKEN_LEN if strict_key() else MIN_TOKEN_LEN) else None
+
+
+def totp_key() -> bytes | None:
+    """ADMIN_TOTP_SECRET decoded, or None when 2FA is off (unset) or the value is invalid."""
+    v = os.environ.get("ADMIN_TOTP_SECRET", "").strip()
+    return totp.decode_secret(v) if v else None
+
+
+def totp_on() -> bool:
+    """2FA is on as soon as the variable is set; an invalid value disables administration
+    (admin_token() -> None, fail closed) instead of silently dropping the second factor."""
+    return bool(os.environ.get("ADMIN_TOTP_SECRET", "").strip())
+
+
+def _totp_ok(code, now: float | None = None) -> bool:
+    key = totp_key()
+    if key is None or not isinstance(code, str):
+        return False
+    with _fail_lock:
+        c = totp.match(key, code.strip(), time.time() if now is None else now, _totp_last[0])
+        if c is None:
+            return False
+        _totp_last[0] = c
+        return True
 
 
 def check_startup() -> None:
@@ -88,36 +129,57 @@ def _ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-def _limited(ip: str, now: float) -> bool:
+def _blocked_for(ip: str, now: float) -> float:
+    """Seconds this IP must still wait (0 = may try). Only per-IP: no global value can
+    lock the real admin out; the global ceiling only slows failures down (see _fail)."""
     with _fail_lock:
-        while _global_failures and _global_failures[0] <= now - FAIL_WINDOW_S:
-            _global_failures.popleft()
-        if len(_global_failures) >= GLOBAL_FAIL_LIMIT:
-            return True
-        q = _failures.get(ip)
-        if not q:
-            return False
-        while q and q[0] <= now - FAIL_WINDOW_S:
-            q.popleft()
-        return len(q) >= FAIL_LIMIT
+        e = _failures.get(ip)
+        if e and now - e[1] > FAIL_FORGET_S:
+            del _failures[ip]
+            return 0.0
+        return max(0.0, e[1] - now) if e and e[0] >= FAIL_LIMIT else 0.0
+
+
+def _retry_after(wait: float) -> HTTPException:
+    return _err(429, "Prea multe încercări. Reîncearcă mai târziu.",
+                {"Retry-After": str(max(1, math.ceil(wait)))})
+
+
+def _check_ip(ip: str) -> None:
+    wait = _blocked_for(ip, time.monotonic())
+    if wait > 0:
+        raise _retry_after(wait)
 
 
 async def _fail(ip: str) -> HTTPException:
     now = time.monotonic()
     with _fail_lock:
-        if len(_failures) > 10000 and ip not in _failures:  # bounded memory: drop the oldest
-            del _failures[next(iter(_failures))]
-        _failures.setdefault(ip, deque(maxlen=FAIL_LIMIT * 4)).append(now)
+        while _failures:  # drop expired entries (oldest updates first), then enforce the cap
+            k, (_, until) = next(iter(_failures.items()))
+            if now - until <= FAIL_FORGET_S and len(_failures) < MAX_TRACKED_IPS:
+                break
+            del _failures[k]
+        prev, until = _failures.pop(ip, (0, now))
+        count = (0 if now - until > FAIL_FORGET_S else prev) + 1
+        block = min(BLOCK_MAX_S, BLOCK_BASE_S * 2 ** (count - FAIL_LIMIT)) if count >= FAIL_LIMIT else 0
+        _failures[ip] = (count, now + block)  # re-inserted at the end: most recent last
+        busy = len(_global_failures) == GLOBAL_FAIL_LIMIT and _global_failures[0] > now - FAIL_WINDOW_S
         _global_failures.append(now)
-    await asyncio.sleep(FAIL_DELAY_S)
+    await asyncio.sleep(GLOBAL_SLOW_DELAY_S if busy else FAIL_DELAY_S)
     log.warning("admin: wrong credentials from %s", ip)
     return _err(401, "Autentificare necesară.", {"WWW-Authenticate": "Bearer"})
+
+
+def _succeeded(ip: str) -> None:
+    with _fail_lock:
+        _failures.pop(ip, None)
 
 
 def reset_failures() -> None:
     with _fail_lock:
         _failures.clear()
         _global_failures.clear()
+        _totp_last[0] = -1
 
 
 def _sign(token: str, exp: int) -> str:
@@ -146,11 +208,12 @@ async def require_admin(request: Request) -> None:
     if token is None:
         raise _err(503, "Administrare dezactivată.")
     ip = _ip(request)
-    if _limited(ip, time.monotonic()):
-        raise _err(429, "Prea multe încercări. Reîncearcă peste un minut.", {"Retry-After": "60"})
+    _check_ip(ip)
     auth = request.headers.get("authorization", "")
     if auth[:7].lower() == "bearer ":
-        if hmac.compare_digest(auth[7:].strip().encode(), token.encode()):
+        ok = hmac.compare_digest(auth[7:].strip().encode(), token.encode())
+        if ok and (not totp_on() or ip in LOOPBACK):  # with 2FA, Bearer only from the server
+            _succeeded(ip)
             return
         raise await _fail(ip)
     if check_session(token, request.cookies.get(COOKIE)):
@@ -235,19 +298,24 @@ async def login(request: Request):
     if token is None:
         raise _err(503, "Administrare dezactivată.")
     ip = _ip(request)
-    if _limited(ip, time.monotonic()):
-        raise _err(429, "Prea multe încercări. Reîncearcă peste un minut.", {"Retry-After": "60"})
+    _check_ip(ip)
     buf = bytearray()
     async for chunk in request.stream():
         buf += chunk
         if len(buf) > MAX_LOGIN_BODY:
             raise _err(413, "Cererea este prea mare.")
     try:
-        given = json.loads(bytes(buf).decode("utf-8")).get("token")
+        body = json.loads(bytes(buf).decode("utf-8"))
+        given, code = body.get("token"), body.get("code")
     except (UnicodeDecodeError, ValueError, AttributeError):
-        given = None
-    if not isinstance(given, str) or not hmac.compare_digest(given.encode(), token.encode()):
+        given = code = None
+    if totp_on() and not code:
+        # asked before the key is checked, so this answer says nothing about the key
+        raise _err(401, "totp_required", {"WWW-Authenticate": "Bearer"})
+    ok = isinstance(given, str) and hmac.compare_digest(given.encode(), token.encode())
+    if not ok or (totp_on() and not _totp_ok(code)):  # code checked only with the right key
         raise await _fail(ip)
+    _succeeded(ip)
     resp = _json({"ok": True})
     resp.set_cookie(COOKIE, make_session(token), max_age=SESSION_S, httponly=True,
                     secure=True, samesite="strict", path="/api/admin")
@@ -268,7 +336,7 @@ def session(request: Request):
     Only the cookie is checked here; it never counts as a failed attempt."""
     token = admin_token()
     ok = token is not None and check_session(token, request.cookies.get(COOKIE))
-    return _json({"enabled": token is not None, "authenticated": bool(ok)})
+    return _json({"enabled": token is not None, "authenticated": bool(ok), "totp": totp_on()})
 
 
 @guarded.get("/csrf")

@@ -42,7 +42,8 @@ Sursa: `app/admin.py`.
 | Autentificare | `Authorization: Bearer <ADMIN_TOKEN>` sau cookie-ul `tabela_admin` obținut de la `POST /api/admin/login` |
 | Cookie | `HttpOnly`, `Secure`, `SameSite=Strict`, valabil 12 ore (`SESSION_S`). Conține expirarea și un HMAC cheiat cu tokenul, nu tokenul |
 | Invalidare | schimbarea `ADMIN_TOKEN` invalidează toate sesiunile |
-| Limitare | 5 încercări greșite pe minut per IP (`FAIL_LIMIT`), apoi 429; 30 de încercări greșite pe minut din toate sursele (`GLOBAL_FAIL_LIMIT`); fiecare greșeală întârzie răspunsul cu 0,5 s (`FAIL_DELAY_S`) |
+| Limitare | per IP: după 5 încercări greșite (`FAIL_LIMIT`) IP-ul primește 429 cu `Retry-After` 60 s, apoi dublu la fiecare greșeală nouă, maximum 1 h (`BLOCK_BASE_S`, `BLOCK_MAX_S`); o autentificare reușită șterge contorul IP-ului; un IP liniștit 1 h după blocare e uitat (`FAIL_FORGET_S`); maximum 10 000 de IP-uri urmărite. Plafonul global de 30 de greșeli pe minut (`GLOBAL_FAIL_LIMIT`) doar încetinește greșelile la 3 s (`GLOBAL_SLOW_DELAY_S`), nu blochează niciodată, deci un atacator nu te poate bloca pe tine. Fiecare greșeală întârzie răspunsul cu 0,5 s (`FAIL_DELAY_S`) |
+| 2FA (opțional) | oprit implicit; pornit doar cu `ADMIN_TOTP_SECRET` în `/etc/tabela.env`. Autentificarea cere atunci cheia + codul TOTP, iar `Bearer` merge doar de pe server (`127.0.0.1`). Vezi `docs/admin-rotatie-cheie.md` |
 | CSRF | Cererile de modificare cu cookie cer `X-CSRF-Token` (din `GET /api/admin/csrf`) și, dacă browserul trimite `Origin`, același host. Cererile cu `Bearer` nu cer CSRF |
 | Antet | răspunsurile admin au `Cache-Control: private, no-store` |
 

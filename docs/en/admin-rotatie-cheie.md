@@ -20,6 +20,24 @@ The key lives only in `/etc/tabela.env` (root, chmod 600). Do not put it in the 
 
 Connect over SSH, edit `/etc/tabela.env` (set a new key or remove `ADMIN_TOKEN_STRICT`) and restart the service. There is no other recovery path from the interface.
 
+## Two-step login (2FA, optional)
+
+Off by default. Without `ADMIN_TOTP_SECRET`, login stays key-only.
+
+**Enable**
+1. On the server: `python3 scripts/admin_totp_setup.py` (in `/opt/tabela`, with the app's venv). The script prints a base32 secret and an `otpauth://` URI; it writes nothing anywhere.
+2. Add the secret to your authenticator app (TOTP, 6 digits, 30 s, SHA1): manual entry, or a QR code generated locally from the URI.
+3. Add to `/etc/tabela.env`: `ADMIN_TOTP_SECRET=<the secret>` and restart: `sudo systemctl restart tabela`.
+4. Check in a new window, **without closing the SSH session**: `#admin` asks for the key and the 6-digit code.
+
+**Effects**
+- Each code is accepted only once (±30 s clock tolerance). If you get "Wrong key or code.", wait for the next code.
+- `Authorization: Bearer` is accepted only from the server (`127.0.0.1`), as with the `curl` examples; from outside it is refused.
+- An invalid secret (not base32 or shorter than 16 characters) disables the administration (503) until you fix it.
+- The "OCR captures" and "Infofer" pages have no code field: log in from `#admin`; the session is shared.
+
+**Disable / recovery** (lost phone, clock out of sync): over SSH, delete the `ADMIN_TOTP_SECRET` line from `/etc/tabela.env` and `sudo systemctl restart tabela`. For a new phone, generate a new secret with the script.
+
 ## Settings on the Settings page
 
 The capture retention (1–30 days, default 7) and the free-space threshold (MB) are changed from the Settings page. The values from the environment (`CAPTURE_RETENTION_DAYS`, `CAPTURE_MIN_FREE_MB`) remain the defaults until a value is saved from the interface.
