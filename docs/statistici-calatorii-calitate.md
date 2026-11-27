@@ -530,9 +530,10 @@ Pentru retrospectivă (`classify_delays`): fiecare valoare durează de la evenim
 |---|---|
 | `PLATFORM_CONFIRM` | 2 |
 | `PLATFORM_CONFUSED_CONFIRM` | 3 |
+| `PLATFORM_CLEAR_CONFIRM` | 5 |
 | `PLATFORM_CONFUSION` | perechi confundate de OCR: {5, 6}, {1, 4, 11, 14}, {3, 8}, {2, 5} |
 
-Prima platformă afișată (de la „nimic” la o valoare) este imediată (1 citire). Schimbarea într-o pereche confundată cere 3 citiri, altfel 2 (inclusiv golirea).
+Prima platformă afișată (de la „nimic” la o valoare) este imediată (1 citire). Schimbarea într-o pereche confundată cere 3 citiri, altfel 2. Golirea (o citire goală) cere 5: cifrele 6/8 și peroanele de două cifre, cu vârful tăiat de bandă, rămân necitite 2–4 cadre.
 
 ### Fantome
 
@@ -548,7 +549,7 @@ Motive (`ghost_verdict`), în ordinea verificării:
 
 1. `near_dup`: serviciul are cel mult `GHOST_MAX_OBS` observații și un partener (același panou și aceeași zi de serviciu) trăiește mai mult și diferă printr-un caracter (`_near_dup`, de exemplu R 9209 față de 92011). Partenerul devine `ghost_of`.
 2. `minority_dup`: un variant cu un caracter diferit, în același slot de timp, are cel puțin `GHOST_MAJORITY` ori observațiile serviciului. Exemplu din cod: R 92011 cu 90 de observații față de R 9209 cu 160 rămâne nedecis.
-3. `short`: trăiește sub `GHOST_MIN_LIFE_S` secunde.
+3. `short`: trăiește sub `GHOST_MIN_LIFE_S` secunde sau are o singură observație (un singur cadru, chiar dacă o imagine veche retrimisă i-a prelungit `last_seen`).
 
 Un serviciu încă listat pe tabelă nu este judecat niciodată (`status = listed`). Garda de coexistență (`coexisting_numbers`) previne confuzia cu două trenuri reale citite în aceeași captură, la aceeași oră programată (de exemplu 5011 și 5014): un partener cu un număr coexistent nu este „adevăratul” tren. Garda nu se aplică motivului `short`.
 
