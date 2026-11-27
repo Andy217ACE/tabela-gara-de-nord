@@ -338,7 +338,8 @@ def test_icon_weights_and_precache_budget(client):
     # Beta 1.59 (sp2 + sp4): measured 805013 B; budget 810_000 (~5 KB margin). Ruling 18.11: the
     # features are the spec's core and the lazy modules stay out of the shell where possible.
     # Beta 1.64 (operators x categories section + R-E/R-M helper + ro.json keys): measured 820584 B; budget 825_000
-    assert total <= 825_000, total
+    # Beta 1.75 (2FA login loader, push ownership proof, i18n keys): measured 825779 B on CI; budget 832_000
+    assert total <= 832_000, total
 
 
 def test_offline_page_uses_root_absolute_urls():
