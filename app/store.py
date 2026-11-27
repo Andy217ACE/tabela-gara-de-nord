@@ -1254,6 +1254,11 @@ class Store:
         with self._lock:  # follows go via ON DELETE CASCADE
             self._conn.execute("DELETE FROM subscriptions WHERE endpoint=?", (endpoint,))
 
+    def get_subscription(self, endpoint: str) -> Subscription | None:
+        r = self._conn.execute("SELECT endpoint, p256dh, auth FROM subscriptions WHERE endpoint=?",
+                               (endpoint,)).fetchone()
+        return Subscription(r["endpoint"], r["p256dh"], r["auth"]) if r else None
+
     def _sub_id(self, endpoint: str) -> int | None:
         r = self._conn.execute("SELECT id FROM subscriptions WHERE endpoint=?",
                                (endpoint,)).fetchone()

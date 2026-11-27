@@ -147,6 +147,8 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | POST | `/api/admin/tools/dupes/apply` | admin + CSRF | Comasează duplicatele (cu copie de siguranță) | 7.7 |
 | POST | `/api/admin/tools/dupes/restore` | admin + CSRF | Restaurează comasările | 7.7 |
 | GET | `/api/admin/security` | admin | Securitate: IP-uri banate (fail2ban), istoric ban-uri, cereri/probe 24 h și 7 zile — din `security/snapshot.json` scris de exportatorul root; `available:false` + `reason` (`missing`/`invalid`/`stale`, cu `age_s`) | — |
+| GET | `/api/admin/visitors` | admin | Vizitatori online (ultimele 5 min), din memorie: IP mascat, browser/SO, ultima cale, nr. cereri, prima/ultima vizită; fără boți | — |
+| POST | `/api/admin/push-test` | admin + CSRF | Trimite o notificare de test către `{endpoint}` doar dacă e abonat; `result`: `sent`/`not_subscribed`/`not_configured`/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
 | GET | `/api/admin/tools/server` | admin | Starea serverului (load, memorie, servicii) | 7.8 |
 | GET | `/api/admin/system` | admin | Detaliile paginii Sistem | 7.9 |
 | GET | `/api/admin/tools/nvme` | admin | Starea discului NVMe (din `nvme.json`) | 7.10 |
