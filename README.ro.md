@@ -264,7 +264,7 @@ sequenceDiagram
     S-->>N: evenimente după fiecare ingest (întârziere, linie, plecat)
     N->>N: schimbare în așteptare, confirmată pe mai multe citiri bune
     N->>P: Web Push (VAPID), o dată pe schimbare
-    P-->>U: notificare; un clic deschide aplicația
+    P-->>U: notificare, un clic deschide aplicația
 ```
 
 - Web Push cu chei VAPID (`pywebpush`); fără ambele chei aplicația merge, iar notificările sunt oprite.
