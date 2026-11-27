@@ -286,7 +286,8 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
     `svc`/`partners`: dicts with id, train_no, sched_time, station, station_raw,
     first_seen, last_seen, status (partners: same board and service date).
     A service still listed is never judged. Ghost when it lived < GHOST_MIN_LIFE_S
-    ("short"), or when it has at most GHOST_MAX_OBS observations and a partner that
+    or was read in a single frame (n_obs == 1) ("short"), or when it has at most
+    GHOST_MAX_OBS observations and a partner that
     lived longer is a one-character variant of it ("near_dup": R 9209 + 92011/920111/920...),
     or when a one-character variant on the board at the same time has at least
     GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
@@ -329,7 +330,9 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
                     best = (p_obs, p["id"])
         if best is not None:
             return "minority_dup", best[1]
-    if life < GHOST_MIN_LIFE_S:
+    # one observation = one frame, whatever first/last_seen say: a re-served old image
+    # (same hash: no new observation) stretched last_seen by minutes (2026-11-03 20:28)
+    if life < GHOST_MIN_LIFE_S or n_obs == 1:
         return "short", None
     return None
 

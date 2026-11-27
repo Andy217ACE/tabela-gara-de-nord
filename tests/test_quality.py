@@ -150,6 +150,16 @@ def test_ghost_short_life_and_listed_never():
     assert q.ghost_verdict(live, [live], 0) is None
 
 
+def test_ghost_one_observation_with_long_span_is_short():
+    # 2026-11-03 20:28: the source served a morning image again 8 min later (same hash: no
+    # 2nd observation, but last_seen moved): IRN 461 10:11 lived "8 min" from ONE frame
+    s = _svc(1483, 461, "10:11", "20:28", "20:36", station="ISTANBUL")
+    assert q.ghost_verdict(s, [s], 1) == ("short", None)
+    # two observations over the same span, or none at all (pre-observations data): kept
+    assert q.ghost_verdict(s, [s], 2) is None
+    assert q.ghost_verdict(s, [s], 0) is None
+
+
 def test_ghost_r503_r5031_both_well_observed_kept():
     # both read for 75 min with many observations: undecidable -> neither is a ghost
     a = _svc(311, 503, "12:46", "12:00", "13:15", station="PLOIESTI SUD")
@@ -218,14 +228,16 @@ def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, co_time):
         b = _db_svc(c, d0, 5014, co_time, f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
         cap = _db_obs(c, a, 5011, f"{d0}T04:30:00+03:00")
         _db_obs(c, b, 5014, f"{d0}T04:30:00+03:00", cap, sched=co_time)
-    want = None if coexist else ("near_dup", real)
+    # coexisting: never the near_dup of 5011; its single observation still makes it a
+    # one-frame sighting ("short", no real service), like the blip above
+    want = ("short", None) if coexist else ("near_dup", real)
     assert q.judge_ghost(c, var) == want
     # a stale ghost flag (judged before the rule) is cleared by the backfill
     q.upsert_service(c, var, ghost=1, ghost_reason="near_dup", ghost_of=real)
     q.backfill(c)
     row = c.execute("SELECT ghost, ghost_reason, ghost_of FROM service_quality"
                     " WHERE service_id=?", (var,)).fetchone()
-    assert tuple(row) == ((0, None, None) if coexist else (1, "near_dup", real))
+    assert tuple(row) == ((1, "short", None) if coexist else (1, "near_dup", real))
     s.close()
 
 
