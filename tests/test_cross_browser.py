@@ -2,6 +2,8 @@
 """Cross-browser smoke (Firefox + WebKit = Safari engine, iPhone users): every main route renders at phone
 and desktop width without JS errors or horizontal scroll; bottom nav, „Mai mult”, theme and language
 toggles work. Chromium is covered by the other *_browser.py files. A missing engine skips cleanly."""
+import os
+
 import pytest
 
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -19,6 +21,8 @@ def xbrowser(request):
         try:
             b = getattr(p, request.param).launch()
         except Exception as e:  # engine binaries missing
+            if os.environ.get("CI"):   # a broken install on CI must not hide as a skip
+                raise
             pytest.skip(f"{request.param} indisponibil: {e}")
         yield b
         b.close()
