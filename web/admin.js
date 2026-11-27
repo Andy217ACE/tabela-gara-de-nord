@@ -28,7 +28,6 @@
   var root = null;
   var built = false;
   var loggedIn = false;
-  var needCode = false;  // the server asks for a 2FA code (ADMIN_TOTP_SECRET set)
   var serverTimer = null;
   var serverBusy = false;
 
@@ -163,65 +162,13 @@
     stopTimer();
     var body = $("admin-body");
     clear(body);
-    var form = el("form", "admin-login panel");
-    form.setAttribute("aria-label", T("admin.login.aria"));
-    var label = el("label", "field");
-    label.appendChild(el("span", "field-label", T("admin.login.key")));
-    var input = el("input");
-    input.type = "password";
-    input.id = "admin-token";
-    input.name = "token";
-    input.autocomplete = "current-password";
-    input.required = true;
-    input.maxLength = 200;
-    label.appendChild(input);
-    form.appendChild(label);
-    var codeLabel = el("label", "field");
-    codeLabel.appendChild(el("span", "field-label", T("admin.login.code")));
-    var code = el("input");
-    code.id = "admin-totp";
-    code.name = "code";
-    code.autocomplete = "one-time-code";
-    code.inputMode = "numeric";
-    code.pattern = "[0-9]{6}";
-    code.maxLength = 6;
-    codeLabel.appendChild(code);
-    codeLabel.hidden = !needCode;
-    code.required = needCode;
-    form.appendChild(codeLabel);
-    var btn = el("button", "btn", T("admin.login.submit"));
-    btn.type = "submit";
-    form.appendChild(btn);
-    body.appendChild(form);
     message(note || "", !!note);
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      btn.disabled = true;
-      api("/api/admin/login", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(needCode ? { token: input.value, code: code.value } : { token: input.value })
-      }).then(function (r) {
-        btn.disabled = false;
-        code.value = "";
-        if (r.status === 401 && detailOf(r.data) === "totp_required") {
-          codeLabel.hidden = false;
-          needCode = code.required = true;
-          message(T("admin.msg.codeRequired"), false);
-          code.focus();
-          return;
-        }
-        input.value = "";
-        if (r.status === 200) { message(""); loadAll(); return; }
-        if (r.status === 429) message(T("admin.msg.tooMany"), true);
-        else if (r.status === 503) disabled();
-        else message(T(needCode ? "admin.msg.wrongKeyOrCode" : "admin.msg.wrongKey"), true);
-        input.focus();
-      }).catch(function () {
-        btn.disabled = false;
-        message(T("admin.msg.noServer"), true);
-      });
-    });
-    input.focus();
+    window.TabelaApp.adminLogin({ keys: "admin", cls: "admin-login", id: "admin-token", message: message,
+      onOk: loadAll, onDisabled: disabled }).then(function (f) {
+      clear(body);
+      body.appendChild(f.form);
+      f.input.focus();
+    }, function () { message(T("admin.msg.noServer"), true); });
   }
 
   function disabled() {
@@ -1086,7 +1033,7 @@
         message("");
         if (!loggedIn || !$("admin-dupes")) loadAll();
         else syncTimer();
-      } else { needCode = !!r.data.totp; showLogin(); }
+      } else showLogin();
     }).catch(function () { message(T("admin.msg.noServer"), true); });
   }
 

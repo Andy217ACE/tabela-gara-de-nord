@@ -34,7 +34,7 @@ Oprită implicit. Fără `ADMIN_TOTP_SECRET`, autentificarea rămâne doar cu ch
 - Fiecare cod e acceptat o singură dată (±30 s toleranță de ceas). Dacă primești „Cheie sau cod greșit.”, așteaptă codul următor.
 - `Authorization: Bearer` e acceptat doar de pe server (`127.0.0.1`), ca la `curl` de mai sus; din afară este refuzat.
 - Un secret invalid (nu e base32 sau are sub 16 caractere) dezactivează administrarea (503) până îl corectezi.
-- Paginile „Capturi OCR” și „Infofer” nu au câmp de cod: autentifică-te din `#admin`; sesiunea e comună.
+- Toate formularele de autentificare (`#admin`, `#ocr`, `#ocr2`, `#infofer`) arată câmpul de cod.
 
 **Oprire / recuperare** (telefon pierdut, ceas desincronizat): prin SSH, șterge linia `ADMIN_TOTP_SECRET` din `/etc/tabela.env` și `sudo systemctl restart tabela`. Pentru un telefon nou, generează un secret nou cu scriptul.
 

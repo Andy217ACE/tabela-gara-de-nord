@@ -46,7 +46,8 @@ def test_admin_css_served_and_themed(client):
 
 def test_admin_endpoints_match_contract():
     js = (WEB / "admin.js").read_text(encoding="utf-8")
-    for path in ("/api/admin/session", "/api/admin/login", "/api/admin/csrf",
+    assert '"/api/admin/login"' in (WEB / "admin_login.js").read_text(encoding="utf-8")  # shared form
+    for path in ("/api/admin/session", "/api/admin/csrf",
                  "/api/admin/tools/dupes", "/api/admin/tools/dupes/apply",
                  "/api/admin/tools/dupes/restore", "/api/admin/tools/server"):
         assert f'"{path}"' in js, path

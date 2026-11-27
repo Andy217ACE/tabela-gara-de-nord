@@ -34,7 +34,7 @@ Off by default. Without `ADMIN_TOTP_SECRET`, login stays key-only.
 - Each code is accepted only once (±30 s clock tolerance). If you get "Wrong key or code.", wait for the next code.
 - `Authorization: Bearer` is accepted only from the server (`127.0.0.1`), as with the `curl` examples; from outside it is refused.
 - An invalid secret (not base32 or shorter than 16 characters) disables the administration (503) until you fix it.
-- The "OCR captures" and "Infofer" pages have no code field: log in from `#admin`; the session is shared.
+- All login forms (`#admin`, `#ocr`, `#ocr2`, `#infofer`) show the code field.
 
 **Disable / recovery** (lost phone, clock out of sync): over SSH, delete the `ADMIN_TOTP_SECRET` line from `/etc/tabela.env` and `sudo systemctl restart tabela`. For a new phone, generate a new secret with the script.
 
