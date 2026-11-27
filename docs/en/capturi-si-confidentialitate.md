@@ -11,7 +11,7 @@ In short:
 - The **real** images of the board are private: they are seen only from the administration, they are not published and they are not
   put in the repo. The application keeps the images for 7 days by default; the data rows stay.
 - Personal data: notification subscriptions (the address of the browser's push service, plus two cryptographic
-  keys) and train follows, linked to them. The IP address appears only in the administration audit log.
+  keys) and train follows, linked to them. In the database, the IP address appears only in the administration audit log; "Online visitors" keeps it only in memory, for 5 minutes.
 - Finding: a test file tracked in git (`tests/fixtures/page_1.html`) contains an embedded JPEG
   image. See section 9 and check before any publication.
 
@@ -379,6 +379,8 @@ The personal or identifying data is the following.
 | The Telegram alert state | `data/telegram_sent.json` | Event keys and the service date (without the visitor's name) | Today and yesterday | The server | `telegram.SentLog` |
 | The administrator's IP address | `correction_audit.ip` | The client IP, on correction and settings actions | Unlimited | Administration | `corrections.audit`, `admin._ip` |
 | Export rate limiting | In memory | The IP, with a time window | Until restart | Nobody | `export.LIMITER` |
+| Online visitors | In memory (at most 500 entries) | The IP (shown masked), browser and OS (from the User-Agent), the last page, the request count; bots and non-browser clients are ignored | 5 minutes after the last request; everything is lost on restart | Administration (`#admin`) | `app/visitors.py` |
+| The nginx log | `/var/log/nginx/access.log` (on the server, outside the application) | IP, path, response code, `Referer`, User-Agent | The system's default rotation | Server administration; fail2ban and the security exporter read it | `deploy/nginx-tabela.conf`, `deploy/fail2ban/` |
 | Login attempt limiting | In memory | The IP and the counter | Until restart | Nobody | `admin._failures` |
 
 Remarks:

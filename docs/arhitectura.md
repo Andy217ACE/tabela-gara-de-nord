@@ -158,7 +158,7 @@ flowchart TB
     NET["Internet"]
     DNS["Nume dinamic tabelacfr.ddns.net"]
 
-    subgraph SRV["Server Ubuntu 24.04"]
+    subgraph SRV["Server Ubuntu 26.04 LTS"]
         direction TB
         NGX["nginx :443 TLS (Let's Encrypt)<br/>limit_req: tabela_api 10/s, tabela_stats 60/min, tabela_admin_login 5/min"]
         subgraph UV["tabela.service (utilizator tabela)"]
@@ -173,6 +173,9 @@ flowchart TB
         TS["tabela-shadow-train.timer, la 03:30"]
         NOIP["tabela-noip (timer) nesigur"]
         CB["certbot.timer"]
+        F2B["fail2ban (nftables): sshd, nginx-tabela-probes, nginx-tabela-slow"]
+        SEC["tabela-security-snapshot.timer, la 2 min (root, doar citire)"]
+        RST["restic, zilnic 02:15 UTC (același disc)"]
     end
 
     NET --> NGX
@@ -185,6 +188,9 @@ flowchart TB
     TS --> FS
     NOIP -.-> DNS
     CB -.-> NGX
+    F2B -. "citește access.log, banează" .-> NGX
+    SEC -- "security/snapshot.json" --> FS
+    RST -. "copie" .-> DBF
 ```
 
 Detalii de configurare din `deploy/nginx-tabela.conf`:

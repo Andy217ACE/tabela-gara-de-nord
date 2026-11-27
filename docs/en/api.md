@@ -7,7 +7,7 @@ the live page, by History, by Statistics and by the others) and the administrati
 (`/api/admin/*`). For each route you will find the method, the path, the authentication, the parameters with types
 and default values, the shape of the response, the error codes, the cache headers and the request limits.
 
-The document describes version **Beta 1.65** (schema 10) (`VERSION`). The interface is described in
+The document describes version **Beta 1.72** (schema 10) (`VERSION`). The interface is described in
 `docs/interfata.md`; deploy and nginx are described in `README.md`.
 
 ## How this document was verified
@@ -307,7 +307,7 @@ The service state. Used by `deploy/update.sh` after a restart (see `README.md`).
 {
   "ok": true,
   "age_s": 0.004525,
-  "version": "Beta 1.65",
+  "version": "Beta 1.72",
   "boards": {
     "arrivals":   {"age_s": 0.004525, "ok": true, "stale": false},
     "departures": {"age_s": 0.004525, "ok": true, "stale": false}
@@ -333,10 +333,10 @@ The version history, read from `CHANGELOG.md` (the `changelog()` function in `ap
 
 ```json
 {
-  "version": "Beta 1.65",
+  "version": "Beta 1.72",
   "entries": [
-    {"version": "Beta 1.65", "date": "2026-11-23",
-     "groups": [{"title": "Schimbat", "items": ["**Capturi scoase din git:** …"]}]}
+    {"version": "Beta 1.72", "date": "2026-11-27",
+     "groups": [{"title": "Adăugat", "items": ["**Test intern (temporar, 7 zile):** …"]}]}
   ]
 }
 ```
@@ -695,7 +695,7 @@ The system state, for the System page. The public variant is minimal.
 - **Response (200), public:**
 
 ```json
-{"version": "Beta 1.65", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
+{"version": "Beta 1.72", "schema": 10, "uptime_s": 0, "stare": "live", "stale_after_s": 600,
  "poller": {"last_ok_age_s": 0, "last_error": null},
  "ocr": {"unread_rate_1h": null, "n": 0, "insufficient": true},
  "disk": {"free_gb": 291.2}, "db": {"size_mb": 0.0, "wal_mb": 0.3},

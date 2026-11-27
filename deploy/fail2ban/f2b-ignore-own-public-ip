@@ -1,8 +1,8 @@
 #!/bin/sh
-# fail2ban ignorecommand: exit 0 (= ignore) if <ip> is the current public IP
-# of home (resolved from tabelacfr.ddns.net, dynamic Digi IP / hairpin NAT).
+# fail2ban ignorecommand: exit 0 (= ignore) if <ip> is (1) the current public IP of home (resolved from tabelacfr.ddns.net) or (2) a real visitor: has /api/ requests with 200 and the site's Referer in the current access.log (protects CGNAT mobile users who share an IP with a scanner).
 ip="$1"
-[ -n "$ip" ] || exit 1
+case "$ip" in ''|*[!0-9a-fA-F.:]*) exit 1;; esac
 own=$(timeout 3 getent ahostsv4 tabelacfr.ddns.net 2>/dev/null | awk 'NR==1{print $1}')
 [ -n "$own" ] && [ "$own" = "$ip" ] && exit 0
+timeout 5 awk -v ip="$ip" '$1==ip && $9=="200" && $7 ~ /^\/api\// && $11 ~ /^"https:\/\/tabelacfr\.ddns\.net\// {f=1; exit} END{exit !f}' /var/log/nginx/access.log && { logger -t f2b-ignore "nu banez $ip: vizitator real"; exit 0; }
 exit 1

@@ -7,7 +7,7 @@ pagină și pentru cine, navigarea, tema, service worker-ul, manifestul PWA, pol
 a conținutului (CSP) și motivele ei, stratul de grafice, deciziile de accesibilitate și modul în
 care sunt servite fișierele statice.
 
-Documentul descrie versiunea **Beta 1.65** (`VERSION`). Endpoint-urile pe care le apelează
+Documentul descrie versiunea **Beta 1.72** (`VERSION`). Endpoint-urile pe care le apelează
 paginile sunt descrise în `docs/api.md`.
 
 ## Cum a fost verificat documentul
@@ -16,7 +16,8 @@ Toate afirmațiile au fost citite din cod: `web/index.html`, `web/app.js` (tabel
 `VIEWS`), `web/theme-init.js`, `web/style.css`, `web/ui2.js`, `web/ui2.css`, `web/charts3.js`,
 `web/sw.js`, `web/manifest.webmanifest`, `web/offline.html`, `web/history.js`, `web/stats.js`,
 `web/statistici.js`, `web/follows.js`, `web/panel.js`, `web/weather.js`, `web/versions.js`,
-`web/sistem.js`, `web/setari.js`, `web/ocr.js`, `web/admin.js`, plus `app/api.py` (CSP, servirea
+`web/sistem.js`, `web/setari.js`, `web/ocr.js`, `web/admin.js`, `web/cum.js`, `web/i18n/i18n.js`,
+`web/polish.css`, `web/print.css`, plus `app/api.py` (CSP, servirea
 statică), `deploy/nginx-tabela.conf` și testele din `tests/` care verifică regulile (de exemplu
 `tests/test_ui3_static.py` pentru `CHARTS_V`). Numărul de octeți din secțiunea 4 a fost măsurat
 pe fișierele din `web/`. Nu am rulat interfața într-un browser pentru acest document.
@@ -24,7 +25,7 @@ pe fișierele din `web/`. Nu am rulat interfața într-un browser pentru acest d
 ## Cuprins
 
 1. [Pagini și rute](#1-pagini-și-rute)
-2. [Navigarea: bara de sus și meniul pe telefon](#2-navigarea-bara-de-sus-și-meniul-pe-telefon)
+2. [Navigarea: bara de sus și bara de jos pe telefon](#2-navigarea-bara-de-sus-și-bara-de-jos-pe-telefon)
 3. [Tema luminoasă și întunecată](#3-tema-luminoasă-și-întunecată)
 4. [Service worker și mod offline](#4-service-worker-și-mod-offline)
 5. [Manifestul PWA](#5-manifestul-pwa)
@@ -52,28 +53,38 @@ Fiecare are o funcție `show(params)` apelată la schimbarea paginii.
 |---|---|---|---|---|---|
 | `#` sau fără fragment | **Tabelă** (`tabela`) | `#view-tabela` | toți | da („Tabelă”) | `app.js` (+ `panel.js`, `weather.js`) |
 | `#istoric` | **Istoric** | `#view-istoric` | toți | da | `history.js` |
-| `#urmarite` | **Urmărite** | `#view-urmarite` | toți (notificările depind de browser) | da | `follows.js` |
+| `#urmarite` | **Urmărite** | `#view-urmarite` | toți (notificările depind de browser) | da (pe telefon în „Mai mult”) | `follows.js` |
 | `#trenuri` | **Trenuri** | `#view-trenuri` | toți | da | `stats.js` (vizualizarea `trenuri`) |
 | `#tren?nr=<număr>` | **Tren** | `#view-tren` | toți | nu (cade sub „Trenuri”) | `stats.js` (`tren`) |
 | `#statistici` | **Statistici** | `#view-statistici` | toți | da | `statistici.js` |
-| `#clasamente` | **Clasamente** | `#view-clasamente` | toți | da | `stats.js` (`clasamente`) |
-| `#statii` | **Stații** | `#view-statii` | toți | da | `stats.js` (`statii`) |
+| `#clasamente` | **Clasamente** | `#view-clasamente` | toți | da (pe telefon în „Mai mult”) | `stats.js` (`clasamente`) |
+| `#statii` | **Stații** | `#view-statii` | toți | da (pe telefon în „Mai mult”) | `stats.js` (`statii`) |
 | `#statie?nume=<nume>` | **Stație** | `#view-statie` | toți | nu (cade sub „Stații”) | `stats.js` (`statie`) |
-| `#sistem` | **Sistem** | `#view-sistem`, creată de `sistem.js` | toți (detalii pentru admin) | da | `sistem.js` (încărcat la prima vizită) |
-| `#versiuni` | **Versiuni** | `#view-versiuni` | toți | nu (link din subsol) | `versions.js` |
-| `#cum` | **Cum funcționează?** | `#view-cum`, creată de `cum.js` | toți | nu (link din subsol) | `cum.js` (+ `cum.css`), încărcat la prima vizită |
-| `#setari` | **Setări** | `#view-setari` | admin | nu (fără link în interfață) | `setari.js` (încărcat la prima vizită) |
+| `#sistem` | **Sistem** | `#view-sistem`, creată de `sistem.js` | toți (detalii pentru admin) | da (pe telefon în „Mai mult”) | `sistem.js` (încărcat la prima vizită) |
+| `#versiuni` | **Versiuni** | `#view-versiuni` | toți | nu (link din subsol; pe telefon în „Mai mult”) | `versions.js` |
+| `#cum` | **Cum funcționează?** | `#view-cum`, creată de `cum.js` | toți | nu (link din subsol; pe telefon în „Mai mult”) | `cum.js` (+ `cum.css`), încărcat la prima vizită |
+| `#setari` | **Setări** | `#view-setari` | admin | nu (doar în „Mai mult”, pe telefon) | `setari.js` (încărcat la prima vizită) |
 | `#ocr` | **Capturi OCR** | creat de `app.js` (`view-ocr`) | admin | nu | `ocr.js` (+ `ocr.css`), încărcat la cerere |
 | `#ocr2` | **Alternativa OCR** | creat de `ocr2.js` (`view-ocr2`) | admin | nu | `ocr2.js` (+ `ocr2.css`), încărcat la prima vizită |
 | `#admin` | **Administrare** | creat de `app.js` (`view-admin`) | admin | nu | `admin.js` (+ `admin.css`), încărcat la cerere |
 
 Observații:
 
-- Rutele `#sistem`, `#setari`, `#ocr`, `#ocr2` și `#admin` sunt încărcate la prima vizită (`loadLazyPage`,
+- Rutele `#sistem`, `#setari`, `#cum`, `#ocr`, `#ocr2` și `#admin` sunt încărcate la prima vizită (`loadLazyPage`,
   `loadOcrView`, `loadAdminView`). Nu sunt în precache-ul service worker-ului, „ca să nu crească
   bugetul”, cum scrie în `app.js`.
-- **Sistem**: pagina arată starea publică; dacă vizitatorul are sesiune de admin (`admin: true`),
-  citește și `GET /api/admin/system`.
+- **Stilurile pe pagină.** `stats.css` (Trenuri, Tren, Stații, Stație, Clasamente) și `statistici.css`
+  (Statistici) se încarcă abia când se deschide pagina (`PAGE_CSS` în `app.js`); pagina apare după
+  ce stilul ei e gata, fără „flash”. Tabela nu așteaptă foile de stil ale Statisticilor.
+- **Paginile părăsite își eliberează memoria**: la revenire, pagina se redesenează din datele
+  păstrate, cu filtrele neschimbate.
+- **Sistem**: pagina arată starea publică (inclusiv calitatea citirii pe ultimele 24 h și 7 zile și
+  viteza: durata ciclului OCR și timpii API p50/p95, măsurați în memorie); dacă vizitatorul are
+  sesiune de admin (`admin: true`), citește și `GET /api/admin/system` (versiunea Tesseract,
+  limbile, actualizările de securitate în așteptare).
+- **Administrare** (`#admin`) are cardurile „Duplicate de numere de tren”, „Server (live)”, „Disc NVMe
+  (live)”, „Securitate (fail2ban)”, „Vizitatori online” și „Test notificări push”; sunt descrise în
+  `docs/administrare-operare.md`, secțiunea 2.
 - **Setări** nu are formular de login. Dacă nu există sesiune, afișează „Autentificare necesară
   pentru setări.” Autentificarea se face din pagina „Capturi OCR” sau „Administrare”, pentru că
   cookie-ul este comun.
@@ -96,12 +107,18 @@ tabla CFR. Are:
 - întârzierile colorate după pragurile din `/api/config` (`delay_thresholds`: 5, 15, 30 minute, cu
   valorile implicite din `app.js`);
 - butoanele „urmărește” pentru fiecare tren (`follows.js`), când există suport pentru notificări.
-- textul „citire nesigură” (constanta `UNSURE` din `app.js`) pentru valorile care nu sunt sigure, în loc de o valoare inventată.
+- textul „citire nesigură” (constanta `UNSURE` din `app.js`) pentru valorile care nu sunt sigure, în loc de o valoare inventată;
+- comutatorul „Arată peron estimat” (`#pe-toggle`, implicit oprit): stratul `peron_est.js`/`.css`
+  se încarcă doar când e pornit și nu e în precache.
+
+**Numele stațiilor** apar cu diacritice pe toate paginile (Brașov, Aeroport Henri Coandă), din
+`GET /api/station-names` (`I18N.station()` în `web/i18n/i18n.js`; o cheie necunoscută apare în
+Title Case). Cheile din adrese, statistici și exporturi rămân cele scrise de CFR.
 
 **Pagina Istoric:** formular cu ziua (`#h-date`, sau „Toate zilele”), numărul trenului, stația, ora
 de la și până la, panoul și butonul „Resetează”. Filtrele se scriu în adresă (`syncHash`), deci un
 link păstrează filtrele. Rezultatele vin de la `GET /api/history`; cu „Toate zilele”, de la
-`GET /api/history?all=1` (cu paginare: „Încarcă mai multe”). Un clic pe un rând deschide un
+`GET /api/history?all=1` (cu paginare: „Încarcă mai multe”, cu numărul rămas). Un clic pe un rând deschide un
 `<dialog>` (`#h-detail`) cu detaliile călătoriei (`GET /api/journeys/{id}`). În modul „toate zilele” interfața arată câte rânduri sunt afișate („afișate N (cele mai noi)”, clasa `h-truncated`). Antetul `X-Truncated` al modului pe o zi nu e citit de `history.js` (nesigur: verifică dacă există o altă ramură).
 
 **Pagina Urmărite:** comutatorul „Notificări pe acest dispozitiv” (`#f-switch`) care cere permisiune
@@ -112,20 +129,27 @@ pagina spune asta în `#f-ios`.
 
 **Pagina Trenuri, Tren, Stații, Stație, Clasamente:** pagini din `stats.js`, cu tabele, filtre și
 exporturi CSV/JSON (linkurile trimit direct la rutele `format=csv`). Pe Tren, Stație și Clasamente
-se încarcă și stratul de grafice (secțiunea 7).
+se încarcă și stratul de grafice (secțiunea 7). Trenuri (ca și Istoricul) desenează 50 de rânduri
+odată, cu butonul „Încarcă încă 50”; sortarea și filtrele lucrează pe toate datele. Pe telefon,
+filtrele din Istoric și Trenuri stau în spatele butonului „Filtre (n)” (`filterToggle` în `app.js`).
 
 **Pagina Statistici:** un singur răspuns de la `GET /api/stats/overview`, cu filtrele `perioada`
 (`Azi`, `7 zile`, `30 de zile`, `Tot istoricul`), `board`, `operator`, `tip`, `doar_confirmate`.
 Are rezumat, întrebări (`insights`), probleme, grafice și exporturi pe seturi. Textul de sus spune
 că întârzierea e cea citită pe tabla din București Nord, iar sosirile și plecările sunt mereu
-separate.
+separate. Pe telefon, secțiunile apar întâi doar ca titluri și se deschid la atingere; graficele se
+desenează pe măsură ce derulezi (la tipărire sau la un link direct spre un grafic, toate odată).
 
 **Pagina Versiuni:** lista din `GET /api/changelog`; este linkul din subsol („Versiuni”) și din
-`/api/health`.
+`/api/health`. Doar cea mai nouă versiune pornește deschisă.
+
+**Pagina Cum funcționează?** (`#cum`): în limbaj simplu, de unde vin datele (camera CFR citită cu
+OCR), ce înseamnă „întârziere”, cum se construiesc istoricul și statisticile, limitele,
+confidențialitatea și unde se raportează o problemă. Text static (`cum.js`), fără apeluri API.
 
 ---
 
-## 2. Navigarea: bara de sus și meniul pe telefon
+## 2. Navigarea: bara de sus și bara de jos pe telefon
 
 **Bara de sus** (`header.topbar`): sigla și titlul, ceasul și vremea (`#hdr-clockwx`, `weather.js`),
 butonul de temă (`#theme-btn`) și indicatorul „Live / Sursa: CFR”.
@@ -135,7 +159,8 @@ Statistici, Clasamente, Stații, Sistem. Fiecare are `data-route` și, pentru pa
 `aria-current="page"`. Pagina `Tren` evidențiază „Trenuri”, iar `Stație` evidențiază „Stații”
 (`NAV_PARENT` în `app.js`).
 
-**Desktop și telefon.** Meniul e aceeași bară pe orice lățime:
+**Tabletă și desktop (peste 700 px).** Meniul e bara de sus, lipită sus, cu butonul de limbă
+(`EN` / `RO`) la capăt:
 
 - `.mainnav` are `overflow-x: auto` și `scrollbar-width: none`: când nu încape, se derulează
   orizontal **în interiorul barei**, nu pagina. `revealActiveNav()` aduce pagina activă în vizor,
@@ -145,9 +170,23 @@ Statistici, Clasamente, Stații, Sistem. Fiecare are `data-route` și, pentru pa
 - **„Site pentru desktop” pe telefon.** Când browserul telefonului afișează pagina pe o lățime
   mult mai mare decât ecranul, `theme-init.js` pune clasa `zoomed-out` pe `<html>`. Atunci meniul
   devine mai mare (`min-height: 88px` pe elemente, `font-size: 1.75rem`, `style.css` ~linia 668).
-  Verificarea se face doar pe ecrane tactile, ca pe desktop zoom-ul să nu schimbe meniul.
+  Verificarea se face doar pe ecrane tactile, ca pe desktop zoom-ul să nu schimbe meniul. În
+  acest mod rămâne bara de sus (pagina e așezată pe ~980 px).
 
-Nu există meniu separat pentru telefon: același `nav` se derulează.
+**Telefon (cel mult 700 px).** Din CSS, de la prima afișare (fără salt de pagină), bara de meniu
+coboară jos (`position: fixed`, cu marginile sigure ale ecranului) și arată doar **Tabelă, Istoric,
+Trenuri, Statistici** (`NAV_BAR` în `app.js`) plus butonul **„Mai mult”** (`nav.nav-more`,
+`#nav-more-btn`). Meniul „Mai mult” (`#nav-more-menu`) e umplut de `initMoreNav()` din aceeași listă
+de rute: Urmărite, Clasamente, Stații, Sistem, apoi Versiuni, Setări și Cum funcționează?, iar pe
+telefon butonul de limbă se mută tot aici. Butonul are `aria-expanded`; meniul se închide la alegerea
+unei pagini, la `Escape` (focusul revine pe buton), la un clic în afară, la schimbarea paginii și când
+focusul de tastatură iese din el. Când pagina curentă e în meniu, butonul „Mai mult” e evidențiat.
+
+**Limba (RO / EN).** `web/i18n/i18n.js` alege limba în ordinea `?lang=` → `localStorage`
+(`tabela-lang`) → română. Textele sunt în `web/i18n/ro.json` și `en.json` (aceleași chei); elementele
+au `data-i18n` / `data-i18n-attr`. Butonul `[data-lang-toggle]` schimbă limba fără reîncărcare
+(evenimentul `i18n:change`), iar `<html lang>` urmează limba aleasă. `ro.json` e în precache;
+`en.json` se pune în cache la prima folosire.
 
 ---
 
@@ -188,6 +227,16 @@ Sistemul de design e descris în `design-system/tabela-gara-de-nord/MASTER.md`.
 
 `panel.css` (modul Panou) urmează aceleași reguli, ca Panoul să nu aibă tema lui.
 
+**Finisaj (`web/polish.css`, încărcat după `style.css` și `ui2.css`).** Doar aspect, doar din tokeni:
+insignele categoriilor de tren (IR, IC, R, RE…) cu umplere ușoară și contrast de cel puțin 4,5:1 în
+ambele teme (IC are culoarea lui), lista „Ce s-a schimbat” mai compactă și tranziții discrete pe
+butoane și linkuri, puse **doar** sub `@media (prefers-reduced-motion: no-preference)`.
+
+**Tipărire (`web/print.css`, `media="print"`).** Tabela, Istoricul, Trenurile și Statisticile se tipăresc
+negru pe alb, fără meniu, antet, filtre, formulare, dialoguri sau butoane (rămân doar butoanele care
+poartă date: numărul trenului, titluri, coloane de sortare), cu rândurile nedespărțite între pagini.
+Pe Tabelă, fila aleasă (Sosiri sau Plecări) rămâne ca titlul foii.
+
 ---
 
 ## 4. Service worker și mod offline
@@ -200,18 +249,22 @@ sigure (HTTPS sau localhost).
 - `tabela-shell-<VERSION>` — fișierele „shell” (precache);
 - `tabela-board-<VERSION>` — ultima tablă primită (`/api/board`).
 
-**Precache (`SHELL`).** Lista are 26 de fișiere, plus `/` (pagina principală, ca navigare) și
-`/offline.html`. Include: `theme-init.js`, `style.css`, `panel.css`, `app.js`, `history.js`,
-`follows.js`, `panel.js`, `weather.css`, `weather.js`, `versions.js`, `stats.css`, `stats.js`,
-`statistici.css`, `statistici.js`, `ui2.css`, `ui2.js`, `manifest.webmanifest`, `favicon.ico`,
-iconițele din `icons/` și fonturile `fonts/fira-sans-400.woff2`, `fonts/fira-code.woff2`.
+**Precache (`SHELL`).** Lista are 30 de fișiere, plus `/` (pagina principală, ca navigare) și
+`/offline.html`. Include: `theme-init.js`, `i18n/i18n.js`, `i18n/ro.json`, `offline.js`, `style.css`,
+`panel.css`, `app.js`, `history.js`, `follows.js`, `panel.js`, `weather.css`, `weather.js`, `stats.js`,
+`stat_weekdays.js`, `statistici.js`, `stat_platform.js`, `stat_dwell.js`, `ui2.css`, `polish.css`,
+`print.css`, `ui2.js`, `manifest.webmanifest`, `favicon.ico`, iconițele din `icons/` și fonturile
+`fonts/fira-sans-400.woff2`, `fonts/fira-code.woff2`.
 
-- **Nu** intră: `ocr.*`, `admin.*`, `sistem.*`, `setari.*` (paginile de administrare și cele
-  încărcate la cerere), `charts3.js`/`charts3.css` (grafice), `icon-512` și `icon-maskable-512`
-  (browserul le ia din manifest), precum și niciun endpoint `/api/*` în afară de tabla.
-- Bugetul: suma fișierelor din `SHELL` e de aproximativ **632 000 de octeți** necomprimat (măsurat
-  pe `web/`). `tests/test_ui3_static.py` impune `PRECACHE_LIMIT = 650_000`, iar
-  `tests/test_brand_theme.py` impune `660_000`. Vezi și secțiunea 11.
+- **Nu** intră: `ocr.*`, `ocr2.*`, `admin.*`, `sistem.*`, `setari.js`, `cum.*`
+  (paginile de administrare și cele încărcate la cerere), `versions.js` (script `defer` din `index.html`), `stats.css` și `statistici.css` (se încarcă
+  cu pagina lor și intră în cache la prima folosire), `peron_est.*`, celelalte module `stat_*`
+  încărcate la cerere, `i18n/en.json` (în cache la prima folosire), `charts3.js`/`charts3.css`
+  (grafice), `icon-512` și `icon-maskable-512` (browserul le ia din manifest), precum și niciun
+  endpoint `/api/*` în afară de tabla.
+- Bugetul: suma fișierelor din `SHELL` e de aproximativ **0,8 MB** necomprimat; `ro.json` (~83 KB)
+  e cea mai mare parte nouă. `tests/test_ui3_static.py` impune `PRECACHE_LIMIT = 800_000`, iar
+  `tests/test_brand_theme.py` impune `825_000` (alt mod de numărare). Vezi și secțiunea 11.
 - Fonturile Fira Sans 500/600/700 se încarcă la cerere și nu sunt în precache; offline cad pe
   greutatea 400 (îngroșare sintetică), cum scrie în `sw.js`.
 
@@ -242,7 +295,8 @@ cu tema și CSS-ul, deci respectă tema.
 - Motivul tehnic (comportamentul standard al browserelor): browserul verifică actualizarea
   service worker-ului comparând octeții lui `sw.js`. Dacă nu se schimbă, nu reinstalează și nu
   reface precache-ul, deci cache-ul offline rămâne cel vechi.
-- Testele verifică doar un minim (`VERSION >= v28` în `test_ui3_static.py`, `>= v9` în `test_stats_static.py`).
+- Testele verifică doar un minim (`VERSION >= v28` în `test_ui3_static.py`, `>= v27` în `test_ui2_static.py`,
+  `>= v17` în `test_statistici_static.py`). La Beta 1.72 valoarea este `v51`.
 
 **Notificări push.** `push` afișează `title` (sau „Gara de Nord”), `body`, `tag` (cu `renotify`),
 iconița `icons/icon-192.png` și `lang: "ro"`. Clicul (`notificationclick`) aduce în față o fereastră
@@ -343,8 +397,8 @@ stiluri inline), temele luminoasă și întunecată, alternativa accesibilă pen
 cere grafice doar dacă are: `stats.js` pentru `tren`, `clasamente` și `statie` (`charts: true`),
 și `statistici.js`. `charts3.js` spune același lucru în antet.
 
-**Regula `CHARTS_V`.** `CHARTS_V = "1.65"` din `ui2.js` trebuie să fie egal cu numărul versiunii din
-`VERSION` (`Beta 1.65` → `1.65`). Testul `test_lazy_not_in_precache_and_loader_matches_the_version`
+**Regula `CHARTS_V`.** `CHARTS_V = "1.72"` din `ui2.js` trebuie să fie egal cu numărul versiunii din
+`VERSION` (`Beta 1.72` → `1.72`). Testul `test_lazy_not_in_precache_and_loader_matches_the_version`
 din `tests/test_ui3_static.py` verifică asta: `CHARTS_V` se schimbă la fiecare deploy. Motivul
 scris de autori este „cache-buster”: dacă browserul ține minte un `charts3.js` vechi, parametrul
 forțează versiunea nouă. Cu antetele `no-cache` + `ETag` din aplicație, rolul exact e de siguranță;
@@ -368,15 +422,15 @@ Deciziile de accesibilitate, cu locul unde sunt implementate:
 | Decizie | Implementare |
 |---|---|
 | Ocolirea meniului | Link „Sari la tabelă” (`.skip-link`, apare la focalizare) către `#main`. `<main tabindex="-1">`. |
-| Limba | `<html lang="ro">`. |
-| Titlu de pagină | `h1` per pagină (uneori `sr-only`, de exemplu `#board-heading` pe Tabelă). |
-| Meniu | `<nav aria-label="Navigare principală">`, `aria-current="page"` pe pagina activă. |
+| Limba | `<html lang>` urmează limba aleasă (`ro` implicit, `en`), setat de `theme-init.js` și `app.js`. |
+| Titlu de pagină | Un singur `h1` per pagină (uneori `sr-only`, de exemplu `#board-heading` pe Tabelă) și fără niveluri de titlu sărite (inclusiv Setări și Statistici). |
+| Meniu | `<nav aria-label="Navigare principală">`, `aria-current="page"` pe pagina activă; pe telefon „Mai mult” e un reper de navigare separat (`<nav aria-label="Mai mult">`), cu `aria-expanded`, `Escape` și închidere când focusul iese. |
 | File (Sosiri / Plecări) | `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`; săgeți stânga/dreapta mută fila (`app.js`). |
-| Anunțuri | `#sr-status` și `#h-count` cu `role="status"` și `aria-live="polite"`; erorile cu `role="alert"` (`#h-error`, `#v-error`). |
+| Anunțuri | `#sr-status` și `#h-count` cu `role="status"` și `aria-live="polite"`; erorile cu `role="alert"` (`#h-error`, `#v-error`). „Tabela e la zi” nu se anunță la încărcare, iar Statisticile nu se recitesc la fiecare redesenare; problemele și revenirile se anunță. |
 | Dialoguri | Detaliile Istoricului sunt `<dialog>` (`showModal`), cu buton de închidere `aria-label="Închide detaliile"`. |
 | Focus vizibil | `:focus-visible` cu contur `--focus` (`style.css`); și pentru comutatoare și butonul de temă. |
-| Ținte tactile | `--tap: 44px` pe ecrane tactile; butoanele „urmărește” au 44 × 44 px pe telefon. |
-| Mișcare redusă | `@media (prefers-reduced-motion: reduce)` în `style.css` oprește animațiile; `ui2.js` verifică același media query. |
+| Ținte tactile | Orice link sau buton are cel puțin 24 × 24 px (WCAG 2.2 AA, criteriul 2.5.8; blocul „a11y 2.5.8” din `style.css`: linkuri de stație și tren, butoane de sortare, câmpuri, căsuțe); `--tap: 44px` pe ecrane tactile; butoanele „urmărește” au 44 × 44 px pe telefon. |
+| Mișcare redusă | Setarea „Reducere mișcare” a sistemului (`prefers-reduced-motion: reduce`) oprește toate animațiile și tranzițiile: blocuri pe componente plus un bloc general la finalul `style.css`; tranzițiile din `polish.css` există doar cu `no-preference`; `ui2.js` verifică același media query. |
 | Contrast forțat | `@media (forced-colors: active)` pune contururi (`CanvasText`) pe elementele importante. |
 | Culoare | Graficele au legendă cu text și model pe fiecare felie (`ui2.js`); `ocr-conf` (pagina Capturi OCR) folosește și text („≥ 80”, „50–79”, „< 50”). |
 | Imagini | Iconițele decorative au `aria-hidden="true"` și `focusable="false"`; siglele au `alt` descriptiv sau `alt=""` când sunt decorative. |
@@ -384,7 +438,8 @@ Deciziile de accesibilitate, cu locul unde sunt implementate:
 | Tastatură pe grafice | `charts3.bind` arată tooltip-ul și cu tastatura; `tools` oferă tabelul ca alternativă textuală. |
 
 Cum sunt verificate: testele `tests/test_*_browser.py` (de exemplu `test_touch_targets_browser`,
-`test_empty_states_browser`, `test_nav_browser`) și `design-system/` (nu le-am rulat aici).
+`test_empty_states_browser`, `test_nav_browser`, `test_a11y_browser`, `test_contrast_browser`), verificarea
+pe Firefox și WebKit din `test_cross_browser.py` și `design-system/` (nu le-am rulat aici).
 
 ---
 
@@ -434,6 +489,8 @@ flowchart LR
         R11["#setari (admin)"]
         R12["#ocr (admin)"]
         R13["#admin (admin)"]
+        R14["#cum"]
+        R15["#ocr2 (admin)"]
     end
 
     subgraph Vizualizari["Vizualizare (app.js / *.js)"]
@@ -451,10 +508,12 @@ flowchart LR
         V11["setari: setari.js"]
         V12["ocr: ocr.js"]
         V13["admin: admin.js"]
+        V14["cum: cum.js"]
+        V15["ocr2: ocr2.js"]
     end
 
     subgraph API["Endpoint-uri (docs/api.md)"]
-        A1["GET /api/board, /api/config, /api/weather"]
+        A1["GET /api/board, /api/config, /api/weather, /api/station-names"]
         A2["GET /api/history, /api/history?all=1, /api/journeys/{id}"]
         A3["GET /api/follows, /api/push/key, POST/DELETE /api/follow, /api/push/subscribe"]
         A4["GET /api/trains/stats, /api/trains/{no}/journeys"]
@@ -467,6 +526,7 @@ flowchart LR
         A11["GET /api/admin/captures, /api/admin/stats, /api/admin/corrections…"]
         A12["GET /api/admin/tools/dupes, /api/admin/tools/server"]
         A13["GET /api/admin/session, POST /api/admin/login, /api/admin/logout"]
+        A14["GET /api/admin/ocr-alt…"]
     end
 
     R0 --> V0 --> A1
@@ -483,6 +543,8 @@ flowchart LR
     R11 --> V11 --> A10
     R12 --> V12 --> A11
     R13 --> V13 --> A12
+    R14 --> V14
+    R15 --> V15 --> A14
     V12 --> A13
     V13 --> A13
     V11 --> A13
@@ -506,9 +568,9 @@ Note:
 - **Testele de browser** (`tests/test_*_browser.py`, `test_csp_browser`) nu au fost rulate; afirmațiile
   despre comportament în browser (de exemplu tabulatorul, dialogurile, „Site pentru desktop”)
   vin din cod, nu din execuție.
-- **Bugetul de precache.** Suma e măsurată pe disc (≈ 632 000 octeți). Testele impun 650 000 în
-  `tests/test_ui3_static.py` și 660 000 în `tests/test_brand_theme.py`. Ambele trec cu suma actuală;
-  limitele sunt diferite, de aliniat.
+- **Bugetul de precache.** Suma e ≈ 0,8 MB. Testele impun 800 000 în `tests/test_ui3_static.py`
+  (pe disc) și 825 000 în `tests/test_brand_theme.py` (servit, cu `/` și `/offline.html`); marja e
+  mică, deci orice fișier nou în `SHELL` cere o decizie de buget.
 - **Explicația exactă a `CHARTS_V`.** Codul spune „cache-buster”, dar cu `no-cache` + `ETag` rolul e
   de siguranță. De verificat în istoricul `CHANGELOG.md` dacă a fost o problemă reală.
 - **Comportamentul `zoomed-out`** pe telefoane reale depinde de browser; regula din `theme-init.js`

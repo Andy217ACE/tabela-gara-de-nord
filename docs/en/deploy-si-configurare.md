@@ -2,7 +2,7 @@
 
 This page describes how the code reaches the Ubuntu server, what settings the application reads, what the scripts `deploy/install.sh` and `deploy/update.sh` do, which systemd units and which nginx configuration are in the repo, how a new version is made and how to go back to an old one.
 
-The page was written from the code and the configuration files in the repo, initially at version `Beta 1.43`, updated for `Beta 1.65` (the `VERSION` file). Where a statement could not be verified from the repo (for example, what exists on the server and is not in git), it is marked **uncertain** and the file or command to check is named.
+The page was written from the code and the configuration files in the repo, initially at version `Beta 1.43`, updated for `Beta 1.72` (the `VERSION` file). Where a statement could not be verified from the repo (for example, what exists on the server and is not in git), it is marked **uncertain** and the file or command to check is named.
 
 Conventions:
 
@@ -38,6 +38,10 @@ The components, with their files:
 | Update with rollback | `deploy/update.sh` | Deploy, migration, health check, rollback |
 | Watchdog | `deploy/tabela-watchdog.service`, `deploy/tabela-watchdog.timer`, `deploy/tabela-watchdog.sudoers`, `app/watchdog.py` | Restarts `tabela` if `/api/health` fails |
 | Shadow training (nightly) | `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`, `scripts/nightly_shadow_train.py` | Daily training of the digit classifier, with no automatic promotion |
+| Security snapshot | `deploy/tabela-security-snapshot.service`, `deploy/tabela-security-snapshot.timer`, `scripts/security_snapshot.py` | Every 2 minutes, as root and read-only: fail2ban + the nginx log → `/var/lib/tabela/security/snapshot.json` for the "Security" card in `#admin` |
+| NVMe collector | `deploy/tabela-nvme.service`, `deploy/tabela-nvme.timer`, `scripts/nvme_collect.py` | Every 2 minutes, as root and read-only: the disk health → `/var/lib/tabela/nvme.json` |
+| Internal Infofer spike (temporary) | `deploy/tabela-infofer.service`, `deploy/tabela-infofer.timer` | Every 3 minutes, one request to the Infofer map into a separate database (`docs/en/administrare-operare.md`, section 16) |
+| fail2ban | `deploy/fail2ban/` | Jails, filters and the `ignorecommand` script (section 7.1) |
 | Dynamic DNS | not in the repo; see [section 9](#9-dynamic-dns-no-ip) | Keeps the hostname on the current public IP |
 | Certificates | Let's Encrypt through certbot; see [section 8](#8-tls-certificates-lets-encrypt) | TLS for `tabelacfr.ddns.net` |
 
@@ -190,7 +194,8 @@ The steps, in the order of the code:
 8. **Migrating an old installation.** If `LAST_IMAGE_PATH` is missing, it adds it (with an atomic rewrite of the file).
 9. **VAPID keys.** If there is no `VAPID_PRIVATE_KEY` with a value, it generates a P-256 pair and writes both keys. If the private key exists but the public one is missing, it derives it from the private one. An existing private key is never regenerated, because that would invalidate all the existing push subscriptions (the reason is written in the script comment and in the README). Of the whole script, only the public key is displayed.
 10. **systemd, the main service.** It copies `deploy/tabela.service` to `/etc/systemd/system/`, does `daemon-reload`, `enable`, then `restart` on `tabela`.
-11. **systemd, watchdog.** It copies `tabela-watchdog.service` and `tabela-watchdog.timer` to `/etc/systemd/system/`, does `daemon-reload` and `enable --now` on the timer. **The script does not install the watchdog's sudoers rule** (`deploy/tabela-watchdog.sudoers`). See section 12.
+11. **systemd, watchdog.** It copies `tabela-watchdog.service` and `tabela-watchdog.timer` to `/etc/systemd/system/`, does `daemon-reload` and `enable --now` on the timer. Before that, it validates the watchdog's sudoers rule (`deploy/tabela-watchdog.sudoers`) with `visudo -cf` and installs it as `/etc/sudoers.d/tabela-watchdog` (mode `440`), like `update.sh`; an invalid rule stops the script.
+    Then, optionally, the security exporter: it creates `/var/lib/tabela/security` (`root:tabela`, `750`), copies `tabela-security-snapshot.service` and `.timer` and does `enable --now` on the timer; a failure is only a warning.
 12. **nginx.** It creates `/root/backup-<date>` (mode `700`) and copies there the current site and `tabela-limits.conf`, if they exist. It installs `deploy/tabela-limits.conf` to `/etc/nginx/conf.d/tabela-limits.conf` and `deploy/nginx-tabela.conf` to `/etc/nginx/sites-available/tabela`, creates the symlink in `sites-enabled`, runs `nginx -t`.
     - If `nginx -t` succeeds, it does `systemctl reload nginx`.
     - If it fails, it restores the backup copies (or deletes the files, on the first installation), runs `nginx -t` again and reloads, then exits with code `1`.
@@ -262,7 +267,7 @@ The default values are the production ones. The tests in `tests/test_update_sh.p
     Each failure here causes an abort before restart.
 13. **Restart.** `systemctl restart tabela`.
 14. **The health check.** `healthy()` tries `HEALTH_TRIES` times, with pauses of `HEALTH_SLEEP` seconds. With the default values, that means 90 attempts, about 180 s. In `strict` mode, the answer must contain `"ok":true`. In `up` mode, it is enough for the answer to contain `"ok":` (that is, the application answers, regardless of whether CFR is read).
-    - If it succeeds: it prints `OK: <PREV> -> <NEW> (<version from VERSION>)` and exits with `0`.
+    - If it succeeds: it installs the security exporter (`install_security_snapshot`: the `tabela-security-snapshot.*` units, the directory `/var/lib/tabela/security` `root:tabela 750`; any failure is only a warning), prints `OK: <PREV> -> <NEW> (<version from VERSION>)` and exits with `0`.
     - If not: it enters rollback (section 4.4).
 
 ### 4.3 Health modes
@@ -351,8 +356,12 @@ Files: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`,
 |---|---|---|---|
 | `tabela.service` | yes (copies, `enable`, `restart`) | yes (if it differs, `daemon-reload`) | |
 | `tabela-watchdog.service` and `.timer` | yes (copies, `enable --now`) | yes (if it differs, `enable --now`) | |
-| the watchdog sudoers rule | **no** | yes (`visudo -cf`, then `install -m 440`) | |
+| the watchdog sudoers rule | yes (`visudo -cf`, then `install -m 440`) | yes (`visudo -cf`, then `install -m 440`) | |
+| `tabela-security-snapshot.service` and `.timer` | yes (optional) | yes (after the health check, optional) | |
 | `tabela-shadow-train.service` and `.timer` | no | no | yes (uncertain, see above) |
+| `tabela-nvme.service` and `.timer` | no | no | yes |
+| `tabela-infofer.service` and `.timer` (temporary) | no | no | yes (`docs/en/administrare-operare.md`, section 16) |
+| the files in `deploy/fail2ban/` | no | no | yes (section 7.1) |
 | the nginx site and `tabela-limits.conf` | yes | no | |
 | `tabela-noip` (dynamic DNS) | no | no | yes (see section 9) |
 
@@ -440,7 +449,7 @@ Check commands, without changes: `sudo ufw status verbose` and `sudo ss -tlnp` (
 
 ### 7.1 fail2ban
 
-Three active jails: `sshd`, `nginx-tabela-probes` and `nginx-tabela-slow`. The probe filter (obvious scanner requests, answered with 4xx; `/.well-known/` is excluded) is in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban. The manual steps (package, copying the filter to `/etc/fail2ban/filter.d/`, the jail definition in `/etc/fail2ban/jail.d/`, restart, check with `fail2ban-client status`) are in `docs/en/administrare-operare.md`, section 15. The server's real configuration is in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, which never bans the home public IP): probes 3 in 10 min → 24 h; `nginx-tabela-slow` 5 in 24 h → 7 days; `sshd` 5 in 10 min → 1 h; increasing bans for repeat offenders (max 5 weeks); the LAN is ignored.
+Three active jails: `sshd`, `nginx-tabela-probes` and `nginx-tabela-slow`. The probe filter (obvious scanner requests, answered with 4xx; `/.well-known/` is excluded) is in `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` does not install fail2ban. The manual steps (package, copying the filter to `/etc/fail2ban/filter.d/`, the jail definition in `/etc/fail2ban/jail.d/`, restart, check with `fail2ban-client status`) are in `docs/en/administrare-operare.md`, section 15. The server's real configuration is in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, used as `ignorecommand`; see `docs/en/administrare-operare.md`, section 15): probes 3 in 10 min → 24 h; `nginx-tabela-slow` 5 in 24 h → 7 days; `sshd` 5 in 10 min → 1 h; increasing bans for repeat offenders (max 5 weeks); the LAN, the home public IP and real visitors are ignored (`ignorecommand`).
 
 ### 7.2 Headers and limits
 
@@ -482,11 +491,11 @@ Each deploy brings a new version. The version scheme: `Beta 1.NN`, where `NN` gr
    - The reason: `/api/changelog` and the "Version history" page display exactly this file, and `update.sh` displays the version from `VERSION`.
 3. **`web/sw.js`**: increase `var VERSION = "vNN";` (the service worker). The reason (the comment in `web/sw.js`): the caches are tied to `VERSION` and the old ones are deleted on activation. Without a bump, clients would use the old files from `SHELL`. The tests check only that it exists and that it is above a minimum threshold (`test_ui2_static.py`: `>= 27`; `test_ui3_static.py`: `>= 28`; `test_statistici_static.py`: `>= 17`). They **do not check** that it was incremented in every version.
 4. **`web/ui2.js`**: `var CHARTS_V = "1.NN";` must be **exactly** equal to `VERSION` without the `Beta ` prefix. It is used as a cache parameter (`charts3.js?v=...`, `charts3.css?v=...`). The test `test_lazy_not_in_precache_and_loader_matches_the_version` (in `tests/test_ui3_static.py`) checks the equality. It is the only test that strictly checks a version value.
-5. **The tests**: `python -m pytest` from the repo root (see `docs/testare.md`). The repo has no CI files (`.github/` is missing). The verification is therefore local.
+5. **The tests**: `python -m pytest` from the repo root (see `docs/en/testare.md`) and `python scripts/check_release.py` (`VERSION` = the first CHANGELOG section, which has Romanian bullets and an `### English` subsection, and `CHARTS_V` = the version). The GitHub CI runs the same checks on every pull request (section 10.1); a PR is merged only with green CI.
 6. **Commit**: the CHANGELOG and `VERSION` are committed **before** running `update.sh` (the comment in `update.sh`). The commit message is at the author's choice.
 7. **Push** to the deploy branch.
-8. **Tag**: in the working worktree there are tags `beta-1.01` through `beta-1.43`, so the `beta-1.NN` convention is used. Uncertain: there is no script in the repo that creates them; they are created manually.
-9. **GitHub release**: the README says the versions and notes are in Releases. Uncertain: the publishing process is not automated in the repo.
+8. **Tag**: `beta-1.NN` on the published commit (the convention has been used since `beta-1.01`). No script or workflow in the repo creates the tag; it is created manually.
+9. **GitHub release**: every version has a Release `Beta 1.NN` on the tag `beta-1.NN`, with the CHANGELOG notes. It is published manually (for example `gh release create`); no workflow creates it.
 10. **Deploy on the server**: `sudo bash /opt/tabela/app/deploy/update.sh [branch]`. At the end, the script prints `OK: <PREV> -> <NEW> (Beta 1.NN)`.
 11. **Post-deploy check**: `curl -s http://127.0.0.1:8000/api/health` on the server, the `version` field must be the new version, and `ok` must be `true`. The check from outside: `https://tabelacfr.ddns.net`, the footer shows the version.
 
@@ -500,6 +509,21 @@ The tests that protect the release rules:
 | `test_lazy_not_in_precache_and_loader_matches_the_version` | `tests/test_ui3_static.py` | `CHARTS_V` = the version |
 | `test_wiring_index_and_service_worker` | `tests/test_ui2_static.py` | `sw.js` exists, `VERSION` above the threshold |
 | `test_service_worker_served_as_js_no_cache` | `tests/test_web_static.py` | `sw.js` has `VERSION`, the files in `SHELL` exist |
+
+### 10.1 CI (GitHub Actions)
+
+Three workflows in `.github/workflows/`:
+
+| Workflow | When it runs | What it does |
+|---|---|---|
+| `ci.yml`, the `test` job | on every pull request, on push to `main`, weekly (Monday) and by hand | Python 3.14; installs `tesseract-ocr` and `tesseract-ocr-ron`; `pip install -r requirements-dev.txt -c requirements.lock`; installs Playwright with Chromium, Firefox and WebKit (the browser tests run instead of skipping); `scripts/check_release.py`; `pip-audit` on `requirements.lock`; then `python -m pytest -q` |
+| `ci.yml`, the `fail2ban` job | the same | Installs fail2ban, checks the filters in `deploy/fail2ban/` with `fail2ban-regex` against `tests/fixtures/fail2ban/` (scanner lines must all match, normal traffic none) and that the jail files load (`fail2ban-client -t`) |
+| `codeql.yml` | on pull requests to `main`, on push to `main` and weekly | CodeQL analysis (`security-extended`) for Python and JavaScript; the results appear in the Security tab |
+| `lock.yml` | on Dependabot (pip) PRs that change `requirements.txt` | Regenerates `requirements.lock` with `uv pip compile`, pushes it to the PR branch and re-runs CI; it executes no code from the PR |
+
+Dependabot (`.github/dependabot.yml`) proposes pip updates weekly (grouped minor/patch; `opencv-python-headless` and `numpy` patch only, because they change OCR) and GitHub Actions updates monthly.
+
+Dependencies: `requirements.txt` (runtime, pinned: `fastapi`, `uvicorn[standard]`, `opencv-python-headless`, `numpy`, `pytesseract`, `pywebpush`, `py-vapid`, `cryptography`, `httpx`, `tzdata`), `requirements-dev.txt` (adds `pytest`, `pytest-asyncio`, `playwright`) and `requirements.lock` (transitive dependencies too, generated with `uv pip compile`; the command is in `CONTRIBUTING.md`). The server installs only `requirements.txt`.
 
 ## 11. Rollback
 
@@ -567,15 +591,15 @@ Note on the diagram: the automatic rollback does not restore the database and do
 
 These are differences between code, configuration and documentation, found when the page was written. They are not modified here.
 
-1. **The watchdog's sudoers rule is not installed by `install.sh`.** On a new installation, `install.sh` enables the watchdog timer but does not copy `deploy/tabela-watchdog.sudoers`. If the watchdog should restart the service, the command `sudo -n systemctl restart tabela` fails (the message in `app/watchdog.py`: "sudo restart of tabela failed") until `update.sh` runs, which installs the rule. The test `test_install_sh_installs_watchdog_units` checks only the script text for the watchdog units, not the sudoers rule.
+1. **The watchdog's sudoers rule** is now installed by `install.sh` too (validated with `visudo -cf`), not only by `update.sh`; a fresh installation can restart the service from the watchdog from the start.
 2. **The automatic rollback leaves the watchdog off.** `update.sh` disables the timer before the rollback and does not re-enable it. The watchdog stays off until the next successful `update.sh`. The manual procedure above includes the re-enabling.
 3. **Failure after the unit changes, before restart.** If `install_unit` changes `tabela.service` and the next step (watchdog) fails, `abort_before_restart` restores the code but not the unit. The new unit stays installed, although the process runs the old code. It is aligned the next time the script runs.
-4. **The shadow training units are not installed by any script.** They must be installed manually. See section 5.3.
+4. **The shadow training, NVMe and Infofer units are not installed by any script.** They must be installed manually. See sections 5.3 and 5.4.
 5. **The firewall.** Documented in section 7 (ufw active, fail2ban with three jails). The fail2ban configuration is versioned in `deploy/fail2ban/`.
 6. **`VAPID_SUBJECT`** has different values in the code, in `install.sh` and in `.env.example` (section 2.4). It does not break operation, but it must be known.
 7. **`TELEGRAM_STATE_PATH`** has the relative default `data/telegram_sent.json` in the code (dev and tests). The `tabela.service` unit sets it to `/var/lib/tabela/telegram_sent.json`, the only writable place under `ProtectSystem=strict`; `tests/test_deploy_static.py` checks this.
 8. **The certificates must exist before `install.sh`** (section 3, the end). Otherwise `nginx -t` fails.
-9. **The README** says `install.sh` installs `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv` and `git`. The script also installs `curl` and `sqlite3`. The difference does not break anything, but the README list is incomplete.
+9. **The `install.sh` packages** (`tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`, `curl`, `sqlite3`) are the same in the README and in section 3.
 10. **Some comments in the CHANGELOG are out of date.** The Beta 1.31 entry says the watchdog unit runs as root. Since Beta 1.42, the unit runs as `tabela`. The historical text is not rewritten, but no conclusion should be drawn from it.
 11. **The strict health gate.** `update.sh` requires `"ok":true` in `strict` mode. If CFR is down, no version passes the gate, and the rollback does not help. The emergency procedure is `HEALTH_MODE=up` (section 4.3).
 12. **Intermediate cache.** There is no cache between clients and nginx. If a CDN or another proxy is added in front, the application's `Cache-Control` headers (section 6.3) must be reviewed.

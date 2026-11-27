@@ -11,7 +11,7 @@ Pe scurt:
 - Imaginile **reale** ale tablei sunt private: se văd doar din administrare, nu se publică și nu se
   pun în repo. Aplicația păstrează imaginile 7 zile implicit; rândurile cu date rămân.
 - Date personale: abonările la notificări (adresa serviciului push al browserului, plus două chei
-  criptografice) și urmăririle de trenuri, legate de ele. Adresa IP apare doar în jurnalul de audit al administrării.
+  criptografice) și urmăririle de trenuri, legate de ele. În baza de date, adresa IP apare doar în jurnalul de audit al administrării; „Vizitatori online” o ține doar în memorie, 5 minute.
 - Constatare: un fișier de test urmărit în git (`tests/fixtures/page_1.html`) conține o imagine JPEG
   încorporată. Vezi secțiunea 9 și verificați înainte de orice publicare.
 
@@ -379,6 +379,8 @@ Datele personale sau identificatoare sunt cele de mai jos.
 | Starea alertelor Telegram | `data/telegram_sent.json` | Chei de eveniment și data serviciului (fără numele vizitatorului) | Azi și ieri | Serverul | `telegram.SentLog` |
 | Adresa IP a administratorului | `correction_audit.ip` | IP-ul clientului, la acțiuni de corecție și setări | Nelimitat | Administrare | `corrections.audit`, `admin._ip` |
 | Limitarea exporturilor | În memorie | IP-ul, cu o fereastră de timp | Până la repornire | Nimeni | `export.LIMITER` |
+| Vizitatori online | În memorie (cel mult 500 de intrări) | IP-ul (afișat mascat), browserul și sistemul (din User-Agent), ultima pagină, numărul de cereri; boții și clienții care nu sunt browsere sunt ignorați | 5 minute de la ultima cerere; totul se pierde la repornire | Administrare (`#admin`) | `app/visitors.py` |
+| Jurnalul nginx | `/var/log/nginx/access.log` (pe server, în afara aplicației) | IP, cale, cod de răspuns, `Referer`, User-Agent | Rotația implicită a sistemului | Administrarea serverului; fail2ban și exportatorul de securitate îl citesc | `deploy/nginx-tabela.conf`, `deploy/fail2ban/` |
 | Limitarea încercărilor de login | În memorie | IP-ul și contorul | Până la repornire | Nimeni | `admin._failures` |
 
 Observații:

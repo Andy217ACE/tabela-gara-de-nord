@@ -2,7 +2,7 @@
 
 Această pagină descrie cum ajunge codul pe serverul Ubuntu, ce setări citește aplicația, ce fac scripturile `deploy/install.sh` și `deploy/update.sh`, ce unități systemd și ce configurare nginx sunt în repo, cum se face o versiune nouă și cum se revine la una veche.
 
-Pagina a fost scrisă din codul și fișierele de configurare din repo, inițial la versiunea `Beta 1.43`, actualizată la `Beta 1.65` (fișierul `VERSION`). Acolo unde o afirmație nu s-a putut verifica din repo (de exemplu, ce există pe server și nu e în git), este marcată cu **nesigur** și se spune ce fișier sau ce comandă trebuie verificată.
+Pagina a fost scrisă din codul și fișierele de configurare din repo, inițial la versiunea `Beta 1.43`, actualizată la `Beta 1.72` (fișierul `VERSION`). Acolo unde o afirmație nu s-a putut verifica din repo (de exemplu, ce există pe server și nu e în git), este marcată cu **nesigur** și se spune ce fișier sau ce comandă trebuie verificată.
 
 Convenții:
 
@@ -38,6 +38,10 @@ Componentele, cu fișierele lor:
 | Actualizare cu rollback | `deploy/update.sh` | Deploy, migrare, verificare de sănătate, rollback |
 | Watchdog | `deploy/tabela-watchdog.service`, `deploy/tabela-watchdog.timer`, `deploy/tabela-watchdog.sudoers`, `app/watchdog.py` | Repornește `tabela` dacă `/api/health` eșuează |
 | Antrenare umbră (nocturnă) | `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`, `scripts/nightly_shadow_train.py` | Antrenare zilnică a clasificatorului de cifre, fără promovare automată |
+| Snapshot de securitate | `deploy/tabela-security-snapshot.service`, `deploy/tabela-security-snapshot.timer`, `scripts/security_snapshot.py` | La 2 minute, ca root și doar citire: fail2ban + log-ul nginx → `/var/lib/tabela/security/snapshot.json` pentru cardul „Securitate” din `#admin` |
+| Colector NVMe | `deploy/tabela-nvme.service`, `deploy/tabela-nvme.timer`, `scripts/nvme_collect.py` | La 2 minute, ca root și doar citire: starea discului → `/var/lib/tabela/nvme.json` |
+| Spike intern Infofer (temporar) | `deploy/tabela-infofer.service`, `deploy/tabela-infofer.timer` | La 3 minute, o cerere la harta Infofer într-o bază separată (`docs/administrare-operare.md`, secțiunea 16) |
+| fail2ban | `deploy/fail2ban/` | Jail-uri, filtre și scriptul `ignorecommand` (secțiunea 7.1) |
 | DNS dinamic | nu e în repo; vezi [secțiunea 9](#9-dns-dinamic-no-ip) | Ține hostname-ul pe IP-ul public curent |
 | Certificate | Let's Encrypt prin certbot; vezi [secțiunea 8](#8-certificate-tls-lets-encrypt) | TLS pentru `tabelacfr.ddns.net` |
 
@@ -196,7 +200,8 @@ Pașii, în ordinea din cod:
 8. **Migrarea unei instalări vechi.** Dacă lipsește `LAST_IMAGE_PATH`, o adaugă (cu rescriere atomă a fișierului).
 9. **Chei VAPID.** Dacă nu există `VAPID_PRIVATE_KEY` cu valoare, generează o pereche P-256 și scrie ambele chei. Dacă există cheia privată, dar lipsește cea publică, o derivă din cea privată. Cheia privată existentă nu se regenerează niciodată, pentru că ar invalida toate abonările push existente (motivul este scris în comentariul scriptului și în README). Din tot scriptul, doar cheia publică se afișează.
 10. **systemd, serviciul principal.** Copiază `deploy/tabela.service` în `/etc/systemd/system/`, face `daemon-reload`, `enable`, apoi `restart` pe `tabela`.
-11. **systemd, watchdog.** Copiază `tabela-watchdog.service` și `tabela-watchdog.timer` în `/etc/systemd/system/`, face `daemon-reload` și `enable --now` pe timer. **Scriptul nu instalează regula sudoers a watchdog-ului** (`deploy/tabela-watchdog.sudoers`). Vezi secțiunea 12.
+11. **systemd, watchdog.** Copiază `tabela-watchdog.service` și `tabela-watchdog.timer` în `/etc/systemd/system/`, face `daemon-reload` și `enable --now` pe timer. Înainte, validează regula sudoers a watchdog-ului (`deploy/tabela-watchdog.sudoers`) cu `visudo -cf` și o instalează ca `/etc/sudoers.d/tabela-watchdog` (mod `440`), la fel ca `update.sh`; o regulă invalidă oprește scriptul.
+    Apoi, opțional, exportatorul de securitate: creează `/var/lib/tabela/security` (`root:tabela`, `750`), copiază `tabela-security-snapshot.service` și `.timer` și face `enable --now` pe timer; un eșec este doar avertisment.
 12. **nginx.** Creează `/root/backup-<data>` (mod `700`) și copiază acolo site-ul și `tabela-limits.conf` actuale, dacă există. Instalează `deploy/tabela-limits.conf` în `/etc/nginx/conf.d/tabela-limits.conf` și `deploy/nginx-tabela.conf` în `/etc/nginx/sites-available/tabela`, creează symlink-ul în `sites-enabled`, rulează `nginx -t`.
     - Dacă `nginx -t` reușește, face `systemctl reload nginx`.
     - Dacă eșuează, restaurează copiile de backup (sau șterge fișierele, la prima instalare), rulează din nou `nginx -t` și reîncarcă, apoi iese cu cod `1`.
@@ -268,7 +273,7 @@ Valorile implicite sunt cele de producție. Testele din `tests/test_update_sh.py
     Fiecare eșec aici face abort înainte de restart.
 13. **Restart.** `systemctl restart tabela`.
 14. **Verificarea de sănătate.** `healthy()` încearcă de `HEALTH_TRIES` ori, cu pauze de `HEALTH_SLEEP` secunde. Cu valorile implicite, asta înseamnă 90 de încercări, adică aproximativ 180 s. În modul `strict`, răspunsul trebuie să conțină `"ok":true`. În modul `up`, este suficient ca răspunsul să conțină `"ok":` (adică aplicația răspunde, indiferent dacă CFR e citit).
-    - Dacă reușește: afișează `OK: <PREV> -> <NEW> (<versiunea din VERSION>)` și iese cu `0`.
+    - Dacă reușește: instalează exportatorul de securitate (`install_security_snapshot`: unitățile `tabela-security-snapshot.*`, directorul `/var/lib/tabela/security` `root:tabela 750`; orice eșec e doar avertisment), afișează `OK: <PREV> -> <NEW> (<versiunea din VERSION>)` și iese cu `0`.
     - Dacă nu: intră în rollback (secțiunea 4.4).
 
 ### 4.3 Moduri de sănătate
@@ -357,8 +362,12 @@ Fișiere: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.time
 |---|---|---|---|
 | `tabela.service` | da (copiază, `enable`, `restart`) | da (dacă diferă, `daemon-reload`) | |
 | `tabela-watchdog.service` și `.timer` | da (copiază, `enable --now`) | da (dacă diferă, `enable --now`) | |
-| regula sudoers a watchdog-ului | **nu** | da (`visudo -cf`, apoi `install -m 440`) | |
+| regula sudoers a watchdog-ului | da (`visudo -cf`, apoi `install -m 440`) | da (`visudo -cf`, apoi `install -m 440`) | |
+| `tabela-security-snapshot.service` și `.timer` | da (opțional) | da (după sănătate, opțional) | |
 | `tabela-shadow-train.service` și `.timer` | nu | nu | da (nesigur, vezi mai sus) |
+| `tabela-nvme.service` și `.timer` | nu | nu | da |
+| `tabela-infofer.service` și `.timer` (temporar) | nu | nu | da (`docs/administrare-operare.md`, secțiunea 16) |
+| fișierele din `deploy/fail2ban/` | nu | nu | da (secțiunea 7.1) |
 | site nginx și `tabela-limits.conf` | da | nu | |
 | `tabela-noip` (DNS dinamic) | nu | nu | da (vezi secțiunea 9) |
 
@@ -446,7 +455,7 @@ Comenzi de verificare, fără modificări: `sudo ufw status verbose` și `sudo s
 
 ### 7.1 fail2ban
 
-Trei jail-uri active: `sshd`, `nginx-tabela-probes` și `nginx-tabela-slow`. Filtrul pentru probe (cereri evidente de scanere, cu răspuns 4xx; `/.well-known/` este exclus) este în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban. Pașii manuali (pachet, copierea filtrului în `/etc/fail2ban/filter.d/`, definiția jail-ului în `/etc/fail2ban/jail.d/`, repornire, verificare cu `fail2ban-client status`) sunt în `docs/administrare-operare.md`, secțiunea 15. Configurația reală a serverului e în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, care nu banează IP-ul public propriu): probe 3 în 10 min → 24 h; `nginx-tabela-slow` 5 în 24 h → 7 zile; `sshd` 5 în 10 min → 1 h; ban crescător pentru recidiviști (maxim 5 săptămâni); LAN-ul e ignorat.
+Trei jail-uri active: `sshd`, `nginx-tabela-probes` și `nginx-tabela-slow`. Filtrul pentru probe (cereri evidente de scanere, cu răspuns 4xx; `/.well-known/` este exclus) este în `deploy/fail2ban/nginx-tabela-probes.local`. `install.sh` nu instalează fail2ban. Pașii manuali (pachet, copierea filtrului în `/etc/fail2ban/filter.d/`, definiția jail-ului în `/etc/fail2ban/jail.d/`, repornire, verificare cu `fail2ban-client status`) sunt în `docs/administrare-operare.md`, secțiunea 15. Configurația reală a serverului e în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, folosit ca `ignorecommand`; vezi `docs/administrare-operare.md`, secțiunea 15): probe 3 în 10 min → 24 h; `nginx-tabela-slow` 5 în 24 h → 7 zile; `sshd` 5 în 10 min → 1 h; ban crescător pentru recidiviști (maxim 5 săptămâni); LAN-ul, IP-ul public al casei și vizitatorii reali sunt ignorați (`ignorecommand`).
 
 ### 7.2 Antete și limite
 
@@ -488,11 +497,11 @@ Fiecare deploy aduce o versiune nouă. Schema versiunilor: `Beta 1.NN`, unde `NN
    - Motivul: `/api/changelog` și pagina „Versiuni” afișează chiar acest fișier, iar `update.sh` afișează versiunea din `VERSION`.
 3. **`web/sw.js`**: se mărește `var VERSION = "vNN";` (service worker-ul). Motivul (comentariul din `web/sw.js`): cache-urile sunt legate de `VERSION` și cele vechi se șterg la activare. Fără bump, clienții ar folosi fișierele vechi din `SHELL`. Testele verifică doar că există și că e peste un prag minim (`test_ui2_static.py`: `>= 27`; `test_ui3_static.py`: `>= 28`; `test_statistici_static.py`: `>= 17`). **Nu verifică** că a fost incrementat la fiecare versiune.
 4. **`web/ui2.js`**: `var CHARTS_V = "1.NN";` trebuie să fie **exact** egal cu `VERSION` fără prefixul `Beta `. Este folosit ca parametru de cache (`charts3.js?v=...`, `charts3.css?v=...`). Testul `test_lazy_not_in_precache_and_loader_matches_the_version` (în `tests/test_ui3_static.py`) verifică egalitatea. Acesta este singurul test care verifică strict o valoare de versiune.
-5. **Testele**: `python -m pytest` din rădăcina repo-ului (vezi `docs/testare.md`). Repo-ul nu are fișiere de CI (`.github/` lipsește). Verificarea este deci locală.
+5. **Testele**: `python -m pytest` din rădăcina repo-ului (vezi `docs/testare.md`) și `python scripts/check_release.py` (`VERSION` = prima secțiune din CHANGELOG, care are puncte în română și o subsecțiune `### English`, iar `CHARTS_V` = versiunea). CI-ul de pe GitHub rulează aceleași verificări la fiecare pull request (secțiunea 10.1); un PR se îmbină doar cu CI verde.
 6. **Commit**: CHANGELOG-ul și `VERSION` se comit **înainte** de rularea `update.sh` (comentariul din `update.sh`). Mesajul de commit este la alegerea autorului.
 7. **Push** pe branch-ul de deploy.
-8. **Tag**: în worktree-ul de lucru există tag-uri `beta-1.01` până la `beta-1.43`, deci convenția `beta-1.NN` este folosită. Nesigur: nu există în repo niciun script care le creează; se creează manual.
-9. **Release pe GitHub**: README spune că versiunile și notele sunt în Releases. Nesigur: procesul de publicare nu este automatizat în repo.
+8. **Tag**: `beta-1.NN` pe commit-ul publicat (convenția e folosită de la `beta-1.01`). Niciun script sau workflow din repo nu creează tag-ul; se creează manual.
+9. **Release pe GitHub**: fiecare versiune are un Release `Beta 1.NN` pe tag-ul `beta-1.NN`, cu notele din CHANGELOG. Se publică manual (de exemplu `gh release create`); niciun workflow nu îl creează.
 10. **Deploy pe server**: `sudo bash /opt/tabela/app/deploy/update.sh [branch]`. La final, scriptul afișează `OK: <PREV> -> <NEW> (Beta 1.NN)`.
 11. **Verificare post-deploy**: `curl -s http://127.0.0.1:8000/api/health` pe server, câmpul `version` trebuie să fie noua versiune, iar `ok` trebuie să fie `true`. Verificarea din exterior: `https://tabelacfr.ddns.net`, footerul afișează versiunea.
 
@@ -506,6 +515,21 @@ Ce teste protejează regulile de release:
 | `test_lazy_not_in_precache_and_loader_matches_the_version` | `tests/test_ui3_static.py` | `CHARTS_V` = versiunea |
 | `test_wiring_index_and_service_worker` | `tests/test_ui2_static.py` | `sw.js` există, `VERSION` peste prag |
 | `test_service_worker_served_as_js_no_cache` | `tests/test_web_static.py` | `sw.js` are `VERSION`, fișierele din `SHELL` există |
+
+### 10.1 CI (GitHub Actions)
+
+Trei workflow-uri în `.github/workflows/`:
+
+| Workflow | Când rulează | Ce face |
+|---|---|---|
+| `ci.yml`, job-ul `test` | la fiecare pull request, la push pe `main`, săptămânal (luni) și manual | Python 3.14; instalează `tesseract-ocr` și `tesseract-ocr-ron`; `pip install -r requirements-dev.txt -c requirements.lock`; instalează Playwright cu Chromium, Firefox și WebKit (testele de browser rulează, nu sar); `scripts/check_release.py`; `pip-audit` pe `requirements.lock`; apoi `python -m pytest -q` |
+| `ci.yml`, job-ul `fail2ban` | la fel | Instalează fail2ban, verifică filtrele din `deploy/fail2ban/` cu `fail2ban-regex` pe `tests/fixtures/fail2ban/` (liniile de scaner trebuie potrivite toate, traficul normal niciuna) și că fișierele de jail se încarcă (`fail2ban-client -t`) |
+| `codeql.yml` | la pull request spre `main`, la push pe `main` și săptămânal | Analiză CodeQL (`security-extended`) pentru Python și JavaScript; rezultatele apar în tab-ul Security |
+| `lock.yml` | la PR-urile Dependabot (pip) care schimbă `requirements.txt` | Regenerează `requirements.lock` cu `uv pip compile`, îl împinge pe branch-ul PR-ului și repornește CI-ul; nu execută cod din PR |
+
+Dependabot (`.github/dependabot.yml`) propune săptămânal actualizări pip (grupate minor/patch; `opencv-python-headless` și `numpy` doar la patch, pentru că schimbă OCR-ul) și lunar actualizări ale acțiunilor GitHub.
+
+Dependențele: `requirements.txt` (runtime, versiuni fixe: `fastapi`, `uvicorn[standard]`, `opencv-python-headless`, `numpy`, `pytesseract`, `pywebpush`, `py-vapid`, `cryptography`, `httpx`, `tzdata`), `requirements-dev.txt` (adaugă `pytest`, `pytest-asyncio`, `playwright`) și `requirements.lock` (și dependențele tranzitive, generat cu `uv pip compile`; comanda e în `CONTRIBUTING.md`). Serverul instalează doar `requirements.txt`.
 
 ## 11. Rollback
 
@@ -573,15 +597,15 @@ Notă la diagramă: rollback-ul automat nu restaurează baza și nu reactivează
 
 Acestea sunt diferențe între cod, configurare și documentație, găsite la scrierea paginii. Nu sunt modificate aici.
 
-1. **Regula sudoers a watchdog-ului nu e instalată de `install.sh`.** Pe o instalare nouă, `install.sh` activează timer-ul watchdog-ului, dar nu copiază `deploy/tabela-watchdog.sudoers`. Dacă watchdog-ul ar trebui să repornească serviciul, comanda `sudo -n systemctl restart tabela` eșuează (mesajul din `app/watchdog.py`: „sudo restart of tabela failed”) până rulează `update.sh`, care instalează regula. Testul `test_install_sh_installs_watchdog_units` verifică doar textul scriptului pentru unitățile watchdog-ului, nu și regula sudoers.
+1. **Regula sudoers a watchdog-ului** e instalată acum și de `install.sh` (cu validare `visudo -cf`), nu doar de `update.sh`; o instalare nouă poate reporni serviciul din watchdog de la început.
 2. **Rollback-ul automat lasă watchdog-ul oprit.** `update.sh` dezactivează timer-ul înainte de rollback și nu îl mai reactivează. Watchdog-ul rămâne oprit până la următorul `update.sh` reușit. Procedura manuală de mai sus include reactivarea.
 3. **Eșec după schimbarea unității, înainte de restart.** Dacă `install_unit` schimbă `tabela.service`, iar pasul următor (watchdog) eșuează, `abort_before_restart` restaurează codul, dar nu unitatea. Unitatea nouă rămâne instalată, deși procesul rulează codul vechi. La următoarea rulare a scriptului se aliniază.
-4. **Unitățile de antrenare umbră nu sunt instalate de niciun script.** Trebuie instalate manual. Vezi secțiunea 5.3.
+4. **Unitățile de antrenare umbră, NVMe și Infofer nu sunt instalate de niciun script.** Trebuie instalate manual. Vezi secțiunile 5.3 și 5.4.
 5. **Firewall-ul.** Documentat în secțiunea 7 (ufw activ, fail2ban cu trei jail-uri). Configurația fail2ban e versionată în `deploy/fail2ban/`.
 6. **`VAPID_SUBJECT`** are valori diferite în cod, în `install.sh` și în `.env.example` (secțiunea 2.4). Nu strică funcționarea, dar trebuie știută.
 7. **`TELEGRAM_STATE_PATH`** are implicitul relativ `data/telegram_sent.json` în cod (dev și teste). Unitul `tabela.service` îl setează la `/var/lib/tabela/telegram_sent.json`, singurul loc scriptibil sub `ProtectSystem=strict`; `tests/test_deploy_static.py` verifică asta.
 8. **Certificatele trebuie să existe înainte de `install.sh`** (secțiunea 3, final). Altfel `nginx -t` eșuează.
-9. **README** spune că `install.sh` instalează `tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv` și `git`. Scriptul instalează în plus `curl` și `sqlite3`. Diferența nu strică, dar lista din README este incompletă.
+9. **Pachetele din `install.sh`** (`tesseract-ocr`, `tesseract-ocr-ron`, `python3-venv`, `git`, `curl`, `sqlite3`) sunt aceleași în README și în secțiunea 3.
 10. **Unele comentarii din CHANGELOG sunt depășite.** Intrarea Beta 1.31 spune că unitatea watchdog rulează ca root. Din Beta 1.42, unitatea rulează ca `tabela`. Textul istoric nu se rescrie, dar nu se trage concluzia din el.
 11. **Poarta strictă de sănătate.** `update.sh` cere `"ok":true` în modul `strict`. Dacă CFR este picat, nicio versiune nu trece poarta, iar rollback-ul nu ajută. Procedura de urgență este `HEALTH_MODE=up` (secțiunea 4.3).
 12. **Cache intermediar.** Nu există cache între clienți și nginx. Dacă se adaugă un CDN sau un alt proxy în față, antetele `Cache-Control` ale aplicației (secțiunea 6.3) trebuie revizuite.

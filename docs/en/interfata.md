@@ -7,7 +7,7 @@ page shows and for whom, navigation, the theme, the service worker, the PWA mani
 security policy (CSP) and its reasons, the chart layer, the accessibility decisions and the way
 static files are served.
 
-The document describes version **Beta 1.65** (`VERSION`). The endpoints that the
+The document describes version **Beta 1.72** (`VERSION`). The endpoints that the
 pages call are described in `docs/api.md`.
 
 ## How this document was verified
@@ -16,7 +16,8 @@ All statements were read from the code: `web/index.html`, `web/app.js` (the `ROU
 `VIEWS` tables), `web/theme-init.js`, `web/style.css`, `web/ui2.js`, `web/ui2.css`, `web/charts3.js`,
 `web/sw.js`, `web/manifest.webmanifest`, `web/offline.html`, `web/history.js`, `web/stats.js`,
 `web/statistici.js`, `web/follows.js`, `web/panel.js`, `web/weather.js`, `web/versions.js`,
-`web/sistem.js`, `web/setari.js`, `web/ocr.js`, `web/admin.js`, plus `app/api.py` (CSP, static
+`web/sistem.js`, `web/setari.js`, `web/ocr.js`, `web/admin.js`, `web/cum.js`, `web/i18n/i18n.js`,
+`web/polish.css`, `web/print.css`, plus `app/api.py` (CSP, static
 serving), `deploy/nginx-tabela.conf` and the tests in `tests/` that check the rules (for example
 `tests/test_ui3_static.py` for `CHARTS_V`). The byte count in section 4 was measured
 on the files in `web/`. I did not run the interface in a browser for this document.
@@ -27,7 +28,7 @@ original is given in parentheses where it helps to find it in the code.
 ## Contents
 
 1. [Pages and routes](#1-pages-and-routes)
-2. [Navigation: the top bar and the phone menu](#2-navigation-the-top-bar-and-the-phone-menu)
+2. [Navigation: the top bar and the phone bottom bar](#2-navigation-the-top-bar-and-the-phone-bottom-bar)
 3. [Light and dark theme](#3-light-and-dark-theme)
 4. [Service worker and offline mode](#4-service-worker-and-offline-mode)
 5. [The PWA manifest](#5-the-pwa-manifest)
@@ -55,28 +56,38 @@ Each has a `show(params)` function called when the page changes.
 |---|---|---|---|---|---|
 | `#` or no fragment | **Board** (`tabela`) | `#view-tabela` | everyone | yes ("Board") | `app.js` (+ `panel.js`, `weather.js`) |
 | `#istoric` | **History** | `#view-istoric` | everyone | yes | `history.js` |
-| `#urmarite` | **Followed trains** | `#view-urmarite` | everyone (notifications depend on the browser) | yes | `follows.js` |
+| `#urmarite` | **Followed trains** | `#view-urmarite` | everyone (notifications depend on the browser) | yes (on a phone under "More") | `follows.js` |
 | `#trenuri` | **Trains** | `#view-trenuri` | everyone | yes | `stats.js` (the `trenuri` view) |
 | `#tren?nr=<number>` | **Train** | `#view-tren` | everyone | no (falls under "Trains") | `stats.js` (`tren`) |
 | `#statistici` | **Statistics** | `#view-statistici` | everyone | yes | `statistici.js` |
-| `#clasamente` | **Rankings** | `#view-clasamente` | everyone | yes | `stats.js` (`clasamente`) |
-| `#statii` | **Stations** | `#view-statii` | everyone | yes | `stats.js` (`statii`) |
+| `#clasamente` | **Rankings** | `#view-clasamente` | everyone | yes (on a phone under "More") | `stats.js` (`clasamente`) |
+| `#statii` | **Stations** | `#view-statii` | everyone | yes (on a phone under "More") | `stats.js` (`statii`) |
 | `#statie?nume=<name>` | **Station** | `#view-statie` | everyone | no (falls under "Stations") | `stats.js` (`statie`) |
-| `#sistem` | **System** | `#view-sistem`, created by `sistem.js` | everyone (details for admin) | yes | `sistem.js` (loaded on the first visit) |
-| `#versiuni` | **Version history** | `#view-versiuni` | everyone | no (link in the footer) | `versions.js` |
-| `#cum` | **How it works** | `#view-cum`, created by `cum.js` | everyone | no (link in the footer) | `cum.js` (+ `cum.css`), loaded on the first visit |
-| `#setari` | **Settings** | `#view-setari` | admin | no (no link in the interface) | `setari.js` (loaded on the first visit) |
+| `#sistem` | **System** | `#view-sistem`, created by `sistem.js` | everyone (details for admin) | yes (on a phone under "More") | `sistem.js` (loaded on the first visit) |
+| `#versiuni` | **Version history** | `#view-versiuni` | everyone | no (link in the footer; on a phone under "More") | `versions.js` |
+| `#cum` | **How it works** | `#view-cum`, created by `cum.js` | everyone | no (link in the footer; on a phone under "More") | `cum.js` (+ `cum.css`), loaded on the first visit |
+| `#setari` | **Settings** | `#view-setari` | admin | no (only under "More", on a phone) | `setari.js` (loaded on the first visit) |
 | `#ocr` | **OCR captures** | created by `app.js` (`view-ocr`) | admin | no | `ocr.js` (+ `ocr.css`), loaded on demand |
 | `#ocr2` | **OCR alternative** | created by `ocr2.js` (`view-ocr2`) | admin | no | `ocr2.js` (+ `ocr2.css`), loaded on the first visit |
 | `#admin` | **Administration** | created by `app.js` (`view-admin`) | admin | no | `admin.js` (+ `admin.css`), loaded on demand |
 
 Remarks:
 
-- The routes `#sistem`, `#setari`, `#ocr`, `#ocr2` and `#admin` are loaded on the first visit (`loadLazyPage`,
+- The routes `#sistem`, `#setari`, `#cum`, `#ocr`, `#ocr2` and `#admin` are loaded on the first visit (`loadLazyPage`,
   `loadOcrView`, `loadAdminView`). They are not in the service worker precache, "so the
   budget does not grow", as written in `app.js`.
-- **System**: the page shows the public state; if the visitor has an admin session (`admin: true`),
-  it also reads `GET /api/admin/system`.
+- **Per-page styles.** `stats.css` (Trains, Train, Stations, Station, Rankings) and `statistici.css`
+  (Statistics) load only when the page is opened (`PAGE_CSS` in `app.js`); the page appears once
+  its style is ready, without a flash. The Board does not wait for the Statistics stylesheets.
+- **Pages you leave free their memory**: on return, the page is redrawn from the kept data,
+  with the filters unchanged.
+- **System**: the page shows the public state (including the reading quality over the last 24 h and
+  7 days and the speed: OCR cycle duration and p50/p95 API times, measured in memory); if the visitor
+  has an admin session (`admin: true`), it also reads `GET /api/admin/system` (Tesseract version,
+  languages, pending security updates).
+- **Administration** (`#admin`) has the cards "Duplicate train numbers", "Server (live)", "NVMe disk
+  (live)", "Security (fail2ban)", "Online visitors" and "Push notification test"; they are described
+  in `docs/en/administrare-operare.md`, section 2.
 - **Settings** has no login form. If there is no session, it shows "Authentication required
   for settings." Authentication is done from the "OCR captures" or "Administration" page, because the
   cookie is shared.
@@ -99,12 +110,18 @@ CFR board. It has:
 - delays colored by the thresholds from `/api/config` (`delay_thresholds`: 5, 15, 30 minutes, with
   the defaults from `app.js`);
 - "follow" buttons for each train (`follows.js`), when notification support exists.
-- the text "uncertain reading" (the `UNSURE` constant in `app.js`) for values that are not certain, instead of an invented value.
+- the text "uncertain reading" (the `UNSURE` constant in `app.js`) for values that are not certain, instead of an invented value;
+- the "Show estimated platform" switch (`#pe-toggle`, off by default): the `peron_est.js`/`.css`
+  layer loads only when it is on and is not precached.
+
+**Station names** appear with diacritics on every page (Brașov, Aeroport Henri Coandă), from
+`GET /api/station-names` (`I18N.station()` in `web/i18n/i18n.js`; an unknown key is shown in
+Title Case). The keys in URLs, statistics and exports stay as CFR writes them.
 
 **The History page:** a form with the day (`#h-date`, or "All days"), the train number, the station, the
 from and to time, the board and the "Reset" button. The filters are written into the address (`syncHash`), so a
 link keeps the filters. The results come from `GET /api/history`; with "All days", from
-`GET /api/history?all=1` (with pagination: "Load more"). A click on a row opens a
+`GET /api/history?all=1` (with pagination: "Load more", with the number left). A click on a row opens a
 `<dialog>` (`#h-detail`) with the journey details (`GET /api/journeys/{id}`). In "all days" mode the interface shows how many rows are displayed ("showing N (newest)", class `h-truncated`). The `X-Truncated` header of the single-day mode is not read by `history.js` (uncertain: check whether there is another branch).
 
 **The Followed trains page:** the "Notifications on this device" switch (`#f-switch`) that asks for permission
@@ -115,20 +132,27 @@ the page says so in `#f-ios`.
 
 **The Trains, Train, Stations, Station and Rankings pages:** pages from `stats.js`, with tables, filters and
 CSV/JSON exports (the links point directly to the `format=csv` routes). On Train, Station and Rankings
-the chart layer is loaded too (section 7).
+the chart layer is loaded too (section 7). Trains (like History) draws 50 rows at a time, with a
+"Load 50 more" button; sorting and filters work on all the data. On a phone, the History and Trains
+filters sit behind a "Filters (n)" button (`filterToggle` in `app.js`).
 
 **The Statistics page:** a single response from `GET /api/stats/overview`, with the filters `perioada`
 (`Today`, `7 days`, `30 days`, `Whole history`), `board`, `operator`, `tip`, `doar_confirmate`.
 It has a summary, questions (`insights`), problems, charts and exports per dataset. The text at the top says
 that the delay is the one read on the București Nord board, and that arrivals and departures are always
-separate.
+separate. On a phone, the sections first show only as headings and open on tap; the charts are
+drawn as you scroll (when printing or following a direct link to a chart, all at once).
 
 **The Version history page:** the list from `GET /api/changelog`; it is the footer link ("Versions") and the one in
-`/api/health`.
+`/api/health`. Only the newest version starts open.
+
+**The How it works page** (`#cum`): in plain language, where the data comes from (the CFR webcam
+read with OCR), what "delay" means, how history and statistics are built, the limits, privacy and
+where to report a problem. Static text (`cum.js`), no API calls.
 
 ---
 
-## 2. Navigation: the top bar and the phone menu
+## 2. Navigation: the top bar and the phone bottom bar
 
 **The top bar** (`header.topbar`): the logo and title, the clock and the weather (`#hdr-clockwx`, `weather.js`),
 the theme button (`#theme-btn`) and the "Live / Source: CFR" indicator.
@@ -138,7 +162,8 @@ Statistics, Rankings, Stations, System. Each has `data-route` and, for the activ
 `aria-current="page"`. The `Train` page highlights "Trains", and `Station` highlights "Stations"
 (`NAV_PARENT` in `app.js`).
 
-**Desktop and phone.** The menu is the same bar at any width:
+**Tablet and desktop (over 700 px).** The menu is the top bar, sticky at the top, with the
+language button (`EN` / `RO`) at its end:
 
 - `.mainnav` has `overflow-x: auto` and `scrollbar-width: none`: when it does not fit, it scrolls
   horizontally **inside the bar**, not the page. `revealActiveNav()` brings the active page into view,
@@ -148,9 +173,24 @@ Statistics, Rankings, Stations, System. Each has `data-route` and, for the activ
 - **"Desktop site" on a phone.** When the phone's browser shows the page at a width
   much larger than the screen, `theme-init.js` puts the class `zoomed-out` on `<html>`. Then the menu
   becomes larger (`min-height: 88px` on elements, `font-size: 1.75rem`, `style.css` ~line 668).
-  The check is done only on touch screens, so that on desktop zooming does not change the menu.
+  The check is done only on touch screens, so that on desktop zooming does not change the menu. In
+  this mode the top bar stays (the page is laid out at ~980 px).
 
-There is no separate menu for the phone: the same `nav` scrolls.
+**Phone (700 px or less).** From CSS, from the first paint (no layout shift), the menu bar moves to
+the bottom (`position: fixed`, with the screen's safe areas) and shows only **Board, History,
+Trains, Statistics** (`NAV_BAR` in `app.js`) plus the **"More"** button (`nav.nav-more`,
+`#nav-more-btn`). The "More" menu (`#nav-more-menu`) is filled by `initMoreNav()` from the same list
+of routes: Followed trains, Rankings, Stations, System, then Version history, Settings and How it
+works, and on a phone the language button moves here too. The button has `aria-expanded`; the menu
+closes when a page is chosen, on `Escape` (focus returns to the button), on a click outside, on a
+page change and when keyboard focus leaves it. When the current page is in the menu, the "More"
+button is highlighted.
+
+**Language (RO / EN).** `web/i18n/i18n.js` picks the language in the order `?lang=` → `localStorage`
+(`tabela-lang`) → Romanian. The texts are in `web/i18n/ro.json` and `en.json` (the same keys); the
+elements have `data-i18n` / `data-i18n-attr`. The `[data-lang-toggle]` button switches the language
+without a reload (the `i18n:change` event), and `<html lang>` follows the chosen language.
+`ro.json` is precached; `en.json` is cached on first use.
 
 ---
 
@@ -191,6 +231,16 @@ The design system is described in `design-system/tabela-gara-de-nord/MASTER.md`.
 
 `panel.css` (the Panel mode) follows the same rules, so that the Panel does not have its own theme.
 
+**Polish (`web/polish.css`, loaded after `style.css` and `ui2.css`).** Looks only, tokens only: the
+train category badges (IR, IC, R, RE…) with a light fill and a contrast of at least 4.5:1 in both
+themes (IC has its own colour), a more compact "What changed" list and subtle transitions on buttons
+and links, set **only** under `@media (prefers-reduced-motion: no-preference)`.
+
+**Printing (`web/print.css`, `media="print"`).** Board, History, Trains and Statistics print black on
+white, without the menu, header, filters, forms, dialogs or buttons (only the buttons that carry data
+stay: train number, headings, sort columns), with rows not split across pages. On the Board, the
+selected tab (Arrivals or Departures) stays as the sheet title.
+
 ---
 
 ## 4. Service worker and offline mode
@@ -203,18 +253,22 @@ origins (HTTPS or localhost).
 - `tabela-shell-<VERSION>` — the "shell" files (precache);
 - `tabela-board-<VERSION>` — the last board received (`/api/board`).
 
-**Precache (`SHELL`).** The list has 26 files, plus `/` (the main page, as a navigation) and
-`/offline.html`. It includes: `theme-init.js`, `style.css`, `panel.css`, `app.js`, `history.js`,
-`follows.js`, `panel.js`, `weather.css`, `weather.js`, `versions.js`, `stats.css`, `stats.js`,
-`statistici.css`, `statistici.js`, `ui2.css`, `ui2.js`, `manifest.webmanifest`, `favicon.ico`,
-the icons from `icons/` and the fonts `fonts/fira-sans-400.woff2`, `fonts/fira-code.woff2`.
+**Precache (`SHELL`).** The list has 30 files, plus `/` (the main page, as a navigation) and
+`/offline.html`. It includes: `theme-init.js`, `i18n/i18n.js`, `i18n/ro.json`, `offline.js`, `style.css`,
+`panel.css`, `app.js`, `history.js`, `follows.js`, `panel.js`, `weather.css`, `weather.js`, `stats.js`,
+`stat_weekdays.js`, `statistici.js`, `stat_platform.js`, `stat_dwell.js`, `ui2.css`, `polish.css`,
+`print.css`, `ui2.js`, `manifest.webmanifest`, `favicon.ico`, the icons from `icons/` and the fonts
+`fonts/fira-sans-400.woff2`, `fonts/fira-code.woff2`.
 
-- **Not** included: `ocr.*`, `admin.*`, `sistem.*`, `setari.*` (the administration pages and the ones
-  loaded on demand), `charts3.js`/`charts3.css` (charts), `icon-512` and `icon-maskable-512`
-  (the browser takes them from the manifest), nor any `/api/*` endpoint other than the board.
-- The budget: the sum of the files in `SHELL` is about **632,000 bytes** uncompressed (measured
-  on `web/`). `tests/test_ui3_static.py` enforces `PRECACHE_LIMIT = 650_000`, and
-  `tests/test_brand_theme.py` enforces `660_000`. See also section 11.
+- **Not** included: `ocr.*`, `ocr2.*`, `admin.*`, `sistem.*`, `setari.js`, `cum.*`
+  (the administration pages and the ones loaded on demand), `versions.js` (a `defer` script in `index.html`), `stats.css` and `statistici.css` (they
+  load with their page and are cached on first use), `peron_est.*`, the other `stat_*` modules
+  loaded on demand, `i18n/en.json` (cached on first use), `charts3.js`/`charts3.css` (charts),
+  `icon-512` and `icon-maskable-512` (the browser takes them from the manifest), nor any `/api/*`
+  endpoint other than the board.
+- The budget: the sum of the files in `SHELL` is about **0.8 MB** uncompressed; `ro.json` (~83 KB)
+  is the largest recent addition. `tests/test_ui3_static.py` enforces `PRECACHE_LIMIT = 800_000`, and
+  `tests/test_brand_theme.py` enforces `825_000` (counted differently). See also section 11.
 - The Fira Sans 500/600/700 fonts are loaded on demand and are not in the precache; offline they fall back to
   the 400 weight (synthetic bold), as written in `sw.js`.
 
@@ -245,7 +299,8 @@ that are not `SHELL_CACHE` or `BOARD_CACHE` are deleted, and `clients.claim()`.
 - The technical reason (standard browser behavior): the browser checks for a service worker
   update by comparing the bytes of `sw.js`. If they do not change, it does not reinstall and does not
   redo the precache, so the offline cache stays the old one.
-- The tests check only a minimum (`VERSION >= v28` in `test_ui3_static.py`, `>= v9` in `test_stats_static.py`).
+- The tests check only a minimum (`VERSION >= v28` in `test_ui3_static.py`, `>= v27` in `test_ui2_static.py`,
+  `>= v17` in `test_statistici_static.py`). At Beta 1.72 the value is `v51`.
 
 **Push notifications.** `push` shows `title` (or "Gara de Nord"), `body`, `tag` (with `renotify`),
 the icon `icons/icon-192.png` and `lang: "ro"`. The click (`notificationclick`) brings an open window of the app to the
@@ -346,8 +401,8 @@ and promises that at the end `App.charts3` exists (or `null` if the files cannot
 asks for charts only if it has them: `stats.js` for `tren`, `clasamente` and `statie` (`charts: true`),
 and `statistici.js`. `charts3.js` says the same in its header.
 
-**The `CHARTS_V` rule.** `CHARTS_V = "1.65"` in `ui2.js` must be equal to the version number in
-`VERSION` (`Beta 1.65` → `1.65`). The test `test_lazy_not_in_precache_and_loader_matches_the_version`
+**The `CHARTS_V` rule.** `CHARTS_V = "1.72"` in `ui2.js` must be equal to the version number in
+`VERSION` (`Beta 1.72` → `1.72`). The test `test_lazy_not_in_precache_and_loader_matches_the_version`
 in `tests/test_ui3_static.py` checks this: `CHARTS_V` changes at every deploy. The reason
 written by the authors is "cache-buster": if the browser remembers an old `charts3.js`, the parameter
 forces the new version. With the `no-cache` + `ETag` headers from the application, the exact role is a safeguard;
@@ -371,15 +426,15 @@ The accessibility decisions, with the place where they are implemented:
 | Decision | Implementation |
 |---|---|
 | Skipping the menu | A "Skip to the board" link (`.skip-link`, appears on focus) to `#main`. `<main tabindex="-1">`. |
-| Language | `<html lang="ro">`. |
-| Page title | `h1` per page (sometimes `sr-only`, for example `#board-heading` on the Board). |
-| Menu | `<nav aria-label="Main navigation">`, `aria-current="page"` on the active page. |
+| Language | `<html lang>` follows the chosen language (`ro` by default, `en`), set by `theme-init.js` and `app.js`. |
+| Page title | A single `h1` per page (sometimes `sr-only`, for example `#board-heading` on the Board) and no skipped heading levels (including Settings and Statistics). |
+| Menu | `<nav aria-label="Main navigation">`, `aria-current="page"` on the active page; on a phone "More" is a separate navigation landmark (`<nav aria-label="More">`), with `aria-expanded`, `Escape` and closing when focus leaves. |
 | Tabs (Arrivals / Departures) | `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, `role="tabpanel"`; left/right arrows move the tab (`app.js`). |
-| Announcements | `#sr-status` and `#h-count` with `role="status"` and `aria-live="polite"`; errors with `role="alert"` (`#h-error`, `#v-error`). |
+| Announcements | `#sr-status` and `#h-count` with `role="status"` and `aria-live="polite"`; errors with `role="alert"` (`#h-error`, `#v-error`). "Board is up to date" is not announced on load, and Statistics is not re-read on every redraw; problems and recoveries are announced. |
 | Dialogs | The History details are `<dialog>` (`showModal`), with a close button `aria-label="Close the details"`. |
 | Visible focus | `:focus-visible` with the `--focus` outline (`style.css`); also for the switches and the theme button. |
-| Touch targets | `--tap: 44px` on touch screens; the "follow" buttons are 44 × 44 px on a phone. |
-| Reduced motion | `@media (prefers-reduced-motion: reduce)` in `style.css` stops the animations; `ui2.js` checks the same media query. |
+| Touch targets | Every link or button is at least 24 × 24 px (WCAG 2.2 AA, criterion 2.5.8; the "a11y 2.5.8" block in `style.css`: station and train links, sort buttons, inputs, checkboxes); `--tap: 44px` on touch screens; the "follow" buttons are 44 × 44 px on a phone. |
+| Reduced motion | The system "Reduce motion" setting (`prefers-reduced-motion: reduce`) turns off all animations and transitions: per-component blocks plus a catch-all block at the end of `style.css`; the `polish.css` transitions exist only with `no-preference`; `ui2.js` checks the same media query. |
 | Forced contrast | `@media (forced-colors: active)` puts outlines (`CanvasText`) on the important elements. |
 | Color | The charts have a legend with text and a pattern on each slice (`ui2.js`); `ocr-conf` (the OCR captures page) also uses text ("≥ 80", "50–79", "< 50"). |
 | Images | Decorative icons have `aria-hidden="true"` and `focusable="false"`; logos have a descriptive `alt` or `alt=""` when decorative. |
@@ -387,7 +442,8 @@ The accessibility decisions, with the place where they are implemented:
 | Keyboard on charts | `charts3.bind` shows the tooltip with the keyboard too; `tools` offers the table as a text alternative. |
 
 How they are verified: the `tests/test_*_browser.py` tests (for example `test_touch_targets_browser`,
-`test_empty_states_browser`, `test_nav_browser`) and `design-system/` (I did not run them here).
+`test_empty_states_browser`, `test_nav_browser`, `test_a11y_browser`, `test_contrast_browser`), the
+Firefox and WebKit check in `test_cross_browser.py` and `design-system/` (I did not run them here).
 
 ---
 
@@ -437,6 +493,8 @@ flowchart LR
         R11["#setari (admin)"]
         R12["#ocr (admin)"]
         R13["#admin (admin)"]
+        R14["#cum"]
+        R15["#ocr2 (admin)"]
     end
 
     subgraph Vizualizari["Vizualizare (app.js / *.js)"]
@@ -454,10 +512,12 @@ flowchart LR
         V11["setari: setari.js"]
         V12["ocr: ocr.js"]
         V13["admin: admin.js"]
+        V14["cum: cum.js"]
+        V15["ocr2: ocr2.js"]
     end
 
     subgraph API["Endpoint-uri (docs/api.md)"]
-        A1["GET /api/board, /api/config, /api/weather"]
+        A1["GET /api/board, /api/config, /api/weather, /api/station-names"]
         A2["GET /api/history, /api/history?all=1, /api/journeys/{id}"]
         A3["GET /api/follows, /api/push/key, POST/DELETE /api/follow, /api/push/subscribe"]
         A4["GET /api/trains/stats, /api/trains/{no}/journeys"]
@@ -470,6 +530,7 @@ flowchart LR
         A11["GET /api/admin/captures, /api/admin/stats, /api/admin/corrections…"]
         A12["GET /api/admin/tools/dupes, /api/admin/tools/server"]
         A13["GET /api/admin/session, POST /api/admin/login, /api/admin/logout"]
+        A14["GET /api/admin/ocr-alt…"]
     end
 
     R0 --> V0 --> A1
@@ -486,6 +547,8 @@ flowchart LR
     R11 --> V11 --> A10
     R12 --> V12 --> A11
     R13 --> V13 --> A12
+    R14 --> V14
+    R15 --> V15 --> A14
     V12 --> A13
     V13 --> A13
     V11 --> A13
@@ -509,9 +572,9 @@ Notes:
 - **The browser tests** (`tests/test_*_browser.py`, `test_csp_browser`) were not run; the statements
   about behavior in the browser (for example the tab key, the dialogs, "Desktop site")
   come from the code, not from execution.
-- **The precache budget.** The sum is measured on disk (≈ 632,000 bytes). The tests enforce 650,000 in
-  `tests/test_ui3_static.py` and 660,000 in `tests/test_brand_theme.py`. Both pass with the current sum;
-  the limits are different, to be aligned.
+- **The precache budget.** The sum is ≈ 0.8 MB. The tests enforce 800,000 in `tests/test_ui3_static.py`
+  (on disk) and 825,000 in `tests/test_brand_theme.py` (as served, with `/` and `/offline.html`); the
+  margin is small, so any new file in `SHELL` needs a budget decision.
 - **The exact explanation of `CHARTS_V`.** The code says "cache-buster", but with `no-cache` + `ETag` the role is
   a safeguard. To verify in the `CHANGELOG.md` history whether there was a real problem.
 - **The `zoomed-out` behavior** on real phones depends on the browser; the rule in `theme-init.js`

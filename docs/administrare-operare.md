@@ -77,7 +77,7 @@ Atenție: `Bearer` ocolește CSRF, deci are aceleași drepturi ca sesiunea. Folo
 | `#ocr` „Capturi OCR” | `web/ocr.js` | listă capturi, imagine cu dreptunghiurile OCR, text brut față de text normalizat, **corecțiile manuale**, starea OCR | admin |
 | `#ocr2` „Alternativa OCR” | `web/ocr2.js` | jurnalul alternativei OCR: decupaje, verdict corect / greșit / neclar pe eveniment (`/api/admin/ocr-alt*`, vezi `docs/ocr.md` §19.6) | admin |
 | `#setari` | `web/setari.js` | retenția capturilor și pragul de spațiu liber (`app/admin_settings.py`) | admin |
-| `#admin` „Administrare” | `web/admin.js` | „Duplicate de numere de tren” (raport, aplicare, restaurare) și „Server (live)” | admin |
+| `#admin` „Administrare” | `web/admin.js` | „Duplicate de numere de tren” (raport, aplicare, restaurare), „Server (live)”, „Disc NVMe (live)”, „Securitate (fail2ban)” (IP-uri banate, istoric ban-uri, cereri/probe pe 24 h și 7 zile), „Vizitatori online” (ultimele 5 minute: IP mascat, browser și sistem, fără boți și scanere; din memorie, reîmprospătat la 30 s) și „Test notificări push” (trimite o notificare doar către abonarea dispozitivului de pe care apeși) | admin |
 | `#sistem` | `web/sistem.js` | starea serverului; detaliile apar doar pentru admin | public, cu detalii pentru admin |
 
 Endpoint-uri (toate sub `/api/admin/`, cu excepția celor marcate):
@@ -93,6 +93,10 @@ Endpoint-uri (toate sub `/api/admin/`, cu excepția celor marcate):
 | `POST /tools/dupes/apply` | aplicarea fuziunii (cere `"confirm": "APLICA"`) |
 | `POST /tools/dupes/restore` | restaurarea fuziunilor (cere `"confirm": "RESTAUREAZA"`) |
 | `GET /tools/server` | starea serverului (doar citire) |
+| `GET /tools/nvme` | starea discului NVMe (din `nvme.json`, scris de `tabela-nvme.timer`) |
+| `GET /security` | cardul „Securitate”, din `security/snapshot.json` (scris de `tabela-security-snapshot.timer`) |
+| `GET /visitors` | „Vizitatori online”, din memoria procesului (se golește la repornire) |
+| `POST /push-test` | notificarea de test (CSRF; doar către o abonare existentă) |
 | `GET /system` | detaliile stării serverului (`app/system_api.py`) |
 | `GET /api/system` | **public**: starea minimă a serverului |
 | `GET/POST/DELETE /api/admin/corrections…` | corecțiile manuale, vezi secțiunea 3 (`…/audit`, `…/preview`, `…/{rid}/preview`, `…/{rid}/apply`, `…/batches/{batch}/restore`) |
@@ -284,6 +288,19 @@ Diferențe față de fuziune, care trebuie știute:
 Toate copiile se fac online (`sqlite3 backup`), se verifică cu `PRAGMA integrity_check` și se scriu ca fișier temporar, apoi se redenumesc. Fișierele au mod 600.
 
 Directorul de copii este `BACKUP_DIR` (implicit `<directorul bazei>/backups`, adică `/var/lib/tabela/backups`).
+
+### Copia zilnică (restic)
+
+Pe lângă copiile de mai sus, serverul face în fiecare zi, la **02:15 UTC**, o copie cu `restic` (un
+depozit criptat, cu deduplicare). Configurația ei (unitatea systemd, lista de căi, parola depozitului)
+este doar pe server și **nu** e în repo; parola nu se scrie niciodată în documentație sau în repo.
+
+- **Limita cunoscută:** depozitul restic este deocamdată **pe același disc** cu baza de date. Protejează
+  împotriva unei ștergeri sau corupții accidentale, nu și împotriva pierderii discului sau a serverului.
+- **Copia off-site** (în afara serverului) nu există încă; decizia e amânată (vezi secțiunea 15 și
+  `docs/decizii-arhitectura.md`, secțiunea 8).
+- Verificare pe server: `systemctl list-timers` (timer-ul de backup trebuie să apară cu următoarea
+  rulare) și `journalctl` pe unitatea lui pentru ultima rulare.
 
 Lista copiilor:
 
@@ -731,11 +748,25 @@ Rezumat pentru orientare, fără secrete:
 3. în `/etc/fail2ban/jail.d/` se definește jail-ul (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` la alegerea operatorului) și se repornește cu `sudo systemctl restart fail2ban`;
 4. verificare: `sudo fail2ban-client status` și `sudo fail2ban-client status nginx-tabela-probes`.
 
-Configurația completă a serverului e versionată în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, care nu banează IP-ul public propriu). Pagina `#sistem` arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
+Configurația completă a serverului e versionată în `deploy/fail2ban/` (versionate: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, filtrele `nginx-tabela-probes.local` și `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, scriptul `f2b-ignore-own-public-ip` → `/usr/local/sbin/`).
+
+**Cine nu e banat niciodată.** `jail.local` ignoră localhost și LAN-ul (`ignoreip`) și, pentru orice alt IP,
+întreabă scriptul `f2b-ignore-own-public-ip` (`ignorecommand`). Scriptul răspunde „ignoră” dacă IP-ul este:
+
+1. IP-ul public curent al casei, rezolvat la fiecare decizie din `tabelacfr.ddns.net` (IP-ul e dinamic);
+2. un **vizitator real**: are în `access.log`-ul curent al nginx cereri la `/api/` cu răspuns 200 și cu
+   `Referer` de pe site. Motivul: pe rețelele mobile (CGNAT) mulți utilizatori ies pe același IP public;
+   dacă un scaner folosește același IP, fără această excepție ar fi banați și oamenii reali. Fiecare
+   astfel de decizie apare în jurnalul sistemului (`logger -t f2b-ignore`).
+
+Scriptul validează IP-ul primit, folosește `timeout` pentru DNS și pentru căutarea în log și, la orice
+eroare, răspunde „nu ignora”. Limită: excepția se uită doar în `access.log`-ul curent (nu în cele rotite).
+
+Pagina `#admin` (cardul „Securitate (fail2ban)”) arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
 
 **Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram) și de la temporizatorul de sănătate NVMe.
 
-**Ce lipsește, deliberat sau încă nefăcut:** copia de siguranță în afara serverului (off-site) nu există; decizia aparține proprietarului și este amânată. Actualizările de sistem nu sunt automate. Vezi `docs/decizii-arhitectura.md`.
+**Ce lipsește, deliberat sau încă nefăcut:** copia de siguranță în afara serverului (off-site) nu există; copia zilnică restic (secțiunea 6) e pe același disc; decizia aparține proprietarului și este amânată. Actualizările de sistem nu sunt automate. Vezi `docs/decizii-arhitectura.md`.
 
 ---
 
