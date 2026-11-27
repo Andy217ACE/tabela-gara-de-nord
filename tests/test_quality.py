@@ -44,7 +44,7 @@ def test_delay_needs():
     (None, 5, 1),     # first platform shown: immediate
     (5, 6, 3),        # RE 10111 / R 9101 flapping 5/6
     (11, 14, 3), (1, 4, 3), (14, 1, 3),  # IR 16087 / IR 16595: 11/4/14/1
-    (9, None, 2),     # IR 16089: 9 / empty
+    (9, None, 5),     # IR 16089: 9 / empty; a cut 6/8/1x is unread for 2-4 frames
     (3, 7, 2),
 ])
 def test_platform_needs(old, new, need):

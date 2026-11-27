@@ -18,7 +18,7 @@ def legacy_rules(monkeypatch):
     'appeared'. For tests of other layers (notifier, history) written against those."""
     from app import quality, store
     for name in ("DELAY_CONFIRM", "DELAY_BIG_CONFIRM", "PLATFORM_CONFIRM",
-                 "PLATFORM_CONFUSED_CONFIRM"):
+                 "PLATFORM_CONFUSED_CONFIRM", "PLATFORM_CLEAR_CONFIRM"):
         monkeypatch.setattr(quality, name, 1)
     monkeypatch.setattr(store, "GONE_AFTER_MISSES", 2)
     monkeypatch.setattr(store, "REAPPEAR_QUIET_MIN", -1)

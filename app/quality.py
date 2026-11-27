@@ -49,6 +49,10 @@ DELAY_PLUS_CONFIRM = 5
 # --- platform validation -----------------------------------------------------
 PLATFORM_CONFIRM = 2
 PLATFORM_CONFUSED_CONFIRM = 3
+# an unread platform is not a cleared one: the band cuts the top of 6/8/1x at the right
+# edge (Departures) and they go unread for 2-4 frames; 28 days live (to 27.11): clearing at
+# 2 frames made 634 clears that came back to the same platform, at 5 frames 84
+PLATFORM_CLEAR_CONFIRM = 5
 # digit pairs the OCR swaps on this board (5/6; 1/4/11/14; 3/8): measured flapping
 PLATFORM_CONFUSION = (frozenset({5, 6}), frozenset({1, 4, 11, 14}), frozenset({3, 8}),
                       frozenset({2, 5}))  # 2/5 (RM 7907) measured in report 2
@@ -182,9 +186,12 @@ def delay_needs(value: int, confirmed: int | None) -> int:
 def platform_needs(old: int | None, new: int | None) -> int:
     """Consecutive identical readings needed for a platform change. The first platform
     shown (none -> x) is immediate; a pair the OCR confuses (5/6, 1/4/11/14, 3/8)
-    needs PLATFORM_CONFUSED_CONFIRM; anything else, clearing included, PLATFORM_CONFIRM."""
+    needs PLATFORM_CONFUSED_CONFIRM; clearing (an empty reading) PLATFORM_CLEAR_CONFIRM;
+    anything else PLATFORM_CONFIRM."""
     if old is None:
         return 1
+    if new is None:
+        return PLATFORM_CLEAR_CONFIRM
     if new is not None and any(old in g and new in g for g in PLATFORM_CONFUSION):
         return PLATFORM_CONFUSED_CONFIRM
     return PLATFORM_CONFIRM

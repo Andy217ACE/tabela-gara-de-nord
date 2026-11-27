@@ -160,14 +160,18 @@ def test_platform_11_14_4_1_flapping_no_events(store):
     assert kinds(store, "platform") == []
 
 
-def test_platform_cleared_needs_two_and_blank_flapping_ignored(store):
+def test_platform_cleared_needs_five_and_blank_flapping_ignored(store):
     # IR 16089: 9 / empty alternating
     store.ingest(frame(platform=9), at(0))
     for m in range(1, 8):
         store.ingest(frame(platform=None if m % 2 else 9), at(m))
     assert kinds(store, "platform") == []
-    store.ingest(frame(platform=None), at(8))
-    store.ingest(frame(platform=None), at(9))
+    # a cut 6/8/1x is unread for 2-4 frames (live 28 days: 634 clears that came back)
+    store.ingest(frame(platform=9), at(8))
+    for m in range(9, 13):
+        store.ingest(frame(platform=None), at(m))
+    assert kinds(store, "platform") == [] and svc(store)["last_platform"] == 9
+    store.ingest(frame(platform=None), at(13))
     assert kinds(store, "platform")[-1] == ("9", None)
 
 
