@@ -69,7 +69,7 @@ Each has a `show(params)` function called when the page changes.
 | `#setari` | **Settings** | `#view-setari` | admin | no (only under "More", on a phone) | `setari.js` (loaded on the first visit) |
 | `#ocr` | **OCR captures** | created by `app.js` (`view-ocr`) | admin | no | `ocr.js` (+ `ocr.css`), loaded on demand |
 | `#ocr2` | **OCR alternative** | created by `ocr2.js` (`view-ocr2`) | admin | no | `ocr2.js` (+ `ocr2.css`), loaded on the first visit |
-| `#admin` | **Administration** | created by `app.js` (`view-admin`) | admin | no | `admin.js` (+ `admin.css`), loaded on demand |
+| `#admin` | **Administration** | created by `app.js` (`view-admin`) | admin | no | `admin.js` (+ `admin.css`), loaded on demand; the login form is shared with `#ocr`, `#ocr2`, `#infofer`: `admin_login.js` (on demand, with a 2FA code field when the server asks for it) |
 
 Remarks:
 

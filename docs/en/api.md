@@ -856,11 +856,13 @@ of whether the browser sends the cookie.
 
 ### 6.4 Protection against key guessing
 
-- Each wrong attempt (login or Bearer) is recorded per IP. After **5 wrong attempts in
-  60 seconds** from the same IP, the response is 429 `"Prea multe încercări. Reîncearcă peste un minut."` (Too many attempts. Try again in a minute)
-  with `Retry-After: 60`.
-- The global limit: **30 wrong attempts in 60 seconds**, from all clients. The purpose is not to
-  bypass the IP limit by rotating addresses.
+- Each wrong attempt (login or Bearer) is counted per IP. After **5 wrong attempts** the IP gets
+  429 `"Prea multe încercări. Reîncearcă mai târziu."` (Too many attempts. Try again later) with
+  `Retry-After: 60`; each further mistake doubles the wait (at most 3600 s). A successful login clears the IP's count.
+- The global ceiling: above **30 wrong attempts in 60 seconds** from all clients, each mistake is
+  delayed 3 s. It never blocks, so an attacker cannot lock the administrator out.
+- Optional 2FA (`ADMIN_TOTP_SECRET`): login also needs `"code"` (6 digits); without it the answer is
+  401 `"totp_required"`, and `GET /api/admin/session` has `"totp": true`. See `docs/en/admin-rotatie-cheie.md`.
 - Each wrong attempt is delayed by 0.5 seconds.
 - nginx additionally limits `POST /api/admin/login` to 5 per minute per IP (burst 5).
 - Session checking (`GET /api/admin/session`) is not counted as a wrong attempt.
@@ -981,7 +983,7 @@ not JSON).
 
 - **200:** the body `{"ok": true}` and the `Set-Cookie` header described in 6.3.
 - **401:** `{"detail": "Autentificare necesară."}` (Authentication required) with `WWW-Authenticate: Bearer`.
-- **429:** `{"detail": "Prea multe încercări. Reîncearcă peste un minut."}` with `Retry-After: 60`.
+- **429:** `{"detail": "Prea multe încercări. Reîncearcă mai târziu."}` with `Retry-After` (seconds).
 
 Verified in a test: the sixth consecutive wrong attempt gives 429 (the sequence 401, 401, 401, 401, 401,
 429, 429).

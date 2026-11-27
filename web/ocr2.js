@@ -85,33 +85,11 @@
   function showLogin() {
     var body = $("ocr2-body");
     clear(body);
-    var form = el("form", "ocr2-login panel");
-    form.setAttribute("aria-label", T("ocr.login.aria"));
-    var lab = el("label", "field");
-    lab.appendChild(el("span", "field-label", T("ocr.login.key")));
-    var input = el("input");
-    input.type = "password";
-    input.name = "token";
-    input.autocomplete = "current-password";
-    input.required = true;
-    input.maxLength = 200;
-    lab.appendChild(input);
-    form.appendChild(lab);
-    var btn = el("button", "btn", T("ocr.login.submit"));
-    btn.type = "submit";
-    form.appendChild(btn);
-    body.appendChild(form);
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      btn.disabled = true;
-      api("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: input.value }) }).then(function (r) {
-        btn.disabled = false;
-        input.value = "";
-        if (r.status === 200) { message(""); load(true); return; }
-        message(T(r.status === 429 ? "ocr.msg.tooMany" : "ocr.msg.wrongKey"));
-      }).catch(function () { btn.disabled = false; message(T("ocr.msg.noServer")); });
-    });
+    window.TabelaApp.adminLogin({ keys: "ocr", cls: "ocr2-login", message: message,
+      onOk: function () { load(true); } }).then(function (f) {
+      clear(body);
+      body.appendChild(f.form);
+    }, function () { message(T("ocr.msg.noServer")); });
   }
 
   // ---- state + totals ---------------------------------------------------------------

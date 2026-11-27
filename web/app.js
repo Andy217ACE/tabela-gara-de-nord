@@ -797,6 +797,18 @@
   Object.defineProperty(window.TabelaApp, "UNSURE", { get: unsureText, configurable: true, enumerable: true });
   window.TabelaApp.refresh = refresh;
   window.TabelaApp.el = el;
+  // shared admin login form: admin_login.js on demand (not precached); Promise of {form, input}
+  var loginJs = null;
+  window.TabelaApp.adminLogin = function (o) {
+    loginJs = loginJs || new Promise(function (ok, ko) {
+      var s = document.createElement("script");
+      s.src = "admin_login.js";
+      s.addEventListener("load", ok);
+      s.addEventListener("error", function () { loginJs = null; ko(); });
+      document.head.appendChild(s);
+    });
+    return loginJs.then(function () { return window.TabelaAdminLogin(o); });
+  };
   window.TabelaApp.icon = icon;
   window.TabelaApp.filterToggle = filterToggle;
   window.TabelaApp.ICONS = ICONS;

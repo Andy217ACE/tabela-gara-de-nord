@@ -162,44 +162,13 @@
     stopTimer();
     var body = $("admin-body");
     clear(body);
-    var form = el("form", "admin-login panel");
-    form.setAttribute("aria-label", T("admin.login.aria"));
-    var label = el("label", "field");
-    label.appendChild(el("span", "field-label", T("admin.login.key")));
-    var input = el("input");
-    input.type = "password";
-    input.id = "admin-token";
-    input.name = "token";
-    input.autocomplete = "current-password";
-    input.required = true;
-    input.maxLength = 200;
-    label.appendChild(input);
-    form.appendChild(label);
-    var btn = el("button", "btn", T("admin.login.submit"));
-    btn.type = "submit";
-    form.appendChild(btn);
-    body.appendChild(form);
     message(note || "", !!note);
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      btn.disabled = true;
-      api("/api/admin/login", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: input.value })
-      }).then(function (r) {
-        btn.disabled = false;
-        input.value = "";
-        if (r.status === 200) { message(""); loadAll(); return; }
-        if (r.status === 429) message(T("admin.msg.tooMany"), true);
-        else if (r.status === 503) disabled();
-        else message(T("admin.msg.wrongKey"), true);
-        input.focus();
-      }).catch(function () {
-        btn.disabled = false;
-        message(T("admin.msg.noServer"), true);
-      });
-    });
-    input.focus();
+    window.TabelaApp.adminLogin({ keys: "admin", cls: "admin-login", id: "admin-token", message: message,
+      onOk: loadAll, onDisabled: disabled }).then(function (f) {
+      clear(body);
+      body.appendChild(f.form);
+      f.input.focus();
+    }, function () { message(T("admin.msg.noServer"), true); });
   }
 
   function disabled() {

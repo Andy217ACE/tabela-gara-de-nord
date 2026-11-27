@@ -66,7 +66,7 @@ Fiecare are o funcție `show(params)` apelată la schimbarea paginii.
 | `#setari` | **Setări** | `#view-setari` | admin | nu (doar în „Mai mult”, pe telefon) | `setari.js` (încărcat la prima vizită) |
 | `#ocr` | **Capturi OCR** | creat de `app.js` (`view-ocr`) | admin | nu | `ocr.js` (+ `ocr.css`), încărcat la cerere |
 | `#ocr2` | **Alternativa OCR** | creat de `ocr2.js` (`view-ocr2`) | admin | nu | `ocr2.js` (+ `ocr2.css`), încărcat la prima vizită |
-| `#admin` | **Administrare** | creat de `app.js` (`view-admin`) | admin | nu | `admin.js` (+ `admin.css`), încărcat la cerere |
+| `#admin` | **Administrare** | creat de `app.js` (`view-admin`) | admin | nu | `admin.js` (+ `admin.css`), încărcat la cerere; formularul de autentificare e comun cu `#ocr`, `#ocr2`, `#infofer`: `admin_login.js` (la cerere, cu câmp de cod 2FA când serverul îl cere) |
 
 Observații:
 

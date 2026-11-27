@@ -43,7 +43,8 @@ Source: `app/admin.py`.
 | Authentication | `Authorization: Bearer <ADMIN_TOKEN>` or the `tabela_admin` cookie obtained from `POST /api/admin/login` |
 | Cookie | `HttpOnly`, `Secure`, `SameSite=Strict`, valid for 12 hours (`SESSION_S`). It contains the expiry and an HMAC keyed with the token, not the token |
 | Invalidation | changing `ADMIN_TOKEN` invalidates all sessions |
-| Limiting | 5 wrong attempts per minute per IP (`FAIL_LIMIT`), then 429; 30 wrong attempts per minute from all sources (`GLOBAL_FAIL_LIMIT`); each mistake delays the response by 0.5 s (`FAIL_DELAY_S`) |
+| Limiting | per IP: after 5 wrong attempts (`FAIL_LIMIT`) the IP gets 429 with `Retry-After` 60 s, doubled on every further mistake, at most 1 h (`BLOCK_BASE_S`, `BLOCK_MAX_S`); a successful login clears the IP's count; an IP quiet for 1 h after its block is forgotten (`FAIL_FORGET_S`); at most 10,000 IPs tracked. The global ceiling of 30 mistakes per minute (`GLOBAL_FAIL_LIMIT`) only slows mistakes to 3 s (`GLOBAL_SLOW_DELAY_S`) and never blocks, so an attacker cannot lock you out. Each mistake delays the response by 0.5 s (`FAIL_DELAY_S`) |
+| 2FA (optional) | off by default; on only with `ADMIN_TOTP_SECRET` in `/etc/tabela.env`. Login then needs the key + the TOTP code, and `Bearer` works only from the server (`127.0.0.1`). See `docs/en/admin-rotatie-cheie.md` |
 | CSRF | Modifying requests with a cookie require `X-CSRF-Token` (from `GET /api/admin/csrf`) and, if the browser sends `Origin`, the same host. Requests with `Bearer` do not require CSRF |
 | Header | admin responses have `Cache-Control: private, no-store` |
 

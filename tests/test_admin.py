@@ -82,10 +82,10 @@ def test_disabled_without_token_503(client, monkeypatch, path):
 
 def test_session_endpoint_always_200(client, monkeypatch):
     r = client.get("/api/admin/session")
-    assert r.status_code == 200 and r.json() == {"enabled": True, "authenticated": False}
+    assert r.status_code == 200 and r.json() == {"enabled": True, "authenticated": False, "totp": False}
     assert r.headers["cache-control"] == "private, no-store"
     monkeypatch.delenv("ADMIN_TOKEN")
-    assert client.get("/api/admin/session").json() == {"enabled": False, "authenticated": False}
+    assert client.get("/api/admin/session").json() == {"enabled": False, "authenticated": False, "totp": False}
 
 
 def test_short_token_counts_as_disabled(client, monkeypatch):
@@ -136,11 +136,11 @@ def test_login_sets_strict_cookie_and_logout_clears(client):
     assert "httponly" in sc and "secure" in sc and "samesite=strict" in sc
     assert "path=/api/admin" in sc and "max-age=43200" in sc
     assert TOKEN.lower() not in sc  # the token itself is never in the cookie
-    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": True}
+    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": True, "totp": False}
     assert client.get("/api/admin/stats").status_code == 200  # cookie works
     out = client.post("/api/admin/logout")
     assert out.status_code == 200
-    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": False}
+    assert client.get("/api/admin/session").json() == {"enabled": True, "authenticated": False, "totp": False}
     assert client.get("/api/admin/stats").status_code == 401
 
 
@@ -302,15 +302,3 @@ def test_operator_chosen_13_char_key_is_accepted(monkeypatch):
     assert adm.admin_token() == "x" * 13
     monkeypatch.setenv("ADMIN_TOKEN", "x" * 11)
     assert adm.admin_token() is None
-
-
-def test_global_failure_cap_blocks_ip_rotation():
-    from app import admin as adm
-    adm.reset_failures()
-    now = 1000.0
-    for i in range(adm.GLOBAL_FAIL_LIMIT):
-        adm._failures.setdefault(f"10.0.0.{i}", __import__("collections").deque()).append(now)
-        adm._global_failures.append(now)
-    assert adm._limited("192.0.2.1", now + 1)          # a fresh IP is limited too
-    assert not adm._limited("192.0.2.1", now + adm.FAIL_WINDOW_S + 1)  # window expires
-    adm.reset_failures()

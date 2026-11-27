@@ -138,44 +138,13 @@
   function showLogin(note) {
     var body = document.getElementById("ocr-body");
     clear(body);
-    var form = el("form", "ocr-login panel");
-    form.setAttribute("aria-label", T("ocr.login.aria"));
-    var label = el("label", "field");
-    label.appendChild(el("span", "field-label", T("ocr.login.key")));
-    var input = el("input");
-    input.type = "password";
-    input.id = "ocr-token";
-    input.name = "token";
-    input.autocomplete = "current-password";
-    input.required = true;
-    input.maxLength = 200;
-    label.appendChild(input);
-    form.appendChild(label);
-    var btn = el("button", "btn", T("ocr.login.submit"));
-    btn.type = "submit";
-    form.appendChild(btn);
-    body.appendChild(form);
     if (note) message(note, true);
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      btn.disabled = true;
-      api("/api/admin/login", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: input.value })
-      }).then(function (r) {
-        btn.disabled = false;
-        input.value = "";
-        if (r.status === 200) { message(""); loadAll(); return; }
-        if (r.status === 429) message(T("ocr.msg.tooMany"), true);
-        else if (r.status === 503) disabled();
-        else message(T("ocr.msg.wrongKey"), true);
-        input.focus();
-      }).catch(function () {
-        btn.disabled = false;
-        message(T("ocr.msg.noServer"), true);
-      });
-    });
-    input.focus();
+    window.TabelaApp.adminLogin({ keys: "ocr", cls: "ocr-login", id: "ocr-token", message: message,
+      onOk: loadAll, onDisabled: disabled }).then(function (f) {
+      clear(body);
+      body.appendChild(f.form);
+      f.input.focus();
+    }, function () { message(T("ocr.msg.noServer"), true); });
   }
 
   function disabled() {
