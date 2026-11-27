@@ -345,7 +345,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         t0 = time.perf_counter()
         response = await call_next(request)
         route = request.scope.get("route")  # set by the router on a match: a template, not the raw path
-        if response.status_code < 400 and request.url.path != "/api/admin/visitors":
+        if response.status_code < 400 and not request.url.path.startswith("/api/admin/"):
             visitors.record(request.client.host if request.client else "",
                             request.headers.get("user-agent", ""), request.url.path)
         if route is not None and request.url.path.startswith("/api/"):

@@ -736,6 +736,7 @@
             if (r.status === 429) say("admin.push.rate");
             else if (res === "sent") say("admin.push.sent");
             else if (res === "not_subscribed") say("admin.push.notSubscribed");
+            else if (res === "gone") say("admin.push.gone");
             else if (res === "not_configured") say("admin.push.notConfigured");
             else say("admin.push.error", { status: r.data && r.data.status != null ? r.data.status : r.status });
           });
