@@ -1236,19 +1236,49 @@ class Store:
 
     # -- subscriptions & follows -----------------------------------------
 
-    def subscribe(self, endpoint: str, p256dh: str, auth: str) -> int:
+    @staticmethod
+    def _check_sub(endpoint: str, p256dh: str, auth: str) -> None:
         check_push_endpoint(endpoint)
         for k in (p256dh, auth):
             if not isinstance(k, str) or not k or len(k) > MAX_KEY_LEN:
                 raise ValueError("cheie invalidă")
+
+    def _upsert_sub(self, endpoint: str, p256dh: str, auth: str) -> int:
+        self._conn.execute(
+            "INSERT INTO subscriptions(endpoint, p256dh, auth, created_at) VALUES (?,?,?,?)"
+            " ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth",
+            (endpoint, p256dh, auth, datetime.now(TZ).isoformat()),
+        )
+        return self._sub_id(endpoint)
+
+    def subscribe(self, endpoint: str, p256dh: str, auth: str) -> int:
+        self._check_sub(endpoint, p256dh, auth)
         with self._lock:
-            self._conn.execute(
-                "INSERT INTO subscriptions(endpoint, p256dh, auth, created_at) VALUES (?,?,?,?)"
-                " ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth",
-                (endpoint, p256dh, auth, datetime.now(TZ).isoformat()),
-            )
-            return self._conn.execute("SELECT id FROM subscriptions WHERE endpoint=?",
-                                      (endpoint,)).fetchone()[0]
+            return self._upsert_sub(endpoint, p256dh, auth)
+
+    def resubscribe(self, old_endpoint: str, endpoint: str, p256dh: str, auth: str) -> int:
+        """Register `endpoint` and move the follows of `old_endpoint` to it, then drop the
+        old subscription, atomically. Used when the browser had to re-subscribe because the
+        VAPID key changed (the old endpoint gets 403 forever). Unknown old: like subscribe()."""
+        check_push_endpoint(old_endpoint)
+        self._check_sub(endpoint, p256dh, auth)
+        with self._lock:
+            c = self._conn
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                sid = self._upsert_sub(endpoint, p256dh, auth)
+                old = self._sub_id(old_endpoint)
+                if old is not None and old != sid:
+                    # shortcut: a merge may exceed MAX_FOLLOWS; the next follow() call enforces it again
+                    c.execute("INSERT OR IGNORE INTO follows(subscription_id, train_no, service_date)"
+                              " SELECT ?, train_no, service_date FROM follows WHERE subscription_id=?"
+                              " ORDER BY rowid", (sid, old))
+                    c.execute("DELETE FROM subscriptions WHERE id=?", (old,))
+                c.execute("COMMIT")
+            except BaseException:
+                c.execute("ROLLBACK")
+                raise
+            return sid
 
     def unsubscribe(self, endpoint: str) -> None:
         with self._lock:  # follows go via ON DELETE CASCADE

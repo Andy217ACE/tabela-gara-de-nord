@@ -137,6 +137,50 @@ def test_unsubscribe_cascades_follows(store):
     assert store._conn.execute("SELECT COUNT(*) FROM follows").fetchone()[0] == 0
 
 
+def test_resubscribe_moves_follows_and_drops_old(store):
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1636, DAY)
+    store.follow(EP, 531, DAY)
+    sid = store.resubscribe(EP, EP2, "p2", "a2")
+    assert store.get_subscription(EP) is None
+    assert store.get_subscription(EP2) == Subscription(EP2, "p2", "a2")
+    assert [f["train_no"] for f in store.list_follows(EP2)] == [1636, 531]
+    assert store._conn.execute("SELECT COUNT(*) FROM subscriptions").fetchone()[0] == 1
+    assert sid == store._sub_id(EP2)
+
+
+def test_resubscribe_merges_into_existing_new_endpoint(store):
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1636, DAY)
+    store.subscribe(EP2, "p", "a")  # the new endpoint was already posted via /subscribe
+    store.follow(EP2, 1636, DAY)
+    store.follow(EP2, 531, DAY)
+    store.resubscribe(EP, EP2, "p2", "a2")
+    assert store.get_subscription(EP) is None
+    assert sorted(f["train_no"] for f in store.list_follows(EP2)) == [531, 1636]
+
+
+def test_resubscribe_unknown_old_is_subscribe(store):
+    store.resubscribe(EP, EP2, "p", "a")
+    assert store.get_subscription(EP2) == Subscription(EP2, "p", "a")
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1636, DAY)
+    store.resubscribe(EP, EP, "p3", "a3")  # same endpoint: only the keys change
+    assert store.get_subscription(EP) == Subscription(EP, "p3", "a3")
+    assert len(store.list_follows(EP)) == 1
+
+
+@pytest.mark.parametrize("args", [
+    ("https://push.example.com/x", EP2, "p", "a"), (EP, "https://push.example.com/x", "p", "a"),
+    (EP, EP2, "", "a"), (EP, EP2, "p", "a" * 300)])
+def test_resubscribe_validates_and_keeps_old(store, args):
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1636, DAY)
+    with pytest.raises(ValueError):
+        store.resubscribe(*args)
+    assert len(store.list_follows(EP)) == 1
+
+
 def test_service_state_and_last_run(store):
     assert store.last_ok_run_id() is None
     rows = [Row("arrival", "IR", n, "Brasov", "CFR", t, delay_min=5, platform=3)

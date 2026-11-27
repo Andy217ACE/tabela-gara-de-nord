@@ -1514,6 +1514,8 @@
   "admin.push.send": "Send test notification",
   "admin.push.gone": "The subscription expired; re-enable notifications in the app.",
   "admin.push.noSub": "This browser is not subscribed to notifications. Enable notifications first in the app (follow a train), then try again.",
+  "admin.push.keyMismatch": "This browser's subscription uses an old VAPID key (push 403). Reopen the app (it re-subscribes automatically) and try again.",
+  "admin.push.keyMismatchFixed": "This browser's subscription used an old VAPID key (push 403). It was renewed automatically, followed trains kept; press again to test.",
   "admin.push.sent": "Test notification sent.",
   "admin.push.notSubscribed": "This browser's subscription is not in the server database.",
   "admin.push.notConfigured": "Push notifications are not configured on the server.",

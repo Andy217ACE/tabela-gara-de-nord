@@ -8,7 +8,7 @@ import pytest
 
 from app import notifier as notifier_mod
 from app.models import Row
-from app.notifier import Notifier, SubscriptionGone, make_webpush_sender
+from app.notifier import KeyMismatch, Notifier, SubscriptionGone, make_webpush_sender
 from app.store import Store, Subscription
 
 # notifier debounce tested on the raw store events (store validation: test_store_quality.py)
@@ -213,6 +213,15 @@ def test_subscription_gone_is_deleted_and_others_still_sent(store):
                                            Subscription(EP3, "r", "c")]
 
 
+def test_key_mismatch_keeps_subscription_and_follows(store):
+    h = Harness(store, fail={EP: KeyMismatch("web push failed: HTTP 403")})
+    h.tick(board(delay=0))
+    h.tick(board(delay=10))
+    h.tick(board(delay=10))
+    assert store.get_subscription(EP) is not None  # follows survive until the app re-subscribes
+    assert len(store.list_follows(EP)) == 1
+
+
 def test_confirm_one_sends_immediately(store):
     h = Harness(store)
     h.notifier = Notifier(store, h.send, confirm=1)
@@ -389,6 +398,15 @@ def test_webpush_sender_maps_gone(monkeypatch, status):
     send = make_webpush_sender(SETTINGS)
     with pytest.raises(SubscriptionGone):
         asyncio.run(send(SUB, {"body": "x"}))
+
+
+def test_webpush_sender_maps_403_to_key_mismatch(monkeypatch):
+    def fake(**kw):
+        raise notifier_mod.WebPushException("forbidden", response=SimpleNamespace(status_code=403))
+
+    monkeypatch.setattr(notifier_mod, "webpush", fake)
+    with pytest.raises(KeyMismatch):
+        asyncio.run(make_webpush_sender(SETTINGS)(SUB, {"body": "x"}))
 
 
 def test_webpush_sender_other_error_hides_key(monkeypatch):

@@ -125,6 +125,53 @@
     }).catch(function () { return null; });
   }
 
+  function pushKey() {
+    return api("GET", "/api/push/key").then(function (data) { return data.key; }, function (e) {
+      if (e.status === 404) throw new Error(T("follows.err.not_enabled"));
+      throw e;
+    });
+  }
+
+  // Was `sub` created with the server's current VAPID key? A subscription made with an
+  // older key gets 403 from the push service forever, so it must be replaced.
+  function sameKey(sub, key) {
+    var have = sub.options && sub.options.applicationServerKey;
+    // shortcut: browsers that do not expose the key cannot be checked; the subscription is kept
+    if (!have) return true;
+    var a = new Uint8Array(have), b = urlBase64ToUint8Array(key);
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  // Browser subscription made with the current key: {sub, old}; `old` is the endpoint of a
+  // replaced subscription (its follows are moved server-side). `force`: replace even when the
+  // key cannot be compared (the server already answered 403).
+  function freshSubscription(reg, force) {
+    return pushKey().then(function (key) {
+      return reg.pushManager.getSubscription().then(function (sub) {
+        if (sub && !force && sameKey(sub, key)) return { sub: sub, old: null };
+        // the browser refuses a second key while one subscription exists: drop it first
+        return (sub ? sub.unsubscribe() : Promise.resolve()).then(function () {
+          return reg.pushManager.subscribe({ userVisibleOnly: true,
+                                             applicationServerKey: urlBase64ToUint8Array(key) });
+        }).then(function (s) { return { sub: s, old: sub ? sub.endpoint : null }; });
+      });
+    });
+  }
+
+  function registerSubscription(r) {
+    var json = r.sub.toJSON ? r.sub.toJSON() : r.sub;
+    var body = { endpoint: json.endpoint, keys: json.keys };
+    if (r.old) body.old_endpoint = r.old;
+    return api("POST", r.old ? "/api/push/resubscribe" : "/api/push/subscribe", body)
+      .then(function () {
+        state.endpoint = json.endpoint;
+        saveEndpoint(json.endpoint);
+        return json.endpoint;
+      });
+  }
+
   // Ask permission (first use), subscribe the browser and register it with the server.
   function ensureSubscription() {
     var reason = unsupportedReason();
@@ -138,24 +185,23 @@
       if (p !== "granted") throw new Error(T("follows.err.no_permission"));
       return registration();
     }).then(function (reg) {
+      return freshSubscription(reg, false);
+    }).then(registerSubscription);
+  }
+
+  // Self-heal on app open (and from the admin push test): an existing subscription made with
+  // an old VAPID key is replaced and its follows moved, with no user action. Resolves to the
+  // new endpoint, or null when nothing had to change.
+  function healSubscription(force) {
+    if (!supported() || Notification.permission !== "granted") return Promise.resolve(null);
+    return navigator.serviceWorker.getRegistration("/").then(function (reg) {
+      if (!reg || !reg.pushManager) return null;
       return reg.pushManager.getSubscription().then(function (sub) {
-        if (sub) return sub;
-        return api("GET", "/api/push/key").catch(function (e) {
-          if (e.status === 404) throw new Error(T("follows.err.not_enabled"));
-          throw e;
-        }).then(function (data) {
-          return reg.pushManager.subscribe({ userVisibleOnly: true,
-                                             applicationServerKey: urlBase64ToUint8Array(data.key) });
+        if (!sub) return null;
+        return freshSubscription(reg, force).then(function (r) {
+          return r.old ? registerSubscription(r) : null;
         });
       });
-    }).then(function (sub) {
-      var json = sub.toJSON ? sub.toJSON() : sub;
-      return api("POST", "/api/push/subscribe", { endpoint: json.endpoint, keys: json.keys })
-        .then(function () {
-          state.endpoint = json.endpoint;
-          saveEndpoint(json.endpoint);
-          return json.endpoint;
-        });
     });
   }
 
@@ -429,7 +475,7 @@
     if (sw) sw.addEventListener("change", onSwitch);
     state.endpoint = supported() ? loadEndpoint() : null;
     renderSwitch();
-    if (supported()) refresh();
+    if (supported()) healSubscription(false).catch(function () { return null; }).then(refresh);
     else {
       state.loaded = true;
       renderAll();
@@ -438,7 +484,7 @@
 
   App.onFollow = onFollow;
   App.followState = followState;
-  App.follows = { urlBase64ToUint8Array: urlBase64ToUint8Array, refresh: refresh,
+  App.follows = { urlBase64ToUint8Array: urlBase64ToUint8Array, refresh: refresh, heal: healSubscription,
                   countLabel: function (n) { return tp("follows.count", n); } };
   App.views.urmarite = { show: function () { if (supported()) refresh(); else renderAll(); } };
   document.addEventListener("i18n:change", function () { renderAll(); });

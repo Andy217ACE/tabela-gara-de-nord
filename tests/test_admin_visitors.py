@@ -153,6 +153,26 @@ def test_push_test_gone_removes_subscription(client):
     assert client.app.state.store.get_subscription(EP) is None
 
 
+def test_push_test_403_is_key_mismatch_and_keeps_subscription(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from app import notifier as notifier_mod
+    login(client)
+    client.app.state.store.subscribe(EP, "p" * 10, "a" * 10)
+    st = settings(db_path=":memory:", vapid_private_key="k", vapid_public_key="K")
+    client.app.state.settings = st
+
+    def fake(**kw):
+        raise notifier_mod.WebPushException("forbidden", response=SimpleNamespace(status_code=403))
+
+    monkeypatch.setattr(notifier_mod, "webpush", fake)
+    client.app.state.notifier.send = notifier_mod.make_webpush_sender(st)
+    h = {"X-CSRF-Token": client.get("/api/admin/csrf").json()["token"]}
+    r = client.post("/api/admin/push-test", json={"endpoint": EP}, headers=h)
+    assert r.json() == {"result": "key_mismatch"}
+    assert client.app.state.store.get_subscription(EP) is not None
+
+
 def test_admin_paths_not_recorded(client):
     client.get("/api/admin/session", headers={"User-Agent": CHROME})
     assert visitors.online() == []

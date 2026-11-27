@@ -58,6 +58,12 @@ class SubscriptionGone(Exception):
     """The push service says the subscription no longer exists (404/410)."""
 
 
+class KeyMismatch(RuntimeError):
+    """403 from the push service: the subscription was created with another VAPID key, so
+    it can never succeed. Not deleted here (its follows would be lost): the app re-subscribes
+    on its next open and moves them (POST /api/push/resubscribe)."""
+
+
 @dataclass
 class _Pending:
     event: Event
@@ -224,6 +230,9 @@ class Notifier:
                 except SubscriptionGone:
                     log.info("push subscription gone; removing")
                     await asyncio.to_thread(self.store.unsubscribe, sub.endpoint)
+                except KeyMismatch:
+                    log.warning("push failed: HTTP 403, subscription made with another VAPID key;"
+                                " kept until the app re-subscribes")
                 except asyncio.TimeoutError:
                     log.warning("push failed: timeout after %.0fs", self.send_timeout)
                 except Exception as e:  # one bad endpoint must not stop the others
@@ -254,7 +263,7 @@ class Notifier:
 def make_webpush_sender(settings) -> Callable[[Subscription, dict], Awaitable[None]]:
     """`send` that delivers via pywebpush with the VAPID keys from `settings`.
 
-    404/410 from the push service -> SubscriptionGone. Other failures are
+    404/410 from the push service -> SubscriptionGone, 403 -> KeyMismatch. Other failures are
     re-raised as RuntimeError with only the HTTP status (never the key).
     """
 
@@ -273,6 +282,8 @@ def make_webpush_sender(settings) -> Callable[[Subscription, dict], Awaitable[No
             status = getattr(e.response, "status_code", None)
             if status in (404, 410):
                 raise SubscriptionGone(f"HTTP {status}") from None
+            if status == 403:
+                raise KeyMismatch("web push failed: HTTP 403") from None
             raise RuntimeError(f"web push failed: HTTP {status}") from None
         except Exception as e:
             raise RuntimeError(f"web push failed: {type(e).__name__}") from None

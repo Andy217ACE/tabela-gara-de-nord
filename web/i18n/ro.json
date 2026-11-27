@@ -1514,6 +1514,8 @@
   "admin.push.send": "Trimite notificare de test",
   "admin.push.gone": "Abonarea a expirat; reactivează notificările din aplicație.",
   "admin.push.noSub": "Browserul nu e abonat la notificări. Activează mai întâi notificările din aplicație (urmărirea unui tren), apoi încearcă din nou.",
+  "admin.push.keyMismatch": "Abonarea acestui browser e făcută cu o cheie VAPID veche (push 403). Redeschide aplicația (se reabonează automat) și încearcă din nou.",
+  "admin.push.keyMismatchFixed": "Abonarea acestui browser era făcută cu o cheie VAPID veche (push 403). Am refăcut-o automat, cu trenurile urmărite păstrate; apasă din nou pentru test.",
   "admin.push.sent": "Notificarea de test a fost trimisă.",
   "admin.push.notSubscribed": "Abonarea acestui browser nu e în baza de date a serverului.",
   "admin.push.notConfigured": "Notificările push nu sunt configurate pe server.",

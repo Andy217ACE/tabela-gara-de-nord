@@ -161,6 +161,13 @@ def _check_push_endpoint(endpoint) -> str:
     return endpoint
 
 
+def _sub_keys(body: dict) -> tuple:
+    keys = body.get("keys")
+    if not isinstance(keys, dict):
+        raise _bad("Cheile abonării lipsesc.")
+    return keys.get("p256dh"), keys.get("auth")
+
+
 async def _json_body(request: Request) -> dict:
     """Read a JSON object body of at most MAX_BODY bytes (413 above, 422 if invalid)."""
     too_big = _bad("Cererea este prea mare (maxim 4 KB).", 413)
@@ -492,12 +499,23 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     async def subscribe(request: Request):
         body = await _json_body(request)
         ep = _check_push_endpoint(body.get("endpoint"))
-        keys = body.get("keys")
-        if not isinstance(keys, dict):
-            raise _bad("Cheile abonării lipsesc.")
-        p256dh, auth = keys.get("p256dh"), keys.get("auth")
+        p256dh, auth = _sub_keys(body)
         try:
             await run_in_threadpool(store_of(request).subscribe, ep, p256dh, auth)
+        except ValueError:
+            raise _bad("Abonare invalidă.") from None
+        return {"ok": True}
+
+    @app.post("/api/push/resubscribe")
+    async def resubscribe(request: Request):
+        """The browser re-subscribed with the current VAPID key: move the follows of
+        `old_endpoint` to the new subscription and drop the old one (unknown old: subscribe)."""
+        body = await _json_body(request)
+        old = _check_push_endpoint(body.get("old_endpoint"))
+        ep = _check_push_endpoint(body.get("endpoint"))
+        p256dh, auth = _sub_keys(body)
+        try:
+            await run_in_threadpool(store_of(request).resubscribe, old, ep, p256dh, auth)
         except ValueError:
             raise _bad("Abonare invalidă.") from None
         return {"ok": True}
