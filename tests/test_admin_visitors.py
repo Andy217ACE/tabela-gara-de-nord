@@ -136,3 +136,23 @@ def test_push_test_not_configured(client):
     h = {"X-CSRF-Token": client.get("/api/admin/csrf").json()["token"]}
     r = client.post("/api/admin/push-test", json={"endpoint": EP}, headers=h)
     assert r.json() == {"result": "not_configured"}
+
+
+def test_push_test_gone_removes_subscription(client):
+    from app.notifier import SubscriptionGone
+    login(client)
+    client.app.state.store.subscribe(EP, "p" * 10, "a" * 10)
+    client.app.state.settings = settings(db_path=":memory:", vapid_private_key="k", vapid_public_key="K")
+
+    async def fake(sub, data):
+        raise SubscriptionGone("HTTP 410")
+
+    client.app.state.notifier.send = fake
+    h = {"X-CSRF-Token": client.get("/api/admin/csrf").json()["token"]}
+    assert client.post("/api/admin/push-test", json={"endpoint": EP}, headers=h).json() == {"result": "gone"}
+    assert client.app.state.store.get_subscription(EP) is None
+
+
+def test_admin_paths_not_recorded(client):
+    client.get("/api/admin/session", headers={"User-Agent": CHROME})
+    assert visitors.online() == []
