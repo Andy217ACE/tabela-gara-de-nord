@@ -397,7 +397,7 @@ What exists, where it lives and where it is documented. Deliberate omissions and
 | Monitoring: watchdog (restarts after 3 failed health checks, at most once per 10 min, running as `tabela` with a single sudoers rule; Telegram alerts), NVMe health timer, security snapshot timer, external uptime checks (`/api/health` also answers `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operations](docs/en/administrare-operare.md) §10, §15 |
 | Data integrity: `processing_version` per observation, multi-frame consensus, confirmation of delay and platform changes | `app/consensus.py`, `app/quality.py` | [OCR](docs/en/ocr.md), [Statistics and quality](docs/en/statistici-calatorii-calitate.md) |
 | OCR regression suite on hand-labelled frames, with strict thresholds that fail on any regression | `tests/fixtures/ocr_truth`, `app/ocr/truth.py` | [Testing](docs/en/testare.md) |
-| CI on every PR and on `main` (tests incl. three browser engines, `pip-audit`, release check, fail2ban filters), CodeQL (`security-extended`), Dependabot, pinned `requirements.lock` | `.github/` | [Testing](docs/en/testare.md) |
+| CI on every PR and on `main` (tests incl. three browser engines, release check, fail2ban filters; gitleaks, bandit, SBOM + `pip-audit`), CodeQL (`security-extended`), Dependabot, pinned `requirements.lock` | `.github/` | [Testing](docs/en/testare.md) |
 | Docs kept in step with the code: every route must appear in the API page | `tests/test_docs_routes.py` | [Testing](docs/en/testare.md) |
 
 Known gaps, stated openly: **there is no off-site backup yet** (the owner's decision, deferred); OS updates
@@ -516,7 +516,7 @@ used, so it stays legible in tabs.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt -c requirements.lock      # Windows: .venv\Scripts\pip ...
+.venv/bin/pip install --require-hashes -r requirements.lock && .venv/bin/pip install -r requirements-dev.txt   # Windows: .venv\Scripts\pip ...
 python -m playwright install chromium firefox webkit                    # optional: browser tests
 ```
 
@@ -580,7 +580,7 @@ python scripts/check_release.py          # release consistency
   captures skip without them (`OCR_TRUTH_DIR`); deploy tests skip without bash and git.
 - **`.github/workflows/ci.yml`** (every PR, pushes to `main`, weekly): Python 3.14, Tesseract, dependencies
   pinned by `requirements.lock`, Playwright Chromium + Firefox + WebKit, `scripts/check_release.py`,
-  `pip-audit`, then the full suite; a second job validates the fail2ban filters with `fail2ban-regex` and
+  then the full suite (hash-verified install); parallel jobs run gitleaks, bandit and the SBOM + `pip-audit`; a second job validates the fail2ban filters with `fail2ban-regex` and
   the jails with `fail2ban-client -t`.
 - **`codeql.yml`:** CodeQL `security-extended` for Python and JavaScript on PRs, on `main` and weekly.
 - **`lock.yml` + Dependabot:** Dependabot proposes weekly pip updates and monthly Actions updates;

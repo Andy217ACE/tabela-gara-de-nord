@@ -44,7 +44,7 @@ LEVELS = {"ok": 0, "warn": 1, "crit": 2}
 
 
 def _get_json(url: str) -> dict:
-    with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as r:  # noqa: S310 (URL fix)
+    with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as r:  # noqa: S310  # nosec B310 - only the local/own health URLs from config, https/http fixed
         return json.loads(r.read().decode("utf-8"))
 
 
