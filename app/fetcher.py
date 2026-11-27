@@ -40,7 +40,7 @@ def extract_image(html: str) -> bytes:
 
 
 def image_hash(data: bytes) -> str:
-    return hashlib.sha1(data).hexdigest()
+    return hashlib.sha1(data, usedforsecurity=False).hexdigest()
 
 
 async def fetch_board_image(client: httpx.AsyncClient, url: str) -> bytes:

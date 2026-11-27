@@ -28,20 +28,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
       - name: Regenerate requirements.lock
         env:
           UV_NO_BUILD: "1"
-          UV_CUSTOM_COMPILE_COMMAND: uv pip compile requirements.txt --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
+          UV_CUSTOM_COMPILE_COMMAND: uv pip compile requirements.txt --generate-hashes --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
         run: |
           pip install uv==0.13.9
-          uv pip compile requirements.txt --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
+          uv pip compile requirements.txt --generate-hashes --python-version 3.14 --python-platform x86_64-unknown-linux-gnu -o requirements.lock
       - name: Commit and push the lock, then re-run CI
         env:
           GH_TOKEN: ${{ github.token }}

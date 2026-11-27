@@ -381,7 +381,7 @@ def record_capture(store, image_bytes: bytes, rows: list[Row] | None,
     rows = rows or []
     if error is None and not rows:  # an empty read is a failed read, never an ok capture
         error = "no rows read"
-    h = hashlib.sha1(image_bytes).hexdigest()
+    h = hashlib.sha1(image_bytes, usedforsecurity=False).hexdigest()
     when = _utc(ts)
     now_s = when.isoformat(timespec="seconds")
     local = when.astimezone(TZ)

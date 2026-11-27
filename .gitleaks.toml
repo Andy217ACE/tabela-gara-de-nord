@@ -1,0 +1,9 @@
+# Gitleaks config: default ruleset + allowlist of PROVEN false positives only.
+# Every entry needs a reason; never allowlist a real secret (rotate it instead).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Dummy token used to assert that the public status output does not leak ADMIN_TOKEN"
+paths = ['''^tests/test_system_status\.py$''']
+regexes = ['''tok-SECRET-123456''']

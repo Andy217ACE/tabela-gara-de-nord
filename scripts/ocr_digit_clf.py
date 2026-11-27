@@ -65,7 +65,7 @@ def _quant(g: np.ndarray) -> np.ndarray:
 
 
 def _split_of(frame: str) -> int:
-    return int(hashlib.md5(frame.encode("utf-8")).hexdigest(), 16) % TEST_SHARE == 0
+    return int(hashlib.md5(frame.encode("utf-8"), usedforsecurity=False).hexdigest(), 16) % TEST_SHARE == 0
 
 
 def _frame_cells(img_path: Path, matcher):
@@ -111,7 +111,7 @@ def _frame_job(args):
     name, path, cache = args
     if cache and Path(cache).exists():
         with open(cache, "rb") as f:
-            return pickle.load(f)
+            return pickle.load(f)  # nosec B301 - own cache written by this tool, never external input
     from app.ocr.digits import DigitMatcher
     matcher = DigitMatcher.load()
     try:
@@ -154,7 +154,7 @@ def _save(out: Path, cells: list[dict], glyphs: list[tuple]) -> None:
 
 
 def _frame_key(frame: str) -> str:
-    return hashlib.md5(frame.encode("utf-8")).hexdigest()
+    return hashlib.md5(frame.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def select_frames(frames, max_frames: int | None) -> list[str]:
@@ -358,7 +358,7 @@ def verify(out_dir: str, n: int = 150, img_root: str | None = None) -> None:
     raw = np.load(out / "glyphs_raw.npz")
     for c in picked:
         ids = cell_id(c)
-        name = hashlib.md5(ids.encode("utf-8")).hexdigest()[:12] + ".png"
+        name = hashlib.md5(ids.encode("utf-8"), usedforsecurity=False).hexdigest()[:12] + ".png"
         if img_root:
             img = cv2.imread(str(Path(img_root) / "captures" / (c["frame"] + ".jpg")))
             x, y, w, h = c["box"]

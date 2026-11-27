@@ -55,9 +55,14 @@ git -C "$APP_DIR" log -1 --oneline
 echo "== venv"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
-PIP_C=()
-[ -f "$APP_DIR/requirements.lock" ] && PIP_C=(-c "$APP_DIR/requirements.lock")
-"$VENV/bin/pip" install -q -r "$APP_DIR/requirements.txt" "${PIP_C[@]}"
+LOCK="$APP_DIR/requirements.lock"
+if [ -f "$LOCK" ] && grep -q -- '--hash=sha256:' "$LOCK"; then
+    "$VENV/bin/pip" install -q --require-hashes -r "$LOCK"   # hash-pinned lock: verified install
+else
+    PIP_C=()
+    [ -f "$LOCK" ] && PIP_C=(-c "$LOCK")
+    "$VENV/bin/pip" install -q -r "$APP_DIR/requirements.txt" "${PIP_C[@]}"
+fi
 
 echo "== env file"
 if [ ! -f "$ENV_FILE" ]; then

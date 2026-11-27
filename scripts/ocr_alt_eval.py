@@ -202,7 +202,7 @@ def evaluate(pkl: str, model_path: str, json_out: str | None = None,
     from app.ocr import alt_reader as alt
     model = alt.AltModel.load(model_path)
     tf = truth_frames()
-    base = {f: v for f, v in pickle.loads(Path(pkl).read_bytes()).items() if f in tf}
+    base = {f: v for f, v in pickle.loads(Path(pkl).read_bytes()).items() if f in tf}  # nosec B301 - own cache written by this tool, never external input
     min_prob = alt.MIN_PROB if thr is None else float(thr)
     _cache_panels(alt)
     nat = natural(base, tf, model, alt, min_prob)

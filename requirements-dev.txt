@@ -2,3 +2,6 @@
 pytest
 pytest-asyncio
 playwright==1.65.2  # optional: tests/test_footer_browser.py (skipped when absent)
+bandit==1.9.4  # CI: static security lint (app/, scripts/)
+pip-audit==2.10.1  # CI: known-vulnerability audit of requirements.lock
+cyclonedx-bom==9.0.0  # CI: SBOM (CycloneDX) from requirements.lock
