@@ -141,3 +141,33 @@ def test_install_sh_installs_security_units():
     text = _read(DEPLOY / "install.sh")
     assert "tabela-security-snapshot.service tabela-security-snapshot.timer" in text
     assert "enable --now tabela-security-snapshot.timer" in text
+
+
+# -- limite de resurse systemd pentru fiecare unitate tabela ---------------------------------
+
+def _size(v: str) -> int:
+    return int(float(v[:-1]) * {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30}[v[-1]])
+
+
+def test_every_tabela_service_unit_has_resource_limits():
+    units = sorted(DEPLOY.glob("tabela*.service"))
+    assert len(units) >= 7
+    for u in units:
+        svc = dict(l.split("=", 1) for l in _unit_section(_read(u), "Service") if "=" in l)
+        for key in ("MemoryHigh", "MemoryMax", "CPUQuota", "TasksMax"):
+            assert key in svc, (u.name, key)
+        assert _size(svc["MemoryHigh"]) < _size(svc["MemoryMax"]), u.name
+        assert svc["CPUQuota"].endswith("%") and int(svc["TasksMax"]) > 0, u.name
+
+
+def test_shadow_train_memory_max_matches_server_drop_in():
+    svc = _unit_section(_read(DEPLOY / "tabela-shadow-train.service"), "Service")
+    assert "MemoryMax=7G" in svc
+
+
+def test_ops_alerts_timer_runs_every_five_minutes():
+    t = _unit_section(_read(DEPLOY / "tabela-ops-alerts.timer"), "Timer")
+    assert "OnUnitActiveSec=5min" in t and "Unit=tabela-ops-alerts.service" in t
+    svc = _unit_section(_read(DEPLOY / "tabela-ops-alerts.service"), "Service")
+    assert "User=tabela" in svc and "EnvironmentFile=/etc/tabela.env" in svc
+    assert any(l.startswith("ExecStart=") and "scripts/ops_alerts.py" in l for l in svc)

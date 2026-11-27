@@ -27,6 +27,7 @@ Conventions:
 14. [What I could not verify and inconsistencies](#14-what-i-could-not-verify-and-inconsistencies)
 15. [Firewall, fail2ban and external monitoring](#15-firewall-fail2ban-and-external-monitoring)
 16. [Internal Infofer spike (temporary)](#16-internal-infofer-spike-temporary)
+17. [Operations alerts (`scripts/ops_alerts.py`)](#17-operations-alerts-scriptsops_alertspy)
 
 ---
 
@@ -765,7 +766,7 @@ error, answers "do not ignore". Limit: the exception looks only at the current `
 
 For the admin, the `#admin` page (the "Security (fail2ban)" card) shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
 
-**External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram) and from the NVMe health timer.
+**External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram), from the NVMe health timer and from the operations alerts (section 17).
 
 **What is missing, deliberately or not yet done:** there is no off-site backup; the daily restic copy (section 6) is on the same disk; the decision belongs to the owner and is deferred. System updates are not automatic. See `docs/decizii-arhitectura.md`.
 
@@ -782,3 +783,29 @@ For the admin, the `#admin` page (the "Security (fail2ban)" card) shows the bann
 - **Stop:** `sudo systemctl disable --now tabela-infofer.timer` (then, optionally, remove the units from `/etc/systemd/system/` and `/var/lib/tabela/infofer.db`).
 
 **Infofer terms:** the data is for non-commercial use only; displaying it publicly requires Infofer's written consent. That is why the spike stays internal and temporary.
+
+---
+
+## 17. Operations alerts (`scripts/ops_alerts.py`)
+
+**What it does.** `deploy/tabela-ops-alerts.timer` starts `tabela-ops-alerts.service` (user `tabela`) every 5 minutes; it checks and sends to Telegram through the **same** channel as the train alerts (`app/telegram.py`, section 7, same bot and chat):
+
+| Check | Level |
+|---|---|
+| `http://127.0.0.1:8000/api/health` does not answer | critical |
+| `https://tabelacfr.ddns.net/api/health` does not answer (from the server; an empty `OPS_PUBLIC_URL=` turns it off, e.g. if the router does no NAT loopback) | critical |
+| stale boards (`ok:false` or `boards.*.stale`) | warning |
+| degraded OCR: of ≥ 10 frames in the last hour, fewer than half complete (`ocr.window.full_frames / frames`) | warning |
+| disk `/`, `/var/lib/tabela`, `/var/lib/tabela/captures` (each filesystem once) above 85% / 95% | warning / critical |
+| Infofer collector: timer active but no run with markers in `infofer_runs` for over 15 min | warning |
+| `tabela*` units in the `failed` state | critical |
+
+**No noise.** A problem is announced only on the second run in a row (a restart during a deploy does not alert), then at most once every 3 hours, or at once if it gets worse (warning → critical). On recovery a "[REZOLVAT]" (resolved) message is sent. State: `/var/lib/tabela/ops_alerts.json` (`OPS_STATE_PATH`). A message that failed to go out (network, Telegram) is not retried until the next reminder.
+
+**Without Telegram.** If `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is missing from `/etc/tabela.env`, the script logs one line and exits 0 (it checks nothing).
+
+- **Install (by hand; `update.sh` does NOT do it):** `sudo install -m 644 /opt/tabela/app/deploy/tabela-ops-alerts.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tabela-ops-alerts.timer`.
+- **Try without sending** (prints what it would send; nothing on the first run, a problem shows only on the second): `sudo systemd-run --pipe --wait -p User=tabela -p EnvironmentFile=/etc/tabela.env -p WorkingDirectory=/opt/tabela/app /opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/ops_alerts.py --dry-run --state /tmp/ops.json`.
+- **Log:** `journalctl -u tabela-ops-alerts -n 50`. **Stop:** `sudo systemctl disable --now tabela-ops-alerts.timer`.
+
+**Monitoring from outside.** The script runs on the same server: if the server, the power or the home internet goes down, it sends nothing. An external monitor (UptimeRobot or similar) therefore stays necessary, configured in the owner's account (no key in the repo): an HTTP(S) check of `https://tabelacfr.ddns.net/api/health` every 5 minutes, `HEAD` or `GET`, alerting by e-mail/Telegram from the external service. For "site up but the board is not read", the monitor can require the keyword `"ok":true` in the response (keyword monitor, `GET` only).

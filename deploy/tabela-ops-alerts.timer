@@ -1,0 +1,14 @@
+# © 2026 Andy217Ace
+# Pornește tabela-ops-alerts.service la fiecare 5 minute.
+# Oprire: sudo systemctl disable --now tabela-ops-alerts.timer
+[Unit]
+Description=Tabela Gara de Nord - alerte de operare la 5 minute
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=tabela-ops-alerts.service
+
+[Install]
+WantedBy=timers.target

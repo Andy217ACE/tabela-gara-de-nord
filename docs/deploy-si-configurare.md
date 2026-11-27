@@ -367,6 +367,7 @@ Fișiere: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.time
 | `tabela-shadow-train.service` și `.timer` | nu | nu | da (nesigur, vezi mai sus) |
 | `tabela-nvme.service` și `.timer` | nu | nu | da |
 | `tabela-infofer.service` și `.timer` (temporar) | nu | nu | da (`docs/administrare-operare.md`, secțiunea 16) |
+| `tabela-ops-alerts.service` și `.timer` | nu | nu | da (`docs/administrare-operare.md`, secțiunea 17) |
 | fișierele din `deploy/fail2ban/` | nu | nu | da (secțiunea 7.1) |
 | site nginx și `tabela-limits.conf` | da | nu | |
 | `tabela-noip` (DNS dinamic) | nu | nu | da (vezi secțiunea 9) |
@@ -374,6 +375,22 @@ Fișiere: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.time
 ### 5.5 Tesseract
 
 Pe server: Tesseract **5.5.0**, Ubuntu 26.04, pachet apt (`tesseract-ocr`, `tesseract-ocr-ron`), doar modelele oficiale `eng`, `ron` și `osd`; utilizatorii nu pot încărca modele. Versiunea și limbile încărcate sunt în `GET /api/system` (`tesseract.version`, `tesseract.langs`, citite o singură dată la prima cerere), iar `security_updates` arată actualizările de securitate Ubuntu în așteptare (din `/var/lib/update-notifier/updates-available`; `null` dacă fișierul lipsește). Verificare manuală: `tesseract --version` și `tesseract --list-langs`. Actualizare: `sudo apt-get update && sudo apt-get install --only-upgrade tesseract-ocr tesseract-ocr-ron`, apoi repornirea serviciului (versiunea se citește la pornire) și o re-măsurare OCR (`docs/ocr.md`), pentru că o versiune nouă poate schimba citirea.
+
+### 5.6 Limite de resurse (cgroup)
+
+Fiecare unitate `tabela*.service` are `MemoryHigh`, `MemoryMax`, `CPUQuota` și `TasksMax`. Scopul e izolarea (o scurgere sau o buclă nu sufocă serverul), nu frânarea rulării normale. Serverul: Intel i5-10400 (6 nuclee / 12 fire), 15 GiB RAM, swap 4 GiB. `MemoryHigh` frânează procesul (reclaim), `MemoryMax` îl oprește (OOM în cgroup); `tabela.service` repornește singur (`Restart=always`).
+
+| Unitate | MemoryHigh / MemoryMax | CPUQuota | TasksMax |
+|---|---|---|---|
+| `tabela.service` (un worker + OCR) | 3G / 4G | 400% | 512 |
+| `tabela-shadow-train.service` (~4,8 GB măsurat) | 6G / 7G (ca drop-in-ul `memory.conf` de pe server) | 400% | 256 |
+| `tabela-watchdog.service` | 192M / 256M | 50% | 32 |
+| `tabela-security-snapshot.service` | 192M / 256M | 50% | 32 |
+| `tabela-infofer.service` | 192M / 256M | 50% | 16 |
+| `tabela-nvme.service` | 96M / 128M | 25% | 16 |
+| `tabela-ops-alerts.service` | 96M / 128M | 25% | 16 |
+
+Valorile pentru `tabela.service` sunt alese cu rezervă, fără o măsurătoare a RSS-ului de vârf: verifică după deploy cu `systemctl status tabela` (rândul `Memory:`, cu „high”/„max”) sau `process.rss_mb` din `#admin`. Dacă memoria se apropie de `MemoryHigh` în rulare normală, crește ambele valori. Unitățile instalate de `update.sh` (`tabela`, watchdog, securitate) primesc limitele la deploy; celelalte (shadow-train, nvme, Infofer, ops-alerts) se reinstalează de mână: `sudo install -m 644 /opt/tabela/app/deploy/tabela-<nume>.service /etc/systemd/system/ && sudo systemctl daemon-reload`.
 
 ## 6. nginx
 

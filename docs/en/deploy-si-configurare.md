@@ -361,6 +361,7 @@ Files: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`,
 | `tabela-shadow-train.service` and `.timer` | no | no | yes (uncertain, see above) |
 | `tabela-nvme.service` and `.timer` | no | no | yes |
 | `tabela-infofer.service` and `.timer` (temporary) | no | no | yes (`docs/en/administrare-operare.md`, section 16) |
+| `tabela-ops-alerts.service` and `.timer` | no | no | yes (`docs/en/administrare-operare.md`, section 17) |
 | the files in `deploy/fail2ban/` | no | no | yes (section 7.1) |
 | the nginx site and `tabela-limits.conf` | yes | no | |
 | `tabela-noip` (dynamic DNS) | no | no | yes (see section 9) |
@@ -368,6 +369,22 @@ Files: `deploy/tabela-shadow-train.service`, `deploy/tabela-shadow-train.timer`,
 ### 5.5 Tesseract
 
 On the server: Tesseract **5.5.0**, Ubuntu 26.04, apt package (`tesseract-ocr`, `tesseract-ocr-ron`), only the official `eng`, `ron` and `osd` models; users cannot upload models. The version and loaded languages are in `GET /api/system` (`tesseract.version`, `tesseract.langs`, read once at the first request), and `security_updates` shows the pending Ubuntu security updates (from `/var/lib/update-notifier/updates-available`; `null` if the file is missing). Manual check: `tesseract --version` and `tesseract --list-langs`. Update: `sudo apt-get update && sudo apt-get install --only-upgrade tesseract-ocr tesseract-ocr-ron`, then restart the service (the version is read at startup) and re-measure OCR (`docs/ocr.md`), because a new version can change the reading.
+
+### 5.6 Resource limits (cgroup)
+
+Every `tabela*.service` unit has `MemoryHigh`, `MemoryMax`, `CPUQuota` and `TasksMax`. The goal is containment (a leak or a loop does not choke the server), not throttling normal operation. The server: Intel i5-10400 (6 cores / 12 threads), 15 GiB RAM, 4 GiB swap. `MemoryHigh` slows the process down (reclaim), `MemoryMax` stops it (OOM inside the cgroup); `tabela.service` restarts on its own (`Restart=always`).
+
+| Unit | MemoryHigh / MemoryMax | CPUQuota | TasksMax |
+|---|---|---|---|
+| `tabela.service` (one worker + OCR) | 3G / 4G | 400% | 512 |
+| `tabela-shadow-train.service` (~4.8 GB measured) | 6G / 7G (like the server's `memory.conf` drop-in) | 400% | 256 |
+| `tabela-watchdog.service` | 192M / 256M | 50% | 32 |
+| `tabela-security-snapshot.service` | 192M / 256M | 50% | 32 |
+| `tabela-infofer.service` | 192M / 256M | 50% | 16 |
+| `tabela-nvme.service` | 96M / 128M | 25% | 16 |
+| `tabela-ops-alerts.service` | 96M / 128M | 25% | 16 |
+
+The values for `tabela.service` are chosen with headroom, without a measurement of the peak RSS: check after the deploy with `systemctl status tabela` (the `Memory:` line, with "high"/"max") or `process.rss_mb` in `#admin`. If memory approaches `MemoryHigh` in normal operation, raise both values. The units installed by `update.sh` (`tabela`, watchdog, security) get the limits on deploy; the others (shadow-train, nvme, Infofer, ops-alerts) are reinstalled by hand: `sudo install -m 644 /opt/tabela/app/deploy/tabela-<name>.service /etc/systemd/system/ && sudo systemctl daemon-reload`.
 
 ## 6. nginx
 
