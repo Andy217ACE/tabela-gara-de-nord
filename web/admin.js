@@ -238,10 +238,13 @@
     body.appendChild(dupesCard());
     body.appendChild(serverCard());
     body.appendChild(nvmeCard());
+    body.appendChild(visitorsCard());
+    body.appendChild(pushTestCard());
     body.appendChild(securityCard());
     body.appendChild(marksCard());
     loadReport();
     loadSecurity();
+    loadVisitors();
     syncTimer();
   }
 
@@ -657,6 +660,93 @@
       T("admin.nvme.readAtMeta", { time: when(s.collected_at) });
   }
 
+  // ---- Vizitatori online (GET /api/admin/visitors) + test push (POST /api/admin/push-test) ----
+  // Paths/UA come from visitors: shown only via textContent.
+
+  var visBusy = false;
+
+  function visitorsCard() {
+    var c = card("admin-visitors", T("admin.vis.title"));
+    c.appendChild(el("p", "admin-text", T("admin.vis.intro")));
+    var meta = el("p", "admin-meta", "");
+    meta.id = "admin-vis-meta";
+    meta.setAttribute("role", "status");
+    c.appendChild(meta);
+    var box = el("div", "admin-sec-box");
+    box.id = "admin-vis-box";
+    c.appendChild(box);
+    return c;
+  }
+
+  function loadVisitors() {
+    if (visBusy || !$("admin-vis-box")) return;
+    visBusy = true;
+    api("/api/admin/visitors").then(function (r) {
+      visBusy = false;
+      var meta = $("admin-vis-meta"), box = $("admin-vis-box");
+      if (!meta || !box) return;
+      if (r.status === 401 || r.status === 503 || r.status === 429) { handleAuth(r); return; }
+      clear(box);
+      if (r.status !== 200 || !r.data) { meta.textContent = T("admin.vis.error", { status: r.status }); return; }
+      var v = r.data.visitors || [];
+      meta.textContent = v.length ? T("admin.vis.count", { n: v.length }) : T("admin.vis.none");
+      if (!v.length) return;
+      var t = el("table", "admin-table"), tr = el("tr");
+      ["ip", "client", "page", "reqs", "first", "last"].forEach(function (k) {
+        tr.appendChild(el("th", null, T("admin.vis.col." + k)));
+      });
+      t.appendChild(tr);
+      v.forEach(function (x) {
+        var row = el("tr");
+        [x.ip, x.client, x.path, String(x.requests), when(new Date(x.first_seen * 1000).toISOString()),
+         when(new Date(x.last_seen * 1000).toISOString())].forEach(function (s) {
+          row.appendChild(el("td", null, s));
+        });
+        t.appendChild(row);
+      });
+      box.appendChild(t);
+    }).catch(function () { visBusy = false; });
+  }
+
+  function pushTestCard() {
+    var c = card("admin-push-test", T("admin.push.title"));
+    c.appendChild(el("p", "admin-text", T("admin.push.intro")));
+    var bar = el("div", "admin-actions");
+    var b = el("button", "btn btn-ghost btn-sm", T("admin.push.send"));
+    b.type = "button";
+    var out = el("p", "admin-meta", "");
+    out.setAttribute("role", "status");
+    function say(k, p) { out.textContent = T(k, p); b.disabled = false; }
+    b.addEventListener("click", function () {
+      b.disabled = true;
+      out.textContent = "";
+      var reg = "serviceWorker" in navigator ? navigator.serviceWorker.ready : Promise.resolve(null);
+      reg.then(function (r) { return r && r.pushManager ? r.pushManager.getSubscription() : null; })
+        .then(function (sub) {
+          if (!sub) { say("admin.push.noSub"); return null; }
+          return getCsrf().then(function (tok) {
+            return api("/api/admin/push-test", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-CSRF-Token": tok },
+              body: JSON.stringify({ endpoint: sub.endpoint })
+            });
+          }).then(function (r) {
+            if (r.status === 401 || r.status === 503) { handleAuth(r); return; }
+            var res = r.data && r.data.result;
+            if (r.status === 429) say("admin.push.rate");
+            else if (res === "sent") say("admin.push.sent");
+            else if (res === "not_subscribed") say("admin.push.notSubscribed");
+            else if (res === "not_configured") say("admin.push.notConfigured");
+            else say("admin.push.error", { status: r.data && r.data.status != null ? r.data.status : r.status });
+          });
+        }).catch(function () { say("admin.msg.noServer"); });
+    });
+    bar.appendChild(b);
+    c.appendChild(bar);
+    c.appendChild(out);
+    return c;
+  }
+
   // ---- Securitate (GET /api/admin/security; exportatorul root scrie snapshot.json) --------
   // The probed IPs and paths come from hostile traffic: everything is shown only via textContent.
 
@@ -936,6 +1026,7 @@
         loadNvme();
         secTick += 1;
         if (secTick % SEC_REFRESH_TICKS === 0) loadSecurity();
+        if (secTick % 3 === 0) loadVisitors();  // 3 x 10 s = 30 s
       }, REFRESH_MS);
       loadServer();
       loadNvme();

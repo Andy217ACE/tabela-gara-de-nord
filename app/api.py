@@ -38,7 +38,7 @@ from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice no
 from app import ocr_alt_api  # noqa: E402  (#ocr2, admin)
 from app import line_prediction, stats_overview  # noqa: E402  (Val 5: sezoane CSV, estimare per tren)
 from app.config import Settings, get_settings
-from app import perf
+from app import perf, visitors
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
@@ -345,6 +345,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         t0 = time.perf_counter()
         response = await call_next(request)
         route = request.scope.get("route")  # set by the router on a match: a template, not the raw path
+        if response.status_code < 400 and request.url.path != "/api/admin/visitors":
+            visitors.record(request.client.host if request.client else "",
+                            request.headers.get("user-agent", ""), request.url.path)
         if route is not None and request.url.path.startswith("/api/"):
             perf.record_route(route.path, (time.perf_counter() - t0) * 1000)
         for k, v in SECURITY_HEADERS.items():

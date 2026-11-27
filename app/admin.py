@@ -18,6 +18,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -30,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app import admin_settings, admin_tools, captures, observations, security_status
+from app import visitors, admin_settings, admin_tools, captures, observations, security_status
 from app.ocr import stats as ocr_stats
 from app.store import TZ
 
@@ -463,6 +464,45 @@ async def security(request: Request):
         out = await run_in_threadpool(security_status.read_snapshot, path, now.timestamp())
     out["now"] = now.isoformat(timespec="seconds")
     return _json(out)
+
+
+@guarded.get("/visitors")
+async def visitors_online(request: Request):
+    """Vizitatori online (ultimele 5 min), din memorie; IP mascat, fără boți."""
+    return _json({"window_s": visitors.ONLINE_S, "visitors": visitors.online(),
+                  "now": time.time()})
+
+
+_push_test_last = 0.0
+
+
+@guarded.post("/push-test", dependencies=[Depends(require_csrf)])
+async def push_test(request: Request):
+    """O notificare de test către un endpoint abonat (verificare Web Push pe telefon)."""
+    global _push_test_last
+    now = time.monotonic()
+    if now - _push_test_last < 10:
+        return _json({"result": "rate_limited"}, 429)
+    _push_test_last = now
+    try:
+        endpoint = (await request.json()).get("endpoint")
+    except Exception:
+        endpoint = None
+    app = request.app
+    sub = (await run_in_threadpool(app.state.store.get_subscription, endpoint)
+           if isinstance(endpoint, str) and endpoint else None)
+    if sub is None:
+        return _json({"result": "not_subscribed"})
+    st = app.state.settings
+    if not (st.vapid_private_key and st.vapid_public_key):
+        return _json({"result": "not_configured"})
+    try:
+        await app.state.notifier.send(sub, {"title": "Gara de Nord", "body": "Notificare de test",
+                                            "tag": "admin-test", "url": "/"})
+    except Exception as e:  # SubscriptionGone or RuntimeError("... HTTP <status>")
+        m = re.search(r"HTTP (\d+)", str(e))
+        return _json({"result": "error", "status": int(m.group(1)) if m else None})
+    return _json({"result": "sent"})
 
 
 def _env_defaults() -> dict[str, int]:

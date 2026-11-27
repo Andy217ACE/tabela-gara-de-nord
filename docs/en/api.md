@@ -149,6 +149,8 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | POST | `/api/admin/tools/dupes/apply` | admin + CSRF | Merges the duplicates (with a safety copy) | 7.7 |
 | POST | `/api/admin/tools/dupes/restore` | admin + CSRF | Restores the merges | 7.7 |
 | GET | `/api/admin/security` | admin | Security: banned IPs (fail2ban), ban history, requests/probes over 24 h and 7 days — from `security/snapshot.json` written by the root exporter; `available:false` + `reason` (`missing`/`invalid`/`stale`, with `age_s`) | — |
+| GET | `/api/admin/visitors` | admin | Online visitors (last 5 min), in memory: masked IP, browser/OS, last path, request count, first/last seen; bots excluded | — |
+| POST | `/api/admin/push-test` | admin + CSRF | Sends one test notification to `{endpoint}` only if subscribed; `result`: `sent`/`not_subscribed`/`not_configured`/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
 | GET | `/api/admin/tools/server` | admin | The server state (load, memory, services) | 7.8 |
 | GET | `/api/admin/system` | admin | The details of the System page | 7.9 |
 | GET | `/api/admin/tools/nvme` | admin | NVMe disk state (from `nvme.json`) | 7.10 |
