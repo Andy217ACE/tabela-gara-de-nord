@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.models import Row
-from app.store import Store, Subscription
+from app.store import MAX_FOLLOWS, Store, Subscription
 
 BUC = ZoneInfo("Europe/Bucharest")
 T0 = datetime(2026, 10, 20, 12, 0, tzinfo=BUC)
@@ -30,9 +30,9 @@ def store():
 def test_subscribe_returns_id_and_upserts(store):
     sid = store.subscribe(EP, "p1", "a1")
     assert isinstance(sid, int)
-    assert store.subscribe(EP, "p2", "a2") == sid  # same endpoint -> same row, keys updated
+    assert store.subscribe(EP, "p2", "a1") == sid  # same endpoint + auth -> same row, p256dh updated
     store.follow(EP, 1636, DAY)
-    assert store.followers(1636, DAY) == [Subscription(EP, "p2", "a2")]
+    assert store.followers(1636, DAY) == [Subscription(EP, "p2", "a1")]
 
 
 @pytest.mark.parametrize("bad", [
@@ -141,10 +141,11 @@ def test_resubscribe_moves_follows_and_drops_old(store):
     store.subscribe(EP, "p", "a")
     store.follow(EP, 1636, DAY)
     store.follow(EP, 531, DAY)
-    sid = store.resubscribe(EP, EP2, "p2", "a2")
+    sid, dropped = store.resubscribe(EP, "a", EP2, "p2", "a2", today=date(2026, 10, 20))
+    assert dropped == 0
     assert store.get_subscription(EP) is None
     assert store.get_subscription(EP2) == Subscription(EP2, "p2", "a2")
-    assert [f["train_no"] for f in store.list_follows(EP2)] == [1636, 531]
+    assert sorted(f["train_no"] for f in store.list_follows(EP2)) == [531, 1636]
     assert store._conn.execute("SELECT COUNT(*) FROM subscriptions").fetchone()[0] == 1
     assert sid == store._sub_id(EP2)
 
@@ -152,27 +153,75 @@ def test_resubscribe_moves_follows_and_drops_old(store):
 def test_resubscribe_merges_into_existing_new_endpoint(store):
     store.subscribe(EP, "p", "a")
     store.follow(EP, 1636, DAY)
-    store.subscribe(EP2, "p", "a")  # the new endpoint was already posted via /subscribe
+    store.subscribe(EP2, "p", "a2")  # the new endpoint was already posted via /subscribe
     store.follow(EP2, 1636, DAY)
     store.follow(EP2, 531, DAY)
-    store.resubscribe(EP, EP2, "p2", "a2")
+    store.resubscribe(EP, "a", EP2, "p2", "a2", today=date(2026, 10, 20))
     assert store.get_subscription(EP) is None
     assert sorted(f["train_no"] for f in store.list_follows(EP2)) == [531, 1636]
 
 
-def test_resubscribe_unknown_old_is_subscribe(store):
-    store.resubscribe(EP, EP2, "p", "a")
-    assert store.get_subscription(EP2) == Subscription(EP2, "p", "a")
+def test_resubscribe_same_endpoint_changes_keys(store):
     store.subscribe(EP, "p", "a")
     store.follow(EP, 1636, DAY)
-    store.resubscribe(EP, EP, "p3", "a3")  # same endpoint: only the keys change
+    store.resubscribe(EP, "a", EP, "p3", "a3")
     assert store.get_subscription(EP) == Subscription(EP, "p3", "a3")
     assert len(store.list_follows(EP)) == 1
 
 
+@pytest.mark.parametrize("old_auth", [None, "", "b", "a" * 2])
+def test_resubscribe_needs_old_auth(store, old_auth):
+    store.subscribe(EP, "p", "a")
+    store.follow(EP, 1636, DAY)
+    with pytest.raises(PermissionError):
+        store.resubscribe(EP, old_auth, EP2, "p2", "a2")
+    assert len(store.list_follows(EP)) == 1 and store.get_subscription(EP2) is None
+
+
+def test_resubscribe_unknown_old_is_refused_like_a_mismatch(store):
+    with pytest.raises(PermissionError):
+        store.resubscribe(EP, "a", EP2, "p", "a")
+    assert store.get_subscription(EP2) is None
+
+
+def test_resubscribe_cannot_take_over_another_new_endpoint(store):
+    store.subscribe(EP, "p", "a")
+    store.subscribe(EP2, "p", "victim")
+    store.follow(EP2, 531, DAY)
+    with pytest.raises(PermissionError):
+        store.resubscribe(EP, "a", EP2, "p", "a")
+    assert store.get_subscription(EP2).auth == "victim"
+    assert store.get_subscription(EP) is not None
+
+
+def test_subscribe_refuses_rekey_but_allows_same_keys(store):
+    store.subscribe(EP, "p", "a")
+    store.subscribe(EP, "p", "a")  # the owner posting again: fine
+    with pytest.raises(PermissionError):
+        store.subscribe(EP, "p", "other")
+    assert store.get_subscription(EP).auth == "a"
+    assert store.owns(EP, "a") and not store.owns(EP, "other") and not store.owns(EP2, "a")
+    assert not store.owns(EP, None)
+
+
+def test_resubscribe_merge_respects_max_follows(store):
+    today = date(2026, 10, 20)
+    store.subscribe(EP, "p", "a")
+    store.subscribe(EP2, "p", "a2")
+    for i in range(MAX_FOLLOWS):                  # old: trains 1..20 on Oct 22
+        store.follow(EP, i + 1, "2026-10-22", today=today)
+    for i in range(5):                            # new: trains 100..104 on Oct 21 (sooner)
+        store.follow(EP2, 100 + i, "2026-10-21", today=today)
+    store._conn.execute("INSERT INTO follows VALUES (?, 999, '2026-10-01')", (store._sub_id(EP),))
+    _, dropped = store.resubscribe(EP, "a", EP2, "p2", "a2", today=today)
+    kept = [(f["date"], f["train_no"]) for f in store.list_follows(EP2)]
+    assert dropped == 5 and len(kept) == MAX_FOLLOWS   # the stale Oct 1 follow is not counted
+    assert sorted(kept) == [("2026-10-21", 100 + i) for i in range(5)] +         [("2026-10-22", i + 1) for i in range(15)]
+
+
 @pytest.mark.parametrize("args", [
-    ("https://push.example.com/x", EP2, "p", "a"), (EP, "https://push.example.com/x", "p", "a"),
-    (EP, EP2, "", "a"), (EP, EP2, "p", "a" * 300)])
+    ("https://push.example.com/x", "a", EP2, "p", "a"), (EP, "a", "https://push.example.com/x", "p", "a"),
+    (EP, "a", EP2, "", "a"), (EP, "a", EP2, "p", "a" * 300)])
 def test_resubscribe_validates_and_keeps_old(store, args):
     store.subscribe(EP, "p", "a")
     store.follow(EP, 1636, DAY)

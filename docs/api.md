@@ -90,13 +90,13 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/weather` | nimic | Ultima observație meteo (model Open-Meteo) | 5.5 |
 | GET | `/api/history` | nimic | Istoricul unei zile sau, cu `all=1`, al tuturor zilelor | 5.6 |
 | GET | `/api/train/{no}` | nimic | Evenimentele unui tren într-o zi | 5.7 |
-| GET | `/api/follows` | nimic (parametru `endpoint`) | Trenurile urmărite de un abonat | 5.8 |
+| GET | `/api/follows` | `keys.auth` al abonării (antet `X-Push-Auth`, 5.10.2) | Trenurile urmărite de un abonat | 5.8 |
 | GET | `/api/push/key` | nimic | Cheia publică VAPID pentru notificări | 5.9 |
 | POST | `/api/push/subscribe` | nimic | Abonare la notificări | 5.10 |
-| POST | `/api/push/resubscribe` | nimic | Reabonare cu cheia VAPID curentă; mută urmăririle | 5.10.1 |
-| POST | `/api/push/unsubscribe` | nimic | Dezabonare | 5.11 |
-| POST | `/api/follow` | nimic | Urmărește un tren într-o zi | 5.12 |
-| DELETE | `/api/follow` | nimic | Oprește urmărirea | 5.12 |
+| POST | `/api/push/resubscribe` | `keys.auth` al abonării vechi (5.10.2) | Reabonare cu cheia VAPID curentă; mută urmăririle | 5.10.1 |
+| POST | `/api/push/unsubscribe` | `keys.auth` al abonării (5.10.2) | Dezabonare | 5.11 |
+| POST | `/api/follow` | `keys.auth` al abonării (5.10.2) | Urmărește un tren într-o zi | 5.12 |
+| DELETE | `/api/follow` | `keys.auth` al abonării (5.10.2) | Oprește urmărirea | 5.12 |
 | GET | `/api/journeys` | nimic | Călătoriile (rezultatul final) | 5.13 |
 | GET | `/api/journeys/{jid}` | nimic | Detaliul unei călătorii | 5.13 |
 | GET | `/api/trains` | nimic | Catalogul public al trenurilor | 5.14 |
@@ -465,8 +465,10 @@ Evenimentele unui tren într-o zi (apariții, schimbări de întârziere, linie,
 Trenurile urmărite de un abonament push. Este apelată de pagina „Urmărite”.
 
 - **Parametri:** `endpoint` (query, obligatoriu). Trebuie să treacă validarea din secțiunea 5.10.
+- **Antet obligatoriu:** `X-Push-Auth: <keys.auth al abonării>` (dovada de proprietate, vezi 5.10.2;
+  e antet, nu parametru de query, ca să nu ajungă în jurnale).
 - **Răspuns (200):** `{"follows": [{"train_no": 1636, "date": "2026-10-31", "on_board": true, "delay_min": 5, "delay_read": true}]}`.
-- **Erori:** 422 `"Endpoint de notificare invalid."` (și pentru parametru lipsă).
+- **Erori:** 422 `"Endpoint de notificare invalid."` (și pentru parametru lipsă); 403 (vezi 5.10.2).
 - **Confidențialitate:** adresa endpoint-ului push apare în query string; nginx nu o scrie în
   jurnalul de acces (`access_log off`). Jurnalul de erori o poate conține la 429.
 
@@ -493,7 +495,9 @@ Trenurile urmărite de un abonament push. Este apelată de pagina „Urmărite�
   cereri către rețeaua internă (SSRF).
 - **Răspuns (200):** `{"ok": true}`.
 - **Erori:** 422 `"Endpoint de notificare invalid."`, 422 `"Cheile abonării lipsesc."`, 422
-  `"Abonare invalidă."` (chei prea scurte sau formă greșită), 413 peste 4 096 de octeți.
+  `"Abonare invalidă."` (chei prea scurte sau formă greșită), 413 peste 4 096 de octeți, 403 dacă
+  `endpoint` e deja înregistrat cu alt `keys.auth` (cheile unei abonări existente nu pot fi
+  înlocuite de oricine cunoaște adresa; același `auth` = reînregistrare acceptată).
 
 ### 5.10.1 `POST /api/push/resubscribe`
 
@@ -503,35 +507,50 @@ compară `applicationServerKey` al abonării cu `/api/push/key`; dacă diferă, 
 se abonează din nou cu cheia curentă și apelează această rută. Browserele care nu expun cheia
 nu pot fi verificate (abonarea rămâne).
 
-- **Corp:** ca la 5.10, plus `old_endpoint` (obligatoriu, aceleași reguli ca `endpoint`).
+- **Corp:** ca la 5.10, plus `old_endpoint` (obligatoriu, aceleași reguli ca `endpoint`) și
+  `old_auth` (obligatoriu: `keys.auth` al abonării vechi, citit de browser înainte de dezabonare).
 - **Efect (atomic):** înregistrează `endpoint`, mută urmăririle de pe `old_endpoint` pe el și șterge
-  abonarea veche. Dacă `old_endpoint` nu e cunoscut, se comportă ca 5.10.
-- **Răspuns (200):** `{"ok": true}`.
-- **Erori:** ca la 5.10 (422, 413); la eroare abonarea veche rămâne neatinsă.
+  abonarea veche. După mutare rămân cel mult 20 de urmăriri active (din ieri încolo), cele mai
+  apropiate în timp (ordonate după dată, apoi număr de tren); cele mai vechi de ieri se șterg.
+- **Răspuns (200):** `{"ok": true, "dropped": 0}`; `dropped` = câte urmăriri au fost tăiate de limită.
+- **Erori:** ca la 5.10 (422, 413); 403 dacă `old_auth` nu se potrivește sau `old_endpoint` nu e
+  cunoscut (același răspuns în ambele cazuri). `follows.js` trece atunci la 5.10 (abonare simplă,
+  fără mutarea urmăririlor). La eroare abonarea veche rămâne neatinsă.
+
+### 5.10.2 Dovada de proprietate
+
+Adresa `endpoint` e cunoscută și de serviciul push (Google, Mozilla, Apple), deci nu e un secret
+suficient. Rutele care citesc sau modifică o abonare cer și `keys.auth` al ei, pe care îl știu doar
+browserul și serverul: în corp (`auth`; la 5.10.1 `old_auth`) sau, la `GET /api/follows`, în antetul
+`X-Push-Auth`. Serverul compară în timp constant (`hmac.compare_digest`). Abonare necunoscută și
+dovadă greșită primesc același răspuns: 403
+`{"detail": "Abonare necunoscută sau dovadă de abonare invalidă."}`. Limitarea ratei: zona nginx
+`tabela_api` (10 cereri/s pe IP, vezi secțiunea despre limite).
 
 ### 5.11 `POST /api/push/unsubscribe`
 
-- **Corp:** `{"endpoint": "<același endpoint>"}`.
+- **Corp:** `{"endpoint": "<același endpoint>", "auth": "<keys.auth>"}`.
 - **Răspuns (200):** `{"ok": true}`. Dezabonarea șterge și urmăririle trenurilor.
-- **Erori:** 422 pentru endpoint invalid.
+- **Erori:** 422 pentru endpoint invalid; 403 (vezi 5.10.2).
 
 ### 5.12 `POST /api/follow` și `DELETE /api/follow`
 
 Urmărește sau oprește urmărirea unui tren pentru o zi. Notificarea vine la schimbarea
 întârzierii sau a liniei ori la dispariția trenului de pe tablă.
 
-- **Corp (ambele metode):** `{"endpoint": "…", "train": 1636, "date": "2026-10-31"}`.
+- **Corp (ambele metode):** `{"endpoint": "…", "auth": "<keys.auth>", "train": 1636, "date": "2026-10-31"}`.
 
 | Câmp | Reguli |
 |---|---|
 | `endpoint` | Ca la 5.10. Abonamentul trebuie să existe deja. |
+| `auth` | `keys.auth` al abonării (5.10.2); altfel 403, la ambele metode. |
 | `train` | Întreg 1–999999 (sau text numeric). |
 | `date` | Obligatoriu, `AAAA-LL-ZZ`. La `POST` trebuie să fie azi sau mai târziu (fus `Europe/Bucharest`). |
 
 - **Răspuns (200):** `{"ok": true}` (la ambele metode).
 - **Erori la POST:**
   - 422 `"Data trebuie să fie azi sau mai târziu."` (pentru o zi din trecut);
-  - 422 `"Abonare necunoscută; activează întâi notificările."`;
+  - 403 `"Abonare necunoscută sau dovadă de abonare invalidă."` (5.10.2);
   - 422 `"Limită de 20 de trenuri."` (de la 20 de urmăriri active; urmăririle din zile trecute nu se
     numără);
   - 422 `"Cerere invalidă."` sau alt mesaj de validare.

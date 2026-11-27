@@ -1,10 +1,15 @@
 # © 2026 Andy217Ace
 """Spike-ul intern Infofer: parserul pe fixture (fără rețea), inserarea + retenția, analiza
 pe două baze sintetice mici."""
+import gzip
 import importlib.util
+import io
 import sqlite3
+import zlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from app import quality as dq
 
@@ -77,6 +82,72 @@ def test_main_logs_failure_and_exits_nonzero(tmp_path, monkeypatch):
     run = sqlite3.connect(db).execute("SELECT http_status, n_markers, error FROM infofer_runs"
                                       ).fetchone()
     assert run[:2] == (200, 0) and "format" in run[2]
+
+
+
+class _Resp:
+    """Răspuns HTTP fals (fără rețea); `read(n)` respectă n, ca http.client."""
+    def __init__(self, body: bytes, headers: dict | None = None):
+        self._buf, self.headers, self.status, self.max_read = io.BytesIO(body), headers or {}, 200, 0
+
+    def read(self, n=-1):
+        self.max_read = max(self.max_read, n)
+        return self._buf.read(n)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _gzip_bomb(n: int) -> bytes:
+    c = zlib.compressobj(9, zlib.DEFLATED, 16 + zlib.MAX_WBITS)
+    chunk = bytes(1 << 20)
+    out = [c.compress(chunk) for _ in range(n >> 20)]
+    return b"".join(out) + c.flush()
+
+
+def test_read_body_normal_plain_and_gzip():
+    page = FIXTURE.read_bytes()
+    assert col.read_body(_Resp(page)) == page
+    assert col.read_body(_Resp(gzip.compress(page), {"Content-Encoding": "gzip"})) == page
+
+
+def test_read_body_rejects_big_content_length_without_reading():
+    r = _Resp(b"x", {"Content-Length": str(col.MAX_RAW + 1)})
+    with pytest.raises(col.TooLarge):
+        col.read_body(r)
+    assert r.max_read == 0
+
+
+def test_read_body_caps_raw_read():
+    r = _Resp(b"x" * (col.MAX_RAW + 100))      # no Content-Length (chunked)
+    with pytest.raises(col.TooLarge):
+        col.read_body(r)
+    assert r.max_read == col.MAX_RAW + 1
+
+
+def test_gzip_bomb_rejected_with_bounded_output():
+    bomb = _gzip_bomb(64 << 20)                  # 64 MB of zeros -> ~64 KB compressed
+    assert len(bomb) < col.MAX_RAW
+    with pytest.raises(col.TooLarge):
+        col.read_body(_Resp(bomb, {"Content-Encoding": "gzip"}))
+
+
+def test_truncated_gzip_is_eof_error():
+    with pytest.raises(EOFError):
+        col.gunzip_capped(gzip.compress(b"a" * 1000)[:-12])
+
+
+def test_main_logs_oversized_response(tmp_path, monkeypatch):
+    bomb = _gzip_bomb(16 << 20)
+    monkeypatch.setattr(col.urllib.request, "urlopen",
+                        lambda req, timeout: _Resp(bomb, {"Content-Encoding": "gzip"}))
+    db = str(tmp_path / "i.db")
+    assert col.main(["--db", db]) == 1
+    run = sqlite3.connect(db).execute("SELECT n_markers, error FROM infofer_runs").fetchone()
+    assert run[0] == 0 and run[1].startswith("TooLarge")
 
 
 def _main_db(path):

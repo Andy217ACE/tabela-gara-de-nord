@@ -92,13 +92,13 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/weather` | nothing | The last weather observation (Open-Meteo model) | 5.5 |
 | GET | `/api/history` | nothing | The history of a day or, with `all=1`, of all days | 5.6 |
 | GET | `/api/train/{no}` | nothing | A train's events on a day | 5.7 |
-| GET | `/api/follows` | nothing (`endpoint` parameter) | The trains followed by a subscriber | 5.8 |
+| GET | `/api/follows` | the subscription's `keys.auth` (`X-Push-Auth` header, 5.10.2) | The trains followed by a subscriber | 5.8 |
 | GET | `/api/push/key` | nothing | The public VAPID key for notifications | 5.9 |
 | POST | `/api/push/subscribe` | nothing | Subscribe to notifications | 5.10 |
-| POST | `/api/push/resubscribe` | nothing | Re-subscribe with the current VAPID key; moves the follows | 5.10.1 |
-| POST | `/api/push/unsubscribe` | nothing | Unsubscribe | 5.11 |
-| POST | `/api/follow` | nothing | Follow a train on a day | 5.12 |
-| DELETE | `/api/follow` | nothing | Stop following | 5.12 |
+| POST | `/api/push/resubscribe` | the old subscription's `keys.auth` (5.10.2) | Re-subscribe with the current VAPID key; moves the follows | 5.10.1 |
+| POST | `/api/push/unsubscribe` | the subscription's `keys.auth` (5.10.2) | Unsubscribe | 5.11 |
+| POST | `/api/follow` | the subscription's `keys.auth` (5.10.2) | Follow a train on a day | 5.12 |
+| DELETE | `/api/follow` | the subscription's `keys.auth` (5.10.2) | Stop following | 5.12 |
 | GET | `/api/journeys` | nothing | The journeys (the final result) | 5.13 |
 | GET | `/api/journeys/{jid}` | nothing | The detail of a journey | 5.13 |
 | GET | `/api/trains` | nothing | The public train catalog | 5.14 |
@@ -467,8 +467,10 @@ A train's events on a day (appearances, delay changes, track changes, disappeara
 The trains followed by a push subscription. It is called by the "Followed trains" page.
 
 - **Parameters:** `endpoint` (query, mandatory). It must pass the validation in section 5.10.
+- **Mandatory header:** `X-Push-Auth: <the subscription's keys.auth>` (proof of ownership, see
+  5.10.2; a header, not a query parameter, so that it does not reach the logs).
 - **Response (200):** `{"follows": [{"train_no": 1636, "date": "2026-10-31", "on_board": true, "delay_min": 5, "delay_read": true}]}`.
-- **Errors:** 422 `"Endpoint de notificare invalid."` (Invalid notification endpoint; also for a missing parameter).
+- **Errors:** 422 `"Endpoint de notificare invalid."` (Invalid notification endpoint; also for a missing parameter); 403 (see 5.10.2).
 - **Privacy:** the push endpoint address appears in the query string; nginx does not write it to the
   access log (`access_log off`). The error log may contain it on a 429.
 
@@ -495,7 +497,10 @@ Registers a Web Push subscription.
   requests to the internal network (SSRF).
 - **Response (200):** `{"ok": true}`.
 - **Errors:** 422 `"Endpoint de notificare invalid."`, 422 `"Cheile abonării lipsesc."` (The subscription keys are missing), 422
-  `"Abonare invalidă."` (Invalid subscription; keys too short or the wrong shape), 413 over 4,096 bytes.
+  `"Abonare invalidă."` (Invalid subscription; keys too short or the wrong shape), 413 over 4,096 bytes,
+  403 if `endpoint` is already registered with another `keys.auth` (the keys of an existing
+  subscription cannot be replaced by whoever knows the address; the same `auth` = re-registration
+  accepted).
 
 ### 5.10.1 `POST /api/push/resubscribe`
 
@@ -505,35 +510,51 @@ subscription's `applicationServerKey` with `/api/push/key`; if they differ, it u
 browser, subscribes again with the current key and calls this route. Browsers that do not expose
 the key cannot be checked (the subscription is kept).
 
-- **Body:** as in 5.10, plus `old_endpoint` (mandatory, same rules as `endpoint`).
+- **Body:** as in 5.10, plus `old_endpoint` (mandatory, same rules as `endpoint`) and `old_auth`
+  (mandatory: the old subscription's `keys.auth`, read by the browser before unsubscribing).
 - **Effect (atomic):** registers `endpoint`, moves the follows of `old_endpoint` to it and deletes
-  the old subscription. If `old_endpoint` is unknown, it behaves like 5.10.
-- **Response (200):** `{"ok": true}`.
-- **Errors:** as in 5.10 (422, 413); on error the old subscription is left untouched.
+  the old subscription. After the move at most 20 active follows (from yesterday on) remain, the
+  soonest ones (ordered by date, then train number); those older than yesterday are deleted.
+- **Response (200):** `{"ok": true, "dropped": 0}`; `dropped` = how many follows the cap removed.
+- **Errors:** as in 5.10 (422, 413); 403 if `old_auth` does not match or `old_endpoint` is unknown
+  (the same answer in both cases). `follows.js` then falls back to 5.10 (plain subscribe, without
+  moving the follows). On error the old subscription is left untouched.
+
+### 5.10.2 Proof of ownership
+
+The `endpoint` address is also known to the push service (Google, Mozilla, Apple), so it is not a
+sufficient secret. The routes that read or change a subscription also require its `keys.auth`,
+which only the browser and the server know: in the body (`auth`; `old_auth` in 5.10.1) or, for
+`GET /api/follows`, in the `X-Push-Auth` header. The server compares in constant time
+(`hmac.compare_digest`). An unknown subscription and a wrong proof get the same answer: 403
+`{"detail": "Abonare necunoscută sau dovadă de abonare invalidă."}` (Unknown subscription or invalid
+subscription proof). Rate limiting: the nginx zone `tabela_api` (10 requests/s per IP, see the
+section on limits).
 
 ### 5.11 `POST /api/push/unsubscribe`
 
-- **Body:** `{"endpoint": "<the same endpoint>"}`.
+- **Body:** `{"endpoint": "<the same endpoint>", "auth": "<keys.auth>"}`.
 - **Response (200):** `{"ok": true}`. Unsubscribing also deletes the train follows.
-- **Errors:** 422 for an invalid endpoint.
+- **Errors:** 422 for an invalid endpoint; 403 (see 5.10.2).
 
 ### 5.12 `POST /api/follow` and `DELETE /api/follow`
 
 Follow or stop following a train for a day. The notification comes when the delay or the track
 changes or when the train disappears from the board.
 
-- **Body (both methods):** `{"endpoint": "…", "train": 1636, "date": "2026-10-31"}`.
+- **Body (both methods):** `{"endpoint": "…", "auth": "<keys.auth>", "train": 1636, "date": "2026-10-31"}`.
 
 | Field | Rules |
 |---|---|
 | `endpoint` | As in 5.10. The subscription must already exist. |
+| `auth` | The subscription's `keys.auth` (5.10.2); otherwise 403, for both methods. |
 | `train` | An integer 1–999999 (or numeric text). |
 | `date` | Mandatory, `AAAA-LL-ZZ`. On `POST` it must be today or later (time zone `Europe/Bucharest`). |
 
 - **Response (200):** `{"ok": true}` (for both methods).
 - **Errors on POST:**
   - 422 `"Data trebuie să fie azi sau mai târziu."` (The date must be today or later) (for a day in the past);
-  - 422 `"Abonare necunoscută; activează întâi notificările."` (Unknown subscription; enable notifications first);
+  - 403 `"Abonare necunoscută sau dovadă de abonare invalidă."` (Unknown subscription or invalid subscription proof; 5.10.2);
   - 422 `"Limită de 20 de trenuri."` (Limit of 20 trains) (from 20 active follows; follows from past days are not
     counted);
   - 422 `"Cerere invalidă."` (Invalid request) or another validation message.
