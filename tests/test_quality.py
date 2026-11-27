@@ -196,15 +196,39 @@ def _db_svc(c, day, no, sched, fs, ls, station="BUZAU"):
         (day, "R", no, station, "CFR", sched, fs, ls, station)).lastrowid
 
 
-def _db_obs(c, sid, no, at, cap=None, sched="04:47"):
+def _db_obs(c, sid, no, at, cap=None, sched="04:47", state="ok"):
     if cap is None:
         cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
                         (at, f"h-{sid}-{at}")).lastrowid
     c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
               " train_no, sched_time, station, validation_state, processing_version)"
-              " VALUES (?,?, 'departure', 0, ?, ?, ?, 'BUZAU', 'ok', 't')",
-              (cap, sid, at, no, sched))
+              " VALUES (?,?, 'departure', 0, ?, ?, ?, 'BUZAU', ?, 't')",
+              (cap, sid, at, no, sched, state))
     return cap
+
+
+def test_judge_ghost_single_frame_only_without_other_reads(tmp_path):
+    from app.store import Store
+
+    s = Store(str(tmp_path / "q.db"))
+    s.migrate()
+    c = s._conn
+    d = "2026-11-03"
+    # 03.11 shape: one observation in all, last_seen stretched by a re-served image
+    stale = _db_svc(c, d, 461, "10:11", f"{d}T20:28:26+02:00", f"{d}T20:36:47+02:00")
+    _db_obs(c, stale, 461, f"{d}T18:28:26+00:00", sched="10:11")
+    assert q.judge_ghost(c, stale) == ("short", None)
+    # read cleanly once, then kept alive 15 min by low-confidence rows: a real train
+    real = _db_svc(c, d, 1751, "11:10", f"{d}T10:00:00+02:00", f"{d}T10:15:00+02:00")
+    _db_obs(c, real, 1751, f"{d}T08:00:00+00:00", sched="11:10")
+    for m in range(1, 15):
+        _db_obs(c, real, 1751, f"{d}T08:{m:02d}:00+00:00", sched="11:10",
+                state="rejected_low_conf")
+    assert q.judge_ghost(c, real) is None
+    q.backfill(c)
+    got = dict(c.execute("SELECT service_id, ghost FROM service_quality").fetchall())
+    assert got[stale] == 1 and got[real] == 0
+    s.close()
 
 
 # coexist: None (never read together), "04:47" (two rows of one time in one frame: two
