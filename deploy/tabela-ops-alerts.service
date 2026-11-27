@@ -1,0 +1,43 @@
+# © 2026 Andy217Ace
+# Alerte de operare pe Telegram (scripts/ops_alerts.py): /api/health local + public, disc,
+# colector Infofer, unități tabela-* căzute; dedup + cooldown + „rezolvat”. Fără
+# TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID în /etc/tabela.env nu face nimic (iese cu 0).
+# NEINSTALAT de update.sh: se instalează de mână, vezi docs/administrare-operare.md.
+# Pornit de tabela-ops-alerts.timer.
+[Unit]
+Description=Tabela Gara de Nord - alerte de operare (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tabela
+Group=tabela
+WorkingDirectory=/opt/tabela/app
+EnvironmentFile=/etc/tabela.env
+Environment=OPS_STATE_PATH=/var/lib/tabela/ops_alerts.json
+ExecStart=/opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/ops_alerts.py
+Nice=10
+TimeoutStartSec=120
+
+# Limite: script mic (câteva cereri HTTP, statvfs, systemctl)
+MemoryHigh=96M
+MemoryMax=128M
+CPUQuota=25%
+TasksMax=16
+
+# Hardening (ca tabela-infofer.service); AF_UNIX pentru systemctl (D-Bus)
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tabela
+ReadOnlyPaths=/opt/tabela
+PrivateTmp=true
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0027

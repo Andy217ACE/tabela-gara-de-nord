@@ -27,6 +27,7 @@ Convenții:
 14. [Ce nu am putut verifica și inconsistențe](#14-ce-nu-am-putut-verifica-și-inconsistențe)
 15. [Firewall, fail2ban și monitorizare externă](#15-firewall-fail2ban-și-monitorizare-externă)
 16. [Spike intern Infofer (temporar)](#16-spike-intern-infofer-temporar)
+17. [Alerte de operare (`scripts/ops_alerts.py`)](#17-alerte-de-operare-scriptsops_alertspy)
 
 ---
 
@@ -764,7 +765,7 @@ eroare, răspunde „nu ignora”. Limită: excepția se uită doar în `access.
 
 Pagina `#admin` (cardul „Securitate (fail2ban)”) arată, pentru admin, IP-urile banate și numărul de cereri/probe (`GET /api/admin/security`, din `security/snapshot.json`, scris la fiecare două minute de `tabela-security-snapshot.timer`).
 
-**Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram) și de la temporizatorul de sănătate NVMe.
+**Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram), de la temporizatorul de sănătate NVMe și de la alertele de operare (secțiunea 17).
 
 **Ce lipsește, deliberat sau încă nefăcut:** copia de siguranță în afara serverului (off-site) nu există; copia zilnică restic (secțiunea 6) e pe același disc; decizia aparține proprietarului și este amânată. Actualizările de sistem nu sunt automate. Vezi `docs/decizii-arhitectura.md`.
 
@@ -781,3 +782,29 @@ Pagina `#admin` (cardul „Securitate (fail2ban)”) arată, pentru admin, IP-ur
 - **Oprire:** `sudo systemctl disable --now tabela-infofer.timer` (apoi, opțional, ștergerea unităților din `/etc/systemd/system/` și a `/var/lib/tabela/infofer.db`).
 
 **Termenii Infofer:** datele sunt doar pentru uz necomercial; afișarea lor publică cere acordul scris al Infofer. De aceea spike-ul rămâne intern și temporar.
+
+---
+
+## 17. Alerte de operare (`scripts/ops_alerts.py`)
+
+**Ce face.** `deploy/tabela-ops-alerts.timer` pornește la 5 minute `tabela-ops-alerts.service` (utilizatorul `tabela`), care verifică și trimite pe Telegram, prin **același** canal ca alertele de trenuri (`app/telegram.py`, secțiunea 7, același bot și chat):
+
+| Verificare | Nivel |
+|---|---|
+| `http://127.0.0.1:8000/api/health` nu răspunde | critic |
+| `https://tabelacfr.ddns.net/api/health` nu răspunde (din server; `OPS_PUBLIC_URL=` gol o oprește, de ex. dacă routerul nu face NAT loopback) | critic |
+| panouri vechi (`ok:false` sau `boards.*.stale`) | atenție |
+| OCR degradat: din ≥ 10 cadre în ultima oră, sub jumătate complete (`ocr.window.full_frames / frames`) | atenție |
+| disc `/`, `/var/lib/tabela`, `/var/lib/tabela/captures` (fiecare sistem de fișiere o dată) peste 85% / 95% | atenție / critic |
+| colectorul Infofer: timer-ul activ, dar nicio rulare cu markeri în `infofer_runs` de peste 15 min | atenție |
+| unități `tabela*` în starea `failed` | critic |
+
+**Fără zgomot.** O problemă se anunță abia la a doua rulare la rând (o repornire la deploy nu alertează), apoi cel mult o dată la 3 ore, sau imediat dacă se agravează (atenție → critic). La revenire pleacă un mesaj „[REZOLVAT]”. Starea: `/var/lib/tabela/ops_alerts.json` (`OPS_STATE_PATH`). Un mesaj care nu a plecat (rețea, Telegram) nu se reîncearcă până la următoarea reamintire.
+
+**Fără Telegram.** Dacă `TELEGRAM_BOT_TOKEN` sau `TELEGRAM_CHAT_ID` lipsesc din `/etc/tabela.env`, scriptul scrie un rând în jurnal și iese cu 0 (nu verifică nimic).
+
+- **Instalare (de mână; `update.sh` NU o face):** `sudo install -m 644 /opt/tabela/app/deploy/tabela-ops-alerts.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tabela-ops-alerts.timer`.
+- **Probă fără trimitere** (afișează ce ar trimite; la prima rulare nimic, o problemă apare abia la a doua): `sudo systemd-run --pipe --wait -p User=tabela -p EnvironmentFile=/etc/tabela.env -p WorkingDirectory=/opt/tabela/app /opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/ops_alerts.py --dry-run --state /tmp/ops.json`.
+- **Jurnal:** `journalctl -u tabela-ops-alerts -n 50`. **Oprire:** `sudo systemctl disable --now tabela-ops-alerts.timer`.
+
+**Monitorizare din afară.** Scriptul rulează pe același server: dacă serverul, curentul sau internetul casei cad, nu mai trimite nimic. De aceea rămâne necesar un monitor extern (UptimeRobot sau similar), configurat în contul proprietarului (nicio cheie în repo): verificare HTTP(S) la `https://tabelacfr.ddns.net/api/health` la 5 minute, metoda `HEAD` sau `GET`, cu alertă pe e-mail/Telegram din serviciul extern. Pentru „site sus, dar tabela nu se citește”, monitorul poate cere cuvântul `"ok":true` în răspuns (keyword monitor, doar cu `GET`).

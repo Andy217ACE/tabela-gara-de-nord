@@ -14,3 +14,9 @@ Group=tabela
 WorkingDirectory=/opt/tabela/app
 ExecStart=/opt/tabela/venv/bin/python -m app.watchdog --state /var/lib/tabela/watchdog.json --url http://127.0.0.1:8000/api/health --service tabela
 TimeoutStartSec=90
+
+# Limite: o cerere HTTP pe minut
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=32

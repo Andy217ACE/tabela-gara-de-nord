@@ -21,6 +21,14 @@ Restart=always
 RestartSec=5
 TimeoutStopSec=30
 
+# Limite de izolare (server: i5-10400 6c/12t, 15 GiB RAM): un worker + OCR (OpenCV/Tesseract,
+# OMP_THREAD_LIMIT=1). Plafoanele opresc o scurgere înainte să sufoce restul; nu încetinesc
+# rularea normală. MemoryHigh frânează (reclaim), MemoryMax = OOM kill în cgroup + Restart.
+MemoryHigh=3G
+MemoryMax=4G
+CPUQuota=400%
+TasksMax=512
+
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict

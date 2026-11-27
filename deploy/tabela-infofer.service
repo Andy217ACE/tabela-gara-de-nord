@@ -17,6 +17,12 @@ ExecStart=/opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/infofer_collect
 Nice=10
 TimeoutStartSec=60
 
+# Limite: o cerere GET + parsare (câteva sute de KB)
+MemoryHigh=192M
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=16
+
 # Hardening (ca tabela-shadow-train.service), plus rețea IPv4/IPv6 pentru cererea HTTPS.
 NoNewPrivileges=true
 ProtectSystem=strict

@@ -16,6 +16,13 @@ Nice=19
 IOSchedulingClass=idle
 TimeoutStartSec=2h
 
+# Limite: antrenarea a măsurat ~4,8 GB; MemoryMax=7G ca drop-in-ul memory.conf de pe server.
+# CPUQuota lasă mereu cel puțin 8 fire libere pentru tabela.service (are și Nice=19).
+MemoryHigh=6G
+MemoryMax=7G
+CPUQuota=400%
+TasksMax=256
+
 # Hardening (ca tabela.service); ReadWritePaths=/var/lib/tabela e necesar pentru fisierele
 # -wal/-shm ale SQLite in mod citire; scriptul nu scrie decat in shadow/.
 NoNewPrivileges=true

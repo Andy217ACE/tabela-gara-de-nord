@@ -11,6 +11,12 @@ Type=oneshot
 User=root
 ExecStart=/opt/tabela/venv/bin/python /opt/tabela/app/scripts/nvme_collect.py /var/lib/tabela/nvme.json
 TimeoutStartSec=90
+
+# Limite: python + nvme/smartctl, doar citire
+MemoryHigh=96M
+MemoryMax=128M
+CPUQuota=25%
+TasksMax=16
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/tabela
