@@ -157,7 +157,7 @@ def fetch() -> tuple[int, bytes]:
     req = urllib.request.Request(URL, headers={
         "User-Agent": USER_AGENT, "Accept": "text/html,*/*;q=0.8",
         "Accept-Encoding": "gzip", "Accept-Language": "ro-RO,ro;q=0.9"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:  # nosec B310 - URL is a module constant (https), no user input
         body = resp.read()
         if resp.headers.get("Content-Encoding", "").lower() == "gzip":
             body = gzip.decompress(body)

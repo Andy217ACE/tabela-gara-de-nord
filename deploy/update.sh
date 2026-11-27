@@ -4,7 +4,7 @@
 # Default branch: the one currently checked out (fails on a detached HEAD).
 #
 #  1. records the running commit (PREV), fetches and checks out origin/<branch>;
-#  2. pip install -r requirements.txt - on failure the old commit is checked out again
+#  2. pip install (requirements.lock with --require-hashes) - on failure the old commit is checked out again
 #     and the service is NOT restarted (it keeps running the old code);
 #  3. migrates /etc/tabela.env (adds LAST_IMAGE_PATH and CAPTURE_DIR if missing) and
 #     creates CAPTURE_DIR owned by the service user; ADMIN_TOKEN is set by hand (secret);
@@ -67,10 +67,17 @@ fi
 
 git_() { git -C "$APP_DIR" "$@"; }
 
-# requirements.lock (fully pinned, Linux/py3.14) constrains the install when the checkout has it
+# requirements.lock (hash-pinned, Linux/py3.14): when it carries hashes it is installed alone with
+# --require-hashes (every wheel/sdist verified). Older checkouts (rollback) may hold an unhashed
+# lock or none: then fall back to requirements.txt constrained by it.
 pip_install() {
+    local lock="$APP_DIR/requirements.lock"
+    if [ -f "$lock" ] && grep -q -- '--hash=sha256:' "$lock"; then
+        "$PIP" install -q --require-hashes -r "$lock"
+        return
+    fi
     local c=()
-    [ -f "$APP_DIR/requirements.lock" ] && c=(-c "$APP_DIR/requirements.lock")
+    [ -f "$lock" ] && c=(-c "$lock")
     "$PIP" install -q -r "$APP_DIR/requirements.txt" "${c[@]}"
 }
 
