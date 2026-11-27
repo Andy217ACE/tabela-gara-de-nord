@@ -19,8 +19,8 @@ WEB = ROOT / "web"
 def test_static_private_route_and_i18n():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '"#infofer": "infofer"' in app and '"infofer.js", "infofer.css"' in app
-    for name in ("VIEWS", "TITLES"):  # at the end of both lists
-        assert re.search(r'var %s = \[[^\]]*"infofer"\];' % name, app)
+    for name in ("VIEWS", "TITLES"):  # last before #cum (test_cum_page keeps #cum last)
+        assert re.search(r'var %s = \[[^\]]*"infofer", "cum"\];' % name, app)
     for f in ("index.html", "sw.js"):  # not linked publicly, not precached
         assert "infofer" not in (WEB / f).read_text(encoding="utf-8").lower(), f
     assert "/api/admin/infofer".startswith(perf.PRIVATE_ROUTES)  # hidden from public perf

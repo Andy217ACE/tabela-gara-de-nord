@@ -13,8 +13,8 @@ WEB = ROOT / "web"
 def test_static_route_lazy_footer_and_i18n():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '"#cum": "cum"' in app and 'loadLazyPage("cum", "cum.js", "cum.css")' in app
-    for name in ("VIEWS", "TITLES"):  # registered last (before admin-only #infofer), as a view and with a page title
-        assert re.search(r'var %s = \[[^\]]*"cum"(, "infofer")?\]' % name, app), name  # infofer: admin-only, after
+    for name in ("VIEWS", "TITLES"):  # registered last, as a view and with a page title
+        assert re.search(r'var %s = \[[^\]]*"cum"\]' % name, app), name
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert 'href="#cum" data-i18n="footer.how"' in html
     js = (WEB / "cum.js").read_text(encoding="utf-8")

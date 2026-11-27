@@ -518,10 +518,10 @@
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari", "#cum": "cum", "#infofer": "infofer" };
   var VIEWS = ["tabela", "istoric", "urmarite", "ocr", "admin", "versiuni", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum", "infofer"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "infofer", "cum"];
   // routes with a page title: i18n key title.<route>
   var TITLES = ["istoric", "ocr", "admin", "versiuni", "urmarite", "trenuri", "tren", "statistici",
-    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "cum", "infofer"];
+    "clasamente", "statii", "statie", "sistem", "setari", "ocr2", "infofer", "cum"];
   // nav item highlighted for a route without its own entry (#tren → „Trenuri”, #statie → „Stații”)
   var NAV_PARENT = { tren: "trenuri", statie: "statii" };
   var currentRoute = null;   // route asked for by the address
