@@ -13,13 +13,13 @@ Ieșire: 0 dacă s-a parsat cel puțin un marker, 1 altfel (eroarea e scrisă î
 from __future__ import annotations
 
 import argparse
-import gzip
 import html
 import re
 import sqlite3
 import sys
 import urllib.error
 import urllib.request
+import zlib
 from datetime import datetime, timedelta, timezone
 
 URL = "https://mersultrenurilor.infofer.ro/ro-RO/Trains/LoadMapPartial"
@@ -28,6 +28,9 @@ USER_AGENT = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like G
               " Chrome/131.0 Safari/537.36")
 TIMEOUT_S = 20
 RETENTION_DAYS = 30
+# Pagina normală are ~460 KB; limitele opresc un răspuns uriaș / gzip-bomb înainte de a umple memoria.
+MAX_RAW = 4 * 1024 * 1024
+MAX_BODY = 8 * 1024 * 1024
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS infofer_obs (
@@ -153,15 +156,40 @@ def store(conn: sqlite3.Connection, fetched_at: datetime, rows: list[dict],
         conn.execute("DELETE FROM infofer_runs WHERE fetched_at < ?", (cutoff,))
 
 
+class TooLarge(ValueError):
+    """Răspuns peste MAX_RAW (brut) sau MAX_BODY (decomprimat)."""
+
+
+def gunzip_capped(raw: bytes, limit: int = MAX_BODY) -> bytes:
+    """gzip -> bytes, fără a decomprima mai mult de `limit` + 1 octeți (gzip-bomb)."""
+    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    out = d.decompress(raw, limit + 1)
+    if len(out) > limit:
+        raise TooLarge(f"raspuns decomprimat peste {limit} octeti")
+    if not d.eof:
+        raise EOFError("gzip trunchiat")
+    return out
+
+
+def read_body(resp) -> bytes:
+    """Corpul răspunsului, limitat la MAX_RAW octeți citiți și MAX_BODY decomprimați."""
+    cl = resp.headers.get("Content-Length", "")
+    if cl.strip().isdigit() and int(cl) > MAX_RAW:
+        raise TooLarge(f"Content-Length {int(cl)} peste {MAX_RAW} octeti")
+    raw = resp.read(MAX_RAW + 1)
+    if len(raw) > MAX_RAW:
+        raise TooLarge(f"raspuns peste {MAX_RAW} octeti")
+    if resp.headers.get("Content-Encoding", "").lower() == "gzip":
+        return gunzip_capped(raw)
+    return raw
+
+
 def fetch() -> tuple[int, bytes]:
     req = urllib.request.Request(URL, headers={
         "User-Agent": USER_AGENT, "Accept": "text/html,*/*;q=0.8",
         "Accept-Encoding": "gzip", "Accept-Language": "ro-RO,ro;q=0.9"})
     with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:  # nosec B310 - URL is a module constant (https), no user input
-        body = resp.read()
-        if resp.headers.get("Content-Encoding", "").lower() == "gzip":
-            body = gzip.decompress(body)
-        return resp.status, body
+        return resp.status, read_body(resp)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -182,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
             error = f"{bad} markeri ignorati"
     except urllib.error.HTTPError as e:
         status, error = e.code, f"HTTP {e.code}"
-    except (OSError, EOFError) as e:  # URLError, timeout, gzip trunchiat
+    except (OSError, EOFError, TooLarge, zlib.error) as e:  # URLError, timeout, gzip trunchiat/stricat
         error = f"{type(e).__name__}: {e}"[:300]
     conn = connect(args.db)
     try:
