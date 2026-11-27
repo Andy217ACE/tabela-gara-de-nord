@@ -5,6 +5,23 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.71 — 2026-11-27
+### Adăugat
+- **Admin: „Vizitatori online”** — cine a folosit site-ul în ultimele 5 minute (IP mascat, browser și sistem, fără boți și scanere), în memorie, reîmprospătat la 30 s. `GET /api/admin/visitors`.
+- **Admin: „Trimite notificare de test”** — verifici pe telefon că notificările merg; se trimite doar către abonarea telefonului de pe care apeși. `POST /api/admin/push-test`.
+- **Teste pe Firefox și WebKit (motorul Safari):** paginile principale, bara de jos, „Mai mult”, tema și limba, pe telefon și desktop; rulează și în CI.
+### Schimbat
+- **Trenuri-fantomă dintr-un singur cadru:** un tren citit într-o singură observație nu mai apare ca tren real, chiar dacă sursa a retrimis mai târziu o imagine veche (03.11: 10 trenuri de dimineață apărute seara, scoase acum din date).
+- **Peron tăiat:** un peron afișat se golește abia după 5 citiri goale; peroanele 6, 8 și cele de două cifre, tăiate sus de bandă, nu mai dispar minute în șir de pe tabelă (634 → ~84 goliri false în 28 de zile).
+- **Date:** marcat ca suspect un salt izolat de întârziere (5 → 45 min, 31.10). Marcajele din auditul din octombrie nu se aplică: evenimentele acelea nu mai există în baza de date curentă.
+### English
+- **Admin "Online visitors":** who used the site in the last 5 minutes (masked IP, browser and OS, bots and scanners excluded), in memory, refreshed every 30 s. `GET /api/admin/visitors`.
+- **Admin "Send test notification":** check on a phone that notifications work; sent only to the subscription of the device you press it on. `POST /api/admin/push-test`.
+- **Firefox and WebKit (Safari engine) tests:** main pages, bottom bar, "More", theme and language, phone and desktop; also run in CI.
+- **Single-frame ghost trains:** a train read in one observation no longer shows as a real train, even when the source later re-served an old image (03.11: 10 morning trains shown in the evening, now removed from the data).
+- **Cut platform:** a shown platform is cleared only after 5 empty readings; platforms 6, 8 and two-digit ones cut at the top by the band no longer vanish for minutes (634 → ~84 false clears in 28 days).
+- **Data:** one isolated delay spike (5 → 45 min, 31.10) marked as suspect. The October audit marks were not applied: those events no longer exist in the current database.
+
 ## Beta 1.70 — 2026-11-27
 ### Schimbat
 - **Tipărirea Tabelei** arată ca titlu panoul ales (Sosiri sau Plecări), ca să se știe ce foaie ai în mână.

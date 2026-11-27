@@ -49,6 +49,10 @@ DELAY_PLUS_CONFIRM = 5
 # --- platform validation -----------------------------------------------------
 PLATFORM_CONFIRM = 2
 PLATFORM_CONFUSED_CONFIRM = 3
+# an unread platform is not a cleared one: the band cuts the top of 6/8/1x at the right
+# edge (Departures) and they go unread for 2-4 frames; 28 days live (to 27.11): clearing at
+# 2 frames made 634 clears that came back to the same platform, at 5 frames 84
+PLATFORM_CLEAR_CONFIRM = 5
 # digit pairs the OCR swaps on this board (5/6; 1/4/11/14; 3/8): measured flapping
 PLATFORM_CONFUSION = (frozenset({5, 6}), frozenset({1, 4, 11, 14}), frozenset({3, 8}),
                       frozenset({2, 5}))  # 2/5 (RM 7907) measured in report 2
@@ -182,10 +186,13 @@ def delay_needs(value: int, confirmed: int | None) -> int:
 def platform_needs(old: int | None, new: int | None) -> int:
     """Consecutive identical readings needed for a platform change. The first platform
     shown (none -> x) is immediate; a pair the OCR confuses (5/6, 1/4/11/14, 3/8)
-    needs PLATFORM_CONFUSED_CONFIRM; anything else, clearing included, PLATFORM_CONFIRM."""
+    needs PLATFORM_CONFUSED_CONFIRM; clearing (an empty reading) PLATFORM_CLEAR_CONFIRM;
+    anything else PLATFORM_CONFIRM."""
     if old is None:
         return 1
-    if new is not None and any(old in g and new in g for g in PLATFORM_CONFUSION):
+    if new is None:
+        return PLATFORM_CLEAR_CONFIRM
+    if any(old in g and new in g for g in PLATFORM_CONFUSION):
         return PLATFORM_CONFUSED_CONFIRM
     return PLATFORM_CONFIRM
 
@@ -280,13 +287,16 @@ def coexisting_numbers(conn: sqlite3.Connection, train_no: int,
 
 def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
                   partner_obs: dict[int, int] | None = None, *,
-                  coexist=frozenset()) -> tuple[str, int | None] | None:
+                  coexist=frozenset(), n_all: int | None = None
+                  ) -> tuple[str, int | None] | None:
     """(reason, real service id) if `svc` is a ghost, else None.
 
     `svc`/`partners`: dicts with id, train_no, sched_time, station, station_raw,
     first_seen, last_seen, status (partners: same board and service date).
     A service still listed is never judged. Ghost when it lived < GHOST_MIN_LIFE_S
-    ("short"), or when it has at most GHOST_MAX_OBS observations and a partner that
+    or was read in a single frame ("short": `n_all` == 1, its observations in every
+    validation state; None = `n_obs`), or when it has at most
+    GHOST_MAX_OBS observations and a partner that
     lived longer is a one-character variant of it ("near_dup": R 9209 + 92011/920111/920...),
     or when a one-character variant on the board at the same time has at least
     GHOST_MAJORITY times its observations ("minority_dup": one board row the OCR
@@ -329,17 +339,20 @@ def ghost_verdict(svc: dict, partners: list[dict], n_obs: int,
                     best = (p_obs, p["id"])
         if best is not None:
             return "minority_dup", best[1]
-    if life < GHOST_MIN_LIFE_S:
+    # one observation in ANY state = one frame, whatever first/last_seen say: a re-served
+    # old image (same hash: no new observation) stretched last_seen (2026-11-03 20:28);
+    # low-confidence reads that kept it alive are evidence of life, so all states count
+    if life < GHOST_MIN_LIFE_S or (n_obs if n_all is None else n_all) == 1:
         return "short", None
     return None
 
 
 def ghost_verdict_db(conn: sqlite3.Connection, svc: dict, partners: list[dict], n_obs: int,
-                     partner_obs: dict[int, int] | None = None
+                     partner_obs: dict[int, int] | None = None, *, n_all: int | None = None
                      ) -> tuple[str, int | None] | None:
     """`ghost_verdict` with the coexistence guard read from the database. The query runs
     only when a near_dup/minority_dup partner was found (at most once per service)."""
-    verdict = ghost_verdict(svc, partners, n_obs, partner_obs)
+    verdict = ghost_verdict(svc, partners, n_obs, partner_obs, n_all=n_all)
     if verdict is None or verdict[1] is None:
         return verdict
     # slot level: a cross-number near_dup/minority_dup partner shares svc's sched_time
@@ -347,7 +360,7 @@ def ghost_verdict_db(conn: sqlite3.Connection, svc: dict, partners: list[dict], 
                             sched_time=svc["sched_time"])
     if not co:
         return verdict
-    return ghost_verdict(svc, partners, n_obs, partner_obs, coexist=set(co))
+    return ghost_verdict(svc, partners, n_obs, partner_obs, coexist=set(co), n_all=n_all)
 
 
 # --- persistence helpers --------------------------------------------------------
@@ -378,7 +391,8 @@ def judge_ghost(conn: sqlite3.Connection, service_id: int) -> tuple[str, int | N
         (s["board"], s["service_date"], service_id)).fetchall()
     counts = _obs_count(conn, [service_id] + [p["id"] for p in partners])
     verdict = ghost_verdict_db(conn, dict(s), [dict(p) for p in partners],
-                               counts.get(service_id, 0), counts)
+                               counts.get(service_id, 0), counts,
+                               n_all=_obs_count(conn, [service_id], True).get(service_id, 0))
     if verdict is not None:
         upsert_service(conn, service_id, ghost=1, ghost_reason=verdict[0], ghost_of=verdict[1])
     elif (conn.execute("SELECT ghost FROM service_quality WHERE service_id=?",
@@ -393,12 +407,14 @@ def clear_ghost(conn: sqlite3.Connection, service_id: int) -> None:
                  " WHERE service_id=? AND ghost=1", (service_id,))
 
 
-def _obs_count(conn: sqlite3.Connection, ids: list[int] | None = None) -> dict[int, int]:
+def _obs_count(conn: sqlite3.Connection, ids: list[int] | None = None,
+               any_state: bool = False) -> dict[int, int]:
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'"
                         " AND name='observations'").fetchone():
         return {}
-    sql = ("SELECT service_id, COUNT(*) FROM observations WHERE service_id IS NOT NULL"
-           " AND validation_state IN ('ok', 'uncertain')")
+    sql = "SELECT service_id, COUNT(*) FROM observations WHERE service_id IS NOT NULL"
+    if not any_state:
+        sql += " AND validation_state IN ('ok', 'uncertain')"
     args: list = []
     if ids is not None:
         sql += f" AND service_id IN ({','.join('?' * len(ids))})"
@@ -498,6 +514,7 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
                 " ORDER BY service_id, ts, id"):
             events[sid].append((eid, ts, old, new))
         n_obs = _obs_count(conn)
+        n_all = _obs_count(conn, any_state=True)
         services = [dict(r) for r in conn.execute("SELECT * FROM services ORDER BY id")]
         by_day = defaultdict(list)
         for s in services:
@@ -507,7 +524,7 @@ def backfill(conn: sqlite3.Connection, *, dry_run: bool = False) -> dict:
         for s in services:
             sid = s["id"]
             verdict = ghost_verdict_db(conn, s, by_day[(s["board"], s["service_date"])],
-                                       n_obs.get(sid, 0), n_obs)
+                                       n_obs.get(sid, 0), n_obs, n_all=n_all.get(sid, 0))
             fs = _ts(s["first_seen"])
             low = int(any(a <= fs < b for a, b in periods))
             st_c, op_c = _canonical_names(s)

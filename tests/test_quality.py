@@ -44,7 +44,7 @@ def test_delay_needs():
     (None, 5, 1),     # first platform shown: immediate
     (5, 6, 3),        # RE 10111 / R 9101 flapping 5/6
     (11, 14, 3), (1, 4, 3), (14, 1, 3),  # IR 16087 / IR 16595: 11/4/14/1
-    (9, None, 2),     # IR 16089: 9 / empty
+    (9, None, 5),     # IR 16089: 9 / empty; a cut 6/8/1x is unread for 2-4 frames
     (3, 7, 2),
 ])
 def test_platform_needs(old, new, need):
@@ -150,6 +150,16 @@ def test_ghost_short_life_and_listed_never():
     assert q.ghost_verdict(live, [live], 0) is None
 
 
+def test_ghost_one_observation_with_long_span_is_short():
+    # 2026-11-03 20:28: the source served a morning image again 8 min later (same hash: no
+    # 2nd observation, but last_seen moved): IRN 461 10:11 lived "8 min" from ONE frame
+    s = _svc(1483, 461, "10:11", "20:28", "20:36", station="ISTANBUL")
+    assert q.ghost_verdict(s, [s], 1) == ("short", None)
+    # two observations over the same span, or none at all (pre-observations data): kept
+    assert q.ghost_verdict(s, [s], 2) is None
+    assert q.ghost_verdict(s, [s], 0) is None
+
+
 def test_ghost_r503_r5031_both_well_observed_kept():
     # both read for 75 min with many observations: undecidable -> neither is a ghost
     a = _svc(311, 503, "12:46", "12:00", "13:15", station="PLOIESTI SUD")
@@ -186,15 +196,39 @@ def _db_svc(c, day, no, sched, fs, ls, station="BUZAU"):
         (day, "R", no, station, "CFR", sched, fs, ls, station)).lastrowid
 
 
-def _db_obs(c, sid, no, at, cap=None, sched="04:47"):
+def _db_obs(c, sid, no, at, cap=None, sched="04:47", state="ok"):
     if cap is None:
         cap = c.execute("INSERT INTO captures(captured_at, image_hash, ok) VALUES (?, ?, 1)",
                         (at, f"h-{sid}-{at}")).lastrowid
     c.execute("INSERT INTO observations(capture_id, service_id, board, row_index, observed_at,"
               " train_no, sched_time, station, validation_state, processing_version)"
-              " VALUES (?,?, 'departure', 0, ?, ?, ?, 'BUZAU', 'ok', 't')",
-              (cap, sid, at, no, sched))
+              " VALUES (?,?, 'departure', 0, ?, ?, ?, 'BUZAU', ?, 't')",
+              (cap, sid, at, no, sched, state))
     return cap
+
+
+def test_judge_ghost_single_frame_only_without_other_reads(tmp_path):
+    from app.store import Store
+
+    s = Store(str(tmp_path / "q.db"))
+    s.migrate()
+    c = s._conn
+    d = "2026-11-03"
+    # 03.11 shape: one observation in all, last_seen stretched by a re-served image
+    stale = _db_svc(c, d, 461, "10:11", f"{d}T20:28:26+02:00", f"{d}T20:36:47+02:00")
+    _db_obs(c, stale, 461, f"{d}T18:28:26+00:00", sched="10:11")
+    assert q.judge_ghost(c, stale) == ("short", None)
+    # read cleanly once, then kept alive 15 min by low-confidence rows: a real train
+    real = _db_svc(c, d, 1751, "11:10", f"{d}T10:00:00+02:00", f"{d}T10:15:00+02:00")
+    _db_obs(c, real, 1751, f"{d}T08:00:00+00:00", sched="11:10")
+    for m in range(1, 15):
+        _db_obs(c, real, 1751, f"{d}T08:{m:02d}:00+00:00", sched="11:10",
+                state="rejected_low_conf")
+    assert q.judge_ghost(c, real) is None
+    q.backfill(c)
+    got = dict(c.execute("SELECT service_id, ghost FROM service_quality").fetchall())
+    assert got[stale] == 1 and got[real] == 0
+    s.close()
 
 
 # coexist: None (never read together), "04:47" (two rows of one time in one frame: two
@@ -218,14 +252,16 @@ def test_judge_ghost_and_backfill_respect_coexistence(tmp_path, co_time):
         b = _db_svc(c, d0, 5014, co_time, f"{d0}T04:00:00+03:00", f"{d0}T05:00:00+03:00")
         cap = _db_obs(c, a, 5011, f"{d0}T04:30:00+03:00")
         _db_obs(c, b, 5014, f"{d0}T04:30:00+03:00", cap, sched=co_time)
-    want = None if coexist else ("near_dup", real)
+    # coexisting: never the near_dup of 5011; its single observation still makes it a
+    # one-frame sighting ("short", no real service), like the blip above
+    want = ("short", None) if coexist else ("near_dup", real)
     assert q.judge_ghost(c, var) == want
     # a stale ghost flag (judged before the rule) is cleared by the backfill
     q.upsert_service(c, var, ghost=1, ghost_reason="near_dup", ghost_of=real)
     q.backfill(c)
     row = c.execute("SELECT ghost, ghost_reason, ghost_of FROM service_quality"
                     " WHERE service_id=?", (var,)).fetchone()
-    assert tuple(row) == ((0, None, None) if coexist else (1, "near_dup", real))
+    assert tuple(row) == ((1, "short", None) if coexist else (1, "near_dup", real))
     s.close()
 
 

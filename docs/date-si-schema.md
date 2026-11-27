@@ -271,7 +271,7 @@ Cheia `live_since` se scrie o singură dată (`INSERT OR IGNORE`). `backfill` o 
 |---|---|---|---|
 | `service_id` | INTEGER | PK, FK → `services(id)` ON DELETE CASCADE | serviciul |
 | `ghost` | INTEGER | NN, DEF `0` | `1` = fantomă: exclusă de la tabla live, catalog și statistici. Verdictul se calculează la ingest, când serviciul iese de pe tablă. |
-| `ghost_reason` | TEXT | nullable | motivul: `short` (trăit sub `GHOST_MIN_LIFE_S = 120` s), `near_dup` (duplicat al unui serviciu mai lung, cu o diferență de un caracter), `minority_dup` (varianta minoritară a unei citiri alternante) |
+| `ghost_reason` | TEXT | nullable | motivul: `short` (trăit sub `GHOST_MIN_LIFE_S = 120` s sau citit într-un singur cadru), `near_dup` (duplicat al unui serviciu mai lung, cu o diferență de un caracter), `minority_dup` (varianta minoritară a unei citiri alternante) |
 | `ghost_of` | INTEGER | nullable (fără FK) | serviciul real căruia i se potrivește duplicatul |
 | `low_quality` | INTEGER | NN, DEF `0` | `1` dacă serviciul a fost văzut în perioada de calitate redusă (`quality_periods`) |
 | `delay_checked` | INTEGER | NN, DEF `0` | `1` după verificarea retroactivă a întârzierilor |
@@ -445,7 +445,7 @@ Dacă niciun panou nu e acceptat, se scrie `runs` cu `ok = 0`, nu se modifică n
 
 - Dacă serviciul era `gone` și revine după mai mult de `REAPPEAR_QUIET_MIN = 10` minute, se emite `appeared`. O absență mai scurtă (OCR-ul a pâlpâit) nu emite nimic.
 - Întârzierea se schimbă doar după confirmare. `quality.delay_needs` cere 2 citiri identice (`DELAY_CONFIRM`), 3 pentru o valoare de cel puțin 100 de minute care diferă cu cel puțin 60 (`DELAY_BIG_CONFIRM`), sau 5 pentru o valoare care pare „+” citit ca cifră (`DELAY_PLUS_CONFIRM`). O schimbare confirmată emite `delay`.
-- Peronul: `quality.platform_needs` cere 2 citiri (`PLATFORM_CONFIRM`), 3 pentru perechile confundate de OCR (`PLATFORM_CONFUSED_CONFIRM`). Prima apariție a unui peron (de la „nimic” la o valoare) e imediată. O schimbare confirmată emite `platform`.
+- Peronul: `quality.platform_needs` cere 2 citiri (`PLATFORM_CONFIRM`), 3 pentru perechile confundate de OCR (`PLATFORM_CONFUSED_CONFIRM`), 5 pentru golire (`PLATFORM_CLEAR_CONFIRM`). Prima apariție a unui peron (de la „nimic” la o valoare) e imediată. O schimbare confirmată emite `platform`.
 - Dacă întârzierea nu s-a citit (`delay_read` fals), valoarea veche rămâne și nu se emite nimic.
 - `last_seen`, `last_read`, `miss_count = 0` și `flagged` se actualizează. `delay_read_at` se setează doar când valoarea aplicată vine dintr-o citire reală.
 

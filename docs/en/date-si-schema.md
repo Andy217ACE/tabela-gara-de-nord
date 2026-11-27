@@ -271,7 +271,7 @@ The `live_since` key is written only once (`INSERT OR IGNORE`). `backfill` uses 
 |---|---|---|---|
 | `service_id` | INTEGER | PK, FK → `services(id)` ON DELETE CASCADE | the service |
 | `ghost` | INTEGER | NN, DEF `0` | `1` = ghost: excluded from the live board, catalog and statistics. The verdict is computed at ingest, when the service leaves the board. |
-| `ghost_reason` | TEXT | nullable | the reason: `short` (lived under `GHOST_MIN_LIFE_S = 120` s), `near_dup` (a duplicate of a longer service, with a one-character difference), `minority_dup` (the minority variant of an alternating reading) |
+| `ghost_reason` | TEXT | nullable | the reason: `short` (lived under `GHOST_MIN_LIFE_S = 120` s or read in a single frame), `near_dup` (a duplicate of a longer service, with a one-character difference), `minority_dup` (the minority variant of an alternating reading) |
 | `ghost_of` | INTEGER | nullable (no FK) | the real service the duplicate matches |
 | `low_quality` | INTEGER | NN, DEF `0` | `1` if the service was seen in the low-quality period (`quality_periods`) |
 | `delay_checked` | INTEGER | NN, DEF `0` | `1` after the retroactive delay check |
@@ -445,7 +445,7 @@ If no panel is accepted, `runs` is written with `ok = 0`, nothing is modified an
 
 - If the service was `gone` and returns after more than `REAPPEAR_QUIET_MIN = 10` minutes, `appeared` is emitted. A shorter absence (the OCR flickered) emits nothing.
 - The delay changes only after confirmation. `quality.delay_needs` requires 2 identical readings (`DELAY_CONFIRM`), 3 for a value of at least 100 minutes that differs by at least 60 (`DELAY_BIG_CONFIRM`), or 5 for a value that looks like a "+" read as a digit (`DELAY_PLUS_CONFIRM`). A confirmed change emits `delay`.
-- The platform: `quality.platform_needs` requires 2 readings (`PLATFORM_CONFIRM`), 3 for the pairs confused by the OCR (`PLATFORM_CONFUSED_CONFIRM`). The first appearance of a platform (from "nothing" to a value) is immediate. A confirmed change emits `platform`.
+- The platform: `quality.platform_needs` requires 2 readings (`PLATFORM_CONFIRM`), 3 for the pairs confused by the OCR (`PLATFORM_CONFUSED_CONFIRM`), 5 for clearing (`PLATFORM_CLEAR_CONFIRM`). The first appearance of a platform (from "nothing" to a value) is immediate. A confirmed change emits `platform`.
 - If the delay was not read (`delay_read` false), the old value stays and nothing is emitted.
 - `last_seen`, `last_read`, `miss_count = 0` and `flagged` are updated. `delay_read_at` is set only when the applied value comes from a real reading.
 

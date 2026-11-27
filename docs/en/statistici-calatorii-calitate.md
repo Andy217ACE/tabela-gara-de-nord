@@ -532,9 +532,10 @@ For the retrospective (`classify_delays`): each value lasts from its event until
 |---|---|
 | `PLATFORM_CONFIRM` | 2 |
 | `PLATFORM_CONFUSED_CONFIRM` | 3 |
+| `PLATFORM_CLEAR_CONFIRM` | 5 |
 | `PLATFORM_CONFUSION` | pairs confused by the OCR: {5, 6}, {1, 4, 11, 14}, {3, 8}, {2, 5} |
 
-The first platform shown (from "nothing" to a value) is immediate (1 reading). A change within a confused pair requires 3 readings, otherwise 2 (including clearing).
+The first platform shown (from "nothing" to a value) is immediate (1 reading). A change within a confused pair requires 3 readings, otherwise 2. Clearing (an empty reading) requires 5: the digits 6/8 and two-digit platforms, their tops cut by the band, stay unread for 2-4 frames.
 
 ### Ghosts
 
@@ -550,7 +551,7 @@ Reasons (`ghost_verdict`), in the order of checking:
 
 1. `near_dup`: the service has at most `GHOST_MAX_OBS` observations and a partner (the same board and the same service date) lives longer and differs by one character (`_near_dup`, for example R 9209 versus 92011). The partner becomes `ghost_of`.
 2. `minority_dup`: a variant with one different character, in the same time slot, has at least `GHOST_MAJORITY` times the service's observations. Example from the code: R 92011 with 90 observations versus R 9209 with 160 stays undecided.
-3. `short`: it lives under `GHOST_MIN_LIFE_S` seconds.
+3. `short`: it lives under `GHOST_MIN_LIFE_S` seconds or has a single observation (one frame, even when a re-served old image stretched its `last_seen`).
 
 A service still listed on the board is never judged (`status = listed`). The coexistence guard (`coexisting_numbers`) prevents confusion with two real trains read in the same capture, at the same scheduled time (for example 5011 and 5014): a partner with a coexisting number is not the "true" train. The guard does not apply to the `short` reason.
 
