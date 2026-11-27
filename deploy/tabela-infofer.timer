@@ -1,0 +1,14 @@
+# © 2026 Andy217Ace
+# Pornește tabela-infofer.service la fiecare 3 minute (spike intern, temporar).
+# Oprire: sudo systemctl disable --now tabela-infofer.timer
+[Unit]
+Description=Tabela Gara de Nord - spike intern Infofer la 3 minute
+
+[Timer]
+OnCalendar=*:0/3
+RandomizedDelaySec=20
+Persistent=false
+Unit=tabela-infofer.service
+
+[Install]
+WantedBy=timers.target

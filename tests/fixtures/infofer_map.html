@@ -1,0 +1,252 @@
+<script type="text/javascript">
+// fixture trunchiat din LoadMapPartial (27.11.2026): 6 markeri, unul fara intarziere (sintetic), unul defect
+var icon=L.svgIcon({
+					iconHtml: `<text x="20" y="20" text-anchor="middle" dominant-baseline="middle" font-size="10">
+						<tspan x="20" dy="-0.6em" text-anchor="middle" dominant-baseline="middle" fill="red" font-size="12" font-weight="bold">IRN</tspan>
+						<tspan x="20" dy="1.2em" text-anchor="middle" dominant-baseline="middle">01641</tspan>
+					</text>`,
+					borderColor: '#004ba0',
+					passedTime: 4,
+					iconAnchor: [30, 30],
+					bearing: null,
+					});
+					var theoreticalGpsPositionLatitude = 45.3526321;
+					var theoreticalGpsPositionLongitude = 25.552929;
+					marker = L.marker([theoreticalGpsPositionLatitude, theoreticalGpsPositionLongitude],{icon:icon})
+					.bindPopup(`
+					<div class="d-flex">
+						<div class="col-8 p-0">
+							<span class="span-train-category-ir">IRN </span>
+							<a href="/ro-RO/Trains?TrainRunningNumber=01641&amp;Date=27.11.2026">01641</a>
+							<br />
+							<span class=color-firebrick>
+								<b>4 min</b> &#xEE;nt&#xE2;rziere
+							</span>
+						</div>
+						<div class="col-4 p-0 d-flex justify-content-end">
+							<image src="/images/Logos/1153-mini.png" height="30px" width="50px"></image>
+						</div>
+					</div>
+					<div class="my-1 p-1 alert alert-success" style="max-width:200px">Pozi&#x21B;ie ESTIMAT&#x102; pe baza raport&#x103;rii CFR de la 22:50</div>
+					<a href="/ro-RO/Trains?TrainRunningNumber=01641&amp;Date=27.11.2026">Detalii...</a>
+					`);
+
+					map.almostOver.addLayer(marker);
+
+					// Open popup on hover (mouseover)
+					marker.on('mouseover', function (e) {
+					this.openPopup();
+					});
+
+					// Close popup when not hovering (mouseout)
+					marker.on('mouseout', function (e) {
+					var self = this;
+					setTimeout(function() {
+					self.closePopup();
+					}, 5000);
+					});
+				;
+							
+var icon=L.svgIcon({
+				iconHtml: `
+				<text x="20" y="20" text-anchor="middle" dominant-baseline="middle" font-size="10">
+					<tspan x="20" dy="-0.6em" text-anchor="middle" dominant-baseline="middle" fill="black" font-size="12" font-weight="bold">R-E</tspan>
+					<tspan x="20" dy="1.2em" text-anchor="middle" dominant-baseline="middle">10122</tspan>
+				</text>`,
+				borderColor: '#CC0000',
+				passedTime: 0,
+				iconAnchor: [30, 30],
+				bearing: 314,
+				});
+				var lastGpsPositionLatitude = 44.4691511;
+				var lastGpsPositionLongitude = 26.0401447;
+				marker = L.marker([lastGpsPositionLatitude, lastGpsPositionLongitude],{icon:icon})
+				.bindPopup(`
+				<div class="d-flex">
+					<div class="col-8 p-0">
+						<span class="span-train-category-r">
+							R-E
+						</span>
+						<a href="/ro-RO/Trains?TrainRunningNumber=10122&amp;Date=27.11.2026">
+							10122
+						</a>
+						<br />
+						<span class=color-darkgreen>
+							<b></b>
+							f&#x103;r&#x103; &#xEE;nt&#xE2;rziere
+						</span>
+					</div>
+					<div class="col-4 p-0">
+						<image src="/images/Logos/4200-mini.png" height="30px" width="50px"></image>
+					</div>
+				</div>
+				<div class="my-1 p-1 alert alert-success" style="max-width:200px">
+					Ultima pozi&#x21B;ie GPS la 22:54
+				</div>
+				<a href="/ro-RO/Trains?TrainRunningNumber=10122&amp;Date=27.11.2026">
+					Detalii...
+				</a>
+				`);
+
+				map.almostOver.addLayer(marker);
+
+				// Open popup on hover (mouseover)
+				marker.on('mouseover', function (e) {
+				this.openPopup();
+				});
+
+				// Close popup when not hovering (mouseout)
+				marker.on('mouseout', function (e) {
+				var self = this;
+				setTimeout(function() {
+				self.closePopup();
+				}, 5000);
+				});
+			;
+							
+var icon=L.svgIcon({
+					iconHtml: `<text x="20" y="20" text-anchor="middle" dominant-baseline="middle" font-size="10">
+						<tspan x="20" dy="-0.6em" text-anchor="middle" dominant-baseline="middle" fill="red" font-size="12" font-weight="bold">IRN</tspan>
+						<tspan x="20" dy="1.2em" text-anchor="middle" dominant-baseline="middle">79</tspan>
+					</text>`,
+					borderColor: '#004ba0',
+					passedTime: 7,
+					iconAnchor: [30, 30],
+					bearing: 304.59,
+					});
+					var theoreticalGpsPositionLatitude = 45.7228268303226;
+					var theoreticalGpsPositionLongitude = 21.8324590960322;
+					marker = L.marker([theoreticalGpsPositionLatitude, theoreticalGpsPositionLongitude],{icon:icon})
+					.bindPopup(`
+					<div class="d-flex">
+						<div class="col-8 p-0">
+							<span class="span-train-category-ir">IRN </span>
+							<a href="/ro-RO/Trains?TrainRunningNumber=79&amp;Date=27.11.2026">79</a>
+							<br />
+							<span class=color-darkgreen>
+								<b>1 min</b> mai devreme
+							</span>
+						</div>
+						<div class="col-4 p-0 d-flex justify-content-end">
+							<image src="/images/Logos/1153-mini.png" height="30px" width="50px"></image>
+						</div>
+					</div>
+					<div class="my-1 p-1 alert alert-success" style="max-width:200px">Pozi&#x21B;ie ESTIMAT&#x102; pe baza raport&#x103;rii CFR de la 22:47</div>
+					<a href="/ro-RO/Trains?TrainRunningNumber=079&amp;Date=27.11.2026">Detalii...</a>
+					`);
+
+					map.almostOver.addLayer(marker);
+
+					// Open popup on hover (mouseover)
+					marker.on('mouseover', function (e) {
+					this.openPopup();
+					});
+
+					// Close popup when not hovering (mouseout)
+					marker.on('mouseout', function (e) {
+					var self = this;
+					setTimeout(function() {
+					self.closePopup();
+					}, 5000);
+					});
+				;
+							
+var icon=L.svgIcon({
+						iconHtml: `<text x="20" y="20" text-anchor="middle" dominant-baseline="middle" font-size="10">
+							<tspan x="20" dy="-0.6em" text-anchor="middle" dominant-baseline="middle" fill="black" font-size="12" font-weight="bold">R</tspan>
+							<tspan x="20" dy="1.2em" text-anchor="middle" dominant-baseline="middle">11413</tspan>
+						</text>`,
+						borderColor: '#9f0a25',
+						iconAnchor: [30, 30],
+						passedTime:27,
+						bearing: null,
+						});
+						var theoreticalGpsPositionLatitude = 47.2979213;
+						var theoreticalGpsPositionLongitude = 27.0816207;
+						marker = L.marker([theoreticalGpsPositionLatitude, theoreticalGpsPositionLongitude],{icon:icon})
+						.bindPopup(`
+						<div class="d-flex">
+							<div class="col-8 p-0">
+								<span class="span-train-category-r">R </span>
+								<a href="/ro-RO/Trains?TrainRunningNumber=11413&amp;Date=27.11.2026">11413</a>
+
+								<br />
+
+										<span class=color-darkgreen>
+											<b></b> 
+											f&#x103;r&#x103; &#xEE;nt&#xE2;rziere
+										</span>
+																</div>
+							<div class="col-4 p-0 d-flex justify-content-end">
+								<image src="/images/Logos/4190-mini.png" height="30px" width="50px"></image>
+							</div>
+						</div>
+						<div class="my-1 p-1 alert alert-warning" style="max-width:200px">RAPORTAT de personalul CFR la 22:27</div>
+						<a href="/ro-RO/Trains?TrainRunningNumber=11413&amp;Date=27.11.2026">Detalii...</a>
+						`);
+
+						map.almostOver.addLayer(marker);
+
+						// Open popup on hover (mouseover)
+						marker.on('mouseover', function (e) {
+						this.openPopup();
+						});
+
+						// Close popup when not hovering (mouseout)
+						marker.on('mouseout', function (e) {
+						var self = this;
+						setTimeout(function() {
+						self.closePopup();
+						}, 5000);
+						});
+						;
+							
+var icon=L.svgIcon({
+					iconHtml: `<text x="20" y="20" text-anchor="middle" dominant-baseline="middle" font-size="10">
+						<tspan x="20" dy="-0.6em" text-anchor="middle" dominant-baseline="middle" fill="black" font-size="12" font-weight="bold">R</tspan>
+						<tspan x="20" dy="1.2em" text-anchor="middle" dominant-baseline="middle">09999</tspan>
+					</text>`,
+					borderColor: '#004ba0',
+					passedTime: 7,
+					iconAnchor: [30, 30],
+					bearing: null,
+					});
+					var theoreticalGpsPositionLatitude = 47.6077925;
+					var theoreticalGpsPositionLongitude = 26.4389341;
+					marker = L.marker([theoreticalGpsPositionLatitude, theoreticalGpsPositionLongitude],{icon:icon})
+					.bindPopup(`
+					<div class="d-flex">
+						<div class="col-8 p-0">
+							<span class="span-train-category-r">R </span>
+							<a href="/ro-RO/Trains?TrainRunningNumber=09999&amp;Date=27.11.2026">09999</a>
+							<br />
+							
+						</div>
+						<div class="col-4 p-0 d-flex justify-content-end">
+							<image src="/images/Logos/1153-mini.png" height="30px" width="50px"></image>
+						</div>
+					</div>
+					<div class="my-1 p-1 alert alert-success" style="max-width:200px">Pozi&#x21B;ie ESTIMAT&#x102; pe baza raport&#x103;rii CFR de la 22:47</div>
+					<a href="/ro-RO/Trains?TrainRunningNumber=09999&amp;Date=27.11.2026">Detalii...</a>
+					`);
+
+					map.almostOver.addLayer(marker);
+
+					// Open popup on hover (mouseover)
+					marker.on('mouseover', function (e) {
+					this.openPopup();
+					});
+
+					// Close popup when not hovering (mouseout)
+					marker.on('mouseout', function (e) {
+					var self = this;
+					setTimeout(function() {
+					self.closePopup();
+					}, 5000);
+					});
+				;
+							
+var icon=L.svgIcon({ passedTime: 3, bearing: null, });
+					.bindPopup(`<span class="span-train-category-r">R </span>`);
+
+</script>

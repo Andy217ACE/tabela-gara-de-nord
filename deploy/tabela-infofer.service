@@ -1,0 +1,34 @@
+# © 2026 Andy217Ace
+# Spike INTERN, temporar (~7 zile): colectorul hărții Infofer (scripts/infofer_collect.py).
+# O cerere GET la 3 minute, scrie DOAR în /var/lib/tabela/infofer.db (bază separată, nu
+# tabela.db). Nimic public. NEINSTALAT de update.sh: se activează/oprește de mână, vezi
+# docs/administrare-operare.md (secțiunea 16). Pornit de tabela-infofer.timer.
+[Unit]
+Description=Tabela Gara de Nord - spike intern colector harta Infofer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tabela
+Group=tabela
+WorkingDirectory=/opt/tabela/app
+ExecStart=/opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/infofer_collect.py --db /var/lib/tabela/infofer.db
+Nice=10
+TimeoutStartSec=60
+
+# Hardening (ca tabela-shadow-train.service), plus rețea IPv4/IPv6 pentru cererea HTTPS.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tabela
+ReadOnlyPaths=/opt/tabela
+PrivateTmp=true
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0027

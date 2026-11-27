@@ -26,6 +26,7 @@ Conventions:
 13. [Runbooks](#13-runbooks)
 14. [What I could not verify and inconsistencies](#14-what-i-could-not-verify-and-inconsistencies)
 15. [Firewall, fail2ban and external monitoring](#15-firewall-fail2ban-and-external-monitoring)
+16. [Internal Infofer spike (temporary)](#16-internal-infofer-spike-temporary)
 
 ---
 
@@ -735,3 +736,16 @@ The server's complete configuration is versioned in `deploy/fail2ban/` (versione
 **External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram) and from the NVMe health timer.
 
 **What is missing, deliberately or not yet done:** there is no off-site backup; the decision belongs to the owner and is deferred. System updates are not automatic. See `docs/decizii-arhitectura.md`.
+
+---
+
+## 16. Internal Infofer spike (temporary)
+
+**What it is.** An internal ~7-day measurement: does Infofer's live train map (`mersultrenurilor.infofer.ro`, `Trains/LoadMapPartial`) predict the arrival delay at Gara de Nord earlier than the board shows it? Nothing appears on the site and the main database does not change.
+
+- **Collection:** `deploy/tabela-infofer.timer` starts `tabela-infofer.service` every 3 minutes (`OnCalendar=*:0/3`, ±20 s), as user `tabela`. Each run makes **one** GET request (no cookies, no personal data) and writes every train (~80–90) into the **separate** database `/var/lib/tabela/infofer.db` (tables `infofer_obs` and `infofer_runs`; a run with 0 markers is logged as an error in `infofer_runs`). Retention: 30 days.
+- **Analysis (read-only):** `sudo -u tabela /opt/tabela/venv/bin/python /opt/tabela/app/scripts/infofer_analyze.py [--json]` compares, at T−60/−30/−15 min, the Infofer delay with the confirmed final delay, with what the board showed at that moment and with the model in `app/predict.py` (coverage, MAE, bias, the 10 worst misses).
+- **Install (by hand; `update.sh` does NOT do it):** `sudo install -m 644 /opt/tabela/app/deploy/tabela-infofer.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tabela-infofer.timer`.
+- **Stop:** `sudo systemctl disable --now tabela-infofer.timer` (then, optionally, remove the units from `/etc/systemd/system/` and `/var/lib/tabela/infofer.db`).
+
+**Infofer terms:** the data is for non-commercial use only; displaying it publicly requires Infofer's written consent. That is why the spike stays internal and temporary.

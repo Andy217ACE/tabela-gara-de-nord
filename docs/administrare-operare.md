@@ -26,6 +26,7 @@ Convenții:
 13. [Runbook-uri](#13-runbook-uri)
 14. [Ce nu am putut verifica și inconsistențe](#14-ce-nu-am-putut-verifica-și-inconsistențe)
 15. [Firewall, fail2ban și monitorizare externă](#15-firewall-fail2ban-și-monitorizare-externă)
+16. [Spike intern Infofer (temporar)](#16-spike-intern-infofer-temporar)
 
 ---
 
@@ -735,3 +736,16 @@ Configurația completă a serverului e versionată în `deploy/fail2ban/` (versi
 **Monitorizare externă.** Un serviciu extern de uptime (UptimeRobot) verifică pagina principală și `/api/health` (care răspunde și la `HEAD`). Alertele locale vin de la watchdog (secțiunea 10, Telegram) și de la temporizatorul de sănătate NVMe.
 
 **Ce lipsește, deliberat sau încă nefăcut:** copia de siguranță în afara serverului (off-site) nu există; decizia aparține proprietarului și este amânată. Actualizările de sistem nu sunt automate. Vezi `docs/decizii-arhitectura.md`.
+
+---
+
+## 16. Spike intern Infofer (temporar)
+
+**Ce este.** O măsurătoare internă de ~7 zile: prezice harta trenurilor în circulație de la Infofer (`mersultrenurilor.infofer.ro`, `Trains/LoadMapPartial`) întârzierea la sosirea în Gara de Nord mai devreme decât o arată tabela? Nimic nu apare pe site și baza principală nu se schimbă.
+
+- **Colectare:** `deploy/tabela-infofer.timer` pornește `tabela-infofer.service` la 3 minute (`OnCalendar=*:0/3`, ±20 s), ca utilizatorul `tabela`. Fiecare rulare face **o** cerere GET (fără cookie-uri, fără date personale) și scrie toate trenurile (~80–90) în baza **separată** `/var/lib/tabela/infofer.db` (tabelele `infofer_obs` și `infofer_runs`; o rulare cu 0 markeri apare ca eroare în `infofer_runs`). Retenție: 30 de zile.
+- **Analiză (doar citire):** `sudo -u tabela /opt/tabela/venv/bin/python /opt/tabela/app/scripts/infofer_analyze.py [--json]` compară, la T−60/−30/−15 min, întârzierea Infofer cu întârzierea finală confirmată, cu ce arăta tabela la acel moment și cu modelul din `app/predict.py` (acoperire, MAE, bias, cele mai mari 10 erori).
+- **Instalare (de mână; `update.sh` NU o face):** `sudo install -m 644 /opt/tabela/app/deploy/tabela-infofer.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tabela-infofer.timer`.
+- **Oprire:** `sudo systemctl disable --now tabela-infofer.timer` (apoi, opțional, ștergerea unităților din `/etc/systemd/system/` și a `/var/lib/tabela/infofer.db`).
+
+**Termenii Infofer:** datele sunt doar pentru uz necomercial; afișarea lor publică cere acordul scris al Infofer. De aceea spike-ul rămâne intern și temporar.
