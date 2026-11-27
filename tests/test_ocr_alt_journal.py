@@ -194,6 +194,9 @@ def test_prune_removes_orphan_crops():
     j.prune(NOW, force=True)
     assert not orphan.exists()
     assert j.crop_path("20261123T110000-arrival-1", "no") is not None
+    # Beta 1.70 (CodeQL py/path-injection): "$" also matched before a trailing newline
+    assert j.crop_path("20261123T110000-arrival-1\n", "no") is None
+    assert j.crop_path("20261123T110000-arrival-1", "no\n") is None
 
 
 def test_stale_cursor_returns_empty_page():

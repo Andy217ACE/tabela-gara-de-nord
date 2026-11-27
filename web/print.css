@@ -7,9 +7,9 @@
   body, main, section, article, div, td, th, li, p, h1, h2, h3, span { color: #000 !important; }
   nav, .navbar, .mainnav, .bottom-nav, footer, .pnl-credit, .skip-link, .lang-toggle,
   /* buttons that carry data stay (train no., headings, names, column labels, dates, chart legend items) */
-  button:not(.h-train):not(.oc-name):not(.st-sort):not(.st-jbtn):not(.ss-acc-btn), .btn,
+  button:not(.h-train):not(.oc-name):not(.st-sort):not(.st-jbtn):not(.ss-acc-btn):not(.tab[aria-selected="true"]), .btn,
   .filters, .ss-filters, .h-more, form, dialog, [role="dialog"], .toast,
-  .topbar, .tabs, .pe-toggle, .pe-note, .pnl-controls, .pnl-boardseg, .pnl-filters, .pnl-switch,
+  .topbar, .tab-count, .pe-toggle, .pe-note, .pnl-controls, .pnl-boardseg, .pnl-filters, .pnl-switch,
   .pnl-actions, .pnl-detail, [role="search"] { display: none !important; }
   .view[hidden] { display: none !important; }
   main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
@@ -17,6 +17,9 @@
   thead { display: table-header-group; }
   svg, img, canvas { max-width: 100% !important; height: auto !important; }
   a { color: #000 !important; text-decoration: underline; }
+  /* Tabela: the selected tab stays as the sheet title (Sosiri / Plecari) */
+  .tabs { border: 0 !important; }
+  .tab[aria-selected="true"] { border: 0 !important; padding: 0 !important; font-size: 1.25rem; font-weight: 700; }
   .type { border-color: #000 !important; }
   @page { margin: 12mm; }
 }

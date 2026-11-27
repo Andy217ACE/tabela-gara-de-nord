@@ -180,6 +180,9 @@ def test_tesseract_and_security_updates_fields(store, tmp_path, monkeypatch):
 
 def test_tesseract_info_failed_probe_not_cached(monkeypatch):
     monkeypatch.setattr(system_status, "_tess_info", None)
+    monkeypatch.setattr(system_status, "_tess_fail", None)
+    clock = [1000.0]
+    monkeypatch.setattr(system_status.time, "monotonic", lambda: clock[0])
     calls = []
 
     def fake_run(cmd, **kw):
@@ -191,6 +194,9 @@ def test_tesseract_info_failed_probe_not_cached(monkeypatch):
 
     monkeypatch.setattr(system_status.subprocess, "run", fake_run)
     assert system_status.tesseract_info("tesseract")["version"] is None
+    assert system_status.tesseract_info("tesseract")["version"] is None   # failure held for 60 s
+    assert len(calls) == 2
+    clock[0] += 61
     assert system_status.tesseract_info("tesseract") == {"version": "5.5.0", "langs": ["eng"]}
     n = len(calls)
     system_status.tesseract_info("tesseract")

@@ -23,7 +23,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .btn, button, a, .nav-item, .lang-toggle, [role="button"] {
     transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease,
-      box-shadow 160ms ease, opacity 160ms ease;
+      box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
   }
   .btn:active, button:active, [role="button"]:active { opacity: 0.8; }
 }

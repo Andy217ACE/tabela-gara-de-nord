@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.70 — 2026-11-27
+### Schimbat
+- **Tipărirea Tabelei** arată ca titlu panoul ales (Sosiri sau Plecări), ca să se știe ce foaie ai în mână.
+- **Butoanele secundare** își păstrează din nou mica animație la apăsare (era anulată de tranzițiile din 1.69).
+- **Pagina Sistem (admin):** dacă Tesseract nu răspunde, verificarea se reia cel mult o dată pe minut, nu la fiecare cerere (o cerere nu mai poate aștepta 10 s).
+- **Securitate:** decupajele din `#ocr2` acceptă doar nume exacte; un caracter „rând nou” la final nu mai trece de verificare (semnalat de CodeQL; nu permitea ieșirea din folder).
+- **Server:** actualizările de securitate în așteptare au fost aplicate.
+### English
+- **Printing the Board** shows the selected board (Arrivals or Departures) as the sheet title.
+- **Secondary buttons** get their small press animation back (the 1.69 transitions overrode it).
+- **System page (admin):** if Tesseract does not answer, the probe is retried at most once a minute instead of on every request (no request can wait 10 s any more).
+- **Security:** `#ocr2` crops accept exact names only; a trailing newline no longer passes the check (flagged by CodeQL; it did not allow leaving the folder).
+- **Server:** pending security updates were applied.
+
 ## Beta 1.69 — 2026-11-24
 ### Schimbat
 - **Insignele de categorie a trenului** (IR, IC, R, RE…) sunt mai clare și la fel peste tot; IC are culoarea lui. Contrast de cel puțin 4,5:1 în ambele teme.
