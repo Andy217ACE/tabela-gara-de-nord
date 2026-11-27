@@ -52,8 +52,8 @@ def test_phone_bottom_bar(browser, base_url, theme):  # noqa: F811
         assert not s["hscroll"], s
         for route in reversed(BAR):
             page.locator(f".mainnav .nav-item[data-route='{route}']").click()
-            page.wait_for_timeout(120)
-            assert page.get_attribute(f".mainnav .nav-item[data-route='{route}']", "aria-current") == "page"
+            # rutele cu modul lazy (ex. statistici) pot marca aria-current după >120 ms pe CI: așteaptă starea, nu un timp fix
+            page.wait_for_selector(f".mainnav .nav-item[data-route='{route}'][aria-current='page']", state="attached", timeout=5000)
             assert page.locator(".mainnav .nav-item[aria-current='page']").count() == 1
         assert not errors, errors
     finally:
