@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app.notifier import SubscriptionGone
+from app.notifier import KeyMismatch, SubscriptionGone
 from app import visitors, admin_settings, admin_tools, captures, observations, security_status
 from app.ocr import stats as ocr_stats
 from app.store import TZ
@@ -503,6 +503,8 @@ async def push_test(request: Request):
     except SubscriptionGone:  # 404/410: same cleanup as the notifier
         await run_in_threadpool(app.state.store.unsubscribe, endpoint)
         return _json({"result": "gone"})
+    except KeyMismatch:  # 403: old VAPID key; the page re-subscribes (admin.js) and retries
+        return _json({"result": "key_mismatch"})
     except Exception as e:  # RuntimeError("... HTTP <status>")
         m = re.search(r"HTTP (\d+)", str(e))
         return _json({"result": "error", "status": int(m.group(1)) if m else None})

@@ -236,6 +236,46 @@ def test_bad_endpoint_rejected(client, ep):
     assert client.get("/api/follows", params={"endpoint": ep}).status_code == 422
 
 
+EP_NEW = "https://fcm.googleapis.com/fcm/send/new"
+
+
+def test_resubscribe_moves_follows(client):
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
+    r = client.post("/api/push/resubscribe",
+                    json={"old_endpoint": EP, "endpoint": EP_NEW, "keys": SUB["keys"]})
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert client.get("/api/follows", params={"endpoint": EP}).json()["follows"] == []
+    assert client.get("/api/follows", params={"endpoint": EP_NEW}).json()["follows"] ==         [{"train_no": 1636, "date": "2026-10-20", "on_board": False}]
+    assert client.app.state.store.get_subscription(EP) is None
+
+
+def test_resubscribe_unknown_old_acts_as_subscribe(client):
+    r = client.post("/api/push/resubscribe",
+                    json={"old_endpoint": EP, "endpoint": EP_NEW, "keys": SUB["keys"]})
+    assert r.status_code == 200
+    assert client.app.state.store.get_subscription(EP_NEW) is not None
+
+
+@pytest.mark.parametrize("body", [
+    {"old_endpoint": "https://10.0.0.1/x", "endpoint": EP_NEW, "keys": SUB["keys"]},
+    {"old_endpoint": EP, "endpoint": "http://push.example.com/x", "keys": SUB["keys"]},
+    {"endpoint": EP_NEW, "keys": SUB["keys"]},
+    {"old_endpoint": EP, "endpoint": EP_NEW},
+    {"old_endpoint": EP, "endpoint": EP_NEW, "keys": {"p256dh": "", "auth": "a"}},
+])
+def test_resubscribe_validation_keeps_old(client, body):
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/follow", json={"endpoint": EP, "train": 1636, "date": "2026-10-20"})
+    assert client.post("/api/push/resubscribe", json=body).status_code == 422
+    assert len(client.get("/api/follows", params={"endpoint": EP}).json()["follows"]) == 1
+
+
+def test_resubscribe_oversized_413(client):
+    big = {"old_endpoint": EP, "endpoint": EP_NEW, "keys": SUB["keys"], "pad": "x" * 5000}
+    assert client.post("/api/push/resubscribe", json=big).status_code == 413
+
+
 def test_push_key(client, monkeypatch):
     assert client.get("/api/push/key").status_code == 404
     app = create_app(settings(vapid_public_key="BPUBKEY"), start_poller=False)

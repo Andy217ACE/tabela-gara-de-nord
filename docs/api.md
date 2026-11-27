@@ -93,6 +93,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/follows` | nimic (parametru `endpoint`) | Trenurile urmărite de un abonat | 5.8 |
 | GET | `/api/push/key` | nimic | Cheia publică VAPID pentru notificări | 5.9 |
 | POST | `/api/push/subscribe` | nimic | Abonare la notificări | 5.10 |
+| POST | `/api/push/resubscribe` | nimic | Reabonare cu cheia VAPID curentă; mută urmăririle | 5.10.1 |
 | POST | `/api/push/unsubscribe` | nimic | Dezabonare | 5.11 |
 | POST | `/api/follow` | nimic | Urmărește un tren într-o zi | 5.12 |
 | DELETE | `/api/follow` | nimic | Oprește urmărirea | 5.12 |
@@ -148,7 +149,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | POST | `/api/admin/tools/dupes/restore` | admin + CSRF | Restaurează comasările | 7.7 |
 | GET | `/api/admin/security` | admin | Securitate: IP-uri banate (fail2ban), istoric ban-uri, cereri/probe 24 h și 7 zile — din `security/snapshot.json` scris de exportatorul root; `available:false` + `reason` (`missing`/`invalid`/`stale`, cu `age_s`) | — |
 | GET | `/api/admin/visitors` | admin | Vizitatori online (ultimele 5 min), din memorie: IP mascat, browser/SO, ultima cale, nr. cereri, prima/ultima vizită; fără boți | — |
-| POST | `/api/admin/push-test` | admin + CSRF | Trimite o notificare de test către `{endpoint}` doar dacă e abonat; `result`: `sent`/`not_subscribed`/`not_configured`/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
+| POST | `/api/admin/push-test` | admin + CSRF | Trimite o notificare de test către `{endpoint}` doar dacă e abonat; `result`: `sent`/`not_subscribed`/`not_configured`/`gone`/`key_mismatch` (push 403: abonare făcută cu o cheie VAPID veche)/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
 | GET | `/api/admin/tools/server` | admin | Starea serverului (load, memorie, servicii) | 7.8 |
 | GET | `/api/admin/system` | admin | Detaliile paginii Sistem | 7.9 |
 | GET | `/api/admin/tools/nvme` | admin | Starea discului NVMe (din `nvme.json`) | 7.10 |
@@ -492,6 +493,20 @@ Trenurile urmărite de un abonament push. Este apelată de pagina „Urmărite�
 - **Răspuns (200):** `{"ok": true}`.
 - **Erori:** 422 `"Endpoint de notificare invalid."`, 422 `"Cheile abonării lipsesc."`, 422
   `"Abonare invalidă."` (chei prea scurte sau formă greșită), 413 peste 4 096 de octeți.
+
+### 5.10.1 `POST /api/push/resubscribe`
+
+Folosită de aplicație când abonarea browserului a fost creată cu o cheie VAPID veche (serviciul
+push răspunde 403 la orice trimitere către ea, pentru totdeauna). La deschidere, `follows.js`
+compară `applicationServerKey` al abonării cu `/api/push/key`; dacă diferă, dezabonează browserul,
+se abonează din nou cu cheia curentă și apelează această rută. Browserele care nu expun cheia
+nu pot fi verificate (abonarea rămâne).
+
+- **Corp:** ca la 5.10, plus `old_endpoint` (obligatoriu, aceleași reguli ca `endpoint`).
+- **Efect (atomic):** înregistrează `endpoint`, mută urmăririle de pe `old_endpoint` pe el și șterge
+  abonarea veche. Dacă `old_endpoint` nu e cunoscut, se comportă ca 5.10.
+- **Răspuns (200):** `{"ok": true}`.
+- **Erori:** ca la 5.10 (422, 413); la eroare abonarea veche rămâne neatinsă.
 
 ### 5.11 `POST /api/push/unsubscribe`
 

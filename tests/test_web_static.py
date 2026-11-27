@@ -225,7 +225,7 @@ def test_history_js_journey_result():
 
 def test_follows_js_uses_api():
     js = (WEB / "follows.js").read_text(encoding="utf-8")
-    for needle in ("/api/push/key", "/api/push/subscribe", "/api/push/unsubscribe",
+    for needle in ("/api/push/key", "/api/push/subscribe", "/api/push/unsubscribe", "/api/push/resubscribe",
                    "/api/follow", "/api/follows", "urlBase64ToUint8Array", "onFollow",
                    "follows.reason."):
         assert needle in js, needle

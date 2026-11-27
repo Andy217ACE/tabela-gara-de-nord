@@ -737,6 +737,13 @@
             else if (res === "sent") say("admin.push.sent");
             else if (res === "not_subscribed") say("admin.push.notSubscribed");
             else if (res === "gone") say("admin.push.gone");
+            else if (res === "key_mismatch") {
+              // 403: subscription made with an old VAPID key; re-subscribe (follows move along)
+              var F = window.TabelaApp && window.TabelaApp.follows;
+              return (F ? F.heal(true) : Promise.resolve(null)).then(function (ep) {
+                say(ep ? "admin.push.keyMismatchFixed" : "admin.push.keyMismatch");
+              }, function () { say("admin.push.keyMismatch"); });
+            }
             else if (res === "not_configured") say("admin.push.notConfigured");
             else say("admin.push.error", { status: r.data && r.data.status != null ? r.data.status : r.status });
           });

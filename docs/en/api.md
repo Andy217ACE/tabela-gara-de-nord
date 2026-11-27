@@ -95,6 +95,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/follows` | nothing (`endpoint` parameter) | The trains followed by a subscriber | 5.8 |
 | GET | `/api/push/key` | nothing | The public VAPID key for notifications | 5.9 |
 | POST | `/api/push/subscribe` | nothing | Subscribe to notifications | 5.10 |
+| POST | `/api/push/resubscribe` | nothing | Re-subscribe with the current VAPID key; moves the follows | 5.10.1 |
 | POST | `/api/push/unsubscribe` | nothing | Unsubscribe | 5.11 |
 | POST | `/api/follow` | nothing | Follow a train on a day | 5.12 |
 | DELETE | `/api/follow` | nothing | Stop following | 5.12 |
@@ -150,7 +151,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | POST | `/api/admin/tools/dupes/restore` | admin + CSRF | Restores the merges | 7.7 |
 | GET | `/api/admin/security` | admin | Security: banned IPs (fail2ban), ban history, requests/probes over 24 h and 7 days — from `security/snapshot.json` written by the root exporter; `available:false` + `reason` (`missing`/`invalid`/`stale`, with `age_s`) | — |
 | GET | `/api/admin/visitors` | admin | Online visitors (last 5 min), in memory: masked IP, browser/OS, last path, request count, first/last seen; bots excluded | — |
-| POST | `/api/admin/push-test` | admin + CSRF | Sends one test notification to `{endpoint}` only if subscribed; `result`: `sent`/`not_subscribed`/`not_configured`/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
+| POST | `/api/admin/push-test` | admin + CSRF | Sends one test notification to `{endpoint}` only if subscribed; `result`: `sent`/`not_subscribed`/`not_configured`/`gone`/`key_mismatch` (push 403: subscription made with an old VAPID key)/`error` (+`status`); 429 `rate_limited` (1 per 10 s) | `{endpoint}` |
 | GET | `/api/admin/tools/server` | admin | The server state (load, memory, services) | 7.8 |
 | GET | `/api/admin/system` | admin | The details of the System page | 7.9 |
 | GET | `/api/admin/tools/nvme` | admin | NVMe disk state (from `nvme.json`) | 7.10 |
@@ -494,6 +495,20 @@ Registers a Web Push subscription.
 - **Response (200):** `{"ok": true}`.
 - **Errors:** 422 `"Endpoint de notificare invalid."`, 422 `"Cheile abonării lipsesc."` (The subscription keys are missing), 422
   `"Abonare invalidă."` (Invalid subscription; keys too short or the wrong shape), 413 over 4,096 bytes.
+
+### 5.10.1 `POST /api/push/resubscribe`
+
+Used by the app when the browser's subscription was created with an old VAPID key (the push
+service answers 403 to every send to it, forever). On open, `follows.js` compares the
+subscription's `applicationServerKey` with `/api/push/key`; if they differ, it unsubscribes the
+browser, subscribes again with the current key and calls this route. Browsers that do not expose
+the key cannot be checked (the subscription is kept).
+
+- **Body:** as in 5.10, plus `old_endpoint` (mandatory, same rules as `endpoint`).
+- **Effect (atomic):** registers `endpoint`, moves the follows of `old_endpoint` to it and deletes
+  the old subscription. If `old_endpoint` is unknown, it behaves like 5.10.
+- **Response (200):** `{"ok": true}`.
+- **Errors:** as in 5.10 (422, 413); on error the old subscription is left untouched.
 
 ### 5.11 `POST /api/push/unsubscribe`
 
