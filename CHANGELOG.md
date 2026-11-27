@@ -5,6 +5,29 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.75 — 2026-11-28
+### Securitate
+- **Administrare:** încercările greșite de autentificare se limitează acum pe fiecare IP, cu așteptare care se dublează (1 min → 1 h); un atacator nu mai poate bloca administratorul, iar o autentificare reușită resetează contorul.
+- **Autentificare în doi pași (TOTP), opțională și oprită implicit:** se pornește cu `ADMIN_TOTP_SECRET` (`scripts/admin_totp_setup.py`); toate formularele de autentificare cer atunci și codul de 6 cifre.
+- **Notificări:** mutarea, dezabonarea, urmărirea și lista trenurilor urmărite cer acum dovada că abonarea îți aparține, nu doar adresa ei; mutarea urmăririlor respectă limita de 20 de trenuri.
+- **Colectorul intern** limitează mărimea răspunsurilor primite (4 MB, 8 MB după decomprimare).
+- **Server:** limite de memorie, procesor și procese pe toate serviciile; alerte de operare pe Telegram (site căzut, OCR degradat, disc plin, servicii căzute), cu mesaj la rezolvare.
+- **CI:** scanare de secrete (gitleaks), bandit, listă de componente (SBOM) cu audit de vulnerabilități; pachetele se instalează doar cu amprentă verificată (`--require-hashes`).
+### Calitate
+- **OCR:** suită de regresie pe 59 de cadre de dezvoltare și 20 de validare oarbă, cu valori de referință versionate; script zilnic de urmărire a preciziei.
+- **Accesibilitate:** verificări automate WCAG 2.2 AA pe toate paginile; pe telefon, elementul selectat de la tastatură nu mai ajunge ascuns sub bara de jos.
+- **Viteză:** limite de performanță (încărcare, stabilitate, octeți, cereri) verificate în teste pe un telefon simulat lent.
+### English
+- **Admin:** failed sign-ins are now limited per IP with doubling backoff (1 min → 1 h); an attacker can no longer lock the administrator out, and a successful sign-in resets the count.
+- **Two-step sign-in (TOTP), optional and off by default:** enabled with `ADMIN_TOTP_SECRET` (`scripts/admin_totp_setup.py`); every sign-in form then also asks for the 6-digit code.
+- **Notifications:** moving, unsubscribing, following and listing followed trains now require proof that the subscription is yours, not just its address; moving follows respects the 20-train limit.
+- **The internal collector** caps the size of responses it receives (4 MB, 8 MB decompressed).
+- **Server:** memory, CPU and task limits on every service; Telegram operations alerts (site down, degraded OCR, disk full, failed services), with a recovery message.
+- **CI:** secret scan (gitleaks), bandit, a software bill of materials (SBOM) with a vulnerability audit; packages install only with verified hashes (`--require-hashes`).
+- **OCR:** regression suite on 59 development and 20 blind-validation frames with versioned baselines; daily accuracy tracking script.
+- **Accessibility:** automated WCAG 2.2 AA checks on every page; on phones, the keyboard-focused element no longer hides under the bottom bar.
+- **Speed:** performance budgets (loading, stability, bytes, requests) enforced in tests on a slow simulated phone.
+
 ## Beta 1.74 — 2026-11-28
 ### Adăugat
 - **Administrare:** pagină internă, doar pentru administrator, pentru testul de 7 zile cu harta trenurilor în circulație, cu link din pagina Administrare. Nu apare în meniu și nimic nu e public.
