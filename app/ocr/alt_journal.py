@@ -25,8 +25,8 @@ MAX_EVENTS = 5000
 PRUNE_EVERY_S = 3600
 SCALE = 3
 VERDICTS = ("correct", "wrong", "unclear")
-ID_RE = re.compile(r"^\d{8}T\d{6}-(arrival|departure)-\d{1,3}$")
-COL_RE = re.compile(r"^(no|time)$")
+ID_RE = re.compile(r"^\d{8}T\d{6}-(arrival|departure)-\d{1,3}\Z")
+COL_RE = re.compile(r"^(no|time)\Z")
 
 DEDUP_S = 15 * 60  # in umbra acelasi rand necitit e propus la fiecare cadru: il notam o data
 

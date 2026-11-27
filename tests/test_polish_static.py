@@ -38,6 +38,7 @@ def test_print_hides_chrome():
     for sel in ("nav", ".bottom-nav", "button:not(", ".filters", "footer"):
         assert sel in css
     # data inside buttons / live regions must print (train numbers, headings, column labels, counts)
-    for keep in (".h-train", ".oc-name", ".st-sort", ".st-jbtn", ".ss-acc-btn"):
+    for keep in (".h-train", ".oc-name", ".st-sort", ".st-jbtn", ".ss-acc-btn", '.tab[aria-selected="true"]'):
         assert keep in css
     assert "[aria-live]" not in css and '[role="button"]' not in css
+    assert ", .tabs," not in css   # Beta 1.70: the selected tab (Sosiri / Plecari) titles the printed sheet

@@ -48,14 +48,19 @@ def panel_state(age_s: float | None) -> str:
 
 
 _tess_info: dict | None = None  # cached on first call: the installed binary does not change while running
+_tess_fail: tuple | None = None  # (monotonic time, result) of the last failed probe
 _UPDATES_FILE = "/var/lib/update-notifier/updates-available"  # written by Ubuntu's update-notifier
 
 
 def tesseract_info(cmd: str) -> dict:
     """Tesseract version and loaded traineddata languages, from `tesseract --version` and
     `--list-langs` (one call each, cached). Unavailable -> None / []."""
-    global _tess_info
+    global _tess_info, _tess_fail
     if _tess_info is None:
+        # a failed probe (missing binary, timeout) is retried at most once a minute, so a hung
+        # binary cannot stall every caller for 10 s
+        if _tess_fail and time.monotonic() - _tess_fail[0] < 60:
+            return _tess_fail[1]
         exe = cmd if os.path.isabs(cmd) else (shutil.which(cmd) or cmd)
 
         def run(arg):
@@ -69,7 +74,8 @@ def tesseract_info(cmd: str) -> dict:
         langs = [x.strip() for x in run("--list-langs").splitlines()[1:] if x.strip()]
         info = {"version": m.group(1) if m else None, "langs": langs}
         if not info["version"]:
-            return info   # failed probe (missing binary, timeout): not cached, retried on the next call
+            _tess_fail = (time.monotonic(), info)
+            return info
         _tess_info = info
     return _tess_info
 
