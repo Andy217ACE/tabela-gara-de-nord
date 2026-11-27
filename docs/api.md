@@ -156,6 +156,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/admin/ocr-alt` | admin | Jurnalul OCR-ului alternativ (pagina `#ocr2`) | 7.10 |
 | GET | `/api/admin/ocr-alt/crop/{eid}/{col}` | admin | Decupajul unei celule (PNG) | 7.10 |
 | POST | `/api/admin/ocr-alt/{eid}/verdict` | admin + CSRF | Verdictul administratorului pentru un eveniment | 7.10 |
+| GET | `/api/admin/infofer` | admin | Spike-ul intern Infofer (pagina `#infofer`): sănătatea colectării, Infofer față de tabelă acum, acuratețe preliminară | 7.10 |
 | GET | `/api/admin/quality-daily/confirmation` | admin | Rata zilnică de confirmare a călătoriilor | 7.10 |
 | GET | `/api/admin/quality-daily/reading` | admin | Calitatea zilnică a citirii | 7.10 |
 | GET | `/api/admin/quality-daily/coverage` | admin | Acoperirea orară a panoului | 7.10 |
@@ -1161,6 +1162,15 @@ Toate cer sesiune de admin (sau `Bearer`); doar `POST …/verdict` cere și `X-C
 - **`POST /api/admin/ocr-alt/{eid}/verdict`** — corpul este exact `{"verdict": "correct" | "wrong" |
   "unclear" | null}` (`null` șterge verdictul; cel mult 1024 de octeți). 422 `"Verdict invalid."`, 404
   `"Eveniment necunoscut."`; răspuns `{"ok": true, "verdict": …, "totals": …}`.
+- **`GET /api/admin/infofer`** — spike-ul intern Infofer (pagina `#infofer`, vezi administrare-operare §16).
+  Citește DOAR-CITIRE `INFOFER_DB` (implicit `/var/lib/tabela/infofer.db`) și baza principală; `no-store`.
+  Baza lipsă → `{"enabled": false}`. Altfel `health` (rulări total/24 h, eșuate = `error` nenul sau 0
+  markeri, ultima rulare, ultima reușită, markeri/rulare, început, zile din 7, `ok`/`problems`: `stale` = nicio
+  rulare reușită în 10 min, `failures` = peste 20% eșuate în 24 h), `hourly` (ultimele 24 h, pe oră UTC),
+  `live` (trenurile din ultima hartă Infofer aflate și pe tabela de sosiri: întârziere Infofer, ora raportării,
+  `stale` dacă `passed_time` ≥ 15, întârzierea de pe tabelă, ora din mers) și `accuracy` (aceeași analiză ca
+  `scripts/infofer_analyze.py`, pe T−60/−30/−15, ținută în memorie 5 min). O bază blocată/stricată dă `error`
+  (200, nu 500); o analiză eșuată dă `accuracy_error`. Datele Infofer nu se afișează public (termenii Infofer).
 - **`GET /api/admin/quality-daily/confirmation`** și **`/reading`** — `days` (1–90, implicit 14): rata de
   confirmare a călătoriilor pe zi, respectiv calitatea citirii pe zi, cu tendință.
 - **`GET /api/admin/quality-daily/coverage`** — `days` (1–90, implicit 7) și `threshold` (0–1, implicit

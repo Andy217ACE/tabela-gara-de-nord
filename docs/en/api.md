@@ -158,6 +158,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/admin/ocr-alt` | admin | The alternative-OCR journal (`#ocr2` page) | 7.10 |
 | GET | `/api/admin/ocr-alt/crop/{eid}/{col}` | admin | The crop of one cell (PNG) | 7.10 |
 | POST | `/api/admin/ocr-alt/{eid}/verdict` | admin + CSRF | The administrator's verdict for one event | 7.10 |
+| GET | `/api/admin/infofer` | admin | The internal Infofer spike (`#infofer` page): collection health, Infofer vs the board now, preliminary accuracy | 7.10 |
 | GET | `/api/admin/quality-daily/confirmation` | admin | Daily journey-confirmation rate | 7.10 |
 | GET | `/api/admin/quality-daily/reading` | admin | Daily reading quality | 7.10 |
 | GET | `/api/admin/quality-daily/coverage` | admin | Hourly board coverage | 7.10 |
@@ -1163,6 +1164,15 @@ All need an admin session (or `Bearer`); only `POST …/verdict` also needs `X-C
 - **`POST /api/admin/ocr-alt/{eid}/verdict`**: the body is exactly `{"verdict": "correct" | "wrong" |
   "unclear" | null}` (`null` clears the verdict; at most 1024 bytes). 422 `"Verdict invalid."`, 404
   `"Eveniment necunoscut."`; response `{"ok": true, "verdict": …, "totals": …}`.
+- **`GET /api/admin/infofer`**: the internal Infofer spike (`#infofer` page, see administrare-operare §16).
+  Opens `INFOFER_DB` (default `/var/lib/tabela/infofer.db`) and the main database READ-ONLY; `no-store`.
+  Missing database → `{"enabled": false}`. Otherwise `health` (runs total/24 h, failed = non-null `error` or
+  0 markers, last run, last successful run, markers/run, start, days of 7, `ok`/`problems`: `stale` = no
+  successful run in 10 min, `failures` = more than 20% failed in 24 h), `hourly` (last 24 h, per UTC hour),
+  `live` (trains on the latest Infofer map that are also on the arrival board: Infofer delay, report time,
+  `stale` if `passed_time` ≥ 15, the board delay, the timetable time) and `accuracy` (the same analysis as
+  `scripts/infofer_analyze.py`, at T−60/−30/−15, kept in memory for 5 min). A locked/broken database gives
+  `error` (200, not 500); a failed analysis gives `accuracy_error`. Infofer data is never shown publicly.
 - **`GET /api/admin/quality-daily/confirmation`** and **`/reading`**: `days` (1-90, default 14): the daily
   journey-confirmation rate and the daily reading quality, with a trend.
 - **`GET /api/admin/quality-daily/coverage`**: `days` (1-90, default 7) and `threshold` (0-1, default

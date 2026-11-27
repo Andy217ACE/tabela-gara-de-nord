@@ -242,6 +242,7 @@
     body.appendChild(pushTestCard());
     body.appendChild(securityCard());
     body.appendChild(marksCard());
+    body.appendChild(infoferCard());
     loadReport();
     loadSecurity();
     loadVisitors();
@@ -525,6 +526,17 @@
     }
     var meta = $("admin-server-meta");
     if (meta) meta.textContent = T("admin.server.updated", { time: when(s.generated_at) });
+  }
+
+  // ---- link to the internal Infofer spike page (#infofer, admin only) ------------------
+
+  function infoferCard() {
+    var c = card("admin-infofer", T("admin.infofer.title"));
+    c.appendChild(el("p", "admin-text", T("admin.infofer.text")));
+    var a = el("a", null, T("admin.infofer.link"));
+    a.href = "#infofer";
+    c.appendChild(a);
+    return c;
   }
 
   // ---- proposed OCR13 marks (static text, no API) -----------------------------------

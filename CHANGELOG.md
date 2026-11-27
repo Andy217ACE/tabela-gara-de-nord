@@ -5,6 +5,12 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.74 — 2026-11-28
+### Adăugat
+- **Administrare:** pagină internă, doar pentru administrator, pentru testul de 7 zile cu harta trenurilor în circulație: starea colectării (OK/problemă), rulările pe oră din ultimele 24 h, trenurile de pe tabelă văzute acum pe hartă (întârzierea de acolo lângă cea de pe tabelă) și o acuratețe preliminară; se actualizează singură la 60 s. Nu apare în meniu și nimic nu e public.
+### English
+- **Administration:** an internal, admin-only page for the 7-day test with the map of running trains: collection health (OK/problem), runs per hour over the last 24 h, the board's trains seen on the map right now (its delay next to the board's) and a preliminary accuracy; it refreshes itself every 60 s. It is not in the menu and nothing is public.
+
 ## Beta 1.73 — 2026-11-27
 ### Reparat
 - **Notificări push:** abonările făcute cu o cheie de notificare veche erau refuzate de serviciul push (eroare 403), deci notificările nu mai ajungeau. Acum aplicația reface singură abonarea la deschidere și păstrează trenurile urmărite (rută nouă `POST /api/push/resubscribe`). Testul de notificare din Administrare spune „cheie veche” și reface abonarea pe loc.
