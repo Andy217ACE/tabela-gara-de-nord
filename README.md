@@ -261,7 +261,7 @@ sequenceDiagram
     S-->>N: events after each ingest (delay, platform, gone)
     N->>N: pending change, confirmed over several good readings
     N->>P: Web Push (VAPID), once per change
-    P-->>U: notification; a click opens the app
+    P-->>U: notification, a click opens the app
 ```
 
 - Web Push with VAPID keys (`pywebpush`); without both keys the app runs and push is disabled.
