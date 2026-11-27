@@ -11,8 +11,8 @@ on:
 permissions:
   contents: read
 
-concurrency:   # a newer push to the same branch/PR cancels the run it makes obsolete
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+concurrency:   # a newer push to the same PR cancels its obsolete run; every push to main gets its own run (no "cancelled" marks on main)
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
