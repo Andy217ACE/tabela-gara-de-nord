@@ -2,7 +2,8 @@
 """Antrenare zilnica a clasificatorului de cifre, in MOD UMBRA: nu promoveaza nimic.
 
 Pasi (toate scrierile sunt in WORKDIR, implicit /var/lib/tabela/shadow):
-    1. export: capturile si observatiile din baza (deschisa doar in citire) -> export.json
+    1. export: capturile si observatiile din baza (deschisa doar in citire) -> export.json;
+       cadrele seturilor de evaluare (truth + holdout) nu intra niciodata la antrenare
     2. extract + label (scripts/ocr_digit_clf.py): crop-uri si etichete silver in run/
     3. antrenare MLP (numpy) pe silver-train
     4. evaluare pe silver-test, pe setul scris de mana (truth.json) si fata de motorul curent
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import signal
 import sqlite3
@@ -41,6 +43,9 @@ DEFAULT_WORKDIR = Path("/var/lib/tabela/shadow")
 DEFAULT_DB = Path("/var/lib/tabela/tabela.db")
 DEFAULT_IMG_ROOT = Path("/var/lib/tabela")
 REPO_TRUTH = ROOT / "tests" / "fixtures" / "ocr_truth" / "truth.json"
+REPO_HOLDOUT = ROOT / "tests" / "fixtures" / "ocr_truth" / "holdout" / "holdout.json"
+# Captura: YYYY/MM/DD/HHMMSS-<hash8> pe server, YYYY_MM_DD_HHMMSS-<hash8> in seturile de adevar.
+FRAME_RE = re.compile(r"(\d{4})\D(\d{2})\D(\d{2})\D(\d{6})-([0-9a-f]{8})")
 TRUTH_IMG = "truth-img"  # WORKDIR/truth-img/<cadru>.jpg: imaginile setului scris de mana
 TIME_LIMIT_S = 2 * 3600
 # Cadre citite cu OCR pe noapte, esantion stabil din toata retentia (ocr_digit_clf.select_frames).
@@ -124,6 +129,27 @@ def export_db(db: Path, img_root: Path, out_json: Path, select=None) -> dict:
     return {"capturi": n_caps, "capturi_cu_imagine": n_with_img,
             "capturi_cu_fisier": len(on_disk), "observatii": n_obs,
             "cadre_exportate": len(caps), "observatii_exportate": len(obs)}
+
+
+def frame_key(frame: str) -> str:
+    """Identitatea capturii: hash8 al imaginii (acelasi pe server si in seturile de adevar)."""
+    m = FRAME_RE.search(frame)
+    return m.group(5) if m else frame
+
+
+def eval_frame_keys(paths) -> set[str]:
+    """Cheile cadrelor de evaluare (truth + holdout + WORKDIR/truth.json, cele care exista)."""
+    keys: set[str] = set()
+    for p in paths:
+        if p is not None and Path(p).is_file():
+            frames = json.loads(Path(p).read_text(encoding="utf-8")).get("frames", {})
+            keys |= {frame_key(f) for f in frames}
+    return keys
+
+
+def training_frames(frames, exclude: set[str]) -> list[str]:
+    """Cadrele de pe server fara cele de evaluare: validarea ramane independenta de antrenare."""
+    return [f for f in frames if frame_key(f) not in exclude]
 
 
 def _truth_file(candidates) -> Path | None:
@@ -246,8 +272,10 @@ def run(workdir, db, img_root, truth_candidates, clf=None, now=None) -> dict:
            "limite": LIMITS}
     antrenare: dict = {"antrenat": False}
     try:
-        rep["surse"] = export_db(Path(db), Path(img_root), workdir / "export.json",
-                                 select=lambda fr: clf.select_frames(fr, MAX_FRAMES))
+        exclude = eval_frame_keys([REPO_TRUTH, REPO_HOLDOUT, *truth_candidates])
+        rep["surse"] = export_db(
+            Path(db), Path(img_root), workdir / "export.json",
+            select=lambda fr: clf.select_frames(training_frames(fr, exclude), MAX_FRAMES))
         rep["cadre"] = clf.extract(str(img_root), str(workdir / "export.json"), str(run_dir),
                                    max_frames=MAX_FRAMES, cache_dir=str(_cache_dir(clf, workdir)))
         rep["etichete"] = clf.label(str(run_dir), None)

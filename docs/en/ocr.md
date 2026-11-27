@@ -1013,23 +1013,35 @@ python scripts/ocr_eval.py score   OUT.json [INAINTE.json]   # tabel, cu compara
 
 ### 20.4 The regression tests
 
-- `tests/test_ocr14.py` runs the reader on **all** the frames in `truth.json` and compares with the thresholds:
+- `tests/test_ocr_regression.py` (regression suite, Beta 1.75) runs the production reader on **two**
+  sets and compares, on each field (`no`, `time`, `type`, `platform`, `delay`, `station`, `operator`),
+  with the versioned baseline `tests/fixtures/ocr_truth/regression-baseline.json`: wrong ≤ baseline
+  (no tolerance), ok ≥ baseline − 3, unread ≤ baseline + 3 (3 lines for another Tesseract/OpenCV
+  build, as `test_ocr14.py` did before).
 
-  | Field | `MAX_WRONG` (at most wrong) | `MIN_OK` (at least correct) |
-  |---|---|---|
-  | `no` | 0 | 379 |
-  | `time` | 4 | 381 |
-  | `type` | 2 | 383 |
-  | `platform` | 0 | 382 |
-  | `delay` | 0 | 374 |
-  | `station` | 3 | 381 |
-  | `operator` | 5 | 382 |
+  Baseline `ocr-tess-grid-5` (28.11.2026): `truth` = 59 frames / 1416 lines (development, used for tuning),
+  `holdout` = 20 frames / 480 lines (independent validation):
 
-  **State**: the docstring in `test_ocr14.py` was updated to 59 frames and 1416 lines.
-  The `MIN_OK` thresholds (≈ 380 on each field) were measured on the initial set of 16 captures / 384 lines
-  (Beta 1.16, according to the comment above `MAX_WRONG`); the code does not show that they were recalibrated
-  after the set was extended. Out of the 1415 labeled "no" values, the threshold of 379 correct covers only ~27%. out of the 1415 labeled "no" values, the threshold of 379 correct
-  covers only ~27%. Verification needed: run the test with the real frames and compare with the measured values.
+  | Field | truth ok | unread | wrong | holdout ok | unread | wrong |
+  |---|---|---|---|---|---|---|
+  | `no` | 1408 | 7 | 0 | 479 | 1 | 0 |
+  | `time` | 1405 | 0 | 4 | 480 | 0 | 0 |
+  | `type` | 1411 | 0 | 2 | 479 | 0 | 1 |
+  | `platform` | 1396 | 19 | 0 | 478 | 2 | 0 |
+  | `delay` | 1392 | 20 | 0 | 475 | 3 | 1 |
+  | `station` | 1413 | 0 | 3 | 477 | 0 | 3 |
+  | `operator` | 1416 | 0 | 0 | 480 | 0 | 0 |
+
+- The baseline is rewritten **only on purpose** (after a measured improvement or new labels), with the
+  captures present: `OCR_RECORD_REGRESSION=1 OMP_THREAD_LIMIT=1 pytest tests/test_ocr_regression.py`.
+  The baseline keeps the sha256 fingerprint of each set's labels: a changed label or an added frame
+  without re-recording fails in CI (`test_baseline_matches_the_labels`).
+- **In CI** (no images: the captures are not in the repo) only the part without OCR runs: the label
+  fingerprint, the disjointness of the sets (section 20.5) and their exclusion from shadow training
+  (19). Under one second. The image part skips with a reason when any capture of a set is missing; it
+  runs locally and wherever the captures exist (`OCR_TRUTH_DIR`). Local duration: ≈ 8 minutes for both sets (79 frames, 60 s budget per frame).
+- `test_ocr14.py` no longer has the whole-set `MAX_WRONG`/`MIN_OK`/`MAX_UNREAD` thresholds (moved to
+  the baseline); it keeps the 8 s budget test and the seam cases.
 
 - `tests/test_ocr_platform_cut.py`: records `baseline-1.31.json` (`OCR_RECORD_BASELINE=1`, only
   intentionally) and checks each cut-platform frame, the number of departures at rows 9 and 11, and
@@ -1044,10 +1056,18 @@ python scripts/ocr_eval.py score   OUT.json [INAINTE.json]   # tabel, cu compara
   labeled **blind** by a labeler distinct from those who wrote the code. Each frame is at
   least 60 minutes from the frames in `truth.json`. According to `holdout/README.md`, for
   choosing the frames only the images were looked at, not the reader's result.
-- The holdout was not used for tuning (`CHANGELOG`, Beta 1.39: "0 wrong platform digits").
-- The holdout README says the scoring was done with "an external script (not in the repo)". So
-  there is no tool in the repo that reproduces that score. **Uncertain**: how exactly
-  the figure in the CHANGELOG on the hold-out is computed.
+- **Leak found** (Beta 1.75): the frame `ocr_truth/holdout/2026_10_24_160005-57702940` was copied into
+  `truth.json` (commit `5d8e0af`, Beta 1.39) and used to tune the platform reading, so it is no longer
+  unseen. Validation excludes it: the independent validation set has **20 frames, 480 lines**.
+  The `LEAKED` list in `tests/test_ocr_regression.py` is closed: any other hold-out frame showing up in
+  `truth.json` fails `test_holdout_is_disjoint_from_the_truth_set`, which also checks the capture
+  identity (hash8 of the image) and the minimum distance of 60 minutes.
+- The hold-out score is now reproducible from the repo (`tests/test_ocr_regression.py`, set `holdout`);
+  the external script mentioned in `holdout/README.md` is no longer needed.
+- **Separation from training**: `scripts/nightly_shadow_train.py` excludes from training every server
+  capture whose identity (hash8 of `YYYY/MM/DD/HHMMSS-<hash8>.jpg`) appears in `truth.json`,
+  `holdout.json` or `WORKDIR/truth.json` (`training_frames`, tested in
+  `test_shadow_training_never_sees_an_evaluation_frame`).
 
 ### 20.6 Statistics in operation (`app/ocr/stats.py`)
 
@@ -1058,6 +1078,24 @@ They do not measure accuracy, but **the state over the last 60 frames** (`WINDOW
 - the OCR duration (p50, max) and the re-read time.
 
 It is in memory (it resets on restart) and appears in `/api/health` and in the administration page.
+
+### 20.7 Daily accuracy monitoring (`scripts/ocr_accuracy_daily.py`)
+
+Live frames have no hand-written labels, so the **confirmed** value of a field in a reading is the
+consensus (`app.consensus.winner`: strict majority, at least 3 votes) of the other readings of the same
+service around it (7 before, 7 after; the reading itself does not vote). Only published readings
+(`validation_state` `ok`/`uncertain`) are scored, per service day, with the same categories as the truth
+set (ok / unread / wrong). Without consensus, the field is not scored.
+
+```text
+python scripts/ocr_accuracy_daily.py [--db /var/lib/tabela/tabela.db] [--date YYYY-MM-DD] [--days N] [--out DIR]
+```
+
+Default: yesterday, one JSON line per day on stdout; with `--out`, also `ocr-accuracy-YYYY-MM-DD.json`.
+The database is opened read-only. **Limit**: it measures consistency, not truth: a stable misread (the
+same digit in every frame, see 21.1) shows as ok. Use the day-to-day trend; the truth remains the
+regression suite (20.4). It has no admin view yet (the validation states per day are already in
+`/api/admin/quality-daily`).
 
 ---
 
@@ -1142,8 +1180,8 @@ Verified in the code. Points 1, 2, 4 and 5 were corrected in `README.md` and in 
 6. **The OMP_THREAD_LIMIT=1 rule**: documented in `ocr_eval.py` and in the working plan as a rule for the server,
    but `deploy/tabela.service` does not set it, and the code in `app/` does not apply it (verified). A known gap, to
    be closed with a human decision (the systemd unit is not modified in this correction). See 8.3.
-7. **Hold-out**: `CHANGELOG` (Beta 1.39) says "0 wrong platform digits" on the hold-out, but
-   the scoring is done with "an external script (not in the repo)" (`holdout/README.md`). It cannot be reproduced from the repo.
+7. **Hold-out** (solved in Beta 1.75): the score is reproducible from the repo with `tests/test_ocr_regression.py`;
+   one hold-out frame had leaked into `truth.json` and is excluded from validation (20.5).
 ## How to reproduce a local measurement
 
 1. Install Tesseract with the Romanian language (`tesseract-ocr`, `tesseract-ocr-ron`) and set `TESSERACT_CMD` if needed.
@@ -1153,6 +1191,6 @@ Verified in the code. Points 1, 2, 4 and 5 were corrected in `README.md` and in 
    on the server it is not run in parallel, see 8.3). Use the output path in a temporary directory, not in the repo.
 4. `python scripts/ocr_eval.py score /tmp/rezultat.json` for the table; with a second run as
    the second argument, for a before/after comparison.
-5. `pytest tests/test_ocr14.py tests/test_ocr_platform_cut.py` for the regression thresholds.
+5. `pytest tests/test_ocr_regression.py tests/test_ocr14.py tests/test_ocr_platform_cut.py` for regression.
 
 Do not run `OCR_RECORD_BASELINE=1` except intentionally: it rewrites `baseline-1.31.json`.

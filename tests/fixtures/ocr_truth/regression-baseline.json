@@ -1,0 +1,91 @@
+{
+ "processing_version": "ocr-tess-grid-5",
+ "recorded": "2026-11-28",
+ "rerecord": "OCR_RECORD_REGRESSION=1 pytest tests/test_ocr_regression.py",
+ "sets": {
+  "truth": {
+   "frames": 59,
+   "lines": 1416,
+   "labels_sha256": "13a34cd293d04c26e1bf56bee1897336733a09e1cc9917e3cf04b8fce0e6e7ba",
+   "fields": {
+    "no": {
+     "ok": 1408,
+     "unread": 7,
+     "wrong": 0
+    },
+    "time": {
+     "ok": 1405,
+     "unread": 0,
+     "wrong": 4
+    },
+    "type": {
+     "ok": 1411,
+     "unread": 0,
+     "wrong": 2
+    },
+    "platform": {
+     "ok": 1396,
+     "unread": 19,
+     "wrong": 0
+    },
+    "delay": {
+     "ok": 1392,
+     "unread": 20,
+     "wrong": 0
+    },
+    "station": {
+     "ok": 1413,
+     "unread": 0,
+     "wrong": 3
+    },
+    "operator": {
+     "ok": 1416,
+     "unread": 0,
+     "wrong": 0
+    }
+   }
+  },
+  "holdout": {
+   "frames": 20,
+   "lines": 480,
+   "labels_sha256": "8d15a67de1ea9032892f6d8f6b908de04e4f0bfc42d0c0adb680b9a2d4386373",
+   "fields": {
+    "no": {
+     "ok": 479,
+     "unread": 1,
+     "wrong": 0
+    },
+    "time": {
+     "ok": 480,
+     "unread": 0,
+     "wrong": 0
+    },
+    "type": {
+     "ok": 479,
+     "unread": 0,
+     "wrong": 1
+    },
+    "platform": {
+     "ok": 478,
+     "unread": 2,
+     "wrong": 0
+    },
+    "delay": {
+     "ok": 475,
+     "unread": 3,
+     "wrong": 1
+    },
+    "station": {
+     "ok": 477,
+     "unread": 0,
+     "wrong": 3
+    },
+    "operator": {
+     "ok": 480,
+     "unread": 0,
+     "wrong": 0
+    }
+   }
+  }
+ }
+}

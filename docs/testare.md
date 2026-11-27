@@ -213,8 +213,9 @@ Imaginile stau doar pe mașina de dezvoltare (`tests/fixtures/ocr_truth/private/
 
 | Fișier | Conținut | Folosit de |
 |---|---|---|
-| `tests/fixtures/ocr_truth/truth.json` | Cadre reale cu cele 12 rânduri pe panou (sosiri și plecări), verificate cu ochiul pe imagine. Cheile sunt `ocr_truth/<cale>` (imagini private) sau `ocr13/<cale>` (imagini din `tests/fixtures/`). | `test_ocr14.py` (aserțiuni de regresie pe acuratețe; `len(lines) >= 300`), `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
-| `tests/fixtures/ocr_truth/holdout/holdout.json` | Set separat, „hold-out”, de cadre nevăzute de implementatori, etichetate de un etichetator distinct. | `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
+| `tests/fixtures/ocr_truth/truth.json` | Cadre reale cu cele 12 rânduri pe panou (sosiri și plecări), verificate cu ochiul pe imagine. Cheile sunt `ocr_truth/<cale>` (imagini private) sau `ocr13/<cale>` (imagini din `tests/fixtures/`). | `test_ocr_regression.py` (setul `truth`, dezvoltare), `test_ocr14.py`, `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
+| `tests/fixtures/ocr_truth/holdout/holdout.json` | Set separat, „hold-out”, de cadre nevăzute de implementatori, etichetate de un etichetator distinct. Validare independentă (fără cadrul scurs în `truth.json`, vezi `docs/ocr.md` 20.5). | `test_ocr_regression.py` (setul `holdout`), `scripts/ocr_alt_eval.py` |
+| `tests/fixtures/ocr_truth/regression-baseline.json` | Baseline-ul suitei de regresie: pe fiecare set, contoarele ok/necitit/greșit pe câmp și amprenta sha256 a etichetelor. | `test_ocr_regression.py` |
 | `tests/fixtures/ocr_truth/baseline-1.31.json` | Rezultatul cititorului din versiunea 1.31, înregistrat ca referință. Testul compară cadrele și contoarele cu `truth.json`. | `test_ocr_platform_cut.py` |
 | `tests/fixtures/ocr_truth/NOTE-2026-10-27.md` | Notă de lucru: ce cadre au fost alese și de ce (peroane necitite, numere greșite). | Doar documentație |
 | `tests/fixtures/ocr_truth/holdout/README.md` | Descrie cum a fost făcut hold-out-ul: cadre de 21–27.10.2026, la cel puțin 60 de minute de orice cadru din `truth.json`, etichetate orbește. | Doar documentație |
@@ -223,12 +224,9 @@ Regula de bază, scrisă în `tests/test_ocr_platform_cut.py`: adăugarea sau re
 
 ### 7.3 Cum se măsoară
 
-`app/ocr/truth.py` are funcțiile `load`, `lines_of` și `score`. `score` întoarce, pentru fiecare câmp, contoarele `ok`, `wrong` și `unread` (necitit), plus misses pentru diagnostic. Testul de acuratețe din `tests/test_ocr14.py` are praguri:
+`app/ocr/truth.py` are funcțiile `load`, `lines_of` și `score`. `score` întoarce, pentru fiecare câmp, contoarele `ok`, `wrong` și `unread` (necitit), plus misses pentru diagnostic. Suita de regresie `tests/test_ocr_regression.py` compară, pe seturile `truth` și `holdout`, cu `regression-baseline.json`: greșite ≤ baseline, corecte ≥ baseline − 3, necitite ≤ baseline + 3. Pică dacă citirea se înrăutățește, nu dacă se îmbunătățește. Baseline-ul se reînregistrează doar intenționat: `OCR_RECORD_REGRESSION=1 OMP_THREAD_LIMIT=1 pytest tests/test_ocr_regression.py`.
 
-- `MAX_WRONG[field]`: câte valori greșite sunt admise maxim per câmp;
-- `MIN_OK[field]`: câte valori corecte sunt cerute minim per câmp.
-
-Testul pică dacă citirea se înrăutățește (`assert c["wrong"] <= MAX_WRONG[field]`), nu dacă se îmbunătățește. Testul `tests/test_ocr_platform_cut.py` compară cu baseline-ul înregistrat; baseline-ul se reînregistrează explicit, cu `OCR_RECORD_BASELINE=1 pytest tests/test_ocr_platform_cut.py` (scris în docstring-ul fișierului).
+În CI (fără capturi) rulează partea fără OCR, sub o secundă: amprenta etichetelor (o etichetă schimbată fără reînregistrare pică), disjuncția `truth`/`holdout` (nume, hash8 al capturii, ≥ 60 min) și excluderea cadrelor de evaluare din antrenarea în umbră (`scripts/nightly_shadow_train.py`). Partea cu OCR sare cu motiv dacă lipsește vreo captură din set. Monitorizarea pe live: `scripts/ocr_accuracy_daily.py` (`tests/test_ocr_accuracy_daily.py`, `docs/ocr.md` 20.7). Testul `tests/test_ocr_platform_cut.py` compară cu baseline-ul înregistrat; baseline-ul se reînregistrează explicit, cu `OCR_RECORD_BASELINE=1 pytest tests/test_ocr_platform_cut.py` (scris în docstring-ul fișierului).
 
 Pentru o evaluare manuală, `scripts/ocr_eval.py` are două subcomenzi, `predict` și `score` (`python scripts/ocr_eval.py predict ...`, `... score ...`). Variabilele `NPROC` (implicit 4) și `OCR_TRUTH_DIR` se pot seta.
 
