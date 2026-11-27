@@ -1012,23 +1012,35 @@ python scripts/ocr_eval.py score   OUT.json [INAINTE.json]   # tabel, cu compara
 
 ### 20.4 Testele de regresie
 
-- `tests/test_ocr14.py` rulează cititorul pe **toate** cadrele din `truth.json` și compară cu pragurile:
+- `tests/test_ocr_regression.py` (suita de regresie, Beta 1.75) rulează cititorul de producție pe
+  **două** seturi și compară, pe fiecare câmp (`no`, `time`, `type`, `platform`, `delay`, `station`,
+  `operator`), cu baseline-ul versionat `tests/fixtures/ocr_truth/regression-baseline.json`:
+  greșite ≤ baseline (fără toleranță), corecte ≥ baseline − 3, necitite ≤ baseline + 3 (3 linii pentru
+  alt build Tesseract/OpenCV, ca înainte în `test_ocr14.py`).
 
-  | Câmp | `MAX_WRONG` (cel mult greșite) | `MIN_OK` (cel puțin corecte) |
-  |---|---|---|
-  | `no` | 0 | 379 |
-  | `time` | 4 | 381 |
-  | `type` | 2 | 383 |
-  | `platform` | 0 | 382 |
-  | `delay` | 0 | 374 |
-  | `station` | 3 | 381 |
-  | `operator` | 5 | 382 |
+  Baseline `ocr-tess-grid-5` (28.11.2026): `truth` = 59 de cadre / 1416 linii (dezvoltare, folosit la reglare),
+  `holdout` = 20 de cadre / 480 de linii (validare independentă):
 
-  **Stare**: docstring-ul din `test_ocr14.py` a fost actualizat la 59 de cadre și 1416 de linii.
-  Pragurile `MIN_OK` (≈ 380 pe fiecare câmp) au fost măsurate pe setul inițial de 16 capturi / 384 de linii
-  (Beta 1.16, conform comentariului de deasupra `MAX_WRONG`); codul nu arată că ar fi fost recalibrate
-  după extinderea setului. Pe cele 1415 valori de „no” etichetate, pragul de 379 corecte acoperă doar ~27%. pe cele 1415 valori de „no” etichetate, pragul de 379 corecte
-  acoperă doar ~27%. Verificare necesară: rulați testul cu cadrele reale și comparați cu valorile măsurate.
+  | Câmp | truth ok | necitit | greșit | holdout ok | necitit | greșit |
+  |---|---|---|---|---|---|---|
+  | `no` | 1408 | 7 | 0 | 479 | 1 | 0 |
+  | `time` | 1405 | 0 | 4 | 480 | 0 | 0 |
+  | `type` | 1411 | 0 | 2 | 479 | 0 | 1 |
+  | `platform` | 1396 | 19 | 0 | 478 | 2 | 0 |
+  | `delay` | 1392 | 20 | 0 | 475 | 3 | 1 |
+  | `station` | 1413 | 0 | 3 | 477 | 0 | 3 |
+  | `operator` | 1416 | 0 | 0 | 480 | 0 | 0 |
+
+- Baseline-ul se rescrie **doar intenționat** (după o îmbunătățire măsurată sau etichete noi), cu
+  capturile prezente: `OCR_RECORD_REGRESSION=1 OMP_THREAD_LIMIT=1 pytest tests/test_ocr_regression.py`.
+  Baseline-ul păstrează amprenta sha256 a etichetelor fiecărui set: o etichetă schimbată sau un cadru
+  adăugat fără reînregistrare pică în CI (`test_baseline_matches_the_labels`).
+- **În CI** (fără imagini: capturile nu sunt în repo) rulează doar partea fără OCR: amprenta etichetelor,
+  disjuncția seturilor (secțiunea 20.5) și excluderea lor din antrenarea în umbră (19). Sub o secundă.
+  Partea cu imagini sare cu motiv dacă lipsește vreo captură din set; rulează local și oriunde există
+  capturile (`OCR_TRUTH_DIR`). Durata locală: ≈ 8 minute pe ambele seturi (79 de cadre, buget 60 s pe cadru).
+- `test_ocr14.py` nu mai are pragurile `MAX_WRONG`/`MIN_OK`/`MAX_UNREAD` pe tot setul (mutate în
+  baseline); păstrează testul de buget de 8 s și cazurile de cusătură.
 
 - `tests/test_ocr_platform_cut.py`: înregistrează `baseline-1.31.json` (`OCR_RECORD_BASELINE=1`, numai
   intenționat) și verifică fiecare cadru de peron tăiat, numărul de plecări la rândurile 9 și 11, și
@@ -1043,10 +1055,18 @@ python scripts/ocr_eval.py score   OUT.json [INAINTE.json]   # tabel, cu compara
   etichetate **orbește** de un etichetator distinct de cei care au scris codul. Fiecare cadru este la
   cel puțin 60 de minute de cadrele din `truth.json`. Potrivit `holdout/README.md`, pentru
   alegerea cadrelor s-au privit doar imaginile, nu rezultatul cititorului.
-- Holdout-ul nu a fost folosit la reglare (`CHANGELOG`, Beta 1.39: „0 cifre greșite la peron”).
-- README-ul din holdout spune că scorul s-a făcut cu „un script extern (nu e în repo)”. Deci
-  nu există un instrument în repo care să reproducă acel scor. **Nesigur**: cum se calculează
-  exact cifra din CHANGELOG pe hold-out.
+- **Scurgere găsită** (Beta 1.75): cadrul `ocr_truth/holdout/2026_10_24_160005-57702940` a fost copiat
+  în `truth.json` (commit `5d8e0af`, Beta 1.39) și folosit la reglarea peronului, deci nu mai e nevăzut.
+  Validarea îl exclude: setul de validare independentă are **20 de cadre, 480 de linii**.
+  Lista `LEAKED` din `tests/test_ocr_regression.py` e închisă: orice alt cadru hold-out apărut în
+  `truth.json` pică testul `test_holdout_is_disjoint_from_the_truth_set`, care verifică și
+  identitatea capturii (hash8 al imaginii) și distanța de cel puțin 60 de minute.
+- Scorul pe hold-out se reproduce acum din repo (`tests/test_ocr_regression.py`, setul `holdout`);
+  scriptul extern din `holdout/README.md` nu mai e necesar.
+- **Separarea de antrenare**: `scripts/nightly_shadow_train.py` exclude din antrenare orice captură
+  de pe server a cărei identitate (hash8 din `YYYY/MM/DD/HHMMSS-<hash8>.jpg`) apare în `truth.json`,
+  `holdout.json` sau `WORKDIR/truth.json` (`training_frames`, testat în
+  `test_shadow_training_never_sees_an_evaluation_frame`).
 
 ### 20.6 Statistici în exploatare (`app/ocr/stats.py`)
 
@@ -1057,6 +1077,24 @@ Nu măsoară acuratețea, ci **starea pe ultimele 60 de cadre** (`WINDOW = 60`, 
 - durata OCR (p50, max) și timpul de recitire.
 
 Este în memorie (se resetează la repornire) și apare în `/api/health` și în pagina de administrare.
+
+### 20.7 Monitorizarea zilnică a acurateței (`scripts/ocr_accuracy_daily.py`)
+
+Pe cadrele live nu există etichete scrise de mână, deci valoarea **confirmată** a unui câmp într-o
+citire este consensul (`app.consensus.winner`: majoritate strictă, cel puțin 3 voturi) al celorlalte
+citiri ale aceluiași serviciu din jurul ei (7 înainte, 7 după; citirea însăși nu votează). Se notează
+doar citirile publicate (`validation_state` `ok`/`uncertain`), pe ziua de serviciu, cu aceleași
+categorii ca setul de adevăr (ok / necitit / greșit). Fără consens, câmpul nu se notează.
+
+```text
+python scripts/ocr_accuracy_daily.py [--db /var/lib/tabela/tabela.db] [--date AAAA-LL-ZZ] [--days N] [--out DIR]
+```
+
+Implicit: ziua de ieri, un rând JSON pe zi la ieșire; cu `--out`, și `ocr-accuracy-AAAA-LL-ZZ.json`.
+Baza se deschide doar în citire. **Limită**: măsoară consecvența, nu adevărul: o greșeală stabilă
+(aceeași cifră în toate cadrele, vezi 21.1) apare ca ok. Folosiți tendința de la o zi la alta;
+adevărul rămâne suita de regresie (20.4). Nu are încă o vedere în administrare (stările de validare
+pe zi sunt deja în `/api/admin/quality-daily`).
 
 ---
 
@@ -1141,8 +1179,8 @@ Verificate în cod. Punctele 1, 2, 4 și 5 au fost corectate în `README.md` și
 6. **Regula OMP_THREAD_LIMIT=1**: documentată în `ocr_eval.py` și în planul de lucru ca regulă pentru server,
    dar `deploy/tabela.service` nu o setează, iar codul din `app/` nu o aplică (verificat). Lacună cunoscută, de
    închis cu o decizie umană (unitatea systemd nu se modifică în această corecție). Vezi 8.3.
-7. **Hold-out**: `CHANGELOG` (Beta 1.39) spune „0 cifre greșite la peron” pe hold-out, dar
-   scorul se face cu „un script extern (nu e în repo)” (`holdout/README.md`). Nu se poate reproduce din repo.
+7. **Hold-out** (rezolvat în Beta 1.75): scorul se reproduce din repo cu `tests/test_ocr_regression.py`;
+   un cadru hold-out se scursese în `truth.json` și e exclus din validare (20.5).
 ## Cum se reproduce o măsurare locală
 
 1. Instalați Tesseract cu limba română (`tesseract-ocr`, `tesseract-ocr-ron`) și setați `TESSERACT_CMD` dacă e nevoie.
@@ -1152,6 +1190,6 @@ Verificate în cod. Punctele 1, 2, 4 și 5 au fost corectate în `README.md` și
    pe server nu se rulează paralel, vezi 8.3). Calea de ieșire folosiți-o într-un director temporar, nu în repo.
 4. `python scripts/ocr_eval.py score /tmp/rezultat.json` pentru tabel; cu o a doua rulare ca
    al doilea argument, pentru comparație înainte/după.
-5. `pytest tests/test_ocr14.py tests/test_ocr_platform_cut.py` pentru pragurile de regresie.
+5. `pytest tests/test_ocr_regression.py tests/test_ocr14.py tests/test_ocr_platform_cut.py` pentru regresie.
 
 Nu rulați `OCR_RECORD_BASELINE=1` decât intenționat: rescrie `baseline-1.31.json`.

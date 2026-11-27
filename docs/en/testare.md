@@ -209,8 +209,9 @@ The images live only on the development machine (`tests/fixtures/ocr_truth/priva
 
 | File | Content | Used by |
 |---|---|---|
-| `tests/fixtures/ocr_truth/truth.json` | Real frames with the 12 rows per panel (arrivals and departures), checked by eye against the image. The keys are `ocr_truth/<path>` (private images) or `ocr13/<path>` (images in `tests/fixtures/`). | `test_ocr14.py` (accuracy regression assertions; `len(lines) >= 300`), `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
-| `tests/fixtures/ocr_truth/holdout/holdout.json` | A separate "hold-out" set of frames not seen by the implementers, labeled by a distinct labeler. | `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
+| `tests/fixtures/ocr_truth/truth.json` | Real frames with the 12 rows per panel (arrivals and departures), checked by eye against the image. The keys are `ocr_truth/<path>` (private images) or `ocr13/<path>` (images in `tests/fixtures/`). | `test_ocr_regression.py` (set `truth`, development), `test_ocr14.py`, `test_ocr_platform_cut.py`, `scripts/ocr_eval.py` |
+| `tests/fixtures/ocr_truth/holdout/holdout.json` | A separate "hold-out" set of frames not seen by the implementers, labeled by a distinct labeler. Independent validation (without the frame leaked into `truth.json`, see `docs/ocr.md` 20.5). | `test_ocr_regression.py` (set `holdout`), `scripts/ocr_alt_eval.py` |
+| `tests/fixtures/ocr_truth/regression-baseline.json` | Baseline of the regression suite: per set, the ok/unread/wrong counters per field and the sha256 fingerprint of the labels. | `test_ocr_regression.py` |
 | `tests/fixtures/ocr_truth/baseline-1.31.json` | The result of the version 1.31 reader, recorded as a reference. The test compares the frames and the counters with `truth.json`. | `test_ocr_platform_cut.py` |
 | `tests/fixtures/ocr_truth/NOTE-2026-10-27.md` | Working note: which frames were chosen and why (unread platforms, wrong numbers). | Documentation only |
 | `tests/fixtures/ocr_truth/holdout/README.md` | Describes how the hold-out was made: frames from 21–27.10.2026, at least 60 minutes from any frame in `truth.json`, labeled blind. | Documentation only |
@@ -219,12 +220,9 @@ The basic rule, written in `tests/test_ocr_platform_cut.py`: adding or relabelin
 
 ### 7.3 How it is measured
 
-`app/ocr/truth.py` has the functions `load`, `lines_of` and `score`. `score` returns, for each field, the counters `ok`, `wrong` and `unread`, plus misses for diagnosis. The accuracy test in `tests/test_ocr14.py` has thresholds:
+`app/ocr/truth.py` has the functions `load`, `lines_of` and `score`. `score` returns, for each field, the counters `ok`, `wrong` and `unread`, plus misses for diagnosis. The regression suite `tests/test_ocr_regression.py` compares, on the sets `truth` and `holdout`, with `regression-baseline.json`: wrong ≤ baseline, ok ≥ baseline − 3, unread ≤ baseline + 3. It fails if the reading gets worse, not if it improves. The baseline is re-recorded only on purpose: `OCR_RECORD_REGRESSION=1 OMP_THREAD_LIMIT=1 pytest tests/test_ocr_regression.py`.
 
-- `MAX_WRONG[field]`: how many wrong values are allowed at most per field;
-- `MIN_OK[field]`: how many correct values are required at least per field.
-
-The test fails if the reading gets worse (`assert c["wrong"] <= MAX_WRONG[field]`), not if it improves. The test `tests/test_ocr_platform_cut.py` compares with the recorded baseline; the baseline is re-recorded explicitly, with `OCR_RECORD_BASELINE=1 pytest tests/test_ocr_platform_cut.py` (written in the file's docstring).
+In CI (no captures) the part without OCR runs, under one second: the label fingerprint (a changed label without re-recording fails), the `truth`/`holdout` disjointness (name, capture hash8, ≥ 60 min) and the exclusion of evaluation frames from shadow training (`scripts/nightly_shadow_train.py`). The OCR part skips with a reason when any capture of a set is missing. Live monitoring: `scripts/ocr_accuracy_daily.py` (`tests/test_ocr_accuracy_daily.py`, `docs/ocr.md` 20.7). The test `tests/test_ocr_platform_cut.py` compares with the recorded baseline; the baseline is re-recorded explicitly, with `OCR_RECORD_BASELINE=1 pytest tests/test_ocr_platform_cut.py` (written in the file's docstring).
 
 For a manual evaluation, `scripts/ocr_eval.py` has two subcommands, `predict` and `score` (`python scripts/ocr_eval.py predict ...`, `... score ...`). The variables `NPROC` (default 4) and `OCR_TRUTH_DIR` can be set.
 

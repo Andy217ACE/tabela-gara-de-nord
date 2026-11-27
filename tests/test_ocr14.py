@@ -4,8 +4,8 @@
 Truth set: tests/fixtures/ocr_truth/truth.json — 59 real frames, 1416 lines (59 x 2 panels
 x 12 rows), every field checked by eye on the image (app/ocr/truth.py). The set started in
 Beta 1.16 as 16 captures / 384 lines (the 8 of tests/fixtures/ocr13 + 8 picked for the
-measured errors of the audit); the thresholds below are re-measured on the full set
-(24.11.2026, Beta 1.64); a change that misreads more cells, or reads fewer, fails here.
+measured errors of the audit). Its per-field accuracy is checked against the recorded
+baseline in tests/test_ocr_regression.py; this file keeps the budget and seam cases.
 
 Seam: a vertical joint between two LED modules of the board runs through the last
 digit of the train number. It cuts the thin "1" into its flag and its stem (two
@@ -27,24 +27,8 @@ from tests.ocr_truth_images import capture, read_frame
 FIX = Path(__file__).parent / "fixtures"
 TRUTH = truth.load(FIX / "ocr_truth" / "truth.json")
 
-# `wrong` is a published misread, `unread` an honest gap. Measured 24.11.2026 (Beta 1.64,
-# Tesseract 5.5, local, 59 frames / 1416 lines; 4 runs at 60 s and 8 s, identical counts):
-#              ok  wrong unread
-#   no       1408    0     7   (lines whose truth is "?" are not scored)
-#   time     1405    4     0
-#   type     1411    2     0
-#   platform 1396    0    19
-#   delay    1392    0    20
-#   station  1413    3     0
-#   operator 1416    0     0
-# The reading is deterministic, so MIN_OK / MAX_UNREAD leave only 3 lines (0.2 %) for another
-# Tesseract/OpenCV build; MAX_WRONG is the measured count (no tolerance: a new misread fails).
-MAX_WRONG = {"no": 0, "time": 4, "type": 2, "platform": 0, "delay": 0,
-             "station": 3, "operator": 0}
-MIN_OK = {"no": 1405, "time": 1402, "type": 1408, "platform": 1393, "delay": 1389,
-          "station": 1410, "operator": 1413}
-MAX_UNREAD = {"no": 10, "time": 3, "type": 3, "platform": 22, "delay": 23,
-              "station": 3, "operator": 3}
+# Field accuracy on the whole set (and on the blind hold-out) is checked against the recorded
+# baseline in tests/test_ocr_regression.py (regression-baseline.json), not here.
 
 # Production budget (OCR_FRAME_BUDGET_S = 8 s): the 10 slowest frames of the set (~40 s here).
 # The budget only limits the re-reads (the first pass always runs), so on this set it costs
@@ -61,34 +45,10 @@ MIN_OK_8S = {"no": 233, "time": 236, "type": 239, "platform": 238, "delay": 231,
 MAX_WRONG_8S = {"no": 0, "time": 1, "type": 0, "platform": 0, "delay": 0,
                 "station": 0, "operator": 0}
 
-_cache: dict[str, list] = {}
-
-
-def _debug(frame: str) -> list:
-    if frame not in _cache:
-        _cache[frame] = read_board_debug(read_frame(frame), budget_s=60.0)[1]
-    return _cache[frame]
-
-
-@pytest.fixture(scope="module")
-def result():
-    preds = {frame: truth.lines_of(_debug(frame)) for frame in TRUTH["frames"]}
-    return truth.score(TRUTH, preds)
-
-
 def test_truth_set_has_about_300_labelled_lines():
     lines = [line for b in TRUTH["frames"].values() for ls in b.values() for line in ls]
     assert len(lines) >= 300
     assert all(set(truth.FIELDS) <= set(line) for line in lines)
-
-
-@pytest.mark.parametrize("field", truth.FIELDS)
-def test_field_accuracy_does_not_regress(result, field):
-    c = result["counts"][field]
-    misses = result["misses"][field]
-    assert c["wrong"] <= MAX_WRONG[field], misses
-    assert c["ok"] >= MIN_OK[field], misses
-    assert c["unread"] <= MAX_UNREAD[field], misses
 
 
 def test_production_budget_does_not_cut_the_reading(monkeypatch):
