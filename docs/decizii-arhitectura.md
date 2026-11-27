@@ -48,6 +48,6 @@ Lista de mai jos strânge alegerile deliberate ale proiectului, cu motivul fiec�
 
 ## 8. Copia de siguranță în afara serverului este amânată
 
-- **Decizia.** Nu există încă o copie off-site. Există copii locale verificate (înainte de fiecare migrare, la restaurări și la operațiile destructive din `#admin`) și monitorizare (watchdog, temporizator NVMe, verificări externe de uptime).
+- **Decizia.** Nu există încă o copie off-site. Există copii locale verificate (înainte de fiecare migrare, la restaurări și la operațiile destructive din `#admin`), o copie zilnică `restic` la 02:15 UTC, deocamdată pe același disc (`docs/administrare-operare.md`, secțiunea 6), și monitorizare (watchdog, temporizator NVMe, verificări externe de uptime).
 - **Motivul.** Decizia proprietarului, amânată. Datele sunt reconstruibile doar în parte (istoricul observat nu se poate reciti din altă sursă).
 - **Risc cunoscut:** pierderea discului și a copiilor locale odată ar însemna pierderea istoricului. Este o lacună asumată, nu o omisiune; o revedem la prima ocazie.

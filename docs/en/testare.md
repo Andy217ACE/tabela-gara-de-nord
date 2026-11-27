@@ -2,15 +2,15 @@
 
 This page describes the test suite of the Tabela Gara de Nord project: how to prepare the environment, how to run the full suite and parts of it, what test categories exist and what they check, what `tests/conftest.py` and `tests/ocr_truth_images.py` do, which tests are skipped in certain environments, and how to add a new test following the project's conventions.
 
-The page was written from the code in the `docs/documentatie-detaliata` branch. Where a statement could not be verified from the repo, it is marked **uncertain**. The full suite was not run when the page was written.
+The page was written from the application code and updated for Beta 1.72. Where a statement could not be verified from the repo, it is marked **uncertain**. The full suite was not run when the page was written.
 
-Reference numbers (Beta 1.65, `pytest --collect-only -q`):
+Reference numbers (Beta 1.72, `pytest --collect-only -q`):
 
-- 149 `tests/test_*.py` files, plus `tests/conftest.py`, `tests/ocr_truth_images.py` and `tests/__init__.py`;
-- 2512 collected tests (parametrized cases are counted separately);
+- 162 `tests/test_*.py` files, plus `tests/conftest.py`, `tests/ocr_truth_images.py` and `tests/__init__.py`;
+- 2607 collected tests (parametrized cases are counted separately);
 - full-suite duration: tens of minutes on a laptop, because of the browser and OCR tests. There is no versioned measurement: time it on your machine.
 
-**CI (GitHub Actions).** `.github/workflows/ci.yml` runs on every push and pull request: the `pytest` suite, including the browser tests (Playwright, Chromium), `pip-audit` on the dependencies and the release-consistency check (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` and the numbers in the code). Dependabot proposes dependency updates. Dependencies are pinned in `requirements.txt` (direct) and `requirements.lock` (transitive too). One test (`tests/test_docs_routes.py`) requires every route registered in the application to appear in `docs/api.md`, so the documentation cannot fall behind. The OCR regression runs on labelled frames (`tests/fixtures`, `app/ocr/truth.py`: about 59 frames and 1,416 labelled rows), with strict thresholds and a production time-budget test.
+**CI (GitHub Actions).** `.github/workflows/ci.yml` runs on every pull request, on push to `main` and weekly: the `pytest` suite, including the browser tests (Playwright: Chromium, plus Firefox and WebKit for `test_cross_browser.py`), the `fail2ban` job (section 3.2), `pip-audit` on the dependencies and the release-consistency check (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` and the numbers in the code). `codeql.yml` runs the CodeQL security analysis (Python and JavaScript). Dependabot proposes dependency updates, and `lock.yml` regenerates `requirements.lock` on its PRs. Dependencies are pinned in `requirements.txt` (direct) and `requirements.lock` (transitive too). One test (`tests/test_docs_routes.py`) requires every route registered in the application to appear in `docs/api.md`, so the documentation cannot fall behind. The OCR regression runs on labelled frames (`tests/fixtures`, `app/ocr/truth.py`: about 59 frames and 1,416 labelled rows), with strict thresholds and a production time-budget test.
 
 ## Contents
 
@@ -364,6 +364,5 @@ def test_unread_delay_keeps_the_row_and_reports_why():
 
 ### 9.3 What is not in the repo
 
-- No `.github/workflows` file (there is no CI). The tests are run locally.
 - No `.coveragerc` or coverage report. **Uncertain**: it is not known whether coverage is measured anywhere.
 - No `tox.ini`, `noxfile.py` or `Makefile`. The command is `python -m pytest`.

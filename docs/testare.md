@@ -2,15 +2,15 @@
 
 Această pagină descrie suita de teste a proiectului Tabela Gara de Nord: cum se pregătește mediul, cum se rulează suita completă și părți din ea, ce categorii de teste există și ce verifică, ce fac `tests/conftest.py` și `tests/ocr_truth_images.py`, ce teste sar în anumite medii, și cum se adaugă un test nou după convențiile din proiect.
 
-Pagina a fost scrisă din codul aplicației și actualizată pentru Beta 1.65. Acolo unde o afirmație nu s-a putut verifica din repo, este marcată cu **nesigur**. Suita completă nu a fost rulată la scrierea paginii.
+Pagina a fost scrisă din codul aplicației și actualizată pentru Beta 1.72. Acolo unde o afirmație nu s-a putut verifica din repo, este marcată cu **nesigur**. Suita completă nu a fost rulată la scrierea paginii.
 
-Numere de referință (Beta 1.65, `pytest --collect-only -q`):
+Numere de referință (Beta 1.72, `pytest --collect-only -q`):
 
-- 149 de fișiere `tests/test_*.py`, plus `tests/conftest.py`, `tests/ocr_truth_images.py` și `tests/__init__.py`;
-- 2512 de teste colectate (cazurile parametrizate sunt numărate separat);
+- 162 de fișiere `tests/test_*.py`, plus `tests/conftest.py`, `tests/ocr_truth_images.py` și `tests/__init__.py`;
+- 2607 teste colectate (cazurile parametrizate sunt numărate separat);
 - durata suitei complete: de ordinul zecilor de minute pe un laptop, din cauza testelor de browser și a celor de OCR. Nu există o măsurătoare versionată: cronometrează pe mașina ta.
 
-**CI (GitHub Actions).** `.github/workflows/ci.yml` rulează la fiecare push și pull request: suita `pytest`, inclusiv testele de browser (Playwright, Chromium), `pip-audit` pe dependențe și verificarea coerenței versiunii (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` și numerele din cod). Dependabot propune actualizări de dependențe. Dependențele sunt fixate în `requirements.txt` (directe) și `requirements.lock` (și tranzitive). Un test (`tests/test_docs_routes.py`) cere ca fiecare rută înregistrată în aplicație să apară în `docs/api.md`, ca documentația să nu rămână în urmă. Regresia OCR rulează pe cadre etichetate (`tests/fixtures`, `app/ocr/truth.py`: aproximativ 59 de cadre și 1416 rânduri etichetate), cu praguri stricte și un test al bugetului de timp din producție.
+**CI (GitHub Actions).** `.github/workflows/ci.yml` rulează la fiecare pull request, la push pe `main` și săptămânal: suita `pytest`, inclusiv testele de browser (Playwright: Chromium, plus Firefox și WebKit pentru `test_cross_browser.py`), job-ul `fail2ban` (secțiunea 3.2), `pip-audit` pe dependențe și verificarea coerenței versiunii (`scripts/check_release.py`: `VERSION`, `CHANGELOG.md` și numerele din cod). `codeql.yml` face analiza de securitate CodeQL (Python și JavaScript). Dependabot propune actualizări de dependențe, iar `lock.yml` regenerează `requirements.lock` pe PR-urile lui. Dependențele sunt fixate în `requirements.txt` (directe) și `requirements.lock` (și tranzitive). Un test (`tests/test_docs_routes.py`) cere ca fiecare rută înregistrată în aplicație să apară în `docs/api.md`, ca documentația să nu rămână în urmă. Regresia OCR rulează pe cadre etichetate (`tests/fixtures`, `app/ocr/truth.py`: aproximativ 59 de cadre și 1416 rânduri etichetate), cu praguri stricte și un test al bugetului de timp din producție.
 
 ## Cuprins
 
@@ -364,6 +364,5 @@ def test_unread_delay_keeps_the_row_and_reports_why():
 
 ### 9.3 Ce nu e în repo
 
-- Niciun fișier `.github/workflows` (nu există CI). Testele se rulează local.
 - Niciun `.coveragerc` sau raport de acoperire. **Nesigur**: nu se știe dacă există o acoperire măsurată.
 - Niciun `tox.ini`, `noxfile.py` sau `Makefile`. Comanda este `python -m pytest`.

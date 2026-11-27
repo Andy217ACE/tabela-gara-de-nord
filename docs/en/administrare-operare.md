@@ -77,7 +77,7 @@ Note: `Bearer` bypasses CSRF, so it has the same rights as the session. Use it o
 | `#ocr` "OCR captures" | `web/ocr.js` | list of captures, image with the OCR rectangles, raw text versus normalized text, **manual corrections**, OCR state | admin |
 | `#ocr2` "OCR alternative" | `web/ocr2.js` | the alternative-OCR journal: crops, a correct / wrong / unclear verdict per event (`/api/admin/ocr-alt*`, see `docs/ocr.md` §19.6) | admin |
 | `#setari` | `web/setari.js` | capture retention and the free-space threshold (`app/admin_settings.py`) | admin |
-| `#admin` "Administration" | `web/admin.js` | "Duplicate train numbers" (report, apply, restore) and "Server (live)" | admin |
+| `#admin` "Administration" | `web/admin.js` | "Duplicate train numbers" (report, apply, restore), "Server (live)", "NVMe disk (live)", "Security (fail2ban)" (banned IPs, ban history, requests/probes over 24 h and 7 days), "Online visitors" (last 5 minutes: masked IP, browser and OS, bots and scanners excluded; in memory, refreshed every 30 s) and "Push notification test" (sends a notification only to the subscription of the device you press it on) | admin |
 | `#sistem` | `web/sistem.js` | server state; the details appear only for admin | public, with details for admin |
 
 Endpoints (all under `/api/admin/`, except those marked):
@@ -93,6 +93,10 @@ Endpoints (all under `/api/admin/`, except those marked):
 | `POST /tools/dupes/apply` | applying the merge (requires `"confirm": "APLICA"`) |
 | `POST /tools/dupes/restore` | restoring the merges (requires `"confirm": "RESTAUREAZA"`) |
 | `GET /tools/server` | the server state (read only) |
+| `GET /tools/nvme` | the NVMe disk state (from `nvme.json`, written by `tabela-nvme.timer`) |
+| `GET /security` | the "Security" card, from `security/snapshot.json` (written by `tabela-security-snapshot.timer`) |
+| `GET /visitors` | "Online visitors", from the process memory (emptied on restart) |
+| `POST /push-test` | the test notification (CSRF; only to an existing subscription) |
 | `GET /system` | the details of the server state (`app/system_api.py`) |
 | `GET /api/system` | **public**: the minimal server state |
 | `GET/POST/DELETE /api/admin/corrections…` | the manual corrections, see section 3 (`…/audit`, `…/preview`, `…/{rid}/preview`, `…/{rid}/apply`, `…/batches/{batch}/restore`) |
@@ -284,6 +288,20 @@ Differences from merging, which must be known:
 All the copies are made online (`sqlite3 backup`), checked with `PRAGMA integrity_check` and written as a temporary file, then renamed. The files have mode 600.
 
 The backup directory is `BACKUP_DIR` (default `<database directory>/backups`, that is, `/var/lib/tabela/backups`).
+
+### The daily copy (restic)
+
+Besides the copies above, the server makes a copy with `restic` (an encrypted, deduplicated
+repository) every day at **02:15 UTC**. Its configuration (the systemd unit, the list of paths, the
+repository password) lives only on the server and is **not** in the repo; the password is never
+written in the documentation or in the repo.
+
+- **Known limit:** for now the restic repository is **on the same disk** as the database. It
+  protects against an accidental deletion or corruption, not against losing the disk or the server.
+- **The off-site copy** (outside the server) does not exist yet; the decision is deferred (see
+  section 15 and `docs/en/decizii-arhitectura.md`, section 8).
+- Check on the server: `systemctl list-timers` (the backup timer must appear with its next run) and
+  `journalctl` on its unit for the last run.
 
 The list of backups:
 
@@ -731,11 +749,25 @@ A summary for orientation, without secrets:
 3. define the jail in `/etc/fail2ban/jail.d/` (`filter = nginx-tabela-probes`, `logpath = /var/log/nginx/access.log`, `maxretry`, `findtime`, `bantime` at the operator's choice) and restart with `sudo systemctl restart fail2ban`;
 4. check: `sudo fail2ban-client status` and `sudo fail2ban-client status nginx-tabela-probes`.
 
-The server's complete configuration is versioned in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`, which never bans the home public IP). For the admin, the `#sistem` page shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
+The server's complete configuration is versioned in `deploy/fail2ban/` (versioned: `jail.local` → `/etc/fail2ban/jail.local`, `jail-tabela.local` → `/etc/fail2ban/jail.d/tabela.local`, the filters `nginx-tabela-probes.local` and `nginx-tabela-slow.local` → `/etc/fail2ban/filter.d/`, the script `f2b-ignore-own-public-ip` → `/usr/local/sbin/`).
+
+**Who is never banned.** `jail.local` ignores localhost and the LAN (`ignoreip`) and, for any other IP,
+asks the script `f2b-ignore-own-public-ip` (`ignorecommand`). The script answers "ignore" if the IP is:
+
+1. the current public IP of the home network, resolved on every decision from `tabelacfr.ddns.net` (the IP is dynamic);
+2. a **real visitor**: it has requests to `/api/` answered with 200 and with the site's `Referer` in
+   nginx's current `access.log`. The reason: on mobile networks (CGNAT) many users share one public IP;
+   if a scanner uses the same IP, without this exception the real people would be banned too. Each such
+   decision appears in the system log (`logger -t f2b-ignore`).
+
+The script validates the IP it receives, uses `timeout` for DNS and for the log search and, on any
+error, answers "do not ignore". Limit: the exception looks only at the current `access.log` (not the rotated ones).
+
+For the admin, the `#admin` page (the "Security (fail2ban)" card) shows the banned IPs and the number of requests/probes (`GET /api/admin/security`, from `security/snapshot.json`, written every two minutes by `tabela-security-snapshot.timer`).
 
 **External monitoring.** An external uptime service (UptimeRobot) checks the home page and `/api/health` (which also answers `HEAD`). Local alerts come from the watchdog (section 10, Telegram) and from the NVMe health timer.
 
-**What is missing, deliberately or not yet done:** there is no off-site backup; the decision belongs to the owner and is deferred. System updates are not automatic. See `docs/decizii-arhitectura.md`.
+**What is missing, deliberately or not yet done:** there is no off-site backup; the daily restic copy (section 6) is on the same disk; the decision belongs to the owner and is deferred. System updates are not automatic. See `docs/decizii-arhitectura.md`.
 
 ---
 

@@ -48,6 +48,6 @@ The list below gathers the project's deliberate choices, with the reason for eac
 
 ## 8. Off-site backup is deferred
 
-- **The decision.** There is no off-site copy yet. There are verified local copies (before every migration, at restores and at the destructive operations of `#admin`) and monitoring (watchdog, NVMe timer, external uptime checks).
+- **The decision.** There is no off-site copy yet. There are verified local copies (before every migration, at restores and at the destructive operations of `#admin`), a daily `restic` copy at 02:15 UTC, for now on the same disk (`docs/en/administrare-operare.md`, section 6), and monitoring (watchdog, NVMe timer, external uptime checks).
 - **The reason.** The owner's decision, deferred. The data is only partly reconstructible (the observed history cannot be re-read from another source).
 - **Known risk:** losing the disk and the local copies together would mean losing the history. It is an accepted gap, not an omission; we revisit it at the first opportunity.
