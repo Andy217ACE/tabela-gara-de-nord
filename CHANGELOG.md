@@ -5,6 +5,21 @@ tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.82 — 2026-11-28
+### Reparat
+- **Cititoarele de ecran** citeau numele trenului lipit de stație la butonul „Alertă” („IR 10072 dinGalați”); acum spun „IR 10072 din Galați”.
+- Aceeași corectură pentru plecări („spre Brașov”) și în engleză („from”/„to”).
+### Documentație
+- **Capturile și GIF-ul din README** refăcute după 1.81: se vede noul buton „Alertă” (gri oprit, verde pornit) și paginile aliniate.
+- Capturile sunt făcute tot doar din pagini publice, cu `scripts/make_demo_media.py`.
+- Fără alte schimbări în aplicație.
+### English
+- **Screen readers** read the train name glued to the station on the "Alert" button ("IR 10072 fromGalați"); it now says "IR 10072 from Galați".
+- The same fix for departures ("to Brașov") and in Romanian.
+- **README screenshots and GIF** rebuilt after 1.81: they show the new "Alert" button (grey off, green on) and the aligned pages.
+- The screenshots still come only from public pages, via `scripts/make_demo_media.py`.
+- No other changes to the app.
+
 ## Beta 1.81 — 2026-11-28
 ### Schimbat
 - **Butonul de urmărire a unui tren se numește acum „Alertă” și se vede mult mai bine:** gri plin când e oprit, verde plin (verdele de „la timp”) cu clopoțel plin când e pornit.
