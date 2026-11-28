@@ -5,6 +5,20 @@ tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.85 — 2026-11-28
+### SEO și conținut
+- **Fișa trenului arată direct în pagină** categoria, ruta observată, ultimele 5 călătorii pe fiecare sens (întârzierea citită sau „necunoscută”), perioada și mediana — vizibile înainte de grafice și pentru motoarele de căutare.
+- **Titlurile trenurilor includ ruta doar când datele o confirmă** (ex. „IR 1586 Constanța – București Nord | Istoric întârzieri”).
+- **Paginile stațiilor listează trenurile văzute recent pe fiecare sens;** stația aeroportului apare și ca „Aeroport Otopeni”.
+- **Statistici și Clasamente au direct în pagină** perioada, eșantionul N, primele cifre și pragul „la timp” (≤ 5 min).
+- **Pagina principală are un titlu și o descriere noi;** „Cum funcționează” are acum secțiunea „Metodologie, pe scurt” (sursa datelor, acoperirea, linii anunțate vs. estimate, pragul, cum semnalezi o eroare).
+### English
+- **Train pages now show directly in the page** the category, observed route, the last 5 journeys per direction (delay read or "unknown"), the period and the median — visible before the charts and to search engines.
+- **Train titles include the route only when the data confirms it** (e.g. "IR 1586 Constanța – București Nord | Delay history").
+- **Station pages list the trains seen recently in each direction;** the airport station is also named "Otopeni Airport".
+- **Statistics and Rankings now state in the page** the period, the sample size N, the headline figures and the on-time threshold (≤ 5 min).
+- **New title and description for the home page;** "How it works" now has a "Methodology, in brief" section (data source, coverage, announced vs. estimated platforms, threshold, how to report an error).
+
 ## Beta 1.84 — 2026-11-28
 ### SEO
 - **La navigarea în aplicație** (meniu, Înapoi/Înainte, schimbarea limbii), titlul, descrierea, adresa canonică, variantele ro/en și datele structurate se actualizează pentru pagina afișată; titlul trimis de server pe prima pagină nu mai e înlocuit.
