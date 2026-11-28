@@ -26,10 +26,6 @@ def _client(tmp_path, seed):
     return s, TestClient(create_app(cfg, start_poller=False))
 
 
-def _wired(c):
-    return c.get("/api/stats/changes").status_code != 404
-
-
 def _young(c):
     for d in (19, 20):
         add(c, "arrival", 1, d, "10:00", 3)
@@ -38,8 +34,6 @@ def _young(c):
 def test_young_base_answers_insufficient_on_every_new_route(tmp_path):
     s, client = _client(tmp_path, _young)
     with client as c:
-        if not _wired(c):
-            pytest.skip("rutele sp3 nu sunt încă legate în stats_api.py")
         for url in ("/api/stats/changes", "/api/stats/heatmap", "/api/stats/overview?compare=prev7"):
             r = c.get(url)
             assert r.status_code == 200, url
@@ -55,8 +49,6 @@ def test_routes_shape_with_two_weeks_of_data(tmp_path):
 
     s, client = _client(tmp_path, seed)
     with client as c:
-        if not _wired(c):
-            pytest.skip("rutele sp3 nu sunt încă legate în stats_api.py")
         assert c.get("/api/stats/changes").json()["window"]["now"]
         h = c.get("/api/stats/heatmap?perioada=all").json()
         assert h["days"] == list(range(7)) and h["hours"] == list(range(24))
