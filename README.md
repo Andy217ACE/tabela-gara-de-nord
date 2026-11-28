@@ -14,6 +14,8 @@ from the public CFR webcam image, using classic OCR (OpenCV + Tesseract, **no AI
 a live board, a searchable history, journey statistics and Web Push notifications for the trains you
 follow. Everything runs in one small Python process on a home server, with SQLite as its only database.
 
+![Tabela Gara de Nord — the live board in English, departures, cards view and history](https://raw.githubusercontent.com/yasirwhite/opendemo-media/main/Andy217ACE-tabela-gara-de-nord/tabela-demo.gif)
+
 **Live:** https://tabelacfr.ddns.net
 
 **Status: Beta.** The current version is in [`VERSION`](VERSION), the history in
