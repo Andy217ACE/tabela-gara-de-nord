@@ -106,7 +106,7 @@ def test_no_third_party_library_added():
     styles / canvas (CSP, theming, per-mark accessibility). Nothing vendored, nothing from a CDN."""
     assert not (WEB / "vendor").exists()
     for name in ("index.html", "ui2.js", "charts3.js", "statistici.js", "stats.js"):
-        assert not re.search(r"https?://(?!tabelacfr\.ddns\.net|cfr\.ro|www\.w3\.org)[a-z0-9.-]+/[^\"']*\.js", read(name)), name
+        assert not re.search(r"https?://(?!tabelagn.online|cfr\.ro|www\.w3\.org)[a-z0-9.-]+/[^\"']*\.js", read(name)), name
 
 
 def test_version_and_changelog_1_28():

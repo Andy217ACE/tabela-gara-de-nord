@@ -156,7 +156,7 @@ Diagrama arată serverul așa cum e descris în repo și în instrucțiunile de 
 ```mermaid
 flowchart TB
     NET["Internet"]
-    DNS["Nume dinamic tabelacfr.ddns.net"]
+    DNS["tabelagn.online (DNS Cloudflare, CNAME la tabelacfr.ddns.net, No-IP)"]
 
     subgraph SRV["Server Ubuntu 26.04 LTS"]
         direction TB
@@ -351,4 +351,4 @@ Lista acoperă toate modulele din `app/` (inclusiv `app/ocr/`). Descrierile vin 
 
 **robots.txt și sitemap.xml.** Vezi [api.md](api.md) §5.22. `/api/*` are `X-Robots-Tag: noindex`; orice cale necunoscută primește o pagină 404 HTML cu `noindex`.
 
-**Search Console / Bing.** Variabilele opționale `GOOGLE_SITE_VERIFICATION` și `BING_SITE_VERIFICATION` din `/etc/tabela.env` adaugă meta tag-ul de verificare. Tokenul se obține așa: Google Search Console → *Adaugă proprietate* → *Prefix URL* `https://tabelacfr.ddns.net/` → metoda *Etichetă HTML*; se copiază doar valoarea `content="…"`. Bing Webmaster Tools → *Add site* → *HTML Meta Tag* (`msvalidate.01`); se copiază valoarea `content`. Apoi `sudo systemctl restart tabela`, *Verifică* în consolă și se trimite `https://tabelacfr.ddns.net/sitemap.xml`. Tokenul nu e secret, dar nu se pune în repo.
+**Search Console / Bing.** Variabilele opționale `GOOGLE_SITE_VERIFICATION` și `BING_SITE_VERIFICATION` din `/etc/tabela.env` adaugă meta tag-ul de verificare. Tokenul se obține așa: Google Search Console → *Adaugă proprietate* → *Prefix URL* `https://tabelagn.online/` → metoda *Etichetă HTML*; se copiază doar valoarea `content="…"`. Bing Webmaster Tools → *Add site* → *HTML Meta Tag* (`msvalidate.01`); se copiază valoarea `content`. Apoi `sudo systemctl restart tabela`, *Verifică* în consolă și se trimite `https://tabelagn.online/sitemap.xml`. Tokenul nu e secret, dar nu se pune în repo.

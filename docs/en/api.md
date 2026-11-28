@@ -826,7 +826,7 @@ Not JSON: they serve `index.html` with the page's head and content injected on t
 
 - Any other path that is not `/api/…` and not a file: 404 HTML with `noindex` (not JSON). A trailing slash or upper case on a public page (`/Statistici/`) → 301 to the canonical form.
 - Every `/api/*` response has `X-Robots-Tag: noindex`.
-- `SITE_URL` (default `https://tabelacfr.ddns.net`) is the base of the absolute URLs. `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (optional) add `<meta name="google-site-verification">` / `<meta name="msvalidate.01">` (see [arhitectura.md](arhitectura.md) §11).
+- `SITE_URL` (default `https://tabelagn.online`) is the base of the absolute URLs. `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (optional) add `<meta name="google-site-verification">` / `<meta name="msvalidate.01">` (see [arhitectura.md](arhitectura.md) §11).
 
 ## 6. The administration security model
 

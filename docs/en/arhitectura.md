@@ -156,7 +156,7 @@ The diagram shows the server as described in the repo and in the working instruc
 ```mermaid
 flowchart TB
     NET["Internet"]
-    DNS["Nume dinamic tabelacfr.ddns.net"]
+    DNS["tabelagn.online (DNS Cloudflare, CNAME la tabelacfr.ddns.net, No-IP)"]
 
     subgraph SRV["Server Ubuntu 26.04 LTS"]
         direction TB
@@ -351,4 +351,4 @@ The list covers all the modules in `app/` (including `app/ocr/`). The descriptio
 
 **robots.txt and sitemap.xml.** See [api.md](api.md) §5.22. `/api/*` has `X-Robots-Tag: noindex`; any unknown path gets a 404 HTML page with `noindex`.
 
-**Search Console / Bing.** The optional variables `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` in `/etc/tabela.env` add the verification meta tag. To get the token: Google Search Console → *Add property* → *URL prefix* `https://tabelacfr.ddns.net/` → *HTML tag* method; copy only the `content="…"` value. Bing Webmaster Tools → *Add site* → *HTML Meta Tag* (`msvalidate.01`); copy the `content` value. Then `sudo systemctl restart tabela`, *Verify* in the console and submit `https://tabelacfr.ddns.net/sitemap.xml`. The token is not secret, but it does not go into the repo.
+**Search Console / Bing.** The optional variables `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` in `/etc/tabela.env` add the verification meta tag. To get the token: Google Search Console → *Add property* → *URL prefix* `https://tabelagn.online/` → *HTML tag* method; copy only the `content="…"` value. Bing Webmaster Tools → *Add site* → *HTML Meta Tag* (`msvalidate.01`); copy the `content` value. Then `sudo systemctl restart tabela`, *Verify* in the console and submit `https://tabelagn.online/sitemap.xml`. The token is not secret, but it does not go into the repo.

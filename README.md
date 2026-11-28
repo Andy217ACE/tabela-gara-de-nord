@@ -14,7 +14,7 @@ from the public CFR webcam image, using classic OCR (OpenCV + Tesseract, **no AI
 a live board, a searchable history, journey statistics and Web Push notifications for the trains you
 follow. Everything runs in one small Python process on a home server, with SQLite as its only database.
 
-**Live:** https://tabelacfr.ddns.net
+**Live:** https://tabelagn.online
 
 **Status: Beta.** The current version is in [`VERSION`](VERSION), the history in
 [`CHANGELOG.md`](CHANGELOG.md), in the app at `#versiuni` and in
@@ -551,7 +551,7 @@ counts as one).
 | `OCR_FRAME_BUDGET_S` | `8` | maximum OCR time per frame, re-reads included |
 | `OCR_ALT`, `OCR_ALT_SHADOW`, `OCR_ALT_MODEL`, `OCR_ALT_JOURNAL_DIR` | off | alternative OCR, shadow mode, model file, journal directory |
 | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` | empty | Web Push keys (the private key is secret); empty = push off |
-| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | the VAPID subject |
+| `VAPID_SUBJECT` | `https://tabelagn.online` | the VAPID subject |
 | `ADMIN_TOKEN`, `ADMIN_TOKEN_STRICT` | unset, `0` | the admin key (secret; at least 12 characters, 24 in strict mode) |
 | `CAPTURE_ENABLED`, `CAPTURE_DIR`, `CAPTURE_RETENTION_DAYS`, `CAPTURE_MIN_FREE_MB` | `1`, `/var/lib/tabela/captures` or `data/captures`, `7`, `2048` | captures |
 | `BACKUP_DIR` | `<database dir>/backups` | pre-migration backups |

@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 LOCAL_URL = "http://127.0.0.1:8000/api/health"
-PUBLIC_URL = "https://tabelacfr.ddns.net/api/health"
+PUBLIC_URL = "https://tabelagn.online/api/health"
 DISKS = ("/", "/var/lib/tabela", "/var/lib/tabela/captures")
 INFOFER_DB = "/var/lib/tabela/infofer.db"
 STATE_PATH = "/var/lib/tabela/ops_alerts.json"

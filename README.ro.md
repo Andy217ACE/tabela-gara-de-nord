@@ -15,7 +15,7 @@ tabelă live, un istoric căutabil, statistici pe călătorii și notificări We
 le urmărești. Totul rulează într-un singur proces Python mic, pe un server de acasă, cu SQLite ca unică
 bază de date.
 
-**Live:** https://tabelacfr.ddns.net
+**Live:** https://tabelagn.online
 
 **Stare: Beta.** Versiunea curentă e în [`VERSION`](VERSION), istoricul în
 [`CHANGELOG.md`](CHANGELOG.md), în aplicație la `#versiuni` și în
@@ -559,7 +559,7 @@ Apoi deschide http://127.0.0.1:8000. Notificările push cer în plus chei VAPID 
 | `OCR_FRAME_BUDGET_S` | `8` | timpul maxim de OCR pe cadru, inclusiv recitirile |
 | `OCR_ALT`, `OCR_ALT_SHADOW`, `OCR_ALT_MODEL`, `OCR_ALT_JOURNAL_DIR` | oprit | alternativa OCR, modul în umbră, fișierul model, directorul jurnalului |
 | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` | gol | cheile Web Push (cheia privată e secretă); gol = push oprit |
-| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | subiectul VAPID |
+| `VAPID_SUBJECT` | `https://tabelagn.online` | subiectul VAPID |
 | `ADMIN_TOKEN`, `ADMIN_TOKEN_STRICT` | nesetat, `0` | cheia de administrare (secretă; minim 12 caractere, 24 în modul strict) |
 | `CAPTURE_ENABLED`, `CAPTURE_DIR`, `CAPTURE_RETENTION_DAYS`, `CAPTURE_MIN_FREE_MB` | `1`, `/var/lib/tabela/captures` sau `data/captures`, `7`, `2048` | capturi |
 | `BACKUP_DIR` | `<directorul bazei>/backups` | copiile dinaintea migrărilor |

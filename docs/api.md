@@ -822,7 +822,7 @@ Nu sunt JSON: servesc `index.html` cu antetul și conținutul paginii injectate 
 
 - Orice altă cale care nu e `/api/…` și nu e fișier: 404 HTML cu `noindex` (nu JSON). O bară finală sau majuscule pe o pagină publică (`/Statistici/`) → 301 la forma canonică.
 - Toate răspunsurile `/api/*` au `X-Robots-Tag: noindex`.
-- `SITE_URL` (implicit `https://tabelacfr.ddns.net`) e baza adreselor absolute. `GOOGLE_SITE_VERIFICATION` și `BING_SITE_VERIFICATION` (opționale) adaugă `<meta name="google-site-verification">` / `<meta name="msvalidate.01">` (vezi [arhitectura.md](arhitectura.md) §11).
+- `SITE_URL` (implicit `https://tabelagn.online`) e baza adreselor absolute. `GOOGLE_SITE_VERIFICATION` și `BING_SITE_VERIFICATION` (opționale) adaugă `<meta name="google-site-verification">` / `<meta name="msvalidate.01">` (vezi [arhitectura.md](arhitectura.md) §11).
 
 ## 6. Modelul de securitate al administrării
 

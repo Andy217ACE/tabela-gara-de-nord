@@ -22,7 +22,7 @@ from urllib.parse import quote
 from app import observations, stations
 from app.store import TZ
 
-SITE = os.environ.get("SITE_URL", "https://tabelacfr.ddns.net").rstrip("/")
+SITE = os.environ.get("SITE_URL", "https://tabelagn.online").rstrip("/")
 NAME = "Tabela Gara de Nord"
 PUBLIC = ("istoric", "urmarite", "trenuri", "statistici", "clasamente", "statii", "versiuni", "cum")
 PRIVATE = ("admin", "ocr", "ocr2", "infofer", "sistem", "setari")  # hash-only, noindex

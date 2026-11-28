@@ -60,7 +60,7 @@ def test_no_third_party_library_added():
     web/vendor, nothing loaded from a CDN."""
     assert not (WEB / "vendor").exists()
     for name in ("index.html", "ui2.js", "statistici.js", "stats.js", "history.js"):
-        assert not re.search(r"https?://(?!tabelacfr\.ddns\.net|cfr\.ro)[a-z0-9.-]+/[^\"']*\.js", read(name)), name
+        assert not re.search(r"https?://(?!tabelagn.online|cfr\.ro)[a-z0-9.-]+/[^\"']*\.js", read(name)), name
 
 
 def test_statistici_uses_donuts_for_part_to_whole():

@@ -415,7 +415,7 @@ Sursa: `app/notifier.py`, `app/api.py` (`_make_sender`, `/api/push/*`), `app/con
 |---|---|---|
 | `VAPID_PRIVATE_KEY` | gol | generată de `install.sh`; **secret** |
 | `VAPID_PUBLIC_KEY` | gol | derivată din cheia privată; publică (apare în `GET /api/push/key`) |
-| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `install.sh` scrie `https://tabelacfr.ddns.net` |
+| `VAPID_SUBJECT` | `https://tabelagn.online` | `install.sh` scrie `https://tabelagn.online` |
 
 Dacă una dintre cele două chei lipsește, notificările push sunt **dezactivate**: se loghează „VAPID keys not configured; push notifications are disabled” o singură dată, iar restul aplicației funcționează.
 
@@ -794,7 +794,7 @@ Pagina `#admin` (cardul „Securitate (fail2ban)”) arată, pentru admin, IP-ur
 | Verificare | Nivel |
 |---|---|
 | `http://127.0.0.1:8000/api/health` nu răspunde | critic |
-| `https://tabelacfr.ddns.net/api/health` nu răspunde (din server; `OPS_PUBLIC_URL=` gol o oprește, de ex. dacă routerul nu face NAT loopback) | critic |
+| `https://tabelagn.online/api/health` nu răspunde (din server; `OPS_PUBLIC_URL=` gol o oprește, de ex. dacă routerul nu face NAT loopback) | critic |
 | panouri vechi (`ok:false` sau `boards.*.stale`) | atenție |
 | OCR degradat: din ≥ 10 cadre în ultima oră, sub jumătate complete (`ocr.window.full_frames / frames`) | atenție |
 | disc `/`, `/var/lib/tabela`, `/var/lib/tabela/captures` (fiecare sistem de fișiere o dată) peste 85% / 95% | atenție / critic |
@@ -809,4 +809,4 @@ Pagina `#admin` (cardul „Securitate (fail2ban)”) arată, pentru admin, IP-ur
 - **Probă fără trimitere** (afișează ce ar trimite; la prima rulare nimic, o problemă apare abia la a doua): `sudo systemd-run --pipe --wait -p User=tabela -p EnvironmentFile=/etc/tabela.env -p WorkingDirectory=/opt/tabela/app /opt/tabela/venv/bin/python -I /opt/tabela/app/scripts/ops_alerts.py --dry-run --state /tmp/ops.json`.
 - **Jurnal:** `journalctl -u tabela-ops-alerts -n 50`. **Oprire:** `sudo systemctl disable --now tabela-ops-alerts.timer`.
 
-**Monitorizare din afară.** Scriptul rulează pe același server: dacă serverul, curentul sau internetul casei cad, nu mai trimite nimic. De aceea rămâne necesar un monitor extern (UptimeRobot sau similar), configurat în contul proprietarului (nicio cheie în repo): verificare HTTP(S) la `https://tabelacfr.ddns.net/api/health` la 5 minute, metoda `HEAD` sau `GET`, cu alertă pe e-mail/Telegram din serviciul extern. Pentru „site sus, dar tabela nu se citește”, monitorul poate cere cuvântul `"ok":true` în răspuns (keyword monitor, doar cu `GET`).
+**Monitorizare din afară.** Scriptul rulează pe același server: dacă serverul, curentul sau internetul casei cad, nu mai trimite nimic. De aceea rămâne necesar un monitor extern (UptimeRobot sau similar), configurat în contul proprietarului (nicio cheie în repo): verificare HTTP(S) la `https://tabelagn.online/api/health` la 5 minute, metoda `HEAD` sau `GET`, cu alertă pe e-mail/Telegram din serviciul extern. Pentru „site sus, dar tabela nu se citește”, monitorul poate cere cuvântul `"ok":true` în răspuns (keyword monitor, doar cu `GET`).

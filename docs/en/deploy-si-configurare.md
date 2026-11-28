@@ -43,7 +43,7 @@ The components, with their files:
 | Internal Infofer spike (temporary) | `deploy/tabela-infofer.service`, `deploy/tabela-infofer.timer` | Every 3 minutes, one request to the Infofer map into a separate database (`docs/en/administrare-operare.md`, section 16) |
 | fail2ban | `deploy/fail2ban/` | Jails, filters and the `ignorecommand` script (section 7.1) |
 | Dynamic DNS | not in the repo; see [section 9](#9-dynamic-dns-no-ip) | Keeps the hostname on the current public IP |
-| Certificates | Let's Encrypt through certbot; see [section 8](#8-tls-certificates-lets-encrypt) | TLS for `tabelacfr.ddns.net` |
+| Certificates | Let's Encrypt through certbot; see [section 8](#8-tls-certificates-lets-encrypt) | TLS for `tabelagn.online` (and `tabelacfr.ddns.net`, for the redirect); see [section 9.1](#91-the-tabelagnonline-domain) |
 
 The deploy flow, from commit to the health check:
 
@@ -86,7 +86,7 @@ The `get_settings()` function in `app/config.py` builds the `Settings` object. T
 | `SOURCE_URL` | string (URL) | `https://cfr.ro/gari/camereweb/index.php?statie=BucurestiNord` | The address from which the poller takes the board image (`app/poller.py`, `fetch_board_image`). | A valid HTTP(S) URL. | The default is used, which is the production source. |
 | `VAPID_PRIVATE_KEY` | **Secret** (base64url string) | `""` | The VAPID private key for push notifications. Format: the 32-byte P-256 scalar, encoded base64url without padding (as `py_vapid` and `pywebpush` read it). | Both VAPID keys must be set. | Push notifications are disabled. The application starts and writes a warning in the log: "VAPID keys not configured; push notifications are disabled". |
 | `VAPID_PUBLIC_KEY` | string (base64url) | `""` | The VAPID public key, sent to the browser for subscription by `GET /api/push/key` (`app/api.py`; without a key, the route answers 404). It is not secret, but it is kept together with the private one. | The uncompressed P-256 public point, encoded base64url. | As above: push disabled. |
-| `VAPID_SUBJECT` | string | `https://tabelacfr.ddns.net` | The subject in the VAPID JWT. `install.sh` writes the same value on a new server. | `mailto:` or an `https:` URL. | The default in the code, `.env.example` and `install.sh` have the same value; `tests/test_deploy_static.py` checks this. |
+| `VAPID_SUBJECT` | string | `https://tabelagn.online` | The subject in the VAPID JWT. `install.sh` writes the same value on a new server. | `mailto:` or an `https:` URL. | The default in the code, `.env.example` and `install.sh` have the same value; `tests/test_deploy_static.py` checks this. |
 | `TESSERACT_CMD` | string (path or name) | `tesseract` | The Tesseract executable, used through `pytesseract` (`app/ocr/engine.py`). | A name in `PATH` or an absolute path. Timeout of 10 s per call (`TESSERACT_TIMEOUT`). | `tesseract` is looked up in `PATH`. If it does not exist, OCR reading fails with `OcrError`, and the Tesseract check in the administration (`tesseract_status`, `app/admin.py`) shows it. |
 | `POLLER_RESTART_BACKOFF` | float (seconds) | `5` | The first pause before restarting the poller after a crash. It doubles on each failure, up to `POLLER_MAX_BACKOFF` = 300 s (`app/api.py`). | Any number; negative values are brought to 0 on use. | 5 s is used. If the value exists but is not a number, `float()` raises an error in `get_settings()` and the application does not start. |
 | `POLLER_ENABLED` | boolean | `1` | `0` or `false`, `no`, `off` (case-insensitive) stops the poller: the application serves only the last stored state. Used for development. | `1` starts, `0` stops. | The poller is on. |
@@ -97,7 +97,7 @@ The `get_settings()` function in `app/config.py` builds the `Settings` object. T
 | `WEATHER_LAT` | float (degrees) | `44.4323` | The latitude of the forecast point. | Between `-90` and `90`. Outside the range the default is used. | `44.4323` is used. |
 | `WEATHER_LON` | float (degrees) | `26.1063` | The longitude of the forecast point. | Between `-180` and `180`. Outside the range the default is used. | `26.1063` is used. |
 | `WEATHER_INTERVAL_S` | integer (seconds) | `900` | How often the forecast is requested. | Digits only. The minimum is `300` (`MIN_INTERVAL_S`): smaller values are raised to 300. | `900` is used. Values that are not digits only are ignored and the default is used. |
-| `SITE_URL` | string (URL) | `https://tabelacfr.ddns.net` | Base of the absolute URLs in `canonical`, `hreflang`, JSON-LD, `robots.txt` and `sitemap.xml` (`app/seo.py`). | URL without a trailing slash. | The default is used. |
+| `SITE_URL` | string (URL) | `https://tabelagn.online` | Base of the absolute URLs in `canonical`, `hreflang`, JSON-LD, `robots.txt` and `sitemap.xml` (`app/seo.py`). | URL without a trailing slash. | The default is used. |
 | `GOOGLE_SITE_VERIFICATION` | string | empty | Adds `<meta name="google-site-verification">` to the pages (Search Console, see [arhitectura.md](arhitectura.md) §11). | Only the `content` value given by Google. | No meta tag. |
 | `BING_SITE_VERIFICATION` | string | empty | Adds `<meta name="msvalidate.01">` (Bing Webmaster Tools). | Only the `content` value given by Bing. | No meta tag. |
 
@@ -150,7 +150,7 @@ Three sources give values for the same variables. The table shows the difference
 | `DB_PATH` | `tabela.db` (relative) | `/var/lib/tabela/tabela.db` | `/var/lib/tabela/tabela.db` |
 | `LAST_IMAGE_PATH` | `data/last.jpg` | `/var/lib/tabela/last.jpg` | `/var/lib/tabela/last.jpg` |
 | `POLLER_ENABLED` | `1` | `1` | `1` |
-| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` |
+| `VAPID_SUBJECT` | `https://tabelagn.online` | `https://tabelagn.online` | `https://tabelagn.online` |
 | `REJECTED_DIR` | `/var/lib/tabela/rejected` | absent (the default is used) | `/var/lib/tabela/rejected` |
 | `CAPTURE_DIR` | `/var/lib/tabela/captures` (if the directory exists) | absent; `update.sh` adds it | `/var/lib/tabela/captures` |
 | `CAPTURE_RETENTION_DAYS` | `7` | absent | `7` |
@@ -193,7 +193,7 @@ The steps, in the order of the code:
 4. **User and directories.** It creates the `tabela` system user (no login, `nologin`, home directory `/var/lib/tabela`), if it does not exist. It creates `/opt/tabela` (`root:root`, `755`) and `/var/lib/tabela` (`tabela:tabela`, `750`).
 5. **The code.** If `/opt/tabela/app` is not a git repo, it does `git clone --branch <branch>`. If it exists, it does `git fetch --prune origin <branch>` and `git checkout -B <branch> origin/<branch>`. It prints the last commit.
 6. **Venv.** It creates `/opt/tabela/venv` if it does not exist, upgrades `pip`, then `pip install -r requirements.txt`.
-7. **The configuration file.** If `/etc/tabela.env` does not exist, it creates it with `umask 077` and four lines: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED=1`, `VAPID_SUBJECT=https://tabelacfr.ddns.net`. Then it sets `root:root` and `600`.
+7. **The configuration file.** If `/etc/tabela.env` does not exist, it creates it with `umask 077` and four lines: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED=1`, `VAPID_SUBJECT=https://tabelagn.online`. Then it sets `root:root` and `600`.
 8. **Migrating an old installation.** If `LAST_IMAGE_PATH` is missing, it adds it (with an atomic rewrite of the file).
 9. **VAPID keys.** If there is no `VAPID_PRIVATE_KEY` with a value, it generates a P-256 pair and writes both keys. If the private key exists but the public one is missing, it derives it from the private one. An existing private key is never regenerated, because that would invalidate all the existing push subscriptions (the reason is written in the script comment and in the README). Of the whole script, only the public key is displayed.
 10. **systemd, the main service.** It copies `deploy/tabela.service` to `/etc/systemd/system/`, does `daemon-reload`, `enable`, then `restart` on `tabela`.
@@ -204,7 +204,7 @@ The steps, in the order of the code:
     - If it fails, it restores the backup copies (or deletes the files, on the first installation), runs `nginx -t` again and reloads, then exits with code `1`.
 13. **The health check.** Up to 90 attempts, every 2 seconds (about 180 s in total), it requests `http://127.0.0.1:8000/api/health` and looks for `"ok":true`. If it succeeds, it prints "healthy after ... s" and exits with `0`. If not, it prints "not healthy after 180 s; see: journalctl -u tabela -n 100" and exits with `1`. Unlike `update.sh`, it does **not** roll back.
 
-Practical conclusion: the first `install.sh` requires the Let's Encrypt certificates to already exist, because the nginx file in the repo refers to `/etc/letsencrypt/live/tabelacfr.ddns.net/`. Without them, `nginx -t` fails and the script deletes the site it has just installed.
+Practical conclusion: the first `install.sh` requires the Let's Encrypt certificates to already exist, because the nginx file in the repo refers to `/etc/letsencrypt/live/tabelagn.online/` and `/etc/letsencrypt/live/tabelacfr.ddns.net/`. Without them, `nginx -t` fails and the script deletes the site it has just installed.
 
 ## 4. update.sh, step by step
 
@@ -395,8 +395,9 @@ The values for `tabela.service` are chosen with headroom, without a measurement 
 
 File: `deploy/nginx-tabela.conf`, installed as `/etc/nginx/sites-available/tabela` and linked in `sites-enabled`. The server blocks:
 
-- **The HTTPS server** (`listen 443 ssl` and `listen [::]:443 ssl ipv6only=on`), for `tabelacfr.ddns.net`. The certificates are in `/etc/letsencrypt/live/tabelacfr.ddns.net/`. It includes `/etc/letsencrypt/options-ssl-nginx.conf` and `ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem`, so the TLS versions and ciphers are the ones in the certbot files. Uncertain: the content of these files is not in the repo; check on the server with `cat /etc/letsencrypt/options-ssl-nginx.conf`.
-- **The HTTP server** (`listen 80`, `server_name tabelacfr.ddns.net`): it redirects with `301` to HTTPS when `Host` is `tabelacfr.ddns.net`; otherwise it answers `404` (`return 404`). Requests with another `Host` do not reach this block unless nginx picks it as the default server. The lines are marked "managed by Certbot".
+- **The HTTPS server** (`listen 443 ssl` and `listen [::]:443 ssl ipv6only=on`), for `tabelagn.online`. The certificates are in `/etc/letsencrypt/live/tabelagn.online/`. It includes `/etc/letsencrypt/options-ssl-nginx.conf` and `ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem`, so the TLS versions and ciphers are the ones in the certbot files. Uncertain: the content of these files is not in the repo; check on the server with `cat /etc/letsencrypt/options-ssl-nginx.conf`.
+- **The HTTPS redirects**: `www.tabelagn.online` and `tabelacfr.ddns.net` answer `301` to `https://tabelagn.online` with the same path (the old domain keeps the Google/Bing verification files; see section 9.1).
+- **The HTTP server** (`listen 80`, every name and the LAN IPs): `301` to `https://tabelagn.online`, except `/.well-known/acme-challenge/` (certificate renewal).
 
 Settings in the HTTPS server:
 
@@ -459,7 +460,7 @@ The production server is the home server (Ubuntu 26.04 LTS), not a cloud machine
 
 | Port | Who has access | Reason |
 |---|---|---|
-| 80 (TCP) | the internet | Redirect to HTTPS for `tabelacfr.ddns.net` and `404` for the other HTTP requests in this block (`listen 80` in `nginx-tabela.conf`) |
+| 80 (TCP) | the internet | `301` redirect to `https://tabelagn.online` and the ACME challenges (`listen 80` in `nginx-tabela.conf`) |
 | 443 (TCP) | the internet | The HTTPS site |
 | 22 (TCP, SSH) | only the local network `192.168.1.0/24` | Administration |
 | 3389 (TCP, RDP) | only the local network `192.168.1.0/24` | Administration |
@@ -477,13 +478,24 @@ HSTS (`max-age=31536000`) and the `limit_req` limits (`tabela_api` 10 requests/s
 
 ## 8. TLS certificates (Let's Encrypt)
 
-- The certificates are issued by Let's Encrypt, with certbot. Their path is `/etc/letsencrypt/live/tabelacfr.ddns.net/` (`fullchain.pem` and `privkey.pem`).
+- The certificates are issued by Let's Encrypt, with certbot. There are two: `/etc/letsencrypt/live/tabelagn.online/` and `/etc/letsencrypt/live/tabelacfr.ddns.net/` (`fullchain.pem` and `privkey.pem`); see section 9.1.
 - The lines marked "managed by Certbot" in `deploy/nginx-tabela.conf` are written by certbot. The comment in the file asks that they stay that way: `certbot renew` modifies only the files in `/etc/letsencrypt`.
 - Renewal is automatic, through `certbot.timer`, the unit installed by the certbot package. The README says so. Uncertain: the exact frequency and the verification command are not in the repo. Check with `systemctl list-timers | grep certbot` and with `sudo certbot renew --dry-run`.
 - If the renewal fails, the certificate expires about 90 days after issuance (the Let's Encrypt rule). Uncertain: there is no expiry alert in the repo.
 - Changing the certificate does not require `update.sh`. To reload nginx after a manual renewal: `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## 9. Dynamic DNS (No-IP)
+
+### 9.1 The tabelagn.online domain
+
+The official address is `https://tabelagn.online`. The old name `tabelacfr.ddns.net` stays in use, only as a DNS target and as a redirect.
+
+- **DNS.** The domain is registered at GoDaddy, with the nameservers switched to Cloudflare. In Cloudflare: `CNAME @ → tabelacfr.ddns.net` and `CNAME www → tabelacfr.ddns.net` (Cloudflare flattens the CNAME at the apex). `tabelacfr.ddns.net` is still updated by No-IP (below), so the new domain follows the dynamic IP with no other setup.
+- **"DNS only" (grey cloud), not proxied.** With the Cloudflare proxy (orange cloud), nginx would see Cloudflare's IPs instead of the visitors': fail2ban would ban Cloudflare, and the `limit_req` limits (on `$binary_remote_addr`) would be shared by all visitors.
+- **Certificates.** Two Let's Encrypt certificates: `/etc/letsencrypt/live/tabelagn.online/` (for `tabelagn.online` and `www.tabelagn.online`) and the old one, `/etc/letsencrypt/live/tabelacfr.ddns.net/`, which must be kept as long as the old domain serves the redirect over HTTPS. Renewal goes through port 80: the HTTP block leaves `/.well-known/acme-challenge/` served from `/var/www/html` (webroot); the certificate issued with the nginx plugin sets up its own temporary configuration. Check: `sudo certbot renew --dry-run`.
+- **Redirects** (`deploy/nginx-tabela.conf`, all `301`, same path): `www.tabelagn.online` → `https://tabelagn.online`; `tabelacfr.ddns.net` (80 and 443) → `https://tabelagn.online`; any HTTP request (including on the LAN IPs `192.168.1.150`/`.149`) → `https://tabelagn.online`. Exceptions: `/.well-known/acme-challenge/` (on 80) and the verification files `/googled34693806887f80a.html` and `/BingSiteAuth.xml`, still served on the old domain, because the Search Console "Change of address" tool needs the old site to stay verified.
+
+### 9.2 The No-IP updater
 
 State: the dynamic DNS updater (the unit named `tabela-noip` in the operating notes, to verify on the server) is **not in the repo** and is **not installed by `update.sh`**. It was installed manually on the server. There is nothing in the repo about it: no unit file, no script, no credentials. This is deliberate, because a DNS updater needs credentials that are not put in git.
 
@@ -517,7 +529,7 @@ Each deploy brings a new version. The version scheme: `Beta 1.NN`, where `NN` gr
 8. **Tag**: `beta-1.NN` on the published commit (the convention has been used since `beta-1.01`). No script or workflow in the repo creates the tag; it is created manually.
 9. **GitHub release**: every version has a Release `Beta 1.NN` on the tag `beta-1.NN`, with the CHANGELOG notes. It is published manually (for example `gh release create`); no workflow creates it.
 10. **Deploy on the server**: `sudo bash /opt/tabela/app/deploy/update.sh [branch]`. At the end, the script prints `OK: <PREV> -> <NEW> (Beta 1.NN)`.
-11. **Post-deploy check**: `curl -s http://127.0.0.1:8000/api/health` on the server, the `version` field must be the new version, and `ok` must be `true`. The check from outside: `https://tabelacfr.ddns.net`, the footer shows the version.
+11. **Post-deploy check**: `curl -s http://127.0.0.1:8000/api/health` on the server, the `version` field must be the new version, and `ok` must be `true`. The check from outside: `https://tabelagn.online`, the footer shows the version.
 
 The tests that protect the release rules:
 

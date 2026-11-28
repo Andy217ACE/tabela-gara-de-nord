@@ -65,7 +65,9 @@ def test_nginx_admin_login_rate_limited_and_certbot_untouched():
     block = conf[conf.index("location = /api/admin/login"):]
     block = block[:block.index("}")]
     assert "limit_req zone=tabela_admin_login burst=5 nodelay;" in block
-    assert conf.count("# managed by Certbot") == 8  # unchanged
+    assert conf.count("# managed by Certbot") == 12  # 6 per certificate, as certbot wrote them
+    for d in ("tabelagn.online", "tabelacfr.ddns.net"):
+        assert f"/etc/letsencrypt/live/{d}/fullchain.pem; # managed by Certbot" in conf, d
     assert conf.index("location = /api/admin/login") < conf.index("location /api/ {")
 
 
