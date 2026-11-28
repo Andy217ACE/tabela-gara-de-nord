@@ -259,6 +259,28 @@ Intervalele (etichetă, limită inferioară, limită superioară), inclusive:
 - `states` = numărătoarea pe cele patru stări.
 - `uncertain_names` = călătorii cu nume de stație sau operator citit nesigur.
 
+### Erori de citire (`/api/stats/read-errors`)
+
+Tabelul „Erori de citire” de pe pagina Statistici (`app/stats_read_errors.py`, desenat de
+`web/stat_read_errors.js`, încărcat lazy). Coloanele sunt ferestre glisante care se termină acum:
+24 h, 48 h, 5, 7 și 30 de zile, ca intervale absolute (24 h reale și la schimbarea orei,
+Europe/Bucharest). Nu depind de filtrele paginii. Cache pe server 300 s.
+
+| Rând | Definiție |
+|---|---|
+| `frames` (Capturi analizate) | capturile tabelei din fereastră (`captures`) |
+| `frames_failed` (Capturi necitite) | capturile cu `ok = 0`: imagine stricată, OCR eșuat sau niciun rând citit |
+| `rows` (Rânduri cu text) | observațiile din fereastră, fără liniile goale ale tabelei (`incomplete` cu `+empty`) |
+| `rows_unread` (Rânduri necitite) | `incomplete` fără `+empty` (text, dar fără tren) + `rejected_low_conf` |
+| `rows_partial` (Rânduri citite parțial) | `uncertain`: tren recunoscut, o valoare (de obicei întârzierea) nesigură |
+| `ghosts` (Trenuri fantomă eliminate) | servicii cu `service_quality.ghost = 1` apărute prima dată în fereastră |
+| `error_rate_pct` | `100 · (rows_unread + rows_partial) / rows`, `null` dacă `rows = 0` |
+
+Stările sunt aceleași ca în paginile de administrare (capturi, `#sistem`): `system_status.ocr_quality`
+își ia numerele din aceeași funcție (`counts`). Un rând se numără în fiecare captură (un tren stă
+pe tabelă zeci de minute), deci `rows` nu e un număr de trenuri. Nimic privat: fără imagini, texte
+citite, numere de tren sau adrese.
+
 ### Agregate pe panou, zi, oră, lună (`by_time`, `daily_trend`)
 
 - `by_time` (pe panou): `hour` (pe ora programată, 0–23), `weekday` (pe ziua de serviciu, 0 = luni) și `month` (`AAAA-LL`). Fiecare grupă are `summarize` complet.

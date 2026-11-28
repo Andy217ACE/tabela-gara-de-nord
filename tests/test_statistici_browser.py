@@ -143,8 +143,13 @@ def test_statistici_page(browser, base_url, w, h, theme):
         page.wait_for_function("""() => { window.scrollTo(0, document.documentElement.scrollHeight);
           return !!document.querySelector("[data-key='durata-pe-panou']") && !!document.querySelector("[data-key='peroane-schimbate']"); }""")
         page.wait_for_function("() => document.querySelectorAll('.ss-fig[aria-busy]').length === 0")
-        assert page.locator(".ss-fig").count() == 26
-        assert page.locator(".ss-how").count() == 27
+        # + „Erori de citire” (stat_read_errors.js, lazy): a real table, 5 windows, every row explained
+        page.wait_for_selector("[data-key='erori-de-citire'] table caption")
+        assert page.locator("[data-key='erori-de-citire'] thead th[scope=col]").count() == 6
+        assert page.locator("[data-key='erori-de-citire'] tbody th[scope=row]").count() == 7
+        assert page.locator("[data-key='erori-de-citire'] dd").count() == 7
+        assert page.locator(".ss-fig").count() == 27
+        assert page.locator(".ss-how").count() == 28
         assert page.locator("details.ss-data").count() >= 10
         assert page.locator(".ss-legend").count() >= 5
         assert "în curs de adunare" in page.text_content("#st-statistici")

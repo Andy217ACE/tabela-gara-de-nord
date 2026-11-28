@@ -259,6 +259,28 @@ In the interface, the percentage of each interval is `100 · n_interval / total`
 - `states` = the count over the four states.
 - `uncertain_names` = journeys with an uncertainly read station or operator name.
 
+### Reading errors (`/api/stats/read-errors`)
+
+The "Reading errors" table on the Statistics page (`app/stats_read_errors.py`, drawn by
+`web/stat_read_errors.js`, loaded lazily). The columns are rolling windows ending now:
+24 h, 48 h, 5, 7 and 30 days, as absolute intervals (a real 24 h even across a clock change,
+Europe/Bucharest). They do not depend on the page filters. Server cache 300 s.
+
+| Row | Definition |
+|---|---|
+| `frames` (Captures analysed) | the board captures in the window (`captures`) |
+| `frames_failed` (Unread captures) | captures with `ok = 0`: broken image, failed OCR or no row read |
+| `rows` (Rows with text) | observations in the window, without the blank lines of the board (`incomplete` with `+empty`) |
+| `rows_unread` (Unread rows) | `incomplete` without `+empty` (text but no train) + `rejected_low_conf` |
+| `rows_partial` (Partly read rows) | `uncertain`: train recognised, one value (usually the delay) unreliable |
+| `ghosts` (Ghost trains removed) | services with `service_quality.ghost = 1` first seen in the window |
+| `error_rate_pct` | `100 · (rows_unread + rows_partial) / rows`, `null` when `rows = 0` |
+
+The states are the same as in the admin pages (captures, `#sistem`): `system_status.ocr_quality`
+takes its numbers from the same function (`counts`). A row is counted in every capture (a train stays
+on the board for tens of minutes), so `rows` is not a number of trains. Nothing private: no images,
+read texts, train numbers or addresses.
+
 ### Aggregates by board, day, hour, month (`by_time`, `daily_trend`)
 
 - `by_time` (per board): `hour` (by scheduled hour, 0–23), `weekday` (by service date, 0 = Monday) and `month` (`AAAA-LL`). Each group has a full `summarize`.

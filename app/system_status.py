@@ -14,9 +14,9 @@ import shutil
 import subprocess
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-from app import perf
+from app import perf, stats_read_errors
 from app.ocr import stats as ocr_stats
 from app.store import SCHEMA_VERSION
 from app.version import __version__
@@ -137,24 +137,13 @@ def ocr_quality(store, now: datetime) -> dict:
         c = _quality_cache
         if c and c[0] is store and time.monotonic() - c[1] < QUALITY_TTL_S:
             return c[2]
-        # timestamps are stored as UTC ISO strings: a string comparison is a time comparison
-        s24, s7 = ((now - d).astimezone(timezone.utc).isoformat(timespec="seconds")
-                   for d in (timedelta(hours=24), timedelta(days=7)))
         # shortcut: ~0.4 s on the live DB with a cold cache, at most once per QUALITY_TTL_S; a covering
         # index (observed_at, validation_state) would remove it if #sistem traffic grows
-        with store._lock:   # one pass per table covers both windows
-            f = store._conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(ok != 0), 0), COALESCE(SUM(captured_at >= ?1), 0),"
-                " COALESCE(SUM(captured_at >= ?1 AND ok != 0), 0) FROM captures WHERE captured_at >= ?2",
-                (s24, s7)).fetchone()
-            r = store._conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(validation_state = 'ok'), 0), COALESCE(SUM(observed_at >= ?1), 0),"
-                " COALESCE(SUM(observed_at >= ?1 AND validation_state = 'ok'), 0) FROM observations"
-                " WHERE observed_at >= ?2", (s24, s7)).fetchone()
-        out = {"h24": {"frames": f[2], "frames_ok_pct": _pct(f[3], f[2]),
-                       "rows": r[2], "rows_ok_pct": _pct(r[3], r[2])},
-               "d7": {"frames": f[0], "frames_ok_pct": _pct(f[1], f[0]),
-                      "rows": r[0], "rows_ok_pct": _pct(r[1], r[0])}}
+        with store._lock:   # the same counts as the public /api/stats/read-errors
+            raw = stats_read_errors.counts(store._conn, now, (("h24", timedelta(hours=24)),
+                                                              ("d7", timedelta(days=7))))
+        out = {k: {"frames": c["frames"], "frames_ok_pct": _pct(c["frames_ok"], c["frames"]),
+                   "rows": c["lines"], "rows_ok_pct": _pct(c["ok"], c["lines"])} for k, c in raw.items()}
         _quality_cache = (store, time.monotonic(), out)
         return out
 

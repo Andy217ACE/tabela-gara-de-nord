@@ -119,6 +119,7 @@ Authentication legend: **nothing** = public; **admin** = session cookie or
 | GET | `/api/stats/heatmap` | nothing | Mean delay by weekday and hour | 5.21 |
 | GET | `/api/stats/reliable` | nothing | The most reliable trains | 5.21 |
 | GET | `/api/stats/dwell` | nothing | How long a train stays on the board | 5.21 |
+| GET | `/api/stats/read-errors` | nothing | Reading errors over 24 h, 48 h, 5, 7 and 30 days | 5.21 |
 | GET | `/api/stats/platform-changes` | nothing | Platform changes | 5.21 |
 | GET | `/api/predict/peron` | nothing | Platform estimates for trains without an announced platform | 5.21 |
 | GET | `/api/trains/{no}/prediction` | nothing | Final-delay estimate for one train (hidden from the OpenAPI schema) | 5.21 |
@@ -799,6 +800,7 @@ estimates).
 | `GET /api/stats/heatmap` | same | Mean delay by weekday (0 = Monday) and hour (0-23), per board, with one scale. A cell without a read delay has mean `null`, never 0. |
 | `GET /api/stats/reliable` | same | "The most reliable trains": at least 10 journeys with a read delay. |
 | `GET /api/stats/dwell` | `perioada`, `board` | How long a train stays on the board (median, mean, p90) by type and station; finished services only. It is the observed consultation window, not the real timetable. |
+| `GET /api/stats/read-errors` | — | Reading errors over rolling windows ending now: `windows` (`h24`, `h48`, `d5`, `d7`, `d30`) and `data[window]` = `frames`, `frames_failed`, `rows`, `rows_unread`, `rows_partial`, `ghosts`, `error_rate_pct` (`null` without rows). Aggregated counts only; independent of the filters. Cached 300 s (`cache_ttl_s`). Definitions: [statistici-calatorii-calitate.md](statistici-calatorii-calitate.md#reading-errors-apistatsread-errors). |
 | `GET /api/stats/platform-changes` | `perioada`, `board` | How often the announced platform changes. |
 | `GET /api/predict/peron` | none | Platform estimates for the trains on the board without an announced platform, from the observed history. The body has `estimates` (`arrivals`, `departures`), `note`, `backtest` (the measured accuracy) and `threshold`. Cached 300 s. Not official CFR information. |
 | `GET /api/trains/{no}/prediction` | `no`: integer | The final-delay estimate: `label`, `note`, `train_no`, `published`, `reason` and `estimates` (per board and station: `delay_min`, `low`, `high`, `n`, `basis`). If the quality gate is not passed: `published: false`, no figures. Cached 300 s. The route is declared with `include_in_schema=False`. |

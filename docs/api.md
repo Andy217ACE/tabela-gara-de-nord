@@ -117,6 +117,7 @@ Legendă pentru autentificare: **nimic** = public; **admin** = cookie de sesiune
 | GET | `/api/stats/heatmap` | nimic | Întârzierea medie pe zi a săptămânii și oră | 5.21 |
 | GET | `/api/stats/reliable` | nimic | Cele mai fiabile trenuri | 5.21 |
 | GET | `/api/stats/dwell` | nimic | Cât stă trenul pe panou | 5.21 |
+| GET | `/api/stats/read-errors` | nimic | Erorile de citire pe 24 h, 48 h, 5, 7 și 30 de zile | 5.21 |
 | GET | `/api/stats/platform-changes` | nimic | Schimbările de peron | 5.21 |
 | GET | `/api/predict/peron` | nimic | Estimări de peron pentru trenurile fără peron anunțat | 5.21 |
 | GET | `/api/trains/{no}/prediction` | nimic | Estimarea întârzierii finale a unui tren (ascunsă din schema OpenAPI) | 5.21 |
@@ -795,6 +796,7 @@ Toate sunt publice, read-only și răspund JSON. Rezultatele sunt în cache scur
 | `GET /api/stats/heatmap` | aceiași | Întârzierea medie pe zi a săptămânii (0 = luni) și oră (0–23), pe panou, cu o singură scală. O celulă fără întârziere citită are media `null`, niciodată 0. |
 | `GET /api/stats/reliable` | aceiași | „Cele mai fiabile trenuri”: minim 10 călătorii cu întârziere citită. |
 | `GET /api/stats/dwell` | `perioada`, `board` | Cât stă trenul pe panou (mediană, medie, p90) pe tip și stație; doar servicii încheiate. E fereastra de consultare observată, nu orarul real. |
+| `GET /api/stats/read-errors` | — | Erorile de citire pe ferestre glisante încheiate acum: `windows` (`h24`, `h48`, `d5`, `d7`, `d30`) și `data[fereastră]` = `frames`, `frames_failed`, `rows`, `rows_unread`, `rows_partial`, `ghosts`, `error_rate_pct` (`null` fără rânduri). Doar numărători agregate; nu depinde de filtre. Cache 300 s (`cache_ttl_s`). Definițiile: [statistici-calatorii-calitate.md](statistici-calatorii-calitate.md#erori-de-citire-apistatsread-errors). |
 | `GET /api/stats/platform-changes` | `perioada`, `board` | Cât de des se schimbă peronul anunțat. |
 | `GET /api/predict/peron` | — | Estimări de peron pentru trenurile de pe panou fără peron anunțat, din istoricul observat. Corpul are `estimates` (`arrivals`, `departures`), `note`, `backtest` (acuratețea măsurată) și `threshold`. Cache 300 s. Nu e informație oficială CFR. |
 | `GET /api/trains/{no}/prediction` | `no`: întreg | Estimarea întârzierii finale: `label`, `note`, `train_no`, `published`, `reason` și `estimates` (pe panou și stație: `delay_min`, `low`, `high`, `n`, `basis`). Dacă poarta de calitate nu e trecută: `published: false`, fără cifre. Cache 300 s. Ruta e declarată cu `include_in_schema=False`. |
