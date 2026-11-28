@@ -5,6 +5,29 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.78 — 2026-11-28
+### Adăugat
+- **Statistici: „Erori de citire”** — capturile necitite, rândurile necitite, rândurile citite parțial, trenurile fantomă eliminate și rata erorilor, pe ultimele 24 h, 48 h, 5, 7 și 30 de zile, fiecare cu o explicație pe înțeles; API public `GET /api/stats/read-errors` (doar numărători agregate, actualizate la cel mult 5 minute).
+- **Adrese proprii pentru paginile publice** (`/statistici`, `/istoric`, `/tren/1636`, `/statie/BRASOV`); linkurile vechi cu `#` merg în continuare și sunt rescrise automat.
+- **Fiecare pagină are titlu, descriere, adresă canonică, variantă română/engleză și previzualizare proprii**, trimise de server, ca motoarele de căutare să le vadă direct.
+- **Date structurate (JSON-LD):** site-ul, gara București Nord, calea paginii și `TrainTrip` pe pagina unui tren; editorul e proiectul independent, nu CFR.
+- **Conținut în HTML simplu pentru motoarele de căutare:** plecările și sosirile curente, listele de trenuri și stații, cu nota despre OCR și că proiectul nu e afiliat CFR.
+- **`robots.txt` și `sitemap.xml`** generate automat (română + engleză, trenuri din ultimele 90 de zile, stații); API-ul și paginile private sunt marcate să nu fie indexate.
+### Schimbat
+- **Adrese necunoscute:** pagină 404 reală (nu indexată); redirecționări permanente pentru bară finală, majuscule și forme ale numelui stației.
+- **Pagina Sistem** folosește aceleași numărători ca secțiunea „Erori de citire” (fără calcul dublat).
+- Verificare opțională Google Search Console / Bing prin variabile de mediu.
+### English
+- **Statistics: "Reading errors"** — unread captures, unread rows, partly read rows, ghost trains removed and the error rate over the last 24 h, 48 h, 5, 7 and 30 days, each with a plain explanation; public API `GET /api/stats/read-errors` (aggregated counts only, refreshed every 5 minutes at most).
+- **Public pages have their own addresses** (`/statistici`, `/istoric`, `/tren/1636`, `/statie/BRASOV`); old `#` links still work and are rewritten automatically.
+- **Every page gets its own title, description, canonical address, Romanian/English variant and preview**, sent by the server so search engines see them directly.
+- **Structured data (JSON-LD):** the website, București Nord station, page breadcrumbs and `TrainTrip` on a train's page; the publisher is the independent project, not CFR.
+- **Plain HTML content for search engines:** current departures and arrivals, the train and station lists, with the OCR and not-affiliated-with-CFR note.
+- **`robots.txt` and `sitemap.xml`** generated automatically (Romanian + English, trains from the last 90 days, stations); the API and private pages are marked not to be indexed.
+- **Unknown addresses:** a real 404 page (not indexed); permanent redirects for trailing slashes, upper case and station-name variants.
+- **The System page** uses the same counts as "Reading errors" (no duplicate computation).
+- Optional Google Search Console / Bing verification through environment variables.
+
 ## Beta 1.77 — 2026-11-28
 ### Reparat
 - **Paginile de administrare deschise offline:** dacă nu fuseseră deschise înainte, afișau denumirile interne ale textelor; acum arată „Ești offline” și o explicație clară.
