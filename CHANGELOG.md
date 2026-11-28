@@ -5,6 +5,26 @@ tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.81 — 2026-11-28
+### Schimbat
+- **Butonul de urmărire a unui tren se numește acum „Alertă” și se vede mult mai bine:** gri plin când e oprit, verde plin (verdele de „la timp”) cu clopoțel plin când e pornit.
+- **Același buton pe Panou,** în rândul tabelului și în detaliile trenului; pe telefoanele foarte înguste rămâne doar clopoțelul, cu țintă de atingere de 44 px.
+- **Cititoarele de ecran** anunță „Pornește/Oprește alerta pentru trenul …”; contrastul trece de 6:1 în ambele teme.
+- **Pagina Urmărite și mesajele de confirmare** folosesc noul nume („Apasă „Alertă””, „Alertă pornită pentru trenul …”).
+### Reparat
+- **Alinierea paginilor pe ecrane late:** Statistici, Istoric, Clasamente, Stații și celelalte pagini nu mai sunt mai late decât bara de sus când tabela e în modul Panou; doar Tabela folosește lățimea mare.
+### Documentație
+- **Demo propriu în proiect** (GIF animat și capturi pe telefon și desktop, temă luminoasă și întunecată, engleză), refăcut cu `scripts/make_demo_media.py` doar din pagini publice.
+- **README în română și engleză adus la zi:** domeniul tabelagn.online, SEO, adresele proprii ale paginilor, „Fără aeroport”, „Erori de citire”, TOTP opțional, dovada abonării la notificări, alerte de operare, CI și testele de accesibilitate și viteză.
+### English
+- **The follow-a-train button is now called "Alert" and stands out:** solid grey when off, solid green (the on-time green) with a filled bell when on.
+- **The same button in the Panel view,** in the table row and in the train details; on very narrow phones only the bell is shown, with a 44 px touch target.
+- **Screen readers** announce "Turn on/off the alert for train …"; contrast is above 6:1 in both themes.
+- **The Followed page and the confirmation messages** use the new name.
+- **Page alignment on wide screens:** Statistics, History, Rankings, Stations and the other pages are no longer wider than the top bar when the board is in Panel mode; only the board uses the wide layout.
+- **Own demo in the project** (animated GIF and phone/desktop screenshots, light/dark, English), rebuilt with `scripts/make_demo_media.py` from public pages only.
+- **README (Romanian and English) brought up to date:** the tabelagn.online domain, SEO, page addresses, "Without Airport", "Reading errors", optional TOTP, push subscription proof, ops alerts, CI and the accessibility and performance tests.
+
 ## Beta 1.80 — 2026-11-28
 ### Schimbat
 - **Adresa oficială devine https://tabelagn.online.** `www.tabelagn.online` trimite permanent (301) la ea, cu aceeași cale.

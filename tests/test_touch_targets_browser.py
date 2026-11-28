@@ -1,5 +1,5 @@
 # © 2026 Andy217Ace
-"""Real browser at 390×844 (phone): the follow controls — the card „urmărește” button and the
+"""Real browser at 390×844 (phone): the follow controls — the card „Alertă” button and the
 Panou row star + bell — are at least 44×44 px touch targets and neighbouring targets do not
 overlap. Skipped when Playwright (dev only) or its Chromium is unavailable."""
 import pytest

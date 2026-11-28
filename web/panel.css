@@ -71,7 +71,8 @@ html[data-view="panou"] #view-tabela > .tabs,
 html[data-view="panou"] #boards,
 html[data-view="panou"] #banner { display: none !important; }
 
-html[data-view="panou"] main { max-width: 1760px; }
+/* only the board page is wide; other pages keep the header's 1320 px (before route() body has no data-route) */
+html[data-view="panou"] body:is(:not([data-route]), [data-route="tabela"]) main { max-width: 1760px; }
 
 .pnl-root { margin-top: 8px; }
 /* until panel.js builds it: the Panou/Carduri switch's height, so the cards below do not jump (CLS) */
@@ -568,8 +569,16 @@ th[aria-sort="descending"] .pnl-sortbtn::after { content: " ▼"; }
 .pnl-star .pnl-ico { width: 18px; height: 18px; }
 .pnl-star[aria-pressed="true"] { color: var(--p-amber); }
 .pnl-star[aria-pressed="true"] .pnl-ico { fill: currentColor; }
-.pnl-follow[aria-pressed="true"] { color: var(--p-info); }
-.pnl-follow[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+/* „Alertă" (ca .follow din style.css): oprită = gri plin, clopoțel gol; pornită = verdele de
+   „la timp" (--ok) plin, clopoțel plin */
+.pnl-follow, .pnl-btn.pnl-alert { background: var(--border); color: var(--text-2); }
+.pnl-btn.pnl-alert { border-color: var(--btn-border); }
+.pnl-follow:hover, .pnl-btn.pnl-alert:hover { background: var(--border-strong); color: var(--text); }
+.pnl-follow[aria-pressed="true"], .pnl-btn.pnl-alert[aria-pressed="true"] {
+  background: var(--ok); border-color: var(--ok); color: var(--surface);
+}
+.pnl-btn.pnl-alert[aria-pressed="true"] .pnl-ico { fill: currentColor; }
+.pnl-follow[aria-disabled="true"], .pnl-btn.pnl-alert[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
 .pnl-empty {
   margin: 0;
@@ -712,7 +721,7 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
     background: var(--p-row);
     box-shadow: inset 4px 0 0 var(--lvl);
   }
-  .pnl-row .pnl-star { width: 40px; height: 40px; }
+  .pnl-row .pnl-star { width: 44px; height: 44px; margin: -2px; }  /* = ui2.css (ținta de 44 px) */
   .pnl-row td,
   .pnl-row:nth-child(even) td,
   .pnl-row:hover td,
