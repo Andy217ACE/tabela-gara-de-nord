@@ -5,6 +5,19 @@ tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.83 — 2026-11-28
+### Îmbunătățit
+- **Peronul estimat e mai precis:** estimarea nu se mai afișează când pe aceeași linie e deja anunțat alt tren (sosire sau plecare) cu ora programată la cel mult 10 minute — linia e ocupată, deci estimarea ar fi probabil greșită.
+- **Măsurat pe ultimele 10 zile (18–27.11):** 86,4% estimări corecte (178 din 206), față de 83,0% (181 din 218) fără regulă.
+- **Estimările se recalculează la fiecare cerere,** ca regula să reacționeze imediat când e anunțat un tren; doar istoricul rămâne în cache 5 minute.
+- Cifra de acuratețe afișată lângă estimări e actualizată (era 73,2% din testul inițial din 06.11).
+### English
+- **Estimated platforms are more accurate:** an estimate is no longer shown when another train (arrival or departure) is already announced on the same platform within 10 minutes of its scheduled time — the line is busy, so the estimate would likely be wrong.
+- **Measured over the last 10 days (18–27 Nov):** 86.4% correct (178 of 206), up from 83.0% (181 of 218) without the rule.
+- **Estimates are recomputed on every request,** so the rule reacts as soon as a train is announced; only the history stays cached for 5 minutes.
+- The accuracy figure shown next to estimates is updated (it was 73.2% from the first test on 6 Nov).
+- No other changes to the app.
+
 ## Beta 1.82 — 2026-11-28
 ### Reparat
 - **Cititoarele de ecran** citeau numele trenului lipit de stație la butonul „Alertă” („IR 10072 dinGalați”); acum spun „IR 10072 din Galați”.
