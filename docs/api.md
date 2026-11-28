@@ -813,13 +813,14 @@ Nu sunt JSON: servesc `index.html` cu antetul și conținutul paginii injectate 
 
 | Metodă | Cale | Răspuns |
 |---|---|---|
-| GET, HEAD | `/`, `/index.html`, `/istoric`, `/urmarite`, `/trenuri`, `/statistici`, `/clasamente`, `/statii`, `/versiuni`, `/cum` | 200 HTML: `<title>`, descriere, `canonical`, `hreflang` (ro = fără query, en = `?lang=en`, `x-default` = ro), Open Graph/Twitter, JSON-LD (`WebSite`, `WebPage`, `BreadcrumbList`, `TrainStation` București Nord) și un bloc `<section class="ssr">` cu conținutul în HTML simplu (pe `/`: primele 20 de plecări și sosiri). Cache 60 s în proces. |
+| GET, HEAD | `/`, `/index.html`, `/istoric`, `/urmarite`, `/trenuri`, `/statistici`, `/clasamente`, `/statii`, `/versiuni`, `/cum` | 200 HTML (`/urmarite`: `noindex`, fără `canonical`/JSON-LD și absentă din sitemap — e personală): `<title>`, descriere, `canonical`, `hreflang` (ro = fără query, en = `?lang=en`, `x-default` = ro), Open Graph/Twitter, JSON-LD (`WebSite`, `WebPage`, `BreadcrumbList`, `TrainStation` București Nord) și un bloc `<section class="ssr">` cu conținutul în HTML simplu (pe `/`: primele 20 de plecări și sosiri). Cache 60 s în proces. |
 | GET, HEAD | `/tren/{no}` | 200 pentru un tren din catalog (JSON-LD `TrainTrip`), 404 HTML `noindex` pentru unul necunoscut; zerourile din față → 301. |
 | GET, HEAD | `/statie/{name:path}` | 200 pentru o stație observată (cheia stocată, de ex. `/statie/BRASOV`); altă formă a numelui (`/statie/brasov`, `/statie/Brașov`) → 301 la cheie; necunoscută → 404 `noindex`. |
 | GET, HEAD | `/tren`, `/statie` | 301 la `/trenuri`, `/statii`. |
 | GET, HEAD | `/admin`, `/ocr`, `/ocr2`, `/infofer`, `/sistem`, `/setari` | 302 la `/#…` (pagini private, doar cu fragment), `X-Robots-Tag: noindex`. |
+| GET | `/api/meta?path=&lang=` | JSON cu antetul paginii publice de la `path` (cel trimis și în HTML): `status`, `title`, `description`, `url` (og:url), `canonical`, `alternates` (`ro`/`en`/`x-default`), `robots` (`noindex` sau `null`), `jsonld`. Folosit de aplicație după navigarea internă și la schimbarea limbii. |
 | GET | `/robots.txt` | `text/plain`: `Allow: /`, `Disallow: /api/`, `/offline.html` și paginile private, linia `Sitemap:`. |
-| GET | `/sitemap.xml` | `application/xml`: paginile publice, trenurile văzute în ultimele 90 de zile (max. 5000) și stațiile, fiecare în ro și en cu `xhtml:link` alternate; `lastmod` pentru tabelă, trenuri și stații. Cache 10 min. |
+| GET | `/sitemap.xml` | `application/xml`: paginile publice, trenurile văzute în ultimele 90 de zile (max. 5000) și stațiile, fiecare în ro și en cu `xhtml:link` alternate; `lastmod` pentru tabelă (ziua ultimei capturi reușite), trenuri și stații. Cache 10 min. |
 
 - Orice altă cale care nu e `/api/…` și nu e fișier: 404 HTML cu `noindex` (nu JSON). O bară finală sau majuscule pe o pagină publică (`/Statistici/`) → 301 la forma canonică.
 - Toate răspunsurile `/api/*` au `X-Robots-Tag: noindex`.
