@@ -206,7 +206,7 @@
   // station name → its page (#statie?nume=<canonical>, web/stats.js); `content` = text or node
   function stationLink(name, content) {
     var a = el("a", "station-link");
-    a.href = "#statie?nume=" + encodeURIComponent(name);
+    a.href = window.TabelaApp.routeHref("#statie?nume=" + encodeURIComponent(name));
     a.append(content == null ? titleCase(name) : content);
     return a;
   }
@@ -362,7 +362,7 @@
     g.setAttribute("aria-label", T("history.row.chart_aria", { day: dayLabel(j.service_date), time: j.sched_time || "" }));
     g.addEventListener("click", function () { openJourney(j.id, g, hint); });
     var prof = el("a", "h-act", T("history.row.train_profile"));
-    prof.href = "#tren?nr=" + encodeURIComponent(j.train_no);
+    prof.href = window.TabelaApp.routeHref("#tren?nr=" + encodeURIComponent(j.train_no));
     acts.append(g, prof);
     cell(tr, T("history.col.details"), "h-op", acts);
     cell(tr, T("history.col.max_delay"), "h-max",
@@ -765,7 +765,7 @@
     box.append(el("p", "detail-note", T("history.res.note", { gap: j.final_read_max_gap_min || 15 })));
     var link = el("a", "res-train-link", T("history.res.train_profile", { train: (j.train_type ? j.train_type + " " : "") +
                   j.train_no }));
-    link.href = "#tren?nr=" + encodeURIComponent(j.train_no);
+    link.href = window.TabelaApp.routeHref("#tren?nr=" + encodeURIComponent(j.train_no));
     link.addEventListener("click", closeDetail);
     box.append(link);
     return box;

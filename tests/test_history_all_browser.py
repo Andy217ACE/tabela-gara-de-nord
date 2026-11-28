@@ -141,7 +141,7 @@ def test_all_days_view(browser, base_url, w, h, theme):
         assert page.locator("#h-results .h-row").count() == 50
         first = page.text_content("#h-results .h-group-title")
         assert "20 octombrie 2026" in first
-        assert page.locator("#h-results a[href='#tren?nr=1621']").count() == 50
+        assert page.locator("#h-results a[href='/tren/1621']").count() == 50
         assert page.locator("#h-results .res-badge").count() == 50
         assert page.locator("#h-results .delay-unread").count() > 0  # unknown is not 0
         assert page.evaluate(NO_HSCROLL)

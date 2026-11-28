@@ -116,3 +116,126 @@ def test_offline_shell_on_a_path(browser, base_url):  # noqa: F811
     finally:
         ctx.set_offline(False)
         ctx.close()
+
+
+HEAD_JS = """() => {
+  const q = s => document.head.querySelector(s), c = (s, a) => (q(s) ? q(s).getAttribute(a) : null);
+  const alt = {};
+  document.head.querySelectorAll('link[rel="alternate"][hreflang]').forEach(l => { alt[l.getAttribute('hreflang')] = l.getAttribute('href'); });
+  const ld = q('script[type="application/ld+json"]');
+  return {title: document.title, description: c('meta[name="description"]', 'content'),
+          canonical: c('link[rel="canonical"]', 'href'), alternates: alt, robots: c('meta[name="robots"]', 'content'),
+          og_url: c('meta[property="og:url"]', 'content'), og_title: c('meta[property="og:title"]', 'content'),
+          og_description: c('meta[property="og:description"]', 'content'),
+          twitter_title: c('meta[name="twitter:title"]', 'content'), jsonld: ld ? JSON.parse(ld.textContent) : null,
+          ssr: document.querySelectorAll('.ssr').length};
+}"""
+
+
+def _settled_head(page, og_url=None):
+    if og_url:
+        page.wait_for_function("u => document.head.querySelector('meta[property=\"og:url\"]').content === u", arg=og_url)
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(150)
+    h = page.evaluate(HEAD_JS)
+    h.pop("ssr")
+    return h
+
+
+def _direct_head(browser, base_url, path):  # noqa: F811
+    ctx, page, msgs = _ctx(browser, base_url)
+    try:
+        page.goto(base_url + path)
+        page.wait_for_function("() => !!document.body.dataset.route")
+        return _settled_head(page)
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("lang", ["", "?lang=en"])
+def test_head_follows_in_app_navigation(browser, base_url, lang):  # noqa: F811
+    """Tabela → Statistici → tren → Back: at each step the head (title, description, canonical,
+    hreflang, og/twitter, robots, JSON-LD) equals the one of a direct visit at that address."""
+    want = {p: _direct_head(browser, base_url, p + lang) for p in ("/", "/statistici", "/tren/1636")}
+    ctx, page, msgs = _ctx(browser, base_url)
+    try:
+        page.goto(base_url + "/" + lang)
+        page.wait_for_function("() => document.body.dataset.route === 'tabela'")
+        assert _settled_head(page) == want["/"]          # the server-rendered head (and title) is kept
+        page.evaluate("window.__same = 1")
+        page.click('.mainnav a[href="/statistici"]')
+        page.wait_for_function("() => document.body.dataset.route === 'statistici'")
+        assert _settled_head(page, want["/statistici"]["og_url"]) == want["/statistici"]
+        page.evaluate("location.hash = '#tren?nr=1636'")
+        page.wait_for_function("() => document.body.dataset.route === 'tren'")
+        assert _settled_head(page, want["/tren/1636"]["og_url"]) == want["/tren/1636"]
+        page.go_back()
+        page.wait_for_function("() => document.body.dataset.route === 'statistici'")
+        assert _settled_head(page, want["/statistici"]["og_url"]) == want["/statistici"]
+        assert page.evaluate("window.__same") == 1
+    finally:
+        ctx.close()
+
+
+def test_head_follows_language_switch(browser, base_url):  # noqa: F811
+    want = _direct_head(browser, base_url, "/statistici?lang=en")
+    ctx, page, msgs = _ctx(browser, base_url)
+    try:
+        page.goto(base_url + "/statistici")
+        page.wait_for_function("() => document.body.dataset.route === 'statistici'")
+        page.wait_for_load_state("networkidle")
+        page.click(".navbar [data-lang-toggle]")
+        assert _settled_head(page, want["og_url"]) == want
+    finally:
+        ctx.close()
+
+
+@pytest.mark.parametrize("lang", ["", "?lang=en"])
+def test_board_and_history_links_are_real_urls(browser, base_url, lang):  # noqa: F811
+    ctx, page, msgs = _ctx(browser, base_url)
+    try:
+        page.goto(base_url + "/" + lang)
+        page.wait_for_selector("#view-tabela a.station-link[href]", state="attached")   # board cards and the Panou rows
+        hrefs = page.eval_on_selector_all("#view-tabela a.station-link[href]", "as => as.map(a => a.getAttribute('href'))")
+        assert hrefs and all(h.startswith("/statie/") for h in hrefs), hrefs
+        assert all(h.endswith("?lang=en") == bool(lang) for h in hrefs), hrefs
+        page.evaluate("window.__same = 1")
+        page.locator("#view-tabela a.station-link[href]:visible").first.click()   # a normal click stays in the app
+        page.wait_for_function("() => document.body.dataset.route === 'statie'")
+        assert page.evaluate("window.__same") == 1 and _where(page).startswith("/statie/")
+        page.goto(base_url + "/istoric" + lang)
+        page.wait_for_selector("#view-istoric a[href^='/tren/'], #view-istoric a[href^='/statie/']")
+        bad = page.eval_on_selector_all("#view-istoric a[href^='#tren'], #view-istoric a[href^='#statie']", "as => as.length")
+        assert bad == 0
+    finally:
+        ctx.close()
+
+
+def test_ssr_copy_stays_until_the_api_answers(browser, base_url):  # noqa: F811
+    ctx, page, msgs = _ctx(browser, base_url)
+    held, gate = [], {"hold": True}
+    try:
+        page.route("**/api/board*", lambda r: held.append(r) if gate["hold"] else r.continue_())   # API slow
+        page.goto(base_url + "/")
+        page.wait_for_function("() => document.body.dataset.route === 'tabela'")
+        page.wait_for_timeout(500)
+        assert page.locator(".ssr").count() == 1 and page.locator(".ssr").is_hidden()   # kept, not shown twice
+        gate["hold"] = False
+        for r in held:
+            r.continue_()
+        page.wait_for_function("() => !document.querySelector('.ssr')")   # real data: the copy goes
+    finally:
+        ctx.close()
+
+
+def test_ssr_copy_is_shown_when_the_api_is_down(browser, base_url):  # noqa: F811
+    ctx, page, msgs = _ctx(browser, base_url)
+    try:
+        page.route("**/api/**", lambda r: r.abort())
+        page.goto(base_url + "/")
+        page.wait_for_selector(".ssr.ssr-fallback", state="visible")
+        txt = page.inner_text(".ssr")
+        assert "Actualizat" in txt and "Gara de Nord" in txt
+        assert page.locator(".ssr table").count() >= 1 or "Nu sunt trenuri" in txt
+    finally:
+        ctx.close()
