@@ -51,7 +51,7 @@ def test_cum_page_in_both_languages(browser, base_url, lang, title, h2):  # noqa
         assert page.evaluate(VISIBLE_H1) == [title]
         assert page.title().startswith(title)
         assert h2 in page.inner_text("#view-cum")
-        assert page.locator("#view-cum h2").count() == 6
+        assert page.locator("#view-cum h2").count() == 7
         assert page.locator("#view-cum .cum-step").count() == 4
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
         # leaving the page hides it again (route in VIEWS)

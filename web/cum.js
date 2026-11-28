@@ -11,8 +11,8 @@
 
   var REPO = "https://github.com/Andy217Ace/tabela-gara-de-nord";
   var STEPS = ["source", "ocr", "check", "store"];
-  // [heading key suffix, paragraph count]
-  var SECTIONS = [["data", 3], ["delay", 3], ["history", 3], ["limits", 3], ["privacy", 4], ["report", 2]];
+  // [heading key suffix, paragraph count]; = CUM_SECTIONS in app/seo.py (server-rendered /cum)
+  var SECTIONS = [["data", 3], ["delay", 3], ["history", 3], ["method", 6], ["limits", 3], ["privacy", 4], ["report", 2]];
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -54,6 +54,11 @@
       var part = el("section", "cum-part");
       part.appendChild(el("h2", null, T("cum." + s[0] + ".title")));
       for (var i = 1; i <= s[1]; i++) part.appendChild(el("p", null, T("cum." + s[0] + ".p" + i)));
+      if (s[0] === "method") {
+        var mp = el("p");
+        mp.appendChild(link(REPO + "/issues", T("cum.report.issues"), true));
+        part.appendChild(mp);
+      }
       if (s[0] === "limits") {
         var p = el("p");
         p.appendChild(link("#sistem", T("cum.limits.system")));
