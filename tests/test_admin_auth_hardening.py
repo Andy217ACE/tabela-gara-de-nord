@@ -190,3 +190,19 @@ def test_setup_script_secret_and_uri(capsys, monkeypatch):
     mod.main()
     out = capsys.readouterr().out
     assert "ADMIN_TOTP_SECRET=" in out and "otpauth://totp/" in out
+
+
+def test_session_invalidated_by_2fa_change(monkeypatch):
+    other = "KRSXG5CTMVRXEZLUKRSXG5CTMVRXEZLU"
+    old = admin.make_session(TOKEN)
+    assert admin.check_session(TOKEN, old)  # no 2FA: unchanged behaviour
+    monkeypatch.setenv("ADMIN_TOTP_SECRET", SECRET)
+    assert not admin.check_session(TOKEN, old)  # 2FA turned on
+    s1 = admin.make_session(TOKEN)
+    assert admin.check_session(TOKEN, s1)  # a new session after the change works
+    monkeypatch.setenv("ADMIN_TOTP_SECRET", other)
+    assert not admin.check_session(TOKEN, s1)  # secret rotated
+    s2 = admin.make_session(TOKEN)
+    monkeypatch.delenv("ADMIN_TOTP_SECRET")
+    assert not admin.check_session(TOKEN, s2)  # 2FA turned off
+    assert admin.check_session(TOKEN, admin.make_session(TOKEN))
