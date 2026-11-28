@@ -1,8 +1,19 @@
 #!/bin/sh
-# fail2ban ignorecommand: exit 0 (= ignore) if <ip> is (1) the current public IP of home (resolved from tabelacfr.ddns.net) or (2) a real visitor: has /api/ requests with 200 and the site's Referer in the current access.log (protects CGNAT mobile users who share an IP with a scanner).
+# fail2ban ignorecommand: exit 0 (= nu bana) daca <ip> este:
+#  1) IP-ul public curent al casei (rezolvat din tabelacfr.ddns.net, IP Digi dinamic / hairpin NAT);
+#  2) un vizitator real: in access.log curent are >=3 cereri GET /api/board cu 200, intinse pe >=60 s
+#     (aplicatia reimprospateaza tabela periodic; scanerele lovesc in rafala de cateva secunde).
+#     Protejeaza utilizatorii din spatele CGNAT mobil care impart IP-ul cu un scaner.
+#     (Site-ul trimite Referrer-Policy: no-referrer, deci Referer NU poate fi folosit ca semnal.)
 ip="$1"
 case "$ip" in ''|*[!0-9a-fA-F.:]*) exit 1;; esac
 own=$(timeout 3 getent ahostsv4 tabelacfr.ddns.net 2>/dev/null | awk 'NR==1{print $1}')
 [ -n "$own" ] && [ "$own" = "$ip" ] && exit 0
-timeout 5 awk -v ip="$ip" '$1==ip && $9=="200" && $7 ~ /^\/api\// && $11 ~ /^"https:\/\/tabelacfr\.ddns\.net\// {f=1; exit} END{exit !f}' /var/log/nginx/access.log && { logger -t f2b-ignore "nu banez $ip: vizitator real"; exit 0; }
+timeout 5 awk -v ip="$ip" '
+  $1==ip && $9=="200" && $7 ~ /^\/api\/board([?]|$)/ {
+    split(substr($4, 2), t, ":"); s = t[2]*3600 + t[3]*60 + t[4]
+    if (n == 0 || s < lo) lo = s; if (n == 0 || s > hi) hi = s; n++
+    if (n >= 3 && hi - lo >= 60) { f = 1; exit }
+  }
+  END { exit !f }' /var/log/nginx/access.log && { logger -t f2b-ignore "nu banez $ip: vizitator real (tabela reimprospatata)"; exit 0; }
 exit 1

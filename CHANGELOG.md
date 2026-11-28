@@ -12,12 +12,14 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 - **Textele paginilor private** se descarcă din nou automat la următoarea vizită dacă prima încercare a eșuat.
 - **Testare:** un test nou verifică mesajul offline și revenirea automată pe pagina Infofer.
 - **Fără efect pe paginile publice:** tabela, istoricul și statisticile funcționează offline exact ca înainte.
+- **Securitate (fail2ban):** vizitatorii reali sunt recunoscuți după reîmprospătarea tabelei (cel puțin 3 cereri în cel puțin un minut), nu după `Referer`, pe care site-ul nu-l trimite; utilizatorii de pe rețele mobile care împart IP-ul cu un scaner nu sunt banați.
 ### English
 - **Admin pages opened offline:** if never opened before, they showed the texts' internal names; they now show "You are offline" and a clear explanation.
 - **Back online:** the admin page loads by itself when the connection returns, with no manual refresh.
 - **Private pages' texts** are fetched again automatically on the next visit if the first attempt failed.
 - **Testing:** a new test checks the offline message and the automatic recovery on the Infofer page.
 - **No effect on public pages:** the board, history and statistics work offline exactly as before.
+- **Security (fail2ban):** real visitors are recognised by the board refreshing (at least 3 requests over at least a minute), not by `Referer`, which the site does not send; mobile users sharing an IP with a scanner are not banned.
 
 ## Beta 1.76 — 2026-11-28
 ### Îmbunătățit

@@ -756,8 +756,9 @@ Configurația completă a serverului e versionată în `deploy/fail2ban/` (versi
 întreabă scriptul `f2b-ignore-own-public-ip` (`ignorecommand`). Scriptul răspunde „ignoră” dacă IP-ul este:
 
 1. IP-ul public curent al casei, rezolvat la fiecare decizie din `tabelacfr.ddns.net` (IP-ul e dinamic);
-2. un **vizitator real**: are în `access.log`-ul curent al nginx cereri la `/api/` cu răspuns 200 și cu
-   `Referer` de pe site. Motivul: pe rețelele mobile (CGNAT) mulți utilizatori ies pe același IP public;
+2. un **vizitator real**: are în `access.log`-ul curent al nginx cel puțin 3 cereri `GET /api/board` cu
+   răspuns 200, întinse pe cel puțin 60 s (aplicația reîmprospătează tabela periodic; scanerele lovesc în
+   rafală de câteva secunde). `Referer` nu se poate folosi: site-ul trimite `Referrer-Policy: no-referrer`. Motivul: pe rețelele mobile (CGNAT) mulți utilizatori ies pe același IP public;
    dacă un scaner folosește același IP, fără această excepție ar fi banați și oamenii reali. Fiecare
    astfel de decizie apare în jurnalul sistemului (`logger -t f2b-ignore`).
 

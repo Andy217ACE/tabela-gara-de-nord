@@ -757,8 +757,9 @@ The server's complete configuration is versioned in `deploy/fail2ban/` (versione
 asks the script `f2b-ignore-own-public-ip` (`ignorecommand`). The script answers "ignore" if the IP is:
 
 1. the current public IP of the home network, resolved on every decision from `tabelacfr.ddns.net` (the IP is dynamic);
-2. a **real visitor**: it has requests to `/api/` answered with 200 and with the site's `Referer` in
-   nginx's current `access.log`. The reason: on mobile networks (CGNAT) many users share one public IP;
+2. a **real visitor**: nginx's current `access.log` has at least 3 `GET /api/board` requests answered
+   with 200, spread over at least 60 s (the app refreshes the board periodically; scanners hit in a burst of
+   a few seconds). `Referer` cannot be used: the site sends `Referrer-Policy: no-referrer`. The reason: on mobile networks (CGNAT) many users share one public IP;
    if a scanner uses the same IP, without this exception the real people would be banned too. Each such
    decision appears in the system log (`logger -t f2b-ignore`).
 
