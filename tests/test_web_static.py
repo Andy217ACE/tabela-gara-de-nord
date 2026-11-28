@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app import seo
 from app.api import create_app
 from app.config import Settings
 
@@ -26,7 +27,7 @@ def test_index_has_title_meta_and_footer(client):
     r = client.get("/")
     assert r.status_code == 200
     html = r.text
-    assert "<title>Tabela Gara de Nord</title>" in html
+    assert "<title>Tabela Gara de Nord — sosiri și plecări live</title>" in html   # app/seo.py
     assert '<html lang="ro">' in html
     assert '<meta name="author" content="Andy217Ace">' in html
     assert re.search(r'<meta name="description" content="[^"]+">', html)
@@ -167,6 +168,7 @@ def test_service_worker_served_as_js_no_cache(client):
     # every same-origin static file referenced by index.html is precached
     html = (WEB / "index.html").read_text(encoding="utf-8")
     refs = set(re.findall(r'(?:src|href)="((?!https?:|#)[^"]+)"', html))
+    refs -= {"/"} | {"/" + p for p in seo.PUBLIC}   # page links (path routes), not files
     refs |= {u.split()[0] for m in re.findall(r'srcset="([^"]+)"', html) for u in m.split(",")}
     precached = set(re.findall(r'"([^"]+)"', shell)) | {"/offline.html"}
     # versions.js is cached at runtime (network-first), not precached since Beta 1.55

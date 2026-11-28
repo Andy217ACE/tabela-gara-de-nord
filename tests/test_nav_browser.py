@@ -17,9 +17,9 @@ ANDROID_DESKTOP_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML
                       "Chrome/130.0.0.0 Safari/537.36")
 IOS_DESKTOP_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
                   "(KHTML, like Gecko) Version/18.0 Safari/605.1.15")
-NAV = [("#", "Tabelă"), ("#istoric", "Istoric"), ("#urmarite", "Urmărite"),
-       ("#trenuri", "Trenuri"), ("#statistici", "Statistici"), ("#clasamente", "Clasamente"),
-       ("#statii", "Stații"), ("#sistem", "Sistem")]
+NAV = [("/", "Tabelă"), ("/istoric", "Istoric"), ("/urmarite", "Urmărite"),
+       ("/trenuri", "Trenuri"), ("/statistici", "Statistici"), ("/clasamente", "Clasamente"),
+       ("/statii", "Stații"), ("#sistem", "Sistem")]
 
 # name: (context options, desktop_site) — desktop_site drops <meta name=viewport>, which is
 # what Chrome Android / Safari iOS do in „desktop site” mode (layout viewport 980 px).
@@ -146,9 +146,9 @@ def test_top_menu_visible_and_reachable(browser, base_url, case, theme):  # noqa
         ctx.close()
 
 
-@pytest.mark.parametrize("hash_, active", [("#statie?nume=BRASOV", "#statii"),
-                                           ("#tren?nr=1636", "#trenuri"),
-                                           ("#clasamente", "#clasamente")])
+@pytest.mark.parametrize("hash_, active", [("#statie?nume=BRASOV", "/statii"),
+                                           ("#tren?nr=1636", "/trenuri"),
+                                           ("#clasamente", "/clasamente")])
 def test_deep_link_highlights_parent_and_reveals_it(browser, base_url, hash_, active):  # noqa: F811
     ctx, page, errors = _open(browser, base_url, "android-desktop-site", "dark")   # the top bar scrolls inside itself
     try:

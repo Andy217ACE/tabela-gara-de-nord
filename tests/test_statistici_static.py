@@ -35,7 +35,7 @@ def test_statistici_js_served_and_csp_safe(client):
 
 def test_statistici_js_content_and_rules():
     js = (WEB / "statistici.js").read_text(encoding="utf-8") + (WEB / "i18n" / "ro.json").read_text(encoding="utf-8")   # texts live in the dictionary since i18n Task 7
-    for needle in ("/api/stats/overview", "App.views.statistici", "history.replaceState",
+    for needle in ("/api/stats/overview", "App.views.statistici", "TabelaApp.syncUrl",
                    "perioada", "operator", "tip", "doar_confirmate", 'set: set', 'format: "csv"',
                    "Cum se citește", "Vezi datele", "Date insuficiente încă", "Pe scurt",
                    "Glosar", "în curs de adunare", "w.note", "sufficient",

@@ -78,7 +78,7 @@ def test_operator_click_applies_filter(browser, ops_url):
     ctx, page, errors = _go(browser, ops_url)
     try:
         page.locator(".oc-cards .oc-name", has_text="Softrans").click()
-        page.wait_for_function("() => location.hash.includes('operator=Softrans')")
+        page.wait_for_function("() => location.search.includes('operator=Softrans')")
         expect(page.locator("#ss-operator")).to_have_value("Softrans")
         page.wait_for_selector(".oc-card-h:has-text('Softrans')")
         assert page.locator(".oc-cards").first.locator(".oc-card").count() == 1

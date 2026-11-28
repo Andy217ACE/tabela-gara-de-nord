@@ -360,9 +360,10 @@ def test_copy_link_to_a_chart_and_open_it(browser, base_url):
         f.locator("button.c3-tool").first.click()
         page.wait_for_timeout(200)
         url = page.evaluate("navigator.clipboard.readText()")
-        assert "#statistici?" in url and "board=arrival" in url and "grafic=" in url, url
+        assert "/statistici?" in url and "#" not in url and "board=arrival" in url and "grafic=" in url, url
         page.evaluate("window.scrollTo(0, 0)")
-        page.goto(url)
+        # same-document navigation, as before with the #hash link (an in-app link does the same)
+        page.evaluate("u => { history.pushState(null, '', u); dispatchEvent(new Event('hashchange')); }", url)
         page.wait_for_selector(".ss-fig.is-target", timeout=8000)
         top = page.evaluate("document.querySelector('.ss-fig.is-target').getBoundingClientRect().top")
         assert -5 < top < 450, top

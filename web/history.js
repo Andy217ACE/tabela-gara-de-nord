@@ -123,7 +123,7 @@
   function syncHash(q) {
     var s = toSearch(q);
     var hash = "#istoric" + (s ? "?" + s : "");
-    if (location.hash !== hash) history.replaceState(null, "", hash);
+    window.TabelaApp.syncUrl(hash);
   }
 
   // ---- validation (mirrors the API; the API stays the authority) ----------------------

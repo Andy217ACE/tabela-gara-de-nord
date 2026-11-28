@@ -513,7 +513,7 @@
 
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
-  var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
+  var ROUTES = { "": "tabela", "#": "tabela", "#tabela": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari", "#cum": "cum", "#infofer": "infofer" };
@@ -622,12 +622,77 @@
     return ready;
   }
 
-  function parseHash() {
-    var h = location.hash || "";
-    var q = h.indexOf("?");
-    var base = q >= 0 ? h.slice(0, q) : h;
+  // Public pages have their own address (/istoric, /tren/1636, /statie/BRASOV: SEO, app/seo.py);
+  // the private ones (#admin, #ocr, #sistem…) stay hash-only. Old #hash links keep working:
+  // they are rewritten to the path with replaceState.
+  var PATHS = ["istoric", "urmarite", "versiuni", "trenuri", "tren", "statistici", "clasamente", "statii", "statie", "cum"];
+  var PATH_ID = { tren: "nr", statie: "nume" };   // /tren/<nr>, /statie/<nume>
+  var routedHref = null;   // address of the last route(): a repeated event for it is ignored
+  function curLang() { return new URLSearchParams(location.search).get("lang"); }
+  // "#tren?nr=1636&board=x" → "/tren/1636?board=x" (the current ?lang= kept); null: not a route
+  function hashToUrl(h) {
+    var q = h.indexOf("?"), base = q >= 0 ? h.slice(0, q) : h, name = base === "#" ? "tabela" : ROUTES[base];
+    if (!name || !base) return null;
+    var lang = curLang();
+    if (name !== "tabela" && PATHS.indexOf(name) < 0) return "/" + (lang ? "?lang=" + encodeURIComponent(lang) : "") + h;
     var params = new URLSearchParams(q >= 0 ? h.slice(q + 1) : "");
-    return { name: ROUTES[base] || "tabela", params: params };
+    var path = name === "tabela" ? "/" : "/" + name, id = PATH_ID[name];
+    if (id && params.get(id)) { path += "/" + encodeURIComponent(params.get(id)); params.delete(id); }
+    params.delete("lang");
+    if (lang) params.set("lang", lang);
+    var s = params.toString();
+    return path + (s ? "?" + s : "");
+  }
+  function parseHash() {
+    var h = location.hash || "", q = h.indexOf("?");
+    var base = q >= 0 ? h.slice(0, q) : h, params;
+    if (base && base !== "#" && ROUTES[base]) {
+      var u = hashToUrl(h);
+      if (u !== location.pathname + location.search + location.hash) history.replaceState(history.state, "", u);
+      return { name: ROUTES[base], params: new URLSearchParams(q >= 0 ? h.slice(q + 1) : "") };
+    }
+    var seg = location.pathname.split("/"), name = PATHS.indexOf(seg[1]) >= 0 ? seg[1] : "tabela";
+    params = new URLSearchParams(location.search);
+    params.delete("lang");
+    if (PATH_ID[name] && seg[2]) {
+      try { params.set(PATH_ID[name], decodeURIComponent(seg[2])); } catch (e) { /* malformed: the view shows "not found" */ }
+    }
+    return { name: name, params: params };
+  }
+  // views keep their filters in the address: "#istoric?date=…" is written as /istoric?date=…
+  function syncUrl(h) {
+    var u = hashToUrl(h);
+    if (u && u !== location.pathname + location.search + location.hash) history.replaceState(history.state, "", u);
+    routedHref = location.href;
+  }
+  // Same-page navigation for route links (paths and old #hash ones): pushState, then the
+  // "hashchange" event every view already listens to.
+  function initLinks() {
+    document.addEventListener("click", function (e) {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var a = e.target.closest && e.target.closest("a[href]");
+      if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download")) return;
+      var raw = a.getAttribute("href"), u = null;
+      if (raw.charAt(0) === "#") {
+        u = hashToUrl(raw);
+        if (!u) {   // in-page anchor (skip link): with <base href="/"> it would load "/#main"
+          var t = raw.length > 1 && document.getElementById(raw.slice(1));
+          if (t) { e.preventDefault(); t.scrollIntoView(); t.focus(); }
+          return;
+        }
+      } else if (/^\/(?!\/)/.test(raw)) {
+        var p = raw.split(/[?#]/)[0];
+        if (p !== "/" && PATHS.indexOf(p.split("/")[1]) < 0) return;   // a file or an API link: the browser
+        u = raw;
+        var lang = curLang();
+        if (lang && raw.indexOf("lang=") < 0) u = p + "?" + (raw.indexOf("?") >= 0 ? raw.split("?")[1] + "&" : "") + "lang=" + encodeURIComponent(lang);
+      } else return;
+      e.preventDefault();
+      if (u !== location.pathname + location.search + location.hash) history.pushState(null, "", u);
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    // back/forward between two paths fires no hashchange of its own
+    window.addEventListener("popstate", function () { window.dispatchEvent(new Event("hashchange")); });
   }
 
   // The top menu scrolls sideways inside itself when it doesn't fit (phones): keep the
@@ -744,6 +809,7 @@
   function route() {
     var r = parseHash();
     var name = r.name;
+    routedHref = location.href;
     currentRoute = name;
     if (!pageCssReady(name)) {   // route() runs again when the stylesheet is in
       if (!shownRoute) VIEWS.forEach(function (v) { var sec = $("view-" + v); if (sec) sec.hidden = true; });   // first load: not the board meanwhile
@@ -810,6 +876,7 @@
     };
   }
   window.TabelaApp.toast = toast;
+  window.TabelaApp.syncUrl = syncUrl;
   window.TabelaApp.config = loadConfig;   // Promise of the validated /api/config
   // the "uncertain reading" marker follows the active language
   Object.defineProperty(window.TabelaApp, "UNSURE", { get: unsureText, configurable: true, enumerable: true });
@@ -973,14 +1040,19 @@
   }
 
   function init() {
+    var ssr = document.querySelector(".ssr");   // the server-rendered copy for crawlers (app/seo.py)
+    if (ssr) ssr.remove();
     initMoreNav();   // before initLang: its links get the dictionary texts too
     initLang();
     initPeronEst();
     loadConfig();
     initTheme();
     initTabs();
+    initLinks();
     route();
     window.addEventListener("hashchange", function () {
+      if (location.href === routedHref) return;   // popstate + hashchange of one navigation
+      routedHref = location.href;
       var u = window.TabelaApp.ui2;   // Beta 1.28: the page change runs inside a View Transition when the browser has them
       if (u && u.transition) u.transition(route); else route();
     });

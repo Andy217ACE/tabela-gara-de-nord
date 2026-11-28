@@ -66,7 +66,7 @@ def test_health_and_changelog_endpoints(client):
 def test_footer_links_to_versions_screen():
     html = (WEB / "index.html").read_text(encoding="utf-8")
     footer = re.search(r'<footer class="footer">(.*?)</footer>', html, re.S).group(1)
-    assert re.search(r'<a class="footer-version" id="app-version" href="#versiuni"', footer)
+    assert re.search(r'<a class="footer-version" id="app-version" href="/versiuni"', footer)
     assert 'id="view-versiuni"' in html and '<script src="versions.js" defer>' in html
     js = (WEB / "versions.js").read_text(encoding="utf-8")
     assert js.startswith("// © 2026 Andy217Ace")

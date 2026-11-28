@@ -78,7 +78,7 @@
   }
   function chartUrl(key) {
     var q = query(v.p, { grafic: key });
-    return location.origin + location.pathname + "#statistici?" + q;
+    return location.origin + "/statistici?" + q;
   }
 
   // ---- params (URL hash) -----------------------------------------------------------------
@@ -118,7 +118,7 @@
   function syncHash(p) {
     var q = v.sect ? sectQuery(v.sect) : query(p);
     var hash = "#statistici" + (q ? "?" + q : "");
-    if (location.hash !== hash) history.replaceState(null, "", hash);
+    window.TabelaApp.syncUrl(hash);
   }
 
   // ---- saved presets: list + menu in stat_presets.js (lazy) ----

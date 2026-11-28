@@ -27,6 +27,9 @@ LAST = date(2026, 10, 20)
 DAYS = 5
 PER_DAY = 50  # 250 journeys > five pages of 50
 
+# the route as an old-style #hash (pages have path URLs now: /istoric?date=…)
+ROUTE_JS = "location.hash || '#' + location.pathname.slice(1) + location.search"
+
 
 @pytest.fixture(scope="module")
 def base_url(tmp_path_factory):
@@ -85,7 +88,7 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
             page.click("#view-istoric .filt-toggle")
         assert page.input_value("#h-date") == ""                 # never pre-filled with today
         assert page.get_attribute("#h-alldays", "aria-pressed") == "true"
-        assert page.evaluate("location.hash") == "#istoric"
+        assert page.evaluate(ROUTE_JS) == "#istoric"
         assert page.locator("#h-results .h-group").count() == 1  # the first 50 = the newest day
         first = page.text_content("#h-results .h-group-title")
         assert "20 octombrie 2026" in first                      # newest first
@@ -108,7 +111,7 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
         expect(page.locator("#h-results .h-row")).to_have_count(PER_DAY)
         expect(page.locator("#h-results .h-group")).to_have_count(1)
         assert "18 octombrie" in page.text_content("#h-results .h-group-title")
-        assert "date=2026-10-18" in page.evaluate("location.hash")
+        assert "date=2026-10-18" in page.evaluate(ROUTE_JS)
         assert page.get_attribute("#h-alldays", "aria-pressed") == "false"
 
         # „Toate zilele” brings every day back
@@ -116,7 +119,7 @@ def test_open_without_params_shows_every_day(browser, base_url, w, h):
         expect(page.locator("#h-results .h-row")).to_have_count(50)
         assert page.input_value("#h-date") == ""
         assert page.locator("#h-results .h-group").count() == 1
-        assert page.evaluate("location.hash") == "#istoric"
+        assert page.evaluate(ROUTE_JS) == "#istoric"
         assert page.evaluate(NO_HSCROLL) and page.evaluate(INSIDE) == 0
         assert errors == []
     finally:

@@ -11,6 +11,9 @@ from tests.test_statistici_browser import _open, base_url, browser  # noqa: E402
 
 expect = sync_api.expect
 
+# the route as an old-style #hash (pages have path URLs now: /istoric?date=…)
+ROUTE_JS = "location.hash || '#' + location.pathname.slice(1) + location.search"
+
 
 def _go(browser, base_url, w, h, hash_="#statistici", ready=".ss-quick .ss-card"):
     stats_overview.clear_cache()
@@ -57,12 +60,12 @@ def test_reset_clears_filters_and_hash(browser, base_url):
         expect(reset).to_be_hidden()
         page.locator(".ss-seg-opt", has_text="7 zile").click()
         expect(reset).to_be_visible()
-        assert "perioada=7" in page.evaluate("location.hash")
+        assert "perioada=7" in page.evaluate(ROUTE_JS)
         reset.click()
         expect(reset).to_be_hidden()
         expect(page.locator("input[name=ss-perioada][value=all]")).to_be_checked()
-        assert "perioada=" not in page.evaluate("location.hash")
-        assert page.evaluate("location.hash") == "#statistici"
+        assert "perioada=" not in page.evaluate(ROUTE_JS)
+        assert page.evaluate(ROUTE_JS) == "#statistici"
         assert errors == []
     finally:
         ctx.close()
@@ -77,7 +80,7 @@ def test_deep_link_scrolls_and_highlights_section(browser, base_url):
         # the filters stay in the address while navigating between sections
         page.locator(".ss-seg-opt", has_text="7 zile").click()
         page.wait_for_selector(".ss-quick .ss-card")
-        h = page.evaluate("location.hash")
+        h = page.evaluate(ROUTE_JS)
         assert "perioada=7" in h and "sect=probleme" in h
         assert errors == []
     finally:
@@ -88,7 +91,7 @@ def test_summary_card_link_sets_sect(browser, base_url):
     ctx, page, errors = _go(browser, base_url, 1280, 800)
     try:
         page.locator(".ss-quick .ss-card-link").first.click()
-        assert "sect=probleme" in page.evaluate("location.hash")
+        assert "sect=probleme" in page.evaluate(ROUTE_JS)
         page.wait_for_selector(".ss-problems.ss-target")
         assert errors == []
     finally:
@@ -127,7 +130,7 @@ def test_preset_saves_and_restores_filters(browser, base_url):
         page.locator(".ss-preset-apply", has_text="Test").click()
         expect(page.locator("#ss-operator")).to_have_value("Transferoviar")
         expect(page.locator("input[name=ss-perioada][value='7']")).to_be_checked()
-        assert "operator=Transferoviar" in page.evaluate("location.hash")
+        assert "operator=Transferoviar" in page.evaluate(ROUTE_JS)
         # delete it again
         page.locator(".ss-presets-toggle").click()
         page.locator(".ss-preset-del").first.click()
@@ -149,7 +152,7 @@ def test_preset_with_missing_field_applies_valid_fields_only(browser, base_url):
         expect(page.locator("input[name=ss-perioada][value='7']")).to_be_checked()
         assert page.locator("#ss-operator").input_value() == ""
         assert page.locator("#ss-tip").input_value() == ""
-        assert "operator=" not in page.evaluate("location.hash")
+        assert "operator=" not in page.evaluate(ROUTE_JS)
         assert errors == []
     finally:
         ctx.close()
@@ -167,7 +170,7 @@ def test_presets_disabled_without_storage(browser, base_url):
         expect(page.locator(".ss-preset-save")).to_have_count(0)
         # the filters themselves keep working
         page.locator(".ss-seg-opt", has_text="7 zile").click()
-        assert "perioada=7" in page.evaluate("location.hash")
+        assert "perioada=7" in page.evaluate(ROUTE_JS)
         assert not [e for e in errors if "blocked" in e and "statistici" in e.lower()]
     finally:
         ctx.close()

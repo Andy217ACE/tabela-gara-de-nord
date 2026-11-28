@@ -26,9 +26,11 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.concurrency import run_in_threadpool
 
 from app import (admin, captures, corrections, corrections_api, export, history_all, observations,
@@ -40,7 +42,7 @@ from app import ocr_alt_api  # noqa: E402  (#ocr2, admin)
 from app import infofer_api  # noqa: E402  (#infofer, admin, spike intern)
 from app import line_prediction, stats_overview  # noqa: E402  (Val 5: sezoane CSV, estimare per tren)
 from app.config import Settings, get_settings
-from app import perf, visitors
+from app import perf, seo, stations, visitors
 from app.ocr import stats as ocr_stats
 from app.version import __version__, changelog
 from app.endpoints import check_push_endpoint
@@ -371,7 +373,9 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             perf.record_route(route.path, (time.perf_counter() - t0) * 1000)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
-        if not request.url.path.startswith("/api/"):
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault("X-Robots-Tag", "noindex")  # data, not pages (SEO)
+        else:
             # static frontend: always revalidate (ETag) so a deploy is picked up at once
             response.headers.setdefault("Cache-Control", "no-cache")
         return response
@@ -670,18 +674,94 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
                             media_type="application/manifest+json",
                             headers={"Cache-Control": "no-cache"})
 
-    # index.html: head served in English for ?lang=en (link previews / crawlers
-    # without JS). Anything else keeps the static Romanian head byte for byte.
-    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
-    @app.api_route("/index.html", methods=["GET", "HEAD"], include_in_schema=False)
-    def index_page(request: Request):
-        index = WEB_DIR / "index.html"
-        if not index.is_file():
+    # index.html for every public page (SEO, app/seo.py): own head, canonical, hreflang, JSON-LD
+    # and a plain-HTML version of the content; ?lang=en serves the English head and content.
+    seo_cache: dict = {}
+
+    def _shell(lang: str) -> str:
+        raw = (WEB_DIR / "index.html").read_bytes().decode("utf-8")
+        return _index_en(raw) if lang == "en" else raw
+
+    def _html(request: Request, make) -> Response:
+        if not (WEB_DIR / "index.html").is_file():
             raise _bad("Nu există.", 404)
-        if request.query_params.get("lang") != "en":
-            return FileResponse(index, media_type="text/html; charset=utf-8")
-        return Response(_index_en(index.read_bytes().decode("utf-8")),
-                        media_type="text/html; charset=utf-8")
+        lang = "en" if request.query_params.get("lang") == "en" else "ro"
+        page = make(lang)
+        if page is None:
+            page = seo.not_found_page(request.url.path, lang)
+        key = ("html", page.path, page.status, lang)
+        body = seo.cached(seo_cache, key, seo.TTL_PAGE, lambda: seo.render(_shell(lang), page, lang))
+        headers = {"X-Robots-Tag": "noindex"} if page.status != 200 else None
+        return Response(body, status_code=page.status, media_type="text/html; charset=utf-8",
+                        headers=headers)
+
+    def _static_page(name: str):
+        def handler(request: Request):
+            return _html(request, lambda lang: seo.cached(
+                seo_cache, ("page", name, lang), seo.TTL_PAGE,
+                lambda: seo.static_page(name, lang, store_of(request), seo_cache)))
+        return handler
+
+    app.add_api_route("/", _static_page("tabela"), methods=["GET", "HEAD"], include_in_schema=False)
+    app.add_api_route("/index.html", _static_page("tabela"), methods=["GET", "HEAD"], include_in_schema=False)
+    for _name in seo.PUBLIC:
+        app.add_api_route("/" + _name, _static_page(_name), methods=["GET", "HEAD"], include_in_schema=False)
+
+    def _private(name: str):
+        def handler(request: Request):  # the page itself lives at /#name (hash route, never indexed)
+            return RedirectResponse("/#" + name, status_code=302, headers={"X-Robots-Tag": "noindex"})
+        return handler
+    for _name in seo.PRIVATE:
+        app.add_api_route("/" + _name, _private(_name), methods=["GET", "HEAD"], include_in_schema=False)
+
+    @app.api_route("/tren", methods=["GET", "HEAD"], include_in_schema=False)
+    @app.api_route("/statie", methods=["GET", "HEAD"], include_in_schema=False)
+    def detail_index(request: Request):
+        return RedirectResponse("/trenuri" if request.url.path == "/tren" else "/statii", status_code=301)
+
+    @app.api_route("/tren/{no}", methods=["GET", "HEAD"], include_in_schema=False)
+    def train_page(request: Request, no: str):
+        if no.isascii() and no.isdigit() and len(no) <= 7 and 0 < int(no) < 1_000_000 and str(int(no)) != no:
+            return RedirectResponse(f"/tren/{int(no)}" + _query(request), status_code=301)  # leading zeros
+        ok = no.isascii() and no.isdigit() and len(no) <= 6 and 0 < int(no) < 1_000_000
+        return _html(request, lambda lang: seo.train_page(int(no), lang, store_of(request), seo_cache)
+                     if ok else None)
+
+    @app.api_route("/statie/{name:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    def station_page(request: Request, name: str):
+        key = stations.canonical(name) if 0 < len(name) <= MAX_STATION_LEN else ""
+        if key and key != name:  # case / display-name form → the stored key's URL
+            return RedirectResponse(seo.station_path(key) + _query(request), status_code=301)
+        return _html(request, lambda lang: seo.station_page(key, lang, store_of(request), seo_cache)
+                     if key else None)
+
+    def _query(request: Request) -> str:
+        return "?" + request.url.query if request.url.query else ""
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots():
+        return Response(seo.robots_txt(), media_type="text/plain; charset=utf-8")
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap(request: Request):
+        body = seo.cached(seo_cache, ("sitemap",), seo.TTL_DATA, lambda: seo.sitemap_xml(store_of(request)))
+        return Response(body, media_type="application/xml; charset=utf-8")
+
+    @app.exception_handler(StarletteHTTPException)
+    async def not_found(request: Request, exc: StarletteHTTPException):
+        path = request.url.path
+        if (exc.status_code != 404 or path.startswith("/api/") or request.method not in ("GET", "HEAD")
+                or not (WEB_DIR / "index.html").is_file()):
+            return await http_exception_handler(request, exc)
+        # trailing slash / upper case of a public page → its canonical path
+        parts = path.rstrip("/").split("/")
+        if len(parts) > 1:
+            parts[1] = parts[1].lower()
+        target = "/".join(parts) or "/"
+        if target != path and (target == "/" or parts[1] in seo.PUBLIC and len(parts) == 2
+                               or parts[1] in ("tren", "statie") and len(parts) >= 3):
+            return RedirectResponse(target + _query(request), status_code=301)
+        return await run_in_threadpool(_html, request, lambda lang: None)
 
     # Static frontend last, so /api/* routes win. No disk writes here.
     if WEB_DIR.is_dir():

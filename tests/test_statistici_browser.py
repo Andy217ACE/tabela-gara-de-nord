@@ -23,6 +23,9 @@ from tests.test_stats_overview import seed, weather  # noqa: E402
 
 expect = sync_api.expect
 
+# the route as an old-style #hash (pages have path URLs now: /istoric?date=…)
+ROUTE_JS = "location.hash || '#' + location.pathname.slice(1) + location.search"
+
 
 def _serve(db):
     settings = Settings(db_path=str(db), source_url="http://127.0.0.1:9/none",
@@ -180,14 +183,14 @@ def test_filters_go_to_url_and_reload(browser, base_url):
         page.wait_for_selector(".ss-kpi")
         page.locator(".ss-seg-opt", has_text="Sosiri").click()
         expect(page.locator(".ss-kpi")).to_have_count(1)
-        assert "board=arrival" in page.evaluate("location.hash")
+        assert "board=arrival" in page.evaluate(ROUTE_JS)
         page.select_option("#ss-operator", "Transferoviar")
         expect(page.locator(".ss-summary")).to_contain_text("doar 2")
-        assert "operator=Transferoviar" in page.evaluate("location.hash")
+        assert "operator=Transferoviar" in page.evaluate(ROUTE_JS)
         assert "Eșantion mic" in page.text_content(".ss-kpi")
         page.locator(".ss-seg-opt", has_text="7 zile").click()
         expect(page.locator(".ss-summary")).to_contain_text("Perioada")
-        assert "perioada=7" in page.evaluate("location.hash")
+        assert "perioada=7" in page.evaluate(ROUTE_JS)
         # a shared link restores the selection
         page.goto(page.url.split("#")[0] + "#statistici?board=departure&tip=IR")
         page.reload()

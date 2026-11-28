@@ -810,6 +810,24 @@ Invalid period: 422 `"Perioadă invalidă (1, 7, 30 sau all)."`; invalid board: 
 
 ---
 
+### 5.22 Public pages, `robots.txt` and `sitemap.xml` (SEO)
+
+Not JSON: they serve `index.html` with the page's head and content injected on the server (`app/seo.py`).
+
+| Method | Path | Response |
+|---|---|---|
+| GET, HEAD | `/`, `/index.html`, `/istoric`, `/urmarite`, `/trenuri`, `/statistici`, `/clasamente`, `/statii`, `/versiuni`, `/cum` | 200 HTML: `<title>`, description, `canonical`, `hreflang` (ro = no query, en = `?lang=en`, `x-default` = ro), Open Graph/Twitter, JSON-LD (`WebSite`, `WebPage`, `BreadcrumbList`, `TrainStation` București Nord) and a `<section class="ssr">` block with the content in plain HTML (on `/`: the next 20 departures and arrivals). Cached 60 s in process. |
+| GET, HEAD | `/tren/{no}` | 200 for a train in the catalog (JSON-LD `TrainTrip`), 404 HTML `noindex` for an unknown one; leading zeros → 301. |
+| GET, HEAD | `/statie/{name:path}` | 200 for an observed station (the stored key, e.g. `/statie/BRASOV`); another form of the name (`/statie/brasov`, `/statie/Brașov`) → 301 to the key; unknown → 404 `noindex`. |
+| GET, HEAD | `/tren`, `/statie` | 301 to `/trenuri`, `/statii`. |
+| GET, HEAD | `/admin`, `/ocr`, `/ocr2`, `/infofer`, `/sistem`, `/setari` | 302 to `/#…` (private pages, fragment only), `X-Robots-Tag: noindex`. |
+| GET | `/robots.txt` | `text/plain`: `Allow: /`, `Disallow: /api/`, `/offline.html` and the private pages, the `Sitemap:` line. |
+| GET | `/sitemap.xml` | `application/xml`: the public pages, the trains seen in the last 90 days (max. 5000) and the stations, each in ro and en with `xhtml:link` alternates; `lastmod` for the board, trains and stations. Cached 10 min. |
+
+- Any other path that is not `/api/…` and not a file: 404 HTML with `noindex` (not JSON). A trailing slash or upper case on a public page (`/Statistici/`) → 301 to the canonical form.
+- Every `/api/*` response has `X-Robots-Tag: noindex`.
+- `SITE_URL` (default `https://tabelacfr.ddns.net`) is the base of the absolute URLs. `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (optional) add `<meta name="google-site-verification">` / `<meta name="msvalidate.01">` (see [arhitectura.md](arhitectura.md) §11).
+
 ## 6. The administration security model
 
 ### 6.1 The key: `ADMIN_TOKEN`

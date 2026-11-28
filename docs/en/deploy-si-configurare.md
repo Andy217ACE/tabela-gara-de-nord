@@ -97,6 +97,9 @@ The `get_settings()` function in `app/config.py` builds the `Settings` object. T
 | `WEATHER_LAT` | float (degrees) | `44.4323` | The latitude of the forecast point. | Between `-90` and `90`. Outside the range the default is used. | `44.4323` is used. |
 | `WEATHER_LON` | float (degrees) | `26.1063` | The longitude of the forecast point. | Between `-180` and `180`. Outside the range the default is used. | `26.1063` is used. |
 | `WEATHER_INTERVAL_S` | integer (seconds) | `900` | How often the forecast is requested. | Digits only. The minimum is `300` (`MIN_INTERVAL_S`): smaller values are raised to 300. | `900` is used. Values that are not digits only are ignored and the default is used. |
+| `SITE_URL` | string (URL) | `https://tabelacfr.ddns.net` | Base of the absolute URLs in `canonical`, `hreflang`, JSON-LD, `robots.txt` and `sitemap.xml` (`app/seo.py`). | URL without a trailing slash. | The default is used. |
+| `GOOGLE_SITE_VERIFICATION` | string | empty | Adds `<meta name="google-site-verification">` to the pages (Search Console, see [arhitectura.md](arhitectura.md) §11). | Only the `content` value given by Google. | No meta tag. |
+| `BING_SITE_VERIFICATION` | string | empty | Adds `<meta name="msvalidate.01">` (Bing Webmaster Tools). | Only the `content` value given by Bing. | No meta tag. |
 
 Remarks about the table:
 

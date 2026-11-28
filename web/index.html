@@ -2,7 +2,7 @@
 <!-- © 2026 Andy217Ace -->
 <html lang="ro">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8"> <base href="/"><!-- pagini cu cale proprie (/tren/1636): resursele relative de la rădăcină -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Tabela Gara de Nord</title>
   <meta name="description" content="Sosirile și plecările din Gara de Nord București, actualizate în timp real: ore, întârzieri și linii. Proiect independent, cu date preluate de la CFR.">
@@ -62,7 +62,7 @@
 
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="#">
+      <a class="brand" href="/">
         <img id="logo" class="logo logo-header" src="icons/logo-96.png" srcset="icons/logo-96.png 1x, icons/logo-192.png 2x" alt="Sigla Tabela Gara de Nord" data-i18n-attr="alt:app.logoAlt" width="46" height="46" decoding="async">
         <span class="brand-text">
           <span class="brand-title">Gara de Nord</span>
@@ -95,31 +95,31 @@
        când nu încape, se derulează orizontal în interiorul barei, nu pagina -->
   <div class="navbar">
     <nav class="mainnav" aria-label="Navigare principală" data-i18n-attr="aria-label:nav.main">
-      <a class="nav-item" href="#" data-route="tabela">
+      <a class="nav-item" href="/" data-route="tabela">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7.5 13h4M7.5 16.5h4M14.5 13h2M14.5 16.5h2"/></svg>
         <span data-i18n="nav.board">Tabelă</span>
       </a>
-      <a class="nav-item" href="#istoric" data-route="istoric">
+      <a class="nav-item" href="/istoric" data-route="istoric">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
         <span data-i18n="nav.history">Istoric</span>
       </a>
-      <a class="nav-item" href="#urmarite" data-route="urmarite">
+      <a class="nav-item" href="/urmarite" data-route="urmarite">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
         <span data-i18n="nav.follows">Urmărite</span>
       </a>
-      <a class="nav-item" href="#trenuri" data-route="trenuri">
+      <a class="nav-item" href="/trenuri" data-route="trenuri">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M9 17l-2.5 4M15 17l2.5 4"/><path d="M8.5 13.5h.01M15.5 13.5h.01"/></svg>
         <span data-i18n="nav.trains">Trenuri</span>
       </a>
-      <a class="nav-item" href="#statistici" data-route="statistici">
+      <a class="nav-item" href="/statistici" data-route="statistici">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V6M17 16.5v-8"/></svg>
         <span data-i18n="nav.stats">Statistici</span>
       </a>
-      <a class="nav-item" href="#clasamente" data-route="clasamente">
+      <a class="nav-item" href="/clasamente" data-route="clasamente">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7"/></svg>
         <span data-i18n="nav.rankings">Clasamente</span>
       </a>
-      <a class="nav-item" href="#statii" data-route="statii">
+      <a class="nav-item" href="/statii" data-route="statii">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
         <span data-i18n="nav.stations">Stații</span>
       </a>
@@ -293,7 +293,7 @@
       <div class="page-head">
         <h1 id="trenuri-heading" data-i18n="page.trains.title">Trenuri</h1>
         <p class="page-sub" data-i18n="page.trains.sub">Catalogul trenurilor observate pe tabela din Gara de Nord, cu statistici de întârziere: un rând pentru fiecare număr de tren și panou (sosiri și plecări separat). Întârzierea este cea citită pe tabela de la București Nord.</p>
-        <p class="page-links"><a class="st-back" href="#statii" data-i18n="page.trains.link">Stații: de unde vin și unde pleacă trenurile →</a></p>
+        <p class="page-links"><a class="st-back" href="/statii" data-i18n="page.trains.link">Stații: de unde vin și unde pleacă trenurile →</a></p>
       </div>
       <div class="st-root" id="st-trenuri"></div>
     </section>
@@ -302,7 +302,7 @@
       <div class="page-head">
         <h1 id="statii-heading" data-i18n="page.stations.title">Stații</h1>
         <p class="page-sub" data-i18n="page.stations.sub">Stațiile afișate pe tabela din Gara de Nord: originea trenurilor la sosiri și destinația la plecări. Caută o stație și deschide-i pagina cu istoricul trenurilor.</p>
-        <p class="page-links"><a class="st-back" href="#trenuri" data-i18n="page.stations.back">← Trenuri</a></p>
+        <p class="page-links"><a class="st-back" href="/trenuri" data-i18n="page.stations.back">← Trenuri</a></p>
       </div>
       <div class="st-root" id="st-statii"></div>
     </section>
@@ -358,8 +358,8 @@
     <img class="logo logo-footer" src="icons/favicon-16.png" srcset="icons/favicon-32.png 2x" alt="" width="16" height="16" decoding="async">
     <p>© 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială: <a href="https://cfr.ro" target="_blank" rel="noopener noreferrer">cfr.ro</a></p>
     <span class="footer-meteo">Meteo: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> · CC BY 4.0 (valori de model)</span>
-    <a class="footer-how" href="#cum" data-i18n="footer.how">Cum funcționează?</a>
-    <a class="footer-version" id="app-version" href="#versiuni" title="Istoricul versiunilor" data-i18n-attr="title:footer.versionsTitle">Versiuni</a>
+    <a class="footer-how" href="/cum" data-i18n="footer.how">Cum funcționează?</a>
+    <a class="footer-version" id="app-version" href="/versiuni" title="Istoricul versiunilor" data-i18n-attr="title:footer.versionsTitle">Versiuni</a>
   </footer>
 </body>
 </html>

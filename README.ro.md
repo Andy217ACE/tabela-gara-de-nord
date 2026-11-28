@@ -59,7 +59,7 @@ bază de date.
 | **Detaliu pe tren** | Apeși pe un tren și vezi detaliile, un link către Istoricul lui și butonul „Urmărește (notificări)”. |
 | **Linie estimată** | O coloană opțională (oprită implicit) cu o **estimare** a liniei din istoricul observat (`/api/predict/peron`), afișată doar peste pragul de precizie măsurat în backtest, altfel „—”. E etichetată ca estimare, nu ca informație CFR. |
 | **Urmărire + Web Push** | Urmărești un tren pentru ziua respectivă și primești o notificare când i se schimbă întârzierea sau linia ori când dispare de pe tabelă. O schimbare se trimite doar după mai multe citiri care o confirmă, deci o citire greșită într-un singur cadru nu produce niciodată o notificare. |
-| **Istoric și căutare** | Ce a afișat tabela într-o zi sau pe toate zilele: filtre pe zi, tren, stație, interval orar și panou; detaliul călătoriei într-un dialog, cu graficul întârzierii observate; linkuri directe ca `#istoric?train=1636&date=2026-10-21`; paginare cu „Încarcă încă N”; export CSV prin API. |
+| **Istoric și căutare** | Ce a afișat tabela într-o zi sau pe toate zilele: filtre pe zi, tren, stație, interval orar și panou; detaliul călătoriei într-un dialog, cu graficul întârzierii observate; linkuri directe ca `/istoric?train=1636&date=2026-10-21`; paginare cu „Încarcă încă N”; export CSV prin API. |
 | **Călătorii** | O apariție a unui tren pe un panou într-o zi de serviciu, cu un rezultat final: `confirmed`, `unconfirmed` (cu motiv), `unknown` sau `in_progress`. |
 | **Statistici și grafice** | Punctualitate, întârziere tipică, clasamente, hărți de căldură, zilele săptămânii, rute, operatori și categorii, „ce s-a schimbat săptămâna asta”, comparație între perioade, linii schimbate, cât stă trenul pe tabelă, sezoane și meteo. Fiecare cifră are lângă ea eșantionul **N**; sub eșantionul minim nu se afișează procente. |
 | **Trenuri și stații** | Un catalog public al trenurilor, cu o pagină pe tren (`#tren?nr=…`) și pe stație (`#statie?nume=…`), cu grafice și exporturi CSV/JSON. Numele stațiilor apar cu diacritice (Brașov, Aeroport Henri Coandă); căutarea ignoră diacriticele. |
@@ -74,20 +74,23 @@ bază de date.
 
 ## Pagini
 
-Aplicația are o singură pagină HTML (`web/index.html`); fiecare pagină e un fragment al adresei.
+Aplicația are o singură pagină HTML (`web/index.html`). Paginile publice au adresă proprie
+(servite cu titlul, descrierea și conținutul lor pentru motoarele de căutare, `app/seo.py`);
+cele private sunt un fragment al adresei. Linkurile vechi `#…` ale paginilor publice merg în
+continuare și sunt rescrise la adresa nouă (`/#statistici` → `/statistici`). Engleză: `?lang=en`.
 
-| Fragment | Pagină | Cine |
+| Adresă | Pagină | Cine |
 |---|---|---|
-| `#` (fără fragment) | **Tabelă** (Carduri / Panou / ecran complet) | oricine |
-| `#istoric` | **Istoric** (o zi sau toate zilele) | oricine |
-| `#urmarite` | Trenurile **urmărite** și comutatorul de notificări | oricine |
-| `#trenuri`, `#tren?nr=<număr>` | **Trenuri** (catalog) și **Tren** (profil, călătorii, grafice) | oricine |
-| `#statistici` | **Statistici**; secțiunile au linkuri directe: `#statistici?sect=probleme` (și `bune`, `rute`, `operatori`, `sumar`, `glosar`) | oricine |
-| `#clasamente` | **Clasamente** | oricine |
-| `#statii`, `#statie?nume=<nume>` | **Stații** și **Stație** | oricine |
+| `/` | **Tabelă** (Carduri / Panou / ecran complet) | oricine |
+| `/istoric` | **Istoric** (o zi sau toate zilele) | oricine |
+| `/urmarite` | Trenurile **urmărite** și comutatorul de notificări | oricine |
+| `/trenuri`, `/tren/<număr>` | **Trenuri** (catalog) și **Tren** (profil, călătorii, grafice) | oricine |
+| `/statistici` | **Statistici**; secțiunile au linkuri directe: `/statistici?sect=probleme` (și `bune`, `rute`, `operatori`, `sumar`, `glosar`) | oricine |
+| `/clasamente` | **Clasamente** | oricine |
+| `/statii`, `/statie/<nume>` | **Stații** și **Stație** | oricine |
 | `#sistem` | **Sistem**: starea serviciului, calitatea citirii (24 h / 7 zile), viteza (ciclul OCR, API p50/p95); detalii pentru admin | oricine |
-| `#cum` | **Cum funcționează?**, pe înțelesul oricui: de unde vin datele, ce înseamnă „întârziere”, limitele, confidențialitatea, unde raportezi o problemă | oricine |
-| `#versiuni` | **Versiuni** (istoricul schimbărilor) | oricine |
+| `/cum` | **Cum funcționează?**, pe înțelesul oricui: de unde vin datele, ce înseamnă „întârziere”, limitele, confidențialitatea, unde raportezi o problemă | oricine |
+| `/versiuni` | **Versiuni** (istoricul schimbărilor) | oricine |
 | `#setari` | **Setări** (retenția capturilor, pragul de spațiu liber) | admin |
 | `#ocr` | **Capturi OCR** (imaginea cu dreptunghiurile OCR, text brut vs. normalizat, corecții manuale) | admin |
 | `#ocr2` | Jurnalul **alternativei OCR** (decupaje și verdicte) | admin |
