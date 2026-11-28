@@ -31,8 +31,9 @@ def test_static_private_route_and_i18n():
     css = (WEB / "infofer.css").read_text(encoding="utf-8")
     assert "var(--surface)" in css and "@import" not in css and "url(" not in css
     assert '"#infofer"' in (WEB / "admin.js").read_text(encoding="utf-8")
-    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
-    en = json.loads((WEB / "i18n" / "en.json").read_text(encoding="utf-8"))
+    # main dictionary + the private pages' one (Beta 1.76: <lang>.admin.json, loaded by I18N.loadExtra)
+    ro, en = ({**json.loads((WEB / "i18n" / f"{lang}.json").read_text(encoding="utf-8")),
+               **json.loads((WEB / "i18n" / f"{lang}.admin.json").read_text(encoding="utf-8"))} for lang in ("ro", "en"))
     keys = lambda d: {k for k in d if k.startswith(("infofer.", "admin.infofer.")) or k == "title.infofer"}  # noqa: E731
     assert keys(ro) == keys(en) and len(keys(ro)) > 40
     used = set(re.findall(r'T\("(infofer\.[A-Za-z0-9.]*[A-Za-z0-9])"', js))

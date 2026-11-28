@@ -70,6 +70,21 @@ def test_set_lang_persists_and_survives_reload(browser, base_url):  # noqa: F811
         ctx.close()
 
 
+def test_load_extra_merges_and_follows_the_language(browser, base_url):  # noqa: F811
+    # Beta 1.76: the private pages' texts are in <lang>.admin.json, loaded on demand
+    ctx, page = _open(browser, base_url)
+    try:
+        assert page.evaluate("I18N.t('admin.ago', {age: 'x'})") == "admin.ago"
+        page.evaluate("I18N.loadExtra('admin')")
+        assert page.evaluate("I18N.t('admin.ago', {age: 'x'})") == "acum x"
+        page.evaluate("I18N.setLang('en')")
+        assert page.evaluate("I18N.t('admin.ago', {age: 'x'})") == "x ago"
+        page.evaluate("I18N.setLang('ro')")
+        assert page.evaluate("I18N.t('admin.ago', {age: 'x'})") == "acum x"
+    finally:
+        ctx.close()
+
+
 def test_set_lang_rejects_invalid(browser, base_url):  # noqa: F811
     ctx, page = _open(browser, base_url, "?lang=en")
     try:

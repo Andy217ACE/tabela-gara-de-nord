@@ -17,6 +17,7 @@ import uvicorn  # noqa: E402
 from app.api import create_app  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.store import Store  # noqa: E402
+from tests.browser_errors import on_request_failed  # noqa: E402
 from tests.test_footer_browser import COUNT_JS  # noqa: E402
 
 expect = sync_api.expect  # polls from Python: no eval under the page's CSP
@@ -106,8 +107,7 @@ def _open(browser, base_url, w, h, theme, hash_):
     page.on("console", lambda m: errors.append(m.text)
             if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.on("requestfailed", lambda r: errors.append("failed " + r.url)
-            if r.url.startswith(base_url) else None)
+    on_request_failed(page, base_url, errors)   # a fetch aborted by a reload/navigation is not an error
     page.goto(base_url + "/" + hash_)
     return ctx, page, errors
 

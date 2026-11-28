@@ -17,11 +17,34 @@
 
   var active = resolve();
 
-  function load(code) {
-    return fetch("/i18n/" + code + ".json", { cache: "no-cache" })
+  function fetchDict(path) {
+    return fetch(path, { cache: "no-cache" })
       .then(function (r) { return r.ok ? r.json() : {}; })
       .catch(function () { return {}; })
-      .then(function (d) { dicts[code] = d || {}; });
+      .then(function (d) { return d || {}; });
+  }
+
+  // Extra dictionaries (e.g. "admin" → /i18n/ro.admin.json): texts of the private pages, kept out of
+  // ro.json (precached for everyone). Once asked for, load() fetches them with each language too.
+  var extras = [];
+  function load(code) {
+    var files = ["/i18n/" + code + ".json"].concat(extras.map(function (n) { return "/i18n/" + code + "." + n + ".json"; }));
+    return Promise.all(files.map(fetchDict)).then(function (ds) { dicts[code] = Object.assign.apply(null, [{}].concat(ds)); });
+  }
+
+  var extraP = {};
+  function loadExtra(name) {
+    if (!extraP[name]) {
+      extraP[name] = window.I18N.ready.then(function () {
+        var code = active;
+        return fetchDict("/i18n/" + code + "." + name + ".json").then(function (d) {
+          if (!Object.keys(d).length) { delete extraP[name]; return; }   // failed (offline, never cached): retried next time
+          if (extras.indexOf(name) < 0) extras.push(name);
+          Object.assign(dicts[code], d);
+        });
+      });
+    }
+    return extraP[name];
   }
 
   function fill(s, params) {
@@ -78,7 +101,7 @@
     var c = norm(code) || "ro";
     active = c;
     try { localStorage.setItem(KEY, c); } catch (e) { /* stocare indisponibilă: limba rămâne pe sesiune */ }
-    var p = c === "ro" ? Promise.resolve() : load(c);
+    var p = c === "ro" && !extras.length ? Promise.resolve() : load(c);
     window.I18N.ready = p.then(function () {
       try { document.dispatchEvent(new CustomEvent("i18n:change", { detail: { lang: c } })); } catch (e) { /* ignore */ }
     });
@@ -90,6 +113,7 @@
     station: station,
     applyDom: applyDom,
     setLang: setLang,
+    loadExtra: loadExtra,   // Promise; resolves once the extra dictionary is merged (failure → keys fall back to the key text)
     lang: function () { return active; },
     ready: Promise.all(jobs).then(function () { /* void */ })
   };

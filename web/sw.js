@@ -9,7 +9,7 @@
 // Bump VERSION when the shell list changes; old caches are deleted on activate.
 "use strict";
 
-var VERSION = "v52";
+var VERSION = "v53";
 var SHELL_CACHE = "tabela-shell-" + VERSION;
 var BOARD_CACHE = "tabela-board-" + VERSION;
 var BOARD_URL = "/api/board";
@@ -56,6 +56,8 @@ var SHELL = [
 // icon-512 / maskable are fetched by the browser from the manifest; not precached.
 // /i18n/en.json is NOT precached (budget): it is cached on first use (see dictFromNetwork), so the
 // English UI and the English offline page work offline once the app has been opened in English
+// /i18n/<lang>.admin.json (texts of the private admin-only pages, loaded by
+// I18N.loadExtra) are NOT precached either: cached on first use by runtimeNetworkFirst
 var DEFAULT_TITLE = "Gara de Nord";
 
 self.addEventListener("install", function (event) {
