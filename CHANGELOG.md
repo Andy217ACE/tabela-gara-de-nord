@@ -5,6 +5,20 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.77 — 2026-11-28
+### Reparat
+- **Paginile de administrare deschise offline:** dacă nu fuseseră deschise înainte, afișau denumirile interne ale textelor; acum arată „Ești offline” și o explicație clară.
+- **Revenirea conexiunii:** pagina de administrare se încarcă singură când revine internetul, fără reîmprospătare manuală.
+- **Textele paginilor private** se descarcă din nou automat la următoarea vizită dacă prima încercare a eșuat.
+- **Testare:** un test nou verifică mesajul offline și revenirea automată pe pagina Infofer.
+- **Fără efect pe paginile publice:** tabela, istoricul și statisticile funcționează offline exact ca înainte.
+### English
+- **Admin pages opened offline:** if never opened before, they showed the texts' internal names; they now show "You are offline" and a clear explanation.
+- **Back online:** the admin page loads by itself when the connection returns, with no manual refresh.
+- **Private pages' texts** are fetched again automatically on the next visit if the first attempt failed.
+- **Testing:** a new test checks the offline message and the automatic recovery on the Infofer page.
+- **No effect on public pages:** the board, history and statistics work offline exactly as before.
+
 ## Beta 1.76 — 2026-11-28
 ### Îmbunătățit
 - **Încărcare mai ușoară:** textele paginilor de administrare (Administrare, Capturi OCR, Verificare OCR, Infofer) nu mai sunt descărcate de fiecare vizitator; se încarcă doar când un administrator deschide una din aceste pagini.

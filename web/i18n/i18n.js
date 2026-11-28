@@ -38,9 +38,10 @@
       extraP[name] = window.I18N.ready.then(function () {
         var code = active;
         return fetchDict("/i18n/" + code + "." + name + ".json").then(function (d) {
-          if (!Object.keys(d).length) { delete extraP[name]; return; }   // failed (offline, never cached): retried next time
+          if (!Object.keys(d).length) { delete extraP[name]; return false; }   // failed (offline, never cached): retried next time
           if (extras.indexOf(name) < 0) extras.push(name);
           Object.assign(dicts[code], d);
+          return true;
         });
       });
     }
@@ -113,7 +114,7 @@
     station: station,
     applyDom: applyDom,
     setLang: setLang,
-    loadExtra: loadExtra,   // Promise; resolves once the extra dictionary is merged (failure → keys fall back to the key text)
+    loadExtra: loadExtra,   // Promise<boolean>: true once the extra dictionary is merged, false if it could not be fetched (retried on the next call)
     lang: function () { return active; },
     ready: Promise.all(jobs).then(function () { /* void */ })
   };

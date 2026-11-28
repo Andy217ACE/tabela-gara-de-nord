@@ -64,6 +64,7 @@
   "theme.pressFor": "Apasă pentru {next}.",
   "footer.credit": "Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR. Tabela oficială:",
   "offline.docTitle": "Offline · Tabela Gara de Nord",
+  "app.privateOffline": "Paginile de administrare au nevoie de conexiune. Se încarcă singure când revine internetul.",
   "offline.title": "Ești offline",
   "offline.text": "Tabela Gara de Nord are nevoie de conexiune pentru datele live. Dacă ai deschis-o recent, ultimele date salvate apar automat când pagina principală e disponibilă în cache.",
   "offline.retry": "Reîncearcă",

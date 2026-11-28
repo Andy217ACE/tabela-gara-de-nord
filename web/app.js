@@ -541,7 +541,7 @@
     var s = document.createElement("script");
     s.src = "ocr.js";
     s.addEventListener("load", function () { if (currentRoute === "ocr") route(); });
-    privateDict().then(function () { document.head.appendChild(s); });
+    privateDict("ocr").then(function () { document.head.appendChild(s); });
   }
 
   // „Administrare" (#admin, admin only, not in the nav): admin.js/admin.css loaded on demand.
@@ -558,11 +558,26 @@
     var s = document.createElement("script");
     s.src = "admin.js";
     s.addEventListener("load", function () { if (currentRoute === "admin") route(); });
-    privateDict().then(function () { document.head.appendChild(s); });
+    privateDict("admin").then(function () { document.head.appendChild(s); });
   }
 
   // the private pages' texts (web/i18n/<lang>.admin.json, not precached) are in before their script runs
-  function privateDict() { return window.I18N.loadExtra("admin"); }
+  // offline on a never-visited private page: a clear message instead of raw keys; retried when back online
+  function privateDict(name) {
+    return window.I18N.loadExtra("admin").then(function (ok) {
+      var sec = $("view-" + name);
+      if (ok) { if (sec && sec.hasAttribute("data-offline")) { sec.textContent = ""; sec.removeAttribute("data-offline"); } return; }
+      if (!sec) { sec = el("section", "view view-" + name); sec.id = "view-" + name; $("main").appendChild(sec); }
+      sec.hidden = currentRoute !== name;
+      sec.setAttribute("data-offline", "");
+      sec.textContent = "";
+      sec.appendChild(el("h1", null, T("offline.title")));
+      sec.appendChild(el("p", null, T("app.privateOffline")));
+      return new Promise(function (resolve) {
+        window.addEventListener("online", function () { resolve(privateDict(name)); }, { once: true });
+      });
+    });
+  }
 
   // Paginile Sistem și Setări se încarcă la prima vizită (nu sunt în precache: bugetul SW).
   var lazyPages = {};
@@ -578,7 +593,7 @@
     var s = document.createElement("script");
     s.src = js;
     s.addEventListener("load", function () { if (currentRoute === name) route(); });
-    (priv ? privateDict() : Promise.resolve()).then(function () { document.head.appendChild(s); });
+    (priv ? privateDict(name) : Promise.resolve()).then(function () { document.head.appendChild(s); });
   }
 
   // Page stylesheets load on the first visit of a view, not with the board (render-blocking otherwise).

@@ -112,3 +112,30 @@ def test_login_when_unauthenticated_and_disabled(browser, base_url):  # noqa: F8
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
     finally:
         ctx.close()
+
+
+def test_offline_private_dict_shows_message_then_recovers(browser, base_url):  # noqa: F811
+    # never-visited private page while the admin dict can't be fetched: a clear message, not raw keys;
+    # back online -> the page loads by itself
+    ctx = browser.new_context(service_workers="block", viewport={"width": 1280, "height": 900})
+    page = ctx.new_page()
+    state = {"block": True}
+
+    def admin_dict(route):
+        return route.abort() if state["block"] else route.continue_()
+    page.route("**/i18n/*.admin.json", admin_dict)
+    page.route("**/api/admin/**", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                       body=json.dumps(DATA) if r.request.url.endswith("/api/admin/infofer") else "{}"))
+    try:
+        page.goto(base_url + "/#infofer")
+        page.wait_for_selector("#view-infofer[data-offline] h1")
+        text = page.inner_text("#view-infofer")
+        assert "Ești offline" in text and "conexiune" in text
+        assert not re.search(r"\binfofer\.\w", text)
+        state["block"] = False
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        page.wait_for_selector("#infofer-live table")
+        assert page.locator("#view-infofer[data-offline]").count() == 0
+        assert page.inner_text("#infofer-heading") == "Colectare Infofer (intern)"
+    finally:
+        ctx.close()
