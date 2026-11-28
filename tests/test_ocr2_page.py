@@ -31,8 +31,9 @@ def test_static_route_lazy_and_i18n():
     assert "X-CSRF-Token" in js and "TabelaApp.views.ocr2" in js
     css = (WEB / "ocr2.css").read_text(encoding="utf-8")
     assert "var(--surface)" in css and "@import" not in css and "url(" not in css
-    ro = json.loads((WEB / "i18n" / "ro.json").read_text(encoding="utf-8"))
-    en = json.loads((WEB / "i18n" / "en.json").read_text(encoding="utf-8"))
+    # main dictionary + the private pages' one (Beta 1.76: <lang>.admin.json, loaded by I18N.loadExtra)
+    ro, en = ({**json.loads((WEB / "i18n" / f"{lang}.json").read_text(encoding="utf-8")),
+               **json.loads((WEB / "i18n" / f"{lang}.admin.json").read_text(encoding="utf-8"))} for lang in ("ro", "en"))
     keys = lambda d: {k for k in d if k.startswith("ocr2.") or k == "title.ocr2"}  # noqa: E731
     assert keys(ro) == keys(en) and len(keys(ro)) > 30
     used = set(re.findall(r'T\("(ocr2\.[A-Za-z.]*[A-Za-z])"', js)) | {"ocr2.verdict." + v for v in ("correct", "wrong", "unclear")}

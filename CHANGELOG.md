@@ -5,6 +5,21 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.76 — 2026-11-28
+### Îmbunătățit
+- **Încărcare mai ușoară:** textele paginilor de administrare (Administrare, Capturi OCR, Verificare OCR, Infofer) nu mai sunt descărcate de fiecare vizitator; se încarcă doar când un administrator deschide una din aceste pagini.
+- **Mod offline:** pachetul păstrat pe dispozitiv la prima vizită e cu aproximativ 24 KB mai mic și rămâne în limitele stabilite, fără ca ele să fie ridicate.
+- **Schimbarea limbii** pe o pagină de administrare reîncarcă și textele ei, în limba aleasă.
+### Calitate
+- **Teste:** cele două dicționare (public și de administrare) au aceleași chei în română și engleză și nu împart nicio cheie; un test verifică faptul că dicționarul de administrare nu e în precache.
+- **Teste de browser mai stabile:** o cerere întreruptă de reîncărcarea paginii (comportament normal al browserului) nu mai e raportată ca eroare; erorile reale de rețea sunt raportate în continuare.
+### English
+- **Lighter loading:** the texts of the admin pages (Administration, OCR captures, OCR review, Infofer) are no longer downloaded by every visitor; they load only when an administrator opens one of those pages.
+- **Offline mode:** the bundle kept on the device on the first visit is about 24 KB smaller and stays within the set limits, without raising them.
+- **Switching the language** on an admin page reloads its texts too, in the chosen language.
+- **Tests:** both dictionaries (public and admin) have the same keys in Romanian and English and share no key; a test checks that the admin dictionary is not precached.
+- **More stable browser tests:** a request cut off by a page reload (normal browser behaviour) is no longer reported as an error; real network errors still are.
+
 ## Beta 1.75 — 2026-11-28
 ### Securitate
 - **Administrare:** încercările greșite de autentificare se limitează acum pe fiecare IP, cu așteptare care se dublează (1 min → 1 h); un atacator nu mai poate bloca administratorul, iar o autentificare reușită resetează contorul.

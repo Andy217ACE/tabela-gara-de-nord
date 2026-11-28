@@ -541,7 +541,7 @@
     var s = document.createElement("script");
     s.src = "ocr.js";
     s.addEventListener("load", function () { if (currentRoute === "ocr") route(); });
-    document.head.appendChild(s);
+    privateDict().then(function () { document.head.appendChild(s); });
   }
 
   // „Administrare" (#admin, admin only, not in the nav): admin.js/admin.css loaded on demand.
@@ -558,12 +558,15 @@
     var s = document.createElement("script");
     s.src = "admin.js";
     s.addEventListener("load", function () { if (currentRoute === "admin") route(); });
-    document.head.appendChild(s);
+    privateDict().then(function () { document.head.appendChild(s); });
   }
+
+  // the private pages' texts (web/i18n/<lang>.admin.json, not precached) are in before their script runs
+  function privateDict() { return window.I18N.loadExtra("admin"); }
 
   // Paginile Sistem și Setări se încarcă la prima vizită (nu sunt în precache: bugetul SW).
   var lazyPages = {};
-  function loadLazyPage(name, js, css) {
+  function loadLazyPage(name, js, css, priv) {
     if (lazyPages[js]) return;
     lazyPages[js] = true;
     if (css) {
@@ -575,7 +578,7 @@
     var s = document.createElement("script");
     s.src = js;
     s.addEventListener("load", function () { if (currentRoute === name) route(); });
-    document.head.appendChild(s);
+    (priv ? privateDict() : Promise.resolve()).then(function () { document.head.appendChild(s); });
   }
 
   // Page stylesheets load on the first visit of a view, not with the board (render-blocking otherwise).
@@ -738,8 +741,8 @@
     shownRoute = name;
     document.documentElement.removeAttribute("data-deeplink");   // theme-init.js kept the board unpainted until now
     if (name === "ocr") loadOcrView();
-    if (name === "ocr2") loadLazyPage("ocr2", "ocr2.js", "ocr2.css");
-    if (name === "infofer") loadLazyPage("infofer", "infofer.js", "infofer.css");   // admin only, never precached
+    if (name === "ocr2") loadLazyPage("ocr2", "ocr2.js", "ocr2.css", true);
+    if (name === "infofer") loadLazyPage("infofer", "infofer.js", "infofer.css", true);   // admin only, never precached
     if (name === "admin") loadAdminView();
     if (name === "sistem") loadLazyPage("sistem", "sistem.js", "sistem.css");
     if (name === "setari") loadLazyPage("setari", "setari.js");

@@ -190,7 +190,10 @@ button is highlighted.
 (`tabela-lang`) → Romanian. The texts are in `web/i18n/ro.json` and `en.json` (the same keys); the
 elements have `data-i18n` / `data-i18n-attr`. The `[data-lang-toggle]` button switches the language
 without a reload (the `i18n:change` event), and `<html lang>` follows the chosen language.
-`ro.json` is precached; `en.json` is cached on first use.
+`ro.json` is precached; `en.json` is cached on first use. The private pages' texts (`admin.*`, `ocr.*`,
+`ocr2.*`, `infofer.*`) live apart, in `ro.admin.json` / `en.admin.json` (the same keys): they are not
+precached, `app.js` loads them with `I18N.loadExtra("admin")` before the page's script, and switching
+the language reloads them for the new language.
 
 ---
 
@@ -263,11 +266,11 @@ origins (HTTPS or localhost).
 - **Not** included: `ocr.*`, `ocr2.*`, `admin.*`, `sistem.*`, `setari.js`, `cum.*`
   (the administration pages and the ones loaded on demand), `versions.js` (a `defer` script in `index.html`), `stats.css` and `statistici.css` (they
   load with their page and are cached on first use), `peron_est.*`, the other `stat_*` modules
-  loaded on demand, `i18n/en.json` (cached on first use), `charts3.js`/`charts3.css` (charts),
+  loaded on demand, `i18n/en.json` and `i18n/*.admin.json` (cached on first use), `charts3.js`/`charts3.css` (charts),
   `icon-512` and `icon-maskable-512` (the browser takes them from the manifest), nor any `/api/*`
   endpoint other than the board.
-- The budget: the sum of the files in `SHELL` is about **0.8 MB** uncompressed; `ro.json` (~83 KB)
-  is the largest recent addition. `tests/test_ui3_static.py` enforces `PRECACHE_LIMIT = 800_000`, and
+- The budget: the sum of the files in `SHELL` is about **0.8 MB** uncompressed; `ro.json` (~100 KB)
+  is the largest part. `tests/test_ui3_static.py` enforces `PRECACHE_LIMIT = 800_000`, and
   `tests/test_brand_theme.py` enforces `825_000` (counted differently). See also section 11.
 - The Fira Sans 500/600/700 fonts are loaded on demand and are not in the precache; offline they fall back to
   the 400 weight (synthetic bold), as written in `sw.js`.

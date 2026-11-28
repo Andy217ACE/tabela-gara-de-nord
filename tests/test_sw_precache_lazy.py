@@ -16,6 +16,7 @@ def test_lazy_pages_not_in_shell():
     for name in LAZY:
         assert name not in shell, name
     assert "/i18n/ro.json" in shell and "en.json" not in shell
+    assert "admin.json" not in shell   # Beta 1.76: private-page texts (I18N.loadExtra), cached on first use
 
 
 def test_runtime_path_for_same_origin_get():

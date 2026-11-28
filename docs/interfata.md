@@ -186,7 +186,10 @@ focusul de tastatură iese din el. Când pagina curentă e în meniu, butonul �
 (`tabela-lang`) → română. Textele sunt în `web/i18n/ro.json` și `en.json` (aceleași chei); elementele
 au `data-i18n` / `data-i18n-attr`. Butonul `[data-lang-toggle]` schimbă limba fără reîncărcare
 (evenimentul `i18n:change`), iar `<html lang>` urmează limba aleasă. `ro.json` e în precache;
-`en.json` se pune în cache la prima folosire.
+`en.json` se pune în cache la prima folosire. Textele paginilor private (`admin.*`, `ocr.*`, `ocr2.*`,
+`infofer.*`) sunt separat, în `ro.admin.json` / `en.admin.json` (aceleași chei între ele): nu sunt
+în precache, `app.js` le încarcă cu `I18N.loadExtra("admin")` înainte de scriptul paginii, iar
+schimbarea limbii le reîncarcă pentru limba nouă.
 
 ---
 
@@ -259,11 +262,11 @@ sigure (HTTPS sau localhost).
 - **Nu** intră: `ocr.*`, `ocr2.*`, `admin.*`, `sistem.*`, `setari.js`, `cum.*`
   (paginile de administrare și cele încărcate la cerere), `versions.js` (script `defer` din `index.html`), `stats.css` și `statistici.css` (se încarcă
   cu pagina lor și intră în cache la prima folosire), `peron_est.*`, celelalte module `stat_*`
-  încărcate la cerere, `i18n/en.json` (în cache la prima folosire), `charts3.js`/`charts3.css`
+  încărcate la cerere, `i18n/en.json` și `i18n/*.admin.json` (în cache la prima folosire), `charts3.js`/`charts3.css`
   (grafice), `icon-512` și `icon-maskable-512` (browserul le ia din manifest), precum și niciun
   endpoint `/api/*` în afară de tabla.
-- Bugetul: suma fișierelor din `SHELL` e de aproximativ **0,8 MB** necomprimat; `ro.json` (~83 KB)
-  e cea mai mare parte nouă. `tests/test_ui3_static.py` impune `PRECACHE_LIMIT = 800_000`, iar
+- Bugetul: suma fișierelor din `SHELL` e de aproximativ **0,8 MB** necomprimat; `ro.json` (~100 KB)
+  e cea mai mare parte. `tests/test_ui3_static.py` impune `PRECACHE_LIMIT = 800_000`, iar
   `tests/test_brand_theme.py` impune `825_000` (alt mod de numărare). Vezi și secțiunea 11.
 - Fonturile Fira Sans 500/600/700 se încarcă la cerere și nu sunt în precache; offline cad pe
   greutatea 400 (îngroșare sintetică), cum scrie în `sw.js`.

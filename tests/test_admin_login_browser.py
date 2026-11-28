@@ -25,7 +25,7 @@ def test_static_single_login_implementation():
         assert bad not in js, bad
     assert "admin_login" not in (WEB / "sw.js").read_text(encoding="utf-8")  # lazy, not precached
     for lang in ("ro", "en"):
-        d = json.loads((WEB / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))
+        d = json.loads((WEB / "i18n" / f"{lang}.admin.json").read_text(encoding="utf-8"))
         assert not re.search(r"minut", d["admin.msg.tooMany"] + d["ocr.msg.tooMany"])
 
 
