@@ -403,7 +403,7 @@ Ce există, unde se află și unde e documentat. Omisiunile deliberate și motiv
 | Monitorizare: watchdog (repornește după 3 verificări de sănătate eșuate, cel mult o dată la 10 min, rulând ca `tabela` cu o singură regulă sudoers; alerte Telegram), timer de sănătate NVMe, timer de snapshot de securitate, verificări externe de uptime (`/api/health` răspunde și la `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operare](docs/administrare-operare.md) §10, §15 |
 | Integritatea datelor: `processing_version` pe observație, consens pe mai multe cadre, confirmarea schimbărilor de întârziere și de linie | `app/consensus.py`, `app/quality.py` | [OCR](docs/ocr.md), [Statistici și calitate](docs/statistici-calatorii-calitate.md) |
 | Suita de regresie OCR pe cadre etichetate de mână, cu praguri stricte care pică la orice regres | `tests/fixtures/ocr_truth`, `app/ocr/truth.py` | [Testare](docs/testare.md) |
-| CI la fiecare PR și pe `main` (teste inclusiv pe trei motoare de browser, `pip-audit`, verificarea versiunii, filtrele fail2ban), CodeQL (`security-extended`), Dependabot, `requirements.lock` fixat | `.github/` | [Testare](docs/testare.md) |
+| CI la fiecare PR și pe `main` (teste inclusiv pe trei motoare de browser, verificarea versiunii, filtrele fail2ban; gitleaks, bandit, SBOM + `pip-audit`), CodeQL (`security-extended`), Dependabot, `requirements.lock` fixat | `.github/` | [Testare](docs/testare.md) |
 | Documentația ține pasul cu codul: fiecare rută trebuie să apară în pagina API | `tests/test_docs_routes.py` | [Testare](docs/testare.md) |
 
 Lacune cunoscute, spuse deschis: **nu există încă o copie de siguranță în afara serverului** (decizia
@@ -524,7 +524,7 @@ trenului), ca să rămână lizibilă în taburi.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt -c requirements.lock      # Windows: .venv\Scripts\pip ...
+.venv/bin/pip install --require-hashes -r requirements.lock && .venv/bin/pip install -r requirements-dev.txt   # Windows: .venv\Scripts\pip ...
 python -m playwright install chromium firefox webkit                    # opțional: testele de browser
 ```
 
@@ -589,7 +589,7 @@ python scripts/check_release.py          # coerența versiunii
   de capturi private se omit fără ele (`OCR_TRUTH_DIR`); testele de deploy se omit fără bash și git.
 - **`.github/workflows/ci.yml`** (la fiecare PR, la push pe `main`, săptămânal): Python 3.14, Tesseract,
   dependențele fixate de `requirements.lock`, Playwright Chromium + Firefox + WebKit,
-  `scripts/check_release.py`, `pip-audit`, apoi toată suita; un al doilea job validează filtrele fail2ban
+  `scripts/check_release.py`, apoi toată suita (instalare verificată cu hash-uri); job-uri paralele rulează gitleaks, bandit și SBOM + `pip-audit`; un al doilea job validează filtrele fail2ban
   cu `fail2ban-regex` și jail-urile cu `fail2ban-client -t`.
 - **`codeql.yml`:** CodeQL `security-extended` pentru Python și JavaScript, la PR-uri, pe `main` și
   săptămânal.

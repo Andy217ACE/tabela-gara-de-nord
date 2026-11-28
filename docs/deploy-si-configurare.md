@@ -539,7 +539,7 @@ Trei workflow-uri în `.github/workflows/`:
 
 | Workflow | Când rulează | Ce face |
 |---|---|---|
-| `ci.yml`, job-ul `test` | la fiecare pull request, la push pe `main`, săptămânal (luni) și manual | Python 3.14; instalează `tesseract-ocr` și `tesseract-ocr-ron`; `pip install -r requirements-dev.txt -c requirements.lock`; instalează Playwright cu Chromium, Firefox și WebKit (testele de browser rulează, nu sar); `scripts/check_release.py`; `pip-audit` pe `requirements.lock`; apoi `python -m pytest -q` |
+| `ci.yml`, job-ul `test` | la fiecare pull request, la push pe `main`, săptămânal (luni) și manual | Python 3.14; instalează `tesseract-ocr` și `tesseract-ocr-ron`; `pip install --require-hashes -r requirements.lock`, apoi `pip install -r requirements-dev.txt`; instalează Playwright cu Chromium, Firefox și WebKit (testele de browser rulează, nu sar); `scripts/check_release.py`; apoi `python -m pytest -q` |
 | `ci.yml`, job-ul `fail2ban` | la fel | Instalează fail2ban, verifică filtrele din `deploy/fail2ban/` cu `fail2ban-regex` pe `tests/fixtures/fail2ban/` (liniile de scaner trebuie potrivite toate, traficul normal niciuna) și că fișierele de jail se încarcă (`fail2ban-client -t`) |
 | `codeql.yml` | la pull request spre `main`, la push pe `main` și săptămânal | Analiză CodeQL (`security-extended`) pentru Python și JavaScript; rezultatele apar în tab-ul Security |
 | `lock.yml` | la PR-urile Dependabot (pip) care schimbă `requirements.txt` | Regenerează `requirements.lock` cu `uv pip compile`, îl împinge pe branch-ul PR-ului și repornește CI-ul; nu execută cod din PR |

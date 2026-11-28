@@ -533,7 +533,7 @@ Three workflows in `.github/workflows/`:
 
 | Workflow | When it runs | What it does |
 |---|---|---|
-| `ci.yml`, the `test` job | on every pull request, on push to `main`, weekly (Monday) and by hand | Python 3.14; installs `tesseract-ocr` and `tesseract-ocr-ron`; `pip install -r requirements-dev.txt -c requirements.lock`; installs Playwright with Chromium, Firefox and WebKit (the browser tests run instead of skipping); `scripts/check_release.py`; `pip-audit` on `requirements.lock`; then `python -m pytest -q` |
+| `ci.yml`, the `test` job | on every pull request, on push to `main`, weekly (Monday) and by hand | Python 3.14; installs `tesseract-ocr` and `tesseract-ocr-ron`; `pip install --require-hashes -r requirements.lock`, then `pip install -r requirements-dev.txt`; installs Playwright with Chromium, Firefox and WebKit (the browser tests run instead of skipping); `scripts/check_release.py`; then `python -m pytest -q` |
 | `ci.yml`, the `fail2ban` job | the same | Installs fail2ban, checks the filters in `deploy/fail2ban/` with `fail2ban-regex` against `tests/fixtures/fail2ban/` (scanner lines must all match, normal traffic none) and that the jail files load (`fail2ban-client -t`) |
 | `codeql.yml` | on pull requests to `main`, on push to `main` and weekly | CodeQL analysis (`security-extended`) for Python and JavaScript; the results appear in the Security tab |
 | `lock.yml` | on Dependabot (pip) PRs that change `requirements.txt` | Regenerates `requirements.lock` with `uv pip compile`, pushes it to the PR branch and re-runs CI; it executes no code from the PR |
