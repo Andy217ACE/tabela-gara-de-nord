@@ -340,3 +340,32 @@ def test_load_cases_since_filters_old_days(tmp_path):
     _svc(conn, 2, day="2026-10-01"); _obs(conn, 2, 5)
     conn.commit()
     assert [c.service_id for c in PP.load_cases(conn, since="2026-09-01")] == [2]
+
+
+# --- linia ocupată: același peron la ±OCCUPIED_WINDOW_MIN minute ---------------------
+
+def _est(occupied, sched="08:00"):
+    return PP.estimate_board(_hist([4] * 6), "departure", [_train(sched=sched)], occupied)
+
+
+def test_estimate_hidden_when_same_platform_within_ten_minutes():
+    assert _est([(4, "08:10")]) == []
+    assert _est([(4, "07:50")]) == []
+
+
+def test_estimate_shown_at_eleven_minutes():
+    assert len(_est([(4, "08:11")])) == 1
+
+
+def test_estimate_shown_when_occupying_train_has_other_platform():
+    assert len(_est([(5, "08:00")])) == 1
+
+
+def test_occupied_window_wraps_over_midnight():
+    assert _est([(4, "00:03")], sched="23:55") == []
+    assert len(_est([(4, "00:06")], sched="23:55")) == 1
+
+
+def test_without_occupied_behaviour_unchanged():
+    assert _est(()) == PP.estimate_board(_hist([4] * 6), "departure", [_train()])
+    assert len(_est(())) == 1
