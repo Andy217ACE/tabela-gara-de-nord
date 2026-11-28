@@ -27,7 +27,7 @@ def test_index_has_title_meta_and_footer(client):
     r = client.get("/")
     assert r.status_code == 200
     html = r.text
-    assert "<title>Tabela Gara de Nord — sosiri și plecări live</title>" in html   # app/seo.py
+    assert "<title>Gara de Nord București – sosiri și plecări live</title>" in html   # app/seo.py
     assert '<html lang="ro">' in html
     assert '<meta name="author" content="Andy217Ace">' in html
     assert re.search(r'<meta name="description" content="[^"]+">', html)

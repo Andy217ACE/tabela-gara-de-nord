@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.api import create_app
 from app.config import Settings
 
-RO_DESC = "Sosirile și plecările din Gara de Nord București, actualizate în timp real"
+RO_DESC = "Vezi trenurile afișate acum în Gara de Nord București, cu ora programată"  # app/seo.py T["ro"]["tabela"]
 
 
 @pytest.fixture

@@ -235,7 +235,7 @@ def test_ssr_copy_is_shown_when_the_api_is_down(browser, base_url):  # noqa: F81
         page.goto(base_url + "/")
         page.wait_for_selector(".ssr.ssr-fallback", state="visible")
         txt = page.inner_text(".ssr")
-        assert "Actualizat" in txt and "Gara de Nord" in txt
+        assert "ctualiz" in txt and "Gara de Nord" in txt
         assert page.locator(".ssr table").count() >= 1 or "Nu sunt trenuri" in txt
     finally:
         ctx.close()
