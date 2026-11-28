@@ -720,7 +720,7 @@ html.pnl-noscroll, html.pnl-noscroll body { overflow: hidden; }
     background: var(--p-row);
     box-shadow: inset 4px 0 0 var(--lvl);
   }
-  .pnl-row .pnl-star { width: 40px; height: 40px; }
+  .pnl-row .pnl-star { width: 44px; height: 44px; margin: -2px; }  /* = ui2.css (ținta de 44 px) */
   .pnl-row td,
   .pnl-row:nth-child(even) td,
   .pnl-row:hover td,
