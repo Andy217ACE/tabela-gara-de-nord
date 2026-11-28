@@ -188,3 +188,17 @@ def test_nginx_redirects_to_official_domain():
     assert "location /.well-known/acme-challenge/ {" in http
     assert "return 301 https://tabelagn.online$request_uri;" in http
     assert conf.count("ipv6only=on") == 1  # nginx refuză opțiunea dublată pe [::]:443
+
+
+def test_nginx_old_domain_has_same_rate_limits_as_main():
+    conf = _read(DEPLOY / "nginx-tabela.conf")
+    blocks = conf.split("\nserver {")
+    by_name = {re.search(r"server_name ([^;]+);", b).group(1): b for b in blocks[1:]}
+    pat = (r"location = /api/admin/login \{[^}]*limit_req zone=tabela_admin_login burst=5 nodelay;",
+           r"location ~ \^/api/\(stats\|trains/stats\|trains/\[0-9\]\+/journeys\|stations\|journeys\)\(/\|\$\) "
+           r"\{[^}]*limit_req zone=tabela_stats burst=20 nodelay;")
+    for name in ("tabelagn.online", "tabelacfr.ddns.net"):
+        for p in pat:
+            assert re.search(p, by_name[name]), (name, p)
+        assert by_name[name].index("location = /api/admin/login") < by_name[name].index("location /api/ {")
+        assert by_name[name].index("location ~ ^/api/(stats") < by_name[name].index("location /api/ {")
