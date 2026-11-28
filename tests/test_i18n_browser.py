@@ -192,7 +192,7 @@ def test_board_english_fits_360(browser, base_url, view):  # noqa: F811
         print("scrollWidth(en,%s,360px)=%s" % (view, width))
         assert width <= 360
         if view == "carduri":
-            assert page.locator(".train:not(.skeleton) .follow span").first.text_content() == "follow"
+            assert page.locator(".train:not(.skeleton) .follow span").first.text_content() == "Alert"
     finally:
         ctx.close()
 
