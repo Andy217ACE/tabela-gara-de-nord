@@ -1069,12 +1069,8 @@
       ghost: pl(ex.ghost || 0, "stats.w.ghost"), low: ex.low_quality || 0 }) +
       (p.operator ? tt("stats.summary.operator", { v: p.operator }) : "") + (p.tip ? tt("stats.summary.type", { v: p.tip }) : "") +
       (p.confirmed_only ? tt("stats.summary.confirmed_only") : "");
+    if (p.no_airport) cov.append(el("span", "ss-airport-note", tt("stats.summary.no_airport")));
     sec.append(cov);
-    if (p.no_airport) {
-      var an = el("p", "ss-coverage ss-airport-note", tt("stats.summary.no_airport"));
-      an.setAttribute("role", "note");
-      sec.append(an);
-    }
 
     if (!h.sufficient) {
       var w = el("p", "st-warn ss-history");
