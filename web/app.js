@@ -266,7 +266,7 @@
     c.plat.setAttribute("aria-label", known ? T("board.platAria", { p: t.platform }) : T("board.platNone"));
     c.plat.title = known ? T("board.platAria", { p: t.platform }) : T("board.platNoneTitle");
 
-    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + name;
+    c.followLabel = (t.train_type || "") + " " + t.train_no + " " + where + " " + name;
     applyFollow(c);
 
     var sig = (read ? d : "?") + "|" + (known ? t.platform : "-");
