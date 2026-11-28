@@ -22,6 +22,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -648,6 +649,34 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
         request.app.state.prediction_cache = cache
         return d
 
+    # The head of a public page as JSON, for the SPA after an in-app navigation / language change
+    # (web/app.js syncHead): the same Page and URL rules as the server-rendered HTML (_html below;
+    # seo_cache is assigned there, before any request).
+    @app.get("/api/meta")
+    def page_meta(request: Request, path: str = "/", lang: str = "ro"):
+        lang = "en" if lang == "en" else "ro"
+        parts, page = path.split("/"), None
+        if path == "/" or len(parts) == 2 and parts[1] in seo.PUBLIC:
+            name = parts[1] or "tabela"
+            page = seo.cached(seo_cache, ("page", name, lang), seo.TTL_PAGE,
+                              lambda: seo.static_page(name, lang, store_of(request), seo_cache))
+        elif len(parts) == 3 and parts[1] == "tren":
+            no = parts[2]
+            if no.isascii() and no.isdigit() and len(no) <= 6 and 0 < int(no) < 1_000_000:
+                page = seo.train_page(int(no), lang, store_of(request), seo_cache)
+        elif len(parts) == 3 and parts[1] == "statie":
+            name = unquote(parts[2])
+            key = stations.canonical(name) if 0 < len(name) <= MAX_STATION_LEN else ""
+            page = seo.station_page(key, lang, store_of(request), seo_cache) if key else None
+        if page is None:
+            page = seo.not_found_page(path[:200], lang)
+        me, ok = seo.url(page.path, lang), seo.indexable_page(page)
+        return {"status": page.status, "title": page.title, "description": page.description, "url": me,
+                "canonical": me if ok else None, "robots": None if ok else "noindex",
+                "alternates": {c: seo.url(page.path, lg) for c, lg in (("ro", "ro"), ("en", "en"),
+                                                                       ("x-default", "ro"))} if ok else None,
+                "jsonld": seo._jsonld(page, lang) if ok else None}
+
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "DELETE"],
                    include_in_schema=False)
     def api_not_found(request: Request, rest: str):
@@ -691,7 +720,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
             page = seo.not_found_page(request.url.path, lang)
         key = ("html", page.path, page.status, lang)
         body = seo.cached(seo_cache, key, seo.TTL_PAGE, lambda: seo.render(_shell(lang), page, lang))
-        headers = {"X-Robots-Tag": "noindex"} if page.status != 200 else None
+        headers = None if seo.indexable_page(page) else {"X-Robots-Tag": "noindex"}
         return Response(body, status_code=page.status, media_type="text/html; charset=utf-8",
                         headers=headers)
 

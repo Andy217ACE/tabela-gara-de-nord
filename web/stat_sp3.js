@@ -229,7 +229,7 @@
       d.items.forEach(function (x) {
         var li = el("li", "ss-sp3-rel-i");
         var a = el("a", "ss-sp3-train", x.train);
-        a.href = "#tren?nr=" + encodeURIComponent(x.train_no);
+        a.href = window.TabelaApp.routeHref("#tren?nr=" + encodeURIComponent(x.train_no));
         li.append(a, el("span", "ss-sp3-rel-r", S.titleCase(x.route || "") + (x.operator ? ", " + x.operator : "") + " · " + board(x.board)),
           el("span", "ss-sp3-rel-s ss-t-good", tt("stats.sp3.reliable.stat", { pct: pct(x.on_time_pct), n: x.n })));
         ol.append(li);

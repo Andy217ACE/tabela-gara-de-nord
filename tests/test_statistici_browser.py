@@ -304,8 +304,8 @@ def test_problems_first(browser, problems_url, w, h, theme):
         top = items.first.text_content()
         assert "Gravitate:" in top and "Încredere:" in top and "N = " in top
         assert "De ce contează:" in top
-        assert prob.locator("a[href^='#statie?nume=PITESTI']").count() >= 1
-        assert prob.locator("a[href^='#tren?nr=925']").count() >= 1
+        assert prob.locator("a[href^='/statie/PITESTI']").count() >= 1
+        assert prob.locator("a[href^='/tren/925']").count() >= 1
         rec = page.locator(".ss-fig", has_text="Ce trenuri întârzie zi de zi")
         assert rec.locator(".ss-ptrain").count() == 4
         assert "7 din 7 zile întârziat" in rec.text_content()
@@ -313,9 +313,10 @@ def test_problems_first(browser, problems_url, w, h, theme):
         trend = page.locator(".ss-fig", has_text="Se îmbunătățește")
         assert "Istoric insuficient" not in trend.text_content()
         assert page.locator(".ss-good li").count() >= 1
-        # sample links of the problems are in-app routes
+        # sample links of the problems are in-app routes, shown as their final address (/tren/…, /statie/…)
         hrefs = page.evaluate("[...document.querySelectorAll('.ss-problems a')].map(a => a.getAttribute('href'))")
-        assert hrefs and all(x.startswith("#") for x in hrefs)
+        odd = [x for x in hrefs if not x.startswith(("/tren/", "/statie/", "/statistici", "/istoric"))]
+        assert hrefs and not odd, odd
         assert page.evaluate(NO_HSCROLL)
         assert page.evaluate(INSIDE) == []
         assert page.evaluate(COUNT_JS) == 1

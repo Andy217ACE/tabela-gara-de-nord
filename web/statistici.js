@@ -1804,7 +1804,7 @@
   function hashLink(l, cls) {
     var a = el("a", cls || "btn btn-ghost btn-sm ss-plink", l.label);
     // only in-app routes (#…): the server builds them, the page never follows anything else
-    a.href = /^#[a-z]/.test(l.href || "") ? l.href : "#statistici";
+    a.href = window.TabelaApp.routeHref(/^#[a-z]/.test(l.href || "") ? l.href : "#statistici");
     return a;
   }
 

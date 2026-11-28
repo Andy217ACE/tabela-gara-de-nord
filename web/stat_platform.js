@@ -84,7 +84,7 @@
       sec.append(table(tt("stats.pc.trains_t"), tt("stats.pc.trains_c").split("|"),
         d.trains.map(function (t) {
           var a = el("a", null, (t.train_type ? t.train_type + " " : "") + t.train_no);
-          a.href = "#tren?nr=" + t.train_no;
+          a.href = window.TabelaApp.routeHref("#tren?nr=" + t.train_no);
           return [a, S.titleCase ? S.titleCase(t.station) : t.station,
                   tt("stats.fig.compare.of", { a: num(t.changed), n: num(t.seen) }) + " (" + (BOARD_PL[t.board] || "").toLowerCase() + ")",
                   pairText(t.pair)];
