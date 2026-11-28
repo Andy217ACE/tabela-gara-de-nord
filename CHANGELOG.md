@@ -5,6 +5,26 @@ tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.84 — 2026-11-28
+### SEO
+- **La navigarea în aplicație** (meniu, Înapoi/Înainte, schimbarea limbii), titlul, descrierea, adresa canonică, variantele ro/en și datele structurate se actualizează pentru pagina afișată; titlul trimis de server pe prima pagină nu mai e înlocuit.
+- **Linkurile spre stații și trenuri** (tabelă, Panou, Istoric, Statistici) sunt adrese reale (`/statie/…`, `/tren/…`): se deschid în tab nou și sunt găsite de motoarele de căutare.
+- **Dacă serverul nu răspunde la pornire,** pagina arată ultima tabelă citită și ora ei, în loc de o pagină goală.
+- „Urmărite” nu mai e indexată și a ieșit din sitemap; data tabelei din sitemap e acum cea a ultimei capturi.
+### Securitate
+- **Sesiunile de administrare se închid la orice schimbare a 2FA** (pornire, oprire, cheie nouă).
+- Șablonul nginx din repo: domeniul vechi are aceleași limite de cereri ca domeniul principal (pe server erau deja identice).
+### Teste
+- Teste de browser pentru traseul Tabelă → Statistici → tren → Înapoi (ro și en); scoase testele sărite fără motiv.
+### English
+- **In-app navigation** (menu, Back/Forward, language switch) now updates the title, description, canonical URL, ro/en alternates and structured data for the page shown; the server-sent title of the first page is no longer replaced.
+- **Station and train links** (board, Panel, History, Statistics) are real URLs (`/statie/…`, `/tren/…`): they open in a new tab and are crawlable.
+- **If the server does not answer at startup,** the page shows the last board read and its time instead of an empty page.
+- "Followed" is no longer indexed and is out of the sitemap; the board's sitemap date is now that of the last capture.
+- **Admin sessions are closed on any 2FA change** (enable, disable, new secret).
+- Repo nginx template: the old domain has the same request limits as the main one (already identical on the server).
+- Browser tests for Board → Statistics → train → Back (ro and en); removed skips that had no reason left.
+
 ## Beta 1.83 — 2026-11-28
 ### Îmbunătățit
 - **Peronul estimat e mai precis:** estimarea nu se mai afișează când pe aceeași linie e deja anunțat alt tren (sosire sau plecare) cu ora programată la cel mult 10 minute — linia e ocupată, deci estimarea ar fi probabil greșită.
