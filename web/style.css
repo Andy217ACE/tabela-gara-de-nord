@@ -431,6 +431,12 @@ main:focus { outline: none; }
 }
 .skip-link:focus { top: 12px; }
 
+/* conținutul randat pe server pentru motoarele de căutare (app/seo.py): ascuns cât rulează
+   aplicația (theme-init.js pune mereu data-view pe <html>), vizibil fără JavaScript */
+html[data-view] .ssr { display: none; }
+.ssr { padding: 16px; }
+.ssr th, .ssr td { padding: 2px 8px; text-align: left; }
+
 svg { flex: none; }
 
 /* ---------- header ---------- */

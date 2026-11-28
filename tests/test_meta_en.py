@@ -49,7 +49,13 @@ def test_ro_head(client, path):
     _assert_ro(r.text)
 
 
+def _no_ssr(h):
+    """Body without the server-rendered content block (it is localized: app/seo.py)."""
+    h = h[h.index("</head>"):]
+    return h[:h.index('<section class="ssr"')] + h[h.index("</section>", h.index('<section class="ssr"')):]
+
+
 def test_body_identical(client):
     ro = client.get("/").text
     en = client.get("/?lang=en").text
-    assert ro[ro.index("</head>"):] == en[en.index("</head>"):]
+    assert _no_ssr(ro) == _no_ssr(en)

@@ -97,6 +97,9 @@ Funcția `get_settings()` din `app/config.py` construiește obiectul `Settings`.
 | `WEATHER_LAT` | real (grade) | `44.4323` | Latitudinea punctului pentru prognoză. | Între `-90` și `90`. În afara intervalului se folosește implicitul. | Se folosește `44.4323`. |
 | `WEATHER_LON` | real (grade) | `26.1063` | Longitudinea punctului pentru prognoză. | Între `-180` și `180`. În afara intervalului se folosește implicitul. | Se folosește `26.1063`. |
 | `WEATHER_INTERVAL_S` | întreg (secunde) | `900` | Cât de des se cere prognoza. | Doar cifre. Minimul este `300` (`MIN_INTERVAL_S`): valorile mai mici sunt ridicate la 300. | Se folosește `900`. Valorile care nu sunt doar cifre se ignoră și se folosește implicitul. |
+| `SITE_URL` | șir (URL) | `https://tabelacfr.ddns.net` | Baza adreselor absolute din `canonical`, `hreflang`, JSON-LD, `robots.txt` și `sitemap.xml` (`app/seo.py`). | URL fără bară finală. | Se folosește implicitul. |
+| `GOOGLE_SITE_VERIFICATION` | șir | gol | Adaugă `<meta name="google-site-verification">` pe pagini (Search Console, vezi [arhitectura.md](arhitectura.md) §11). | Doar valoarea `content` dată de Google. | Fără meta tag. |
+| `BING_SITE_VERIFICATION` | șir | gol | Adaugă `<meta name="msvalidate.01">` (Bing Webmaster Tools). | Doar valoarea `content` dată de Bing. | Fără meta tag. |
 
 Observații despre tabel:
 

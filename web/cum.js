@@ -82,7 +82,7 @@
     if (!sec) return;
     var wasShown = !sec.hidden;
     sec.remove();
-    if (wasShown && location.hash === "#cum") App.views.cum.show();
+    if (wasShown && document.body.getAttribute("data-route") === "cum") App.views.cum.show();
   });
 
   App.views.cum = {

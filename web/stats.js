@@ -400,7 +400,7 @@
     toSearch(p, fields).forEach(function (val, k) { s.set(k, val); });
     var q = s.toString();
     var hash = "#" + base + (q ? "?" + q : "");
-    if (location.hash !== hash) history.replaceState(null, "", hash);
+    window.TabelaApp.syncUrl(hash);
   }
 
   // Filter form; `onChange(p)` after a debounced edit. Returns {form, set(p)}.

@@ -58,7 +58,7 @@ follow. Everything runs in one small Python process on a home server, with SQLit
 | **Train detail** | Tap a train for its details, a link to its History and a "Follow (notifications)" button. |
 | **Estimated platform** | An optional column (off by default) with a platform **estimate** from the observed history (`/api/predict/peron`), shown only above the accuracy threshold measured in a backtest, otherwise "—". It is labelled as an estimate, not CFR information. |
 | **Following + Web Push** | Follow a train for the day and get a notification when its delay or platform changes, or when it leaves the board. A change is pushed only after several confirming readings, so a one-frame misread never triggers a notification. |
-| **History and search** | What the board showed on a day, or across all days: filters for day, train, station, time range and panel; journey detail in a dialog with the observed delay chart; deep links such as `#istoric?train=1636&date=2026-10-21`; "Load N more" paging; CSV export through the API. |
+| **History and search** | What the board showed on a day, or across all days: filters for day, train, station, time range and panel; journey detail in a dialog with the observed delay chart; deep links such as `/istoric?train=1636&date=2026-10-21`; "Load N more" paging; CSV export through the API. |
 | **Journeys** | One appearance of a train on a panel on a service day, with a final result: `confirmed`, `unconfirmed` (with a reason), `unknown` or `in_progress`. |
 | **Statistics and charts** | Punctuality, typical delay, rankings, heatmaps, weekdays, routes, operators and categories, "what changed this week", period comparison, platform changes, dwell time on the board, seasons and weather. Every figure carries its sample size **N**; below the minimum sample no percentage is shown. |
 | **Trains and stations** | A public train catalog with a page per train (`#tren?nr=…`) and per station (`#statie?nume=…`), with charts and CSV/JSON exports. Station names are shown with diacritics (Brașov, Aeroport Henri Coandă); search ignores diacritics. |
@@ -73,20 +73,23 @@ follow. Everything runs in one small Python process on a home server, with SQLit
 
 ## Pages
 
-The app is a single HTML page (`web/index.html`); each page is a fragment of the address.
+The app is a single HTML page (`web/index.html`). The public pages have their own address
+(served with their own title, description and content for search engines, `app/seo.py`); the
+private ones are a fragment of the address. Old `#…` links of the public pages still work and are
+rewritten to the path (`/#statistici` → `/statistici`). English: `?lang=en`.
 
-| Fragment | Page | Who |
+| Address | Page | Who |
 |---|---|---|
-| `#` (no fragment) | **Board** (Cards / Panel / full screen) | everyone |
-| `#istoric` | **History** (one day or all days) | everyone |
-| `#urmarite` | **Followed** trains and the notification switch | everyone |
-| `#trenuri`, `#tren?nr=<number>` | **Trains** (catalog) and **Train** (profile, journeys, charts) | everyone |
-| `#statistici` | **Statistics**; sections can be linked: `#statistici?sect=probleme` (also `bune`, `rute`, `operatori`, `sumar`, `glosar`) | everyone |
-| `#clasamente` | **Rankings** | everyone |
-| `#statii`, `#statie?nume=<name>` | **Stations** and **Station** | everyone |
+| `/` | **Board** (Cards / Panel / full screen) | everyone |
+| `/istoric` | **History** (one day or all days) | everyone |
+| `/urmarite` | **Followed** trains and the notification switch | everyone |
+| `/trenuri`, `/tren/<number>` | **Trains** (catalog) and **Train** (profile, journeys, charts) | everyone |
+| `/statistici` | **Statistics**; sections can be linked: `/statistici?sect=probleme` (also `bune`, `rute`, `operatori`, `sumar`, `glosar`) | everyone |
+| `/clasamente` | **Rankings** | everyone |
+| `/statii`, `/statie/<name>` | **Stations** and **Station** | everyone |
 | `#sistem` | **System**: service state, reading quality (24 h / 7 days), speed (OCR cycle, API p50/p95); details for admins | everyone |
-| `#cum` | **How it works**, in plain language: where the data comes from, what "delay" means, limits, privacy, where to report a problem | everyone |
-| `#versiuni` | **Versions** (the changelog) | everyone |
+| `/cum` | **How it works**, in plain language: where the data comes from, what "delay" means, limits, privacy, where to report a problem | everyone |
+| `/versiuni` | **Versions** (the changelog) | everyone |
 | `#setari` | **Settings** (capture retention, free-space threshold) | admin |
 | `#ocr` | **OCR captures** (image with OCR boxes, raw vs. normalized text, manual corrections) | admin |
 | `#ocr2` | **OCR alternative** journal (crops and verdicts) | admin |

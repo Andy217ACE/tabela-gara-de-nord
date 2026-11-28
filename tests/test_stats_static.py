@@ -43,7 +43,7 @@ def test_stats_js_uses_api_and_rules():
                    "encodeURIComponent(name)", "#tren?nr=",
                    "Eșantion mic (N = ", "procentele nu sunt afișate",
                    "Încă nu există trenuri cu cel puțin", "below_min",
-                   "București Nord", "sufficient === false", "history.replaceState"):
+                   "București Nord", "sufficient === false", "TabelaApp.syncUrl"):
         assert needle in js, needle
     # a missing value is „—”, never 0
     assert 'v == null ? "—"' in js
@@ -71,7 +71,7 @@ def test_index_has_stats_views_nav_and_assets():
         assert f'id="view-{v}"' in html, v
     for route, label in (("trenuri", "Trenuri"), ("statistici", "Statistici"),
                          ("clasamente", "Clasamente")):
-        assert re.search(rf'<a class="nav-item" href="#{route}" data-route="{route}">\s*<svg class="nav-icon"',
+        assert re.search(rf'<a class="nav-item" href="/{route}" data-route="{route}">\s*<svg class="nav-icon"',
                          html), route
         assert f">{label}</span>" in html and label in _RO_VALUES, label
     assert 'id="rank-stations"' in html
@@ -118,8 +118,8 @@ def test_station_views_wired():
         assert needle in app, needle
     html = (WEB / "index.html").read_text(encoding="utf-8")
     for needle in ('id="view-statii"', 'id="view-statie"', 'id="st-statii"', 'id="st-statie"',
-                   'id="statie-heading"', 'id="statie-sub"', 'href="#statii"',
-                   '<a class="nav-item" href="#statii" data-route="statii">'):
+                   'id="statie-heading"', 'id="statie-sub"', 'href="/statii"',
+                   '<a class="nav-item" href="/statii" data-route="statii">'):
         assert needle in html, needle
     assert html.count("<footer") == 1
 

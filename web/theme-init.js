@@ -92,7 +92,7 @@
 // app.js (care scoate atributul), altfel apare o clipă și pagina sare (CLS).
 (function () {
   var h = (location.hash || "").split("?")[0];
-  if (h && h !== "#" && h !== "#tabela") document.documentElement.setAttribute("data-deeplink", "");
+  if ((h && h !== "#" && h !== "#tabela") || location.pathname !== "/") document.documentElement.setAttribute("data-deeplink", "");
   // modul tabelei (Panou / Carduri) înainte de prima pictare, ca în panel.js restore(): fără schimbare de așezare
   var v = null;
   try { v = localStorage.getItem("tabela.view"); } catch (e) { /* ignore */ }
