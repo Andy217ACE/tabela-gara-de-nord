@@ -183,7 +183,10 @@ def reset_failures() -> None:
 
 
 def _sign(token: str, exp: int) -> str:
-    return hmac.new(token.encode(), f"session:{exp}".encode(), hashlib.sha256).hexdigest()
+    # The key also covers the TOTP secret (none = b""): enabling, disabling or rotating 2FA
+    # invalidates every session issued before.
+    key = token.encode() + b"\x00" + (totp_key() or b"")
+    return hmac.new(key, f"session:{exp}".encode(), hashlib.sha256).hexdigest()
 
 
 def make_session(token: str, now: float | None = None) -> str:
