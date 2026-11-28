@@ -255,7 +255,7 @@ async def stats_reliable_route(request: Request):
 
 @router.get("/api/stats/rankings")
 async def stats_rankings(request: Request):
-    p = stats_params(request)
+    p = params(request)  # #clasamente has no toggle: keep every journey unless fara_aeroport=1
     fmt = _fmt(request)
     limit = _int(request.query_params.get("limit"), "limit", 1, RANK_MAX) or 10
 

@@ -5,6 +5,23 @@ tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
 
+## Beta 1.79 — 2026-11-28
+### Adăugat
+- **Statistici: comutator „Fără aeroport”, activ implicit.** Cursele spre și dinspre Aeroport Henri Coandă sunt foarte scurte și aproape mereu la timp, așa că umflau procentul „la timp”; acum sunt scoase din toate calculele paginii Statistici, inclusiv din exporturi.
+- **Bifa stă lângă „Doar confirmate”** și se poate combina cu ea; debifată, cursele de aeroport revin în calcule, iar linkul paginii păstrează alegerea (`fara_aeroport=0`).
+- **O notă scurtă în sumar** spune când cursele de aeroport sunt scoase.
+### Schimbat
+- **Paginile de tren și de stație, Istoricul, Clasamente și catalogul** arată în continuare toate cursele, inclusiv pe cele de aeroport.
+- **`/robots.txt` și `/sitemap.xml`** răspund și la cererile HEAD (înainte dădeau 404).
+- **Testare:** testul de pe telefon al paginii Statistici nu mai depinde de înălțimea exactă a sumarului.
+### English
+- **Statistics: "Without Airport" toggle, on by default.** Trips to and from Henri Coandă Airport are very short and almost always on time, so they inflated the on-time rate; they are now left out of every figure on the Statistics page, exports included.
+- **The checkbox sits next to "Confirmed only"** and combines with it; unticked, the airport trips come back, and the page link keeps the choice (`fara_aeroport=0`).
+- **A short note in the summary** says when airport trips are left out.
+- **Train and station pages, History, Rankings and the catalog** still show every trip, airport ones included.
+- **`/robots.txt` and `/sitemap.xml`** now answer HEAD requests (they returned 404 before).
+- **Testing:** the Statistics phone test no longer depends on the summary's exact height.
+
 ## Beta 1.78 — 2026-11-28
 ### Adăugat
 - **Statistici: „Erori de citire”** — capturile necitite, rândurile necitite, rândurile citite parțial, trenurile fantomă eliminate și rata erorilor, pe ultimele 24 h, 48 h, 5, 7 și 30 de zile, fiecare cu o explicație pe înțeles; API public `GET /api/stats/read-errors` (doar numărători agregate, actualizate la cel mult 5 minute).

@@ -61,8 +61,10 @@ def test_other_statistici_routes(client):
         assert d0["params"]["no_airport"] is True and d1["params"]["no_airport"] is False
         if key:
             assert d0[key] == 6 and d1[key] == 12
-    rk = client.get("/api/stats/rankings?min=1").json()
-    assert AIR not in [s["station"] for s in rk["stations"]["most_delayed"]]
+    # #clasamente has no toggle: airport kept by default, out only on request
+    names = lambda q: [s["station"] for s in client.get("/api/stats/rankings?min=1" + q).json()["stations"]["most_delayed"] + client.get("/api/stats/rankings?min=1" + q).json()["stations"]["most_punctual"]]
+    assert AIR not in names("&fara_aeroport=1")
+    assert AIR in names("")
     for path in ("/api/stats/heatmap", "/api/stats/reliable", "/api/stats/changes", "/api/stats/seasons"):
         assert client.get(path).status_code == 200, path
         assert client.get(path + "?fara_aeroport=0").status_code == 200, path
