@@ -15,7 +15,32 @@ tabelă live, un istoric căutabil, statistici pe călătorii și notificări We
 le urmărești. Totul rulează într-un singur proces Python mic, pe un server de acasă, cu SQLite ca unică
 bază de date.
 
-**Live:** https://tabelagn.online
+**Live:** https://tabelagn.online (vechea adresă `tabelacfr.ddns.net` trimite aici, vezi
+[Domeniu și adrese](#domeniu-și-adrese)).
+
+<p align="center"><img src="docs/media/demo.gif" alt="Scurt tur animat al paginilor publice pe desktop: Panoul cu sosirile, vizualizarea Carduri cu sosiri și plecări, Statistici, Istoric și pagina unui tren în tema luminoasă, apoi Panoul, Statisticile și tabela în engleză în tema întunecată" width="800"></p>
+
+<table>
+  <tr>
+    <td><img src="docs/media/mobil-carduri-light.png" alt="Telefon, temă luminoasă: tabela de sosiri ca carduri, cu întârziere, linie și butoane de urmărire, plus bara de navigare de jos" width="190"></td>
+    <td><img src="docs/media/mobil-carduri-dark.png" alt="Telefon, temă întunecată: aceleași carduri de sosiri în tema întunecată" width="190"></td>
+    <td><img src="docs/media/mobil-statistici-light.png" alt="Telefon, temă luminoasă: pagina Statistici cu cardurile de rezumat (la timp, întârziere în medie, trenuri analizate)" width="190"></td>
+    <td><img src="docs/media/mobil-tren-dark.png" alt="Telefon, temă întunecată: pagina unui tren cu călătoriile observate și punctualitatea" width="190"></td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <td><img src="docs/media/desktop-panou-light.png" alt="Desktop, temă luminoasă: Panoul în stil de gară cu sosirile, filtrele, starea datelor și widgetul meteo" width="400"></td>
+    <td><img src="docs/media/desktop-statistici-dark.png" alt="Desktop, temă întunecată: pagina Statistici cu filtrele, comutatorul Fără aeroport bifat și cardurile de rezumat" width="400"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/desktop-istoric-light.png" alt="Desktop, temă luminoasă: Istoricul pe toate zilele, cu filtre și rezumatele la timp pentru sosiri și plecări" width="400"></td>
+    <td><img src="docs/media/desktop-en-dark.png" alt="Desktop, temă întunecată: varianta în engleză a tabelei (?lang=en) ca carduri, sosiri și plecări una lângă alta" width="400"></td>
+  </tr>
+</table>
+
+Imaginile sunt capturi reale, doar ale paginilor publice, refăcute cu
+`python scripts/make_demo_media.py` (Playwright + Pillow) în [`docs/media/`](docs/media/).
 
 **Stare: Beta.** Versiunea curentă e în [`VERSION`](VERSION), istoricul în
 [`CHANGELOG.md`](CHANGELOG.md), în aplicație la `#versiuni` și în
@@ -46,6 +71,7 @@ bază de date.
 - [Testare și CI](#testare-și-ci)
 - [Versiuni](#versiuni)
 - [Deploy (server Ubuntu)](#deploy-server-ubuntu)
+- [Domeniu și adrese](#domeniu-și-adrese)
 - [Documentație](#documentație)
 - [Contribuții, politica de securitate, licență](#contribuții-politica-de-securitate-licență)
 - [Atribuire](#atribuire)
@@ -61,8 +87,8 @@ bază de date.
 | **Urmărire + Web Push** | Urmărești un tren pentru ziua respectivă și primești o notificare când i se schimbă întârzierea sau linia ori când dispare de pe tabelă. O schimbare se trimite doar după mai multe citiri care o confirmă, deci o citire greșită într-un singur cadru nu produce niciodată o notificare. |
 | **Istoric și căutare** | Ce a afișat tabela într-o zi sau pe toate zilele: filtre pe zi, tren, stație, interval orar și panou; detaliul călătoriei într-un dialog, cu graficul întârzierii observate; linkuri directe ca `/istoric?train=1636&date=2026-10-21`; paginare cu „Încarcă încă N”; export CSV prin API. |
 | **Călătorii** | O apariție a unui tren pe un panou într-o zi de serviciu, cu un rezultat final: `confirmed`, `unconfirmed` (cu motiv), `unknown` sau `in_progress`. |
-| **Statistici și grafice** | Punctualitate, întârziere tipică, clasamente, hărți de căldură, zilele săptămânii, rute, operatori și categorii, „ce s-a schimbat săptămâna asta”, comparație între perioade, linii schimbate, cât stă trenul pe tabelă, sezoane și meteo. Fiecare cifră are lângă ea eșantionul **N**; sub eșantionul minim nu se afișează procente. |
-| **Trenuri și stații** | Un catalog public al trenurilor, cu o pagină pe tren (`#tren?nr=…`) și pe stație (`#statie?nume=…`), cu grafice și exporturi CSV/JSON. Numele stațiilor apar cu diacritice (Brașov, Aeroport Henri Coandă); căutarea ignoră diacriticele. |
+| **Statistici și grafice** | Punctualitate, întârziere tipică, clasamente, hărți de căldură, zilele săptămânii, rute, operatori și categorii, „ce s-a schimbat săptămâna asta”, comparație între perioade, linii schimbate, cât stă trenul pe tabelă, sezoane și meteo, „Erori de citire”. Fiecare cifră are lângă ea eșantionul **N**; sub eșantionul minim nu se afișează procente. Un comutator **„Fără aeroport”** (activ implicit) scoate din pagina Statistici cursele foarte scurte și aproape mereu la timp de la Aeroport Henri Coandă. |
+| **Trenuri și stații** | Un catalog public al trenurilor, cu o pagină pe tren (`/tren/1636`) și pe stație (`/statie/BRASOV`), cu grafice și exporturi CSV/JSON. Numele stațiilor apar cu diacritice (Brașov, Aeroport Henri Coandă); căutarea ignoră diacriticele. |
 | **Indicatori de calitate a datelor** | Valorile OCR nesigure sunt subliniate punctat, cu titlul „citire nesigură”; serviciile-fantomă (citiri greșite) sunt ascunse; perioadele de calitate redusă sunt marcate și excluse implicit din statistici. |
 | **Meteo** | Un widget mic lângă ceas, cu condițiile curente din București (date de model Open-Meteo) și graficul temperaturii pe 24 h. |
 | **PWA / offline** | Instalabilă; funcționează offline cu ultima tabelă (marcată „date vechi”) și o pagină offline cu sigla. |
@@ -87,7 +113,7 @@ continuare și sunt rescrise la adresa nouă (`/#statistici` → `/statistici`).
 | `/trenuri`, `/tren/<număr>` | **Trenuri** (catalog) și **Tren** (profil, călătorii, grafice) | oricine |
 | `/statistici` | **Statistici**; secțiunile au linkuri directe: `/statistici?sect=probleme` (și `bune`, `rute`, `operatori`, `sumar`, `glosar`) | oricine |
 | `/clasamente` | **Clasamente** | oricine |
-| `/statii`, `/statie/<nume>` | **Stații** și **Stație** | oricine |
+| `/statii`, `/statie/<CHEIE>` | **Stații** și **Stație** (cheia e numele stației din baza de date, de ex. `/statie/BRASOV`) | oricine |
 | `#sistem` | **Sistem**: starea serviciului, calitatea citirii (24 h / 7 zile), viteza (ciclul OCR, API p50/p95); detalii pentru admin | oricine |
 | `/cum` | **Cum funcționează?**, pe înțelesul oricui: de unde vin datele, ce înseamnă „întârziere”, limitele, confidențialitatea, unde raportezi o problemă | oricine |
 | `/versiuni` | **Versiuni** (istoricul schimbărilor) | oricine |
@@ -95,9 +121,22 @@ continuare și sunt rescrise la adresa nouă (`/#statistici` → `/statistici`).
 | `#ocr` | **Capturi OCR** (imaginea cu dreptunghiurile OCR, text brut vs. normalizat, corecții manuale) | admin |
 | `#ocr2` | Jurnalul **alternativei OCR** (decupaje și verdicte) | admin |
 | `#admin` | **Administrare** (vezi [Administrare](#administrare)) | admin |
+| `#infofer` | un **experiment intern, privat** (vezi [Administrare](#administrare)) | admin |
 
-Paginile de administrare nu apar în meniu și nu intră în precache-ul service worker-ului. Lista completă,
-cu scriptul din spatele fiecărei pagini, e în [Interfața](docs/interfata.md).
+Paginile de administrare nu apar în meniu, nu intră în precache-ul service worker-ului, iar textele lor
+(`web/i18n/ro.admin.json`, `en.admin.json`) se descarcă doar când un administrator deschide una dintre ele.
+Lista completă, cu scriptul din spatele fiecărei pagini, e în [Interfața](docs/interfata.md).
+
+**Motoare de căutare (SEO).** Pentru fiecare pagină publică serverul trimite titlul, descrierea, adresa
+canonică, variantele `hreflang` (ro, en, x-default), etichetele de previzualizare pentru rețele sociale
+și date structurate JSON-LD (site-ul, gara București Nord, calea paginii, un `TrainTrip` pe pagina unui
+tren; editorul e proiectul independent, nu CFR), plus un rezumat în HTML simplu (plecările și sosirile
+curente, listele de trenuri și stații, cu nota despre OCR și că proiectul nu e afiliat CFR). `/robots.txt`
+și `/sitemap.xml` sunt generate (română + engleză, trenurile văzute în ultimele 90 de zile, stațiile);
+API-ul și paginile private sunt excluse. O adresă necunoscută primește un 404 real, marcat `noindex`; bara
+finală, majusculele și alte forme ale numelui stației se redirecționează permanent. Etichetele de
+verificare Google Search Console și Bing sunt opționale, prin `GOOGLE_SITE_VERIFICATION` și
+`BING_SITE_VERIFICATION`.
 
 ## Cum funcționează
 
@@ -243,9 +282,19 @@ descrise în [Administrare și operare](docs/administrare-operare.md).
   limbaj) și „Ce merge bine”, rute, operatori și categorii (bare de pondere, matricea operator ×
   categorie), cele mai punctuale trenuri, harta de căldură (zi a săptămânii × oră), zilele săptămânii,
   întârzieri în trepte, linii schimbate după anunț, cât stă trenul pe tabelă, sezoane și meteo. Filtrele
-  (perioadă, panou, operator, categorie, doar confirmate) rămân vizibile și pot fi salvate pe dispozitiv
+  (perioadă, panou, operator, categorie, doar confirmate, fără aeroport) rămân vizibile și pot fi salvate pe dispozitiv
   ca cel mult 5 seturi; mod simplu/expert și opțiune de contrast ridicat; fiecare grafic și tabel se
   exportă în CSV (UTF-8 cu BOM) și PNG; graficele se desenează pe măsură ce derulezi.
+- **„Fără aeroport”** (activ implicit, lângă „Doar confirmate” și combinabil cu ea): cursele spre și
+  dinspre Aeroport Henri Coandă sunt foarte scurte și aproape mereu la timp, deci umflau procentul „la
+  timp”; sunt scoase din toate calculele paginii Statistici, iar o notă scurtă în sumar spune asta.
+  Debifat, cursele revin, iar linkul paginii păstrează alegerea (`fara_aeroport=0`, acceptat și de API-ul
+  de statistici). Paginile de tren și de stație, Istoricul, Clasamentele și catalogul arată în continuare
+  toate cursele.
+- **„Erori de citire”** (`GET /api/stats/read-errors`, public, păstrat 5 minute): capturile necitite,
+  rândurile necitite și citite parțial, trenurile fantomă eliminate și rata erorilor pe ultimele 24 h,
+  48 h, 5, 7 și 30 de zile (ferestre glisante care se încheie acum), fiecare cu o explicație pe înțeles;
+  pagina Sistem folosește aceleași numărători.
 - **Estimările nu se publică până nu își câștigă dreptul.** Estimarea întârzierii finale pe tren
   (`/api/trains/{nr}/prediction`) rămâne `published: false` până trece o poartă de calitate (30 de zile de
   date bune, 100 de predicții, eroare sub cea de referință). Comparația pe sezoane nu arată cifre sub 30
@@ -274,6 +323,11 @@ sequenceDiagram
 - O schimbare se trimite doar după ce e văzută în mai multe citiri reușite; evenimentele `appeared` și o
   linie golită („fără linie”) nu se trimit niciodată; aceeași valoare nu se trimite de două ori.
 - Cel mult 20 de urmăriri active pe abonare; abonările care răspund 404/410 se șterg automat.
+- Dezabonarea, urmărirea, lista trenurilor urmărite și mutarea lor cer dovada că abonarea îți aparține
+  (cheia ei `auth`: în corpul cererii sau, pentru lista urmăririlor, în antetul `X-Push-Auth`, care nu se
+  scrie în loguri), nu doar adresa ei; mutarea urmăririlor respectă limita de 20.
+- O abonare făcută cu o cheie de push veche e refuzată de serviciul de push; aplicația o reface atunci
+  singură la deschidere și mută trenurile urmărite pe abonarea nouă (`POST /api/push/resubscribe`).
 - Adresele de push se acceptă doar pentru servicii de push cunoscute, prin HTTPS (protecție împotriva
   SSRF, `app/endpoints.py`), iar locația `/api/follows` nu se scrie în logul de acces nginx.
 - Necesită HTTPS; pe iPhone/iPad funcționează doar pentru aplicația adăugată pe ecranul principal.
@@ -360,7 +414,12 @@ Administrarea se activează cu `ADMIN_TOKEN` în `/etc/tabela.env` (minim 12 car
 `ADMIN_TOKEN_STRICT=1`, minim 24, altfel serviciul refuză să pornească). Fără el, toate rutele
 `/api/admin/*` răspund 503. Autentificarea se face din `#ocr` sau `#admin` (cookie de sesiune HttpOnly,
 Secure, SameSite=Strict, valabil 12 h, care conține un HMAC, nu tokenul) sau cu `Authorization: Bearer`,
-pe server.
+pe server. Încercările greșite se limitează pe fiecare IP, cu o așteptare care se dublează (1 min → 1 h);
+o limită globală doar încetinește eșecurile, deci un atacator nu poate bloca administratorul, iar o
+autentificare reușită resetează contorul. **Autentificarea în doi pași (TOTP) e opțională și oprită
+implicit:** cu `ADMIN_TOTP_SECRET` (creat cu `scripts/admin_totp_setup.py`) toate formularele de
+autentificare cer și codul de 6 cifre (RFC 6238, fiecare cod acceptat o singură dată), iar tokenul Bearer
+se acceptă doar de pe serverul însuși.
 
 Pagina **`#admin`** are aceste carduri:
 
@@ -373,6 +432,14 @@ Pagina **`#admin`** are aceste carduri:
 | **Test notificări push** | trimite o notificare de test, doar către abonarea dispozitivului de pe care apeși |
 | **Duplicate de numere de tren** | raport, aplicare (cu copie de siguranță întâi) și restaurarea fuziunilor |
 | **Marcaje propuse (OCR13)** | listă informativă dintr-o analiză a istoricului vechi; nimic de aplicat |
+| **Test Infofer** | un link către `#infofer`, experimentul intern descris mai jos |
+
+**`#infofer` (experiment intern, privat).** Un test intern temporar care măsoară dacă întârzierea la
+sosire s-ar putea estima mai devreme decât apare pe tabelă. Un colector (`scripts/infofer_collect.py`,
+`tabela-infofer.timer`) scrie într-o bază separată, pe care aplicația doar o citește; pagina
+(`GET /api/admin/infofer`, `no-store`) îi arată administratorului starea colectării și cifre preliminare
+de precizie. E doar pentru administrator, nu apare în meniu, nu se indexează (`robots.txt`) și nimic din
+ea nu apare pe paginile publice.
 
 Celelalte pagini de administrare: **`#ocr`** (capturile cu dreptunghiurile OCR colorate după încredere:
 verde ≥ 80, galben 50–79, roșu < 50; text brut vs. normalizat pe câmp; „Copiază JSON”; reguli de corecție
@@ -398,15 +465,16 @@ Ce există, unde se află și unde e documentat. Omisiunile deliberate și motiv
 | CSP strict (`default-src 'self'`, fără script/stil inline, `frame-ancestors 'none'`), `nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` | `app/api.py`, `web/` | [Interfața](docs/interfata.md), [API](docs/api.md) |
 | DOM construit doar cu `createElement` / `textContent` (fără `innerHTML`), impus de teste statice | `web/*.js`, `tests/` | [Interfața](docs/interfata.md) |
 | HSTS și limitarea cererilor în nginx (`tabela_api` 10 c/s burst 20, `tabela_stats` 60 c/min, `tabela_admin_login` 5 c/min), `client_max_body_size 8k`, `server_tokens off` | `deploy/nginx-tabela.conf`, `deploy/tabela-limits.conf` | [Deploy](docs/deploy-si-configurare.md) §6 |
-| Autentificare admin: un singur token comparat în timp constant, cookie de sesiune semnat HMAC cu expirare, token CSRF (+ verificarea originii), 5 eșecuri/min/IP și 30/min în total → 429, `Cache-Control: private, no-store` | `app/admin.py` | [API](docs/api.md) §6, [Rotația cheii](docs/admin-rotatie-cheie.md) |
+| Autentificare admin: un singur token comparat în timp constant, cookie de sesiune semnat HMAC cu expirare, token CSRF (+ verificarea originii), după 5 eșecuri un IP e refuzat (429) cu o așteptare care se dublează (1 min → 1 h), o limită globală de 30/min doar încetinește eșecurile, TOTP opțional (`ADMIN_TOTP_SECRET`), `Cache-Control: private, no-store` | `app/admin.py`, `app/totp.py` | [API](docs/api.md) §6, [Rotația cheii](docs/admin-rotatie-cheie.md) |
 | Firewall: `ufw` deny incoming, doar 80/443 publice, SSH doar din rețeaua locală; uvicorn ascultă doar pe `127.0.0.1` | server | [Deploy](docs/deploy-si-configurare.md) §7 |
 | fail2ban: jail-urile `sshd`, `nginx-tabela-probes`, `nginx-tabela-slow` (ban-uri crescătoare pentru recidiviști); filtrele sunt testate în CI | `deploy/fail2ban/` | [Operare](docs/administrare-operare.md) §15 |
-| Întărire systemd: utilizator fără privilegii, `NoNewPrivileges`, `ProtectSystem=strict` (scrie doar în `/var/lib/tabela`), `PrivateTmp`, `PrivateDevices`, `RestrictAddressFamilies`, un singur worker, `OMP_THREAD_LIMIT=1` | `deploy/tabela.service` | [Deploy](docs/deploy-si-configurare.md) §5 |
+| Întărire systemd: utilizator fără privilegii, `NoNewPrivileges`, `ProtectSystem=strict` (scrie doar în `/var/lib/tabela`), `PrivateTmp`, `PrivateDevices`, `RestrictAddressFamilies`, un singur worker, `OMP_THREAD_LIMIT=1`; limite de memorie, procesor și procese (cgroup) pe toate serviciile | `deploy/tabela*.service` | [Deploy](docs/deploy-si-configurare.md) §5 |
 | Copii de siguranță: automate și verificate înaintea fiecărei migrări de schemă (se păstrează ultimele 5) și înaintea operațiilor distructive din admin; `update.sh` revine la codul vechi dacă verificarea de sănătate eșuează | `app/dbbackup.py`, `deploy/update.sh` | [Operare](docs/administrare-operare.md) §6 |
-| Monitorizare: watchdog (repornește după 3 verificări de sănătate eșuate, cel mult o dată la 10 min, rulând ca `tabela` cu o singură regulă sudoers; alerte Telegram), timer de sănătate NVMe, timer de snapshot de securitate, verificări externe de uptime (`/api/health` răspunde și la `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operare](docs/administrare-operare.md) §10, §15 |
+| Monitorizare: watchdog (repornește după 3 verificări de sănătate eșuate, cel mult o dată la 10 min, rulând ca `tabela` cu o singură regulă sudoers; alerte Telegram), alerte de operare pe Telegram la 5 minute (site căzut, OCR degradat, disc plin, unități căzute, cu mesaj „rezolvat”; `scripts/ops_alerts.py`, `tabela-ops-alerts.timer`), timer de sănătate NVMe, timer de snapshot de securitate, verificări externe de uptime (`/api/health` răspunde și la `HEAD`) | `app/watchdog.py`, `scripts/ops_alerts.py`, `deploy/tabela-*.timer` | [Operare](docs/administrare-operare.md) §10, §15 |
 | Integritatea datelor: `processing_version` pe observație, consens pe mai multe cadre, confirmarea schimbărilor de întârziere și de linie | `app/consensus.py`, `app/quality.py` | [OCR](docs/ocr.md), [Statistici și calitate](docs/statistici-calatorii-calitate.md) |
-| Suita de regresie OCR pe cadre etichetate de mână, cu praguri stricte care pică la orice regres | `tests/fixtures/ocr_truth`, `app/ocr/truth.py` | [Testare](docs/testare.md) |
-| CI la fiecare PR și pe `main` (teste inclusiv pe trei motoare de browser, verificarea versiunii, filtrele fail2ban; gitleaks, bandit, SBOM + `pip-audit`), CodeQL (`security-extended`), Dependabot, `requirements.lock` fixat | `.github/` | [Testare](docs/testare.md) |
+| Suita de regresie OCR pe cadre etichetate de mână (un set de dezvoltare și un set de validare oarbă, cu valori de referință versionate), care pică la orice regres; urmărirea zilnică a preciziei | `tests/fixtures/ocr_truth`, `app/ocr/truth.py`, `scripts/ocr_accuracy_daily.py` | [Testare](docs/testare.md), [OCR](docs/ocr.md) |
+| Verificări automate WCAG 2.2 AA (axe-core) pe 12 pagini (cele publice plus `#setari` și `#admin`) în ambele teme, la 390 și 1280 px, și limite de performanță (LCP, CLS, TBT, octeți, cereri) pe un telefon simulat lent | `tests/test_axe_wcag22_browser.py`, `tests/test_perf_budgets_browser.py`, `tests/perf_budgets.json` | [Testare](docs/testare.md) |
+| CI la fiecare PR și pe `main` (teste inclusiv pe trei motoare de browser, verificarea versiunii, filtrele fail2ban; scanare de secrete gitleaks, bandit, audit al lanțului de dependențe SBOM + `pip-audit`), CodeQL (`security-extended`), Dependabot, `requirements.lock` cu amprente, instalat cu `--require-hashes` | `.github/` | [Testare](docs/testare.md) |
 | Documentația ține pasul cu codul: fiecare rută trebuie să apară în pagina API | `tests/test_docs_routes.py` | [Testare](docs/testare.md) |
 
 Lacune cunoscute, spuse deschis: **nu există încă o copie de siguranță în afara serverului** (decizia
@@ -433,15 +501,17 @@ JSON prin HTTPS, fără chei API (în schimb, limite de cereri). Multe rute acce
 | `GET /api/trains`, `/api/trains/{nr}`, `/api/trains/stats`, `/api/trains/{nr}/journeys` | catalogul și statisticile pe tren |
 | `GET /api/stats`, `/api/stats/overview`, `/api/stats/rankings`, `/api/stats/seasons` | statistici, clasamente, sezoane și meteo |
 | `GET /api/stats/changes`, `/heatmap`, `/reliable`, `/dwell`, `/platform-changes` | secțiunile suplimentare din Statistici |
+| `GET /api/stats/read-errors` | erorile de citire pe 24 h, 48 h, 5, 7 și 30 de zile |
 | `GET /api/stations`, `/api/stations/{nume}`, `/api/stations/{nume}/journeys`, `/api/station-names` | stațiile și numele afișate |
 | `GET /api/predict/peron` | estimări de linie (nu informație oficială CFR) |
 | `GET /api/trains/{nr}/prediction` | estimarea întârzierii finale (nepublicată până trece poarta de calitate) |
 | `GET /api/system` | starea publică a sistemului (detalii pentru admin) |
 | `GET /api/export/history.csv` | export CSV al istoricului (cel mult 366 de zile) |
-| `GET /api/push/key`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe`, `GET /api/follows`, `POST` / `DELETE /api/follow` | notificări |
+| `GET /api/push/key`, `POST /api/push/subscribe`, `POST /api/push/resubscribe`, `POST /api/push/unsubscribe`, `GET /api/follows`, `POST` / `DELETE /api/follow` | notificări |
+| `GET /robots.txt`, `/sitemap.xml` (și `HEAD`) | pentru motoarele de căutare |
 
 Parametri comuni ai rutelor de statistici: `prag`, `min`, `board`, `from`, `to` (AAAA-LL-ZZ),
-`doar_confirmate=1`.
+`doar_confirmate=1`; pe rutele paginii Statistici cursele de aeroport sunt scoase, în afară de `fara_aeroport=0`.
 
 </details>
 
@@ -451,7 +521,7 @@ Parametri comuni ai rutelor de statistici: `prag`, `min`, `board`, `from`, `to` 
 Sesiune (`session`, `login`, `logout`, `csrf`), capturi (`captures…`, `stats`), `settings`, corecții
 (`corrections…` cu `preview`, `apply`, `audit` și `restore` pe lot), duplicate (`tools/dupes…`), server
 (`tools/server`, `tools/nvme`, `system`), `security`, `visitors`, `push-test`, alternativa OCR
-(`ocr-alt…`) și calitatea pe zi (`quality-daily/confirmation`, `/reading`, `/coverage`). Cu cookie,
+(`ocr-alt…`), experimentul intern (`infofer`) și calitatea pe zi (`quality-daily/confirmation`, `/reading`, `/coverage`). Cu cookie,
 cererile care modifică date cer tokenul CSRF. Nu există nicio rută HTTP care descarcă baza de date.
 
 </details>
@@ -486,19 +556,24 @@ app/                    aplicația FastAPI, poller, stocare, statistici, adminis
   captures.py, observations.py, rejected.py       capturi, observații OCR, cadre respinse
   journeys.py, history_all.py, stations.py, trains_api.py, export.py
   stats*.py, seasons.py, predict.py, line_prediction.py, peron_predict.py, peron_api.py
-  admin*.py, system_*.py, security_status.py, visitors.py, perf.py, nvme_status.py, ocr_alt_api.py
+  admin*.py, totp.py, system_*.py, security_status.py, visitors.py, perf.py, nvme_status.py, ocr_alt_api.py
+  seo.py                  titluri pe pagină, canonical/hreflang, JSON-LD, conținut HTML simplu, robots.txt, sitemap.xml
+  infofer_api.py          vederea de admin a experimentului intern (#infofer)
   dbbackup.py, backup_api.py, restore.py          copii de siguranță și restaurare
-  notifier.py, telegram.py, endpoints.py          Web Push, Telegram, validarea adreselor push
+  notifier.py, telegram.py, alerts.py, endpoints.py   Web Push, Telegram, canalele de alertă, validarea adreselor push
   weather.py, watchdog.py, version.py
 web/                    PWA-ul: index.html, app.js, sw.js, manifest, scripturile și stilurile paginilor,
                         ui2.* (stratul vizual comun), charts3.* (stratul de grafice la cerere), stat_*.js
-                        (secțiunile din Statistici), i18n/ro.json + en.json, fonts/, icons/
+                        (secțiunile din Statistici), i18n/ro.json + en.json (+ ro/en.admin.json, doar admin),
+                        fonts/, icons/
 data/                   operators.txt, stations.txt (numele afișate), stations_seed.txt
 deploy/                 install.sh, update.sh, tabela.service, unități și timere pentru watchdog / antrenarea
-                        în umbră / NVMe / snapshot de securitate, site-ul nginx + limite, fail2ban/
+                        în umbră / NVMe / snapshot de securitate / alerte de operare / infofer, site-ul nginx
+                        + limite, fail2ban/
 scripts/                întreținere și evaluare: check_release, purge_ghosts, merge_number_dups,
-                        restore_db, dev_seed, ocr_eval, ocr_alt_eval, ocr_digit_clf, nightly_shadow_train,
-                        backtest_delay, backtest_peron, security_snapshot, nvme_collect, make_icons, ...
+                        restore_db, dev_seed, ocr_eval, ocr_alt_eval, ocr_digit_clf, ocr_accuracy_daily,
+                        nightly_shadow_train, backtest_delay, backtest_peron, security_snapshot, nvme_collect,
+                        ops_alerts, admin_totp_setup, make_icons, make_demo_media, ...
 tests/                  suita pytest (unitare, API, statice, browser, OCR, migrări, deploy) + fixturi
 docs/                   documentația detaliată (română), docs/en/ (engleză), brand/, superpowers/ (planuri istorice)
 design-system/          tokenii de design și regulile componentelor (MASTER.md)
@@ -561,6 +636,9 @@ Apoi deschide http://127.0.0.1:8000. Notificările push cer în plus chei VAPID 
 | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` | gol | cheile Web Push (cheia privată e secretă); gol = push oprit |
 | `VAPID_SUBJECT` | `https://tabelagn.online` | subiectul VAPID |
 | `ADMIN_TOKEN`, `ADMIN_TOKEN_STRICT` | nesetat, `0` | cheia de administrare (secretă; minim 12 caractere, 24 în modul strict) |
+| `ADMIN_TOTP_SECRET` | nesetat | autentificare opțională în doi pași pentru administrare (secret base32; nesetat = oprit) |
+| `SITE_URL` | `https://tabelagn.online` | baza adreselor absolute din canonical, hreflang, JSON-LD, `robots.txt`, `sitemap.xml` |
+| `GOOGLE_SITE_VERIFICATION`, `BING_SITE_VERIFICATION` | gol | etichete opționale de verificare pentru motoarele de căutare |
 | `CAPTURE_ENABLED`, `CAPTURE_DIR`, `CAPTURE_RETENTION_DAYS`, `CAPTURE_MIN_FREE_MB` | `1`, `/var/lib/tabela/captures` sau `data/captures`, `7`, `2048` | capturi |
 | `BACKUP_DIR` | `<directorul bazei>/backups` | copiile dinaintea migrărilor |
 | `DELAY_THRESHOLDS` | `5,15,30` | pragurile de culoare ale întârzierii (minute) |
@@ -663,6 +741,36 @@ flowchart TD
 
 Fiecare pas, unitățile systemd, nginx, certificatele, DNS-ul dinamic și rollback-ul manual:
 [Deploy și configurare](docs/deploy-si-configurare.md).
+
+## Domeniu și adrese
+
+Adresa oficială este **https://tabelagn.online** (de la Beta 1.80; până la 1.79 site-ul era la
+`tabelacfr.ddns.net`).
+
+```mermaid
+flowchart LR
+    U["Vizitator"] --> DNS["Cloudflare DNS<br/>DNS only, nor gri"]
+    DNS -->|"CNAME @ și www"| DDNS["tabelacfr.ddns.net<br/>No-IP, IP dinamic"]
+    DDNS --> NGINX["nginx pe serverul de acasă"]
+    NGINX -->|"www, domeniul vechi, HTTP simplu:<br/>301, aceeași cale"| CANON["https://tabelagn.online"]
+```
+
+- **DNS.** Domeniul e înregistrat la GoDaddy, cu nameserverele la Cloudflare; `@` și `www` sunt CNAME
+  către `tabelacfr.ddns.net`, pe care No-IP îl ține îndreptat spre IP-ul dinamic al serverului de acasă.
+- **„DNS only”, fără proxy.** În spatele proxy-ului Cloudflare, nginx ar vedea IP-urile Cloudflare în
+  locul celor ale vizitatorilor: fail2ban ar bana Cloudflare, iar limitele `limit_req` ar fi împărțite de
+  toți vizitatorii.
+- **Redirecționări** (`deploy/nginx-tabela.conf`, toate `301`, cu aceeași cale): `www.tabelagn.online`,
+  vechiul `tabelacfr.ddns.net` și orice cerere HTTP simplă merg la `https://tabelagn.online`. Pe domeniul
+  vechi se redirecționează doar deschiderile de pagini și roboții (clienții fără `Sec-Fetch-Mode`), așa că
+  linkurile vechi merg în continuare, iar aplicația instalată de pe vechea adresă își primește în
+  continuare datele, notificările și actualizările. Excepții: `/.well-known/acme-challenge/` pentru
+  reînnoirea certificatelor și fișierele de verificare Google/Bing pe domeniul vechi (necesare pentru
+  „Schimbarea adresei” din Search Console).
+- **Certificate:** două certificate Let's Encrypt, unul pentru `tabelagn.online` + `www` și cel vechi,
+  păstrat cât timp domeniul vechi servește redirecționarea prin HTTPS.
+
+Detalii: [Deploy și configurare](docs/deploy-si-configurare.md) §9.1.
 
 ## Documentație
 

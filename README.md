@@ -14,7 +14,32 @@ from the public CFR webcam image, using classic OCR (OpenCV + Tesseract, **no AI
 a live board, a searchable history, journey statistics and Web Push notifications for the trains you
 follow. Everything runs in one small Python process on a home server, with SQLite as its only database.
 
-**Live:** https://tabelagn.online
+**Live:** https://tabelagn.online (the old address `tabelacfr.ddns.net` redirects here, see
+[Domain and addresses](#domain-and-addresses)).
+
+<p align="center"><img src="docs/media/demo.gif" alt="Short animated tour of the public pages on desktop: the Panel board with arrivals, the Cards view with arrivals and departures, Statistics, History and a train page in the light theme, then the Panel, Statistics and the English board in the dark theme" width="800"></p>
+
+<table>
+  <tr>
+    <td><img src="docs/media/mobil-carduri-light.png" alt="Phone, light theme: the arrivals board as cards, with delay, platform and follow buttons, and the bottom navigation bar" width="190"></td>
+    <td><img src="docs/media/mobil-carduri-dark.png" alt="Phone, dark theme: the same arrivals cards in the dark theme" width="190"></td>
+    <td><img src="docs/media/mobil-statistici-light.png" alt="Phone, light theme: the Statistics page with the summary cards (on time, average delay, trains analysed)" width="190"></td>
+    <td><img src="docs/media/mobil-tren-dark.png" alt="Phone, dark theme: a train page with its observed journeys and punctuality" width="190"></td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <td><img src="docs/media/desktop-panou-light.png" alt="Desktop, light theme: the station-style Panel with arrivals, filters, data status and the weather widget" width="400"></td>
+    <td><img src="docs/media/desktop-statistici-dark.png" alt="Desktop, dark theme: the Statistics page with the filters, the No airport switch turned on and the summary cards" width="400"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/desktop-istoric-light.png" alt="Desktop, light theme: History across all days, with filters and on-time summaries for arrivals and departures" width="400"></td>
+    <td><img src="docs/media/desktop-en-dark.png" alt="Desktop, dark theme: the English version of the board (?lang=en) as cards, arrivals and departures side by side" width="400"></td>
+  </tr>
+</table>
+
+The images are real screenshots of the public pages only, regenerated with
+`python scripts/make_demo_media.py` (Playwright + Pillow) into [`docs/media/`](docs/media/).
 
 **Status: Beta.** The current version is in [`VERSION`](VERSION), the history in
 [`CHANGELOG.md`](CHANGELOG.md), in the app at `#versiuni` and in
@@ -45,6 +70,7 @@ follow. Everything runs in one small Python process on a home server, with SQLit
 - [Testing and CI](#testing-and-ci)
 - [Releases](#releases)
 - [Deploy (Ubuntu server)](#deploy-ubuntu-server)
+- [Domain and addresses](#domain-and-addresses)
 - [Documentation](#documentation)
 - [Contributing, security policy, license](#contributing-security-policy-license)
 - [Attribution](#attribution)
@@ -60,8 +86,8 @@ follow. Everything runs in one small Python process on a home server, with SQLit
 | **Following + Web Push** | Follow a train for the day and get a notification when its delay or platform changes, or when it leaves the board. A change is pushed only after several confirming readings, so a one-frame misread never triggers a notification. |
 | **History and search** | What the board showed on a day, or across all days: filters for day, train, station, time range and panel; journey detail in a dialog with the observed delay chart; deep links such as `/istoric?train=1636&date=2026-10-21`; "Load N more" paging; CSV export through the API. |
 | **Journeys** | One appearance of a train on a panel on a service day, with a final result: `confirmed`, `unconfirmed` (with a reason), `unknown` or `in_progress`. |
-| **Statistics and charts** | Punctuality, typical delay, rankings, heatmaps, weekdays, routes, operators and categories, "what changed this week", period comparison, platform changes, dwell time on the board, seasons and weather. Every figure carries its sample size **N**; below the minimum sample no percentage is shown. |
-| **Trains and stations** | A public train catalog with a page per train (`#tren?nr=…`) and per station (`#statie?nume=…`), with charts and CSV/JSON exports. Station names are shown with diacritics (Brașov, Aeroport Henri Coandă); search ignores diacritics. |
+| **Statistics and charts** | Punctuality, typical delay, rankings, heatmaps, weekdays, routes, operators and categories, "what changed this week", period comparison, platform changes, dwell time on the board, seasons and weather, "Read errors". Every figure carries its sample size **N**; below the minimum sample no percentage is shown. A **"No airport"** switch (on by default) leaves the very short, almost always on-time Aeroport Henri Coandă trips out of the Statistics page. |
+| **Trains and stations** | A public train catalog with a page per train (`/tren/1636`) and per station (`/statie/BRASOV`), with charts and CSV/JSON exports. Station names are shown with diacritics (Brașov, Aeroport Henri Coandă); search ignores diacritics. |
 | **Data quality indicators** | Unsure OCR values are underlined with the title "uncertain reading"; ghost services (misreads) are hidden; low-quality periods are marked and excluded from statistics by default. |
 | **Weather** | A small widget next to the clock with the current conditions in Bucharest (Open-Meteo model data) and a 24 h temperature chart. |
 | **PWA / offline** | Installable; works offline with the last board (marked as stale) and an offline page with the logo. |
@@ -86,7 +112,7 @@ rewritten to the path (`/#statistici` → `/statistici`). English: `?lang=en`.
 | `/trenuri`, `/tren/<number>` | **Trains** (catalog) and **Train** (profile, journeys, charts) | everyone |
 | `/statistici` | **Statistics**; sections can be linked: `/statistici?sect=probleme` (also `bune`, `rute`, `operatori`, `sumar`, `glosar`) | everyone |
 | `/clasamente` | **Rankings** | everyone |
-| `/statii`, `/statie/<name>` | **Stations** and **Station** | everyone |
+| `/statii`, `/statie/<KEY>` | **Stations** and **Station** (the key is the stored station name, e.g. `/statie/BRASOV`) | everyone |
 | `#sistem` | **System**: service state, reading quality (24 h / 7 days), speed (OCR cycle, API p50/p95); details for admins | everyone |
 | `/cum` | **How it works**, in plain language: where the data comes from, what "delay" means, limits, privacy, where to report a problem | everyone |
 | `/versiuni` | **Versions** (the changelog) | everyone |
@@ -94,9 +120,21 @@ rewritten to the path (`/#statistici` → `/statistici`). English: `?lang=en`.
 | `#ocr` | **OCR captures** (image with OCR boxes, raw vs. normalized text, manual corrections) | admin |
 | `#ocr2` | **OCR alternative** journal (crops and verdicts) | admin |
 | `#admin` | **Administration** (see [Administration](#administration)) | admin |
+| `#infofer` | an **internal, private experiment** (see [Administration](#administration)) | admin |
 
-The admin pages do not appear in the menu and are not precached by the service worker. The full list,
+The admin pages do not appear in the menu, are not precached by the service worker and their texts
+(`web/i18n/ro.admin.json`, `en.admin.json`) are downloaded only when an administrator opens one of them. The full list,
 with the script behind each page, is in [Interface](docs/en/interfata.md).
+
+**Search engines (SEO).** For every public page the server sends its own title, description,
+canonical address, `hreflang` alternates (ro, en, x-default), social preview tags and JSON-LD
+structured data (the site, București Nord station, the breadcrumb, a `TrainTrip` on a train page; the
+publisher is the independent project, not CFR), plus a plain-HTML summary (the current departures and
+arrivals, the train and station lists, with the OCR and not-affiliated-with-CFR note). `/robots.txt` and
+`/sitemap.xml` are generated (Romanian + English, trains seen in the last 90 days, stations); the API and
+the private pages are excluded. An unknown address gets a real 404 marked `noindex`; a trailing slash,
+capital letters and other forms of a station name are redirected permanently. Google Search Console and
+Bing verification tags are optional, through `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION`.
 
 ## How it works
 
@@ -240,9 +278,18 @@ service stopped) and the reversible scripts `scripts/purge_ghosts.py` and `scrip
   with the previous 7 days, "Problems" (deterministic findings, no language model) and "What works well",
   routes, operators and categories (share bars, operator × category matrix), most reliable trains,
   heatmap (weekday × hour), weekdays, delay steps, platform changes after announcement, time spent on the
-  board, seasons and weather. The filters (period, panel, operator, category, confirmed only) stay
+  board, seasons and weather. The filters (period, panel, operator, category, confirmed only, no airport) stay
   visible and can be saved as up to 5 presets on the device; simple/expert mode and a high-contrast
   option; every chart and table exports to CSV (UTF-8 with BOM) and PNG; charts are drawn as you scroll.
+- **"No airport"** (on by default, next to "Confirmed only" and combinable with it): the trips to and
+  from Aeroport Henri Coandă are very short and almost always on time, so they inflated the "on time"
+  share; they are left out of every calculation on the Statistics page and a short note in the summary
+  says so. Unticked, they come back and the page link keeps the choice (`fara_aeroport=0`, also accepted
+  by the statistics API). Train and station pages, History, Rankings and the catalog still show every
+  trip.
+- **"Read errors"** (`GET /api/stats/read-errors`, public, cached 5 minutes): unread captures, unread and
+  partly read rows, removed ghost trains and the error rate over the last 24 h, 48 h, 5, 7 and 30 days
+  (sliding windows ending now), each with a plain explanation; the System page uses the same counts.
 - **Estimates are not published until they earn it.** The final-delay estimate per train
   (`/api/trains/{no}/prediction`) stays `published: false` until a quality gate passes (30 days of good
   data, 100 predictions, error below the baseline). The season comparison shows no figures under 30
@@ -271,6 +318,11 @@ sequenceDiagram
 - A change is pushed only after it is seen in several successful readings; `appeared` events and a
   platform cleared to "none" are never pushed; the same value is not pushed twice.
 - Up to 20 active follows per subscription; subscriptions answering 404/410 are removed automatically.
+- Unsubscribing, following, listing the follows and moving them need proof that the subscription is
+  yours (its `auth` key: in the request body, or in the `X-Push-Auth` header for the follows list, a
+  header that is not logged), not just its address; moving follows respects the limit of 20.
+- A subscription made with an old push key is refused by the push service; the app then renews it on
+  its own when opened and moves the followed trains to the new one (`POST /api/push/resubscribe`).
 - Push endpoints are accepted only for known push services over HTTPS (protection against SSRF,
   `app/endpoints.py`), and the `/api/follows` location is not written to the nginx access log.
 - Requires HTTPS; on iPhone/iPad it works only for the app added to the home screen.
@@ -356,6 +408,11 @@ Administration is enabled by `ADMIN_TOKEN` in `/etc/tabela.env` (at least 12 cha
 `ADMIN_TOKEN_STRICT=1`, at least 24, or the service refuses to start). Without it every `/api/admin/*`
 route answers 503. Sign-in is from `#ocr` or `#admin` (an HttpOnly, Secure, SameSite=Strict session
 cookie valid for 12 h that holds an HMAC, not the token) or with `Authorization: Bearer` on the server.
+Wrong attempts are limited per IP, with a wait that doubles (1 min → 1 h); a global ceiling only slows
+failures down, so an attacker cannot lock the administrator out, and a successful sign-in resets the
+count. **Two-step sign-in (TOTP) is optional and off by default:** with `ADMIN_TOTP_SECRET` (created with
+`scripts/admin_totp_setup.py`) every sign-in form also asks for the 6-digit code (RFC 6238, each code
+accepted once) and the Bearer token is accepted only from the server itself.
 
 The **`#admin`** page has these cards:
 
@@ -368,6 +425,14 @@ The **`#admin`** page has these cards:
 | **Push notification test** | sends one test notification, only to the subscription of the device you press it on |
 | **Duplicate train numbers** | report, apply (with a safety copy first) and restore merges |
 | **Proposed OCR13 marks** | an informational list from an analysis of the old history; nothing to apply |
+| **Infofer test** | a link to `#infofer`, the internal experiment described below |
+
+**`#infofer` (internal, private experiment).** A temporary internal test that measures whether the
+arrival delay could be estimated earlier than it appears on the board. A collector
+(`scripts/infofer_collect.py`, `tabela-infofer.timer`) writes into a separate database that the app only
+reads; the page (`GET /api/admin/infofer`, `no-store`) shows the collection state and preliminary
+accuracy figures to the administrator. It is admin-only, not in the menu, not indexed (`robots.txt`) and
+nothing from it is shown on the public pages.
 
 The other admin pages: **`#ocr`** (captures with the OCR boxes coloured by confidence: green ≥ 80, yellow
 50–79, red < 50; raw vs. normalized text per field; "Copy JSON"; manual correction rules with preview →
@@ -392,15 +457,16 @@ What exists, where it lives and where it is documented. Deliberate omissions and
 | Strict CSP (`default-src 'self'`, no inline script/style, `frame-ancestors 'none'`), `nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` | `app/api.py`, `web/` | [Interface](docs/en/interfata.md), [API](docs/en/api.md) |
 | DOM built only with `createElement` / `textContent` (no `innerHTML`), enforced by static tests | `web/*.js`, `tests/` | [Interface](docs/en/interfata.md) |
 | HSTS and nginx rate limits (`tabela_api` 10 r/s burst 20, `tabela_stats` 60 r/min, `tabela_admin_login` 5 r/min), `client_max_body_size 8k`, `server_tokens off` | `deploy/nginx-tabela.conf`, `deploy/tabela-limits.conf` | [Deploy](docs/en/deploy-si-configurare.md) §6 |
-| Admin auth: one token compared in constant time, HMAC-signed session cookie with expiry, CSRF token (+ same-origin check), 5 failures/min/IP and 30/min overall → 429, `Cache-Control: private, no-store` | `app/admin.py` | [API](docs/en/api.md) §6, [Key rotation](docs/en/admin-rotatie-cheie.md) |
+| Admin auth: one token compared in constant time, HMAC-signed session cookie with expiry, CSRF token (+ same-origin check), after 5 failures an IP is refused (429) for a doubling wait (1 min → 1 h), a global ceiling of 30/min only slows failures down, optional TOTP (`ADMIN_TOTP_SECRET`), `Cache-Control: private, no-store` | `app/admin.py`, `app/totp.py` | [API](docs/en/api.md) §6, [Key rotation](docs/en/admin-rotatie-cheie.md) |
 | Firewall: `ufw` deny incoming, only 80/443 public, SSH only from the local network; uvicorn listens only on `127.0.0.1` | server | [Deploy](docs/en/deploy-si-configurare.md) §7 |
 | fail2ban jails `sshd`, `nginx-tabela-probes`, `nginx-tabela-slow` (increasing bans for repeat offenders); the filters are tested in CI | `deploy/fail2ban/` | [Operations](docs/en/administrare-operare.md) §15 |
-| systemd hardening: unprivileged user, `NoNewPrivileges`, `ProtectSystem=strict` (writes only to `/var/lib/tabela`), `PrivateTmp`, `PrivateDevices`, `RestrictAddressFamilies`, one worker, `OMP_THREAD_LIMIT=1` | `deploy/tabela.service` | [Deploy](docs/en/deploy-si-configurare.md) §5 |
+| systemd hardening: unprivileged user, `NoNewPrivileges`, `ProtectSystem=strict` (writes only to `/var/lib/tabela`), `PrivateTmp`, `PrivateDevices`, `RestrictAddressFamilies`, one worker, `OMP_THREAD_LIMIT=1`; memory, CPU and process limits (cgroup) on every service | `deploy/tabela*.service` | [Deploy](docs/en/deploy-si-configurare.md) §5 |
 | Backups: automatic and verified before every schema migration (the last 5 kept) and before destructive admin operations; `update.sh` rolls the code back if the health check fails | `app/dbbackup.py`, `deploy/update.sh` | [Operations](docs/en/administrare-operare.md) §6 |
-| Monitoring: watchdog (restarts after 3 failed health checks, at most once per 10 min, running as `tabela` with a single sudoers rule; Telegram alerts), NVMe health timer, security snapshot timer, external uptime checks (`/api/health` also answers `HEAD`) | `app/watchdog.py`, `deploy/tabela-*.timer` | [Operations](docs/en/administrare-operare.md) §10, §15 |
+| Monitoring: watchdog (restarts after 3 failed health checks, at most once per 10 min, running as `tabela` with a single sudoers rule; Telegram alerts), operations alerts on Telegram every 5 minutes (site down, degraded OCR, full disk, failed units, with a "resolved" message; `scripts/ops_alerts.py`, `tabela-ops-alerts.timer`), NVMe health timer, security snapshot timer, external uptime checks (`/api/health` also answers `HEAD`) | `app/watchdog.py`, `scripts/ops_alerts.py`, `deploy/tabela-*.timer` | [Operations](docs/en/administrare-operare.md) §10, §15 |
 | Data integrity: `processing_version` per observation, multi-frame consensus, confirmation of delay and platform changes | `app/consensus.py`, `app/quality.py` | [OCR](docs/en/ocr.md), [Statistics and quality](docs/en/statistici-calatorii-calitate.md) |
-| OCR regression suite on hand-labelled frames, with strict thresholds that fail on any regression | `tests/fixtures/ocr_truth`, `app/ocr/truth.py` | [Testing](docs/en/testare.md) |
-| CI on every PR and on `main` (tests incl. three browser engines, release check, fail2ban filters; gitleaks, bandit, SBOM + `pip-audit`), CodeQL (`security-extended`), Dependabot, pinned `requirements.lock` | `.github/` | [Testing](docs/en/testare.md) |
+| OCR regression suite on hand-labelled frames (a development set and a blind hold-out set, with a versioned baseline) that fails on any regression; daily accuracy tracking | `tests/fixtures/ocr_truth`, `app/ocr/truth.py`, `scripts/ocr_accuracy_daily.py` | [Testing](docs/en/testare.md), [OCR](docs/en/ocr.md) |
+| Automatic WCAG 2.2 AA checks (axe-core) on 12 pages (the public ones plus `#setari` and `#admin`) in both themes, at 390 and 1280 px, and performance budgets (LCP, CLS, TBT, bytes, requests) on a throttled phone | `tests/test_axe_wcag22_browser.py`, `tests/test_perf_budgets_browser.py`, `tests/perf_budgets.json` | [Testing](docs/en/testare.md) |
+| CI on every PR and on `main` (tests incl. three browser engines, release check, fail2ban filters; gitleaks secret scan, bandit, SBOM + `pip-audit` supply-chain audit), CodeQL (`security-extended`), Dependabot, `requirements.lock` with hashes installed with `--require-hashes` | `.github/` | [Testing](docs/en/testare.md) |
 | Docs kept in step with the code: every route must appear in the API page | `tests/test_docs_routes.py` | [Testing](docs/en/testare.md) |
 
 Known gaps, stated openly: **there is no off-site backup yet** (the owner's decision, deferred); OS updates
@@ -426,15 +492,17 @@ JSON over HTTPS, with no API keys (rate limits instead). Many routes accept `for
 | `GET /api/trains`, `/api/trains/{no}`, `/api/trains/stats`, `/api/trains/{no}/journeys` | the catalog and per-train statistics |
 | `GET /api/stats`, `/api/stats/overview`, `/api/stats/rankings`, `/api/stats/seasons` | statistics, rankings, seasons and weather |
 | `GET /api/stats/changes`, `/heatmap`, `/reliable`, `/dwell`, `/platform-changes` | the extra Statistics sections |
+| `GET /api/stats/read-errors` | read errors over 24 h, 48 h, 5, 7 and 30 days |
 | `GET /api/stations`, `/api/stations/{name}`, `/api/stations/{name}/journeys`, `/api/station-names` | stations and display names |
 | `GET /api/predict/peron` | platform estimates (not official CFR information) |
 | `GET /api/trains/{no}/prediction` | the final-delay estimate (unpublished until the quality gate passes) |
 | `GET /api/system` | the public system state (details for admins) |
 | `GET /api/export/history.csv` | CSV export of the history (at most 366 days) |
-| `GET /api/push/key`, `POST /api/push/subscribe`, `POST /api/push/unsubscribe`, `GET /api/follows`, `POST` / `DELETE /api/follow` | notifications |
+| `GET /api/push/key`, `POST /api/push/subscribe`, `POST /api/push/resubscribe`, `POST /api/push/unsubscribe`, `GET /api/follows`, `POST` / `DELETE /api/follow` | notifications |
+| `GET /robots.txt`, `/sitemap.xml` (also `HEAD`) | for search engines |
 
 Common parameters of the statistics routes: `prag`, `min`, `board`, `from`, `to` (YYYY-MM-DD),
-`doar_confirmate=1`.
+`doar_confirmate=1`; on the Statistics page routes the airport trips are left out unless `fara_aeroport=0`.
 
 </details>
 
@@ -444,7 +512,7 @@ Common parameters of the statistics routes: `prag`, `min`, `board`, `from`, `to`
 Session (`session`, `login`, `logout`, `csrf`), captures (`captures…`, `stats`), `settings`, corrections
 (`corrections…` with `preview`, `apply`, `audit` and batch `restore`), duplicates (`tools/dupes…`), server
 (`tools/server`, `tools/nvme`, `system`), `security`, `visitors`, `push-test`, the alternative OCR
-(`ocr-alt…`) and daily quality (`quality-daily/confirmation`, `/reading`, `/coverage`). With the cookie,
+(`ocr-alt…`), the internal experiment (`infofer`) and daily quality (`quality-daily/confirmation`, `/reading`, `/coverage`). With the cookie,
 changing requests need the CSRF token. There is no HTTP route that downloads the database.
 
 </details>
@@ -479,19 +547,22 @@ app/                    FastAPI application, poller, storage, statistics, admini
   captures.py, observations.py, rejected.py       captures, OCR observations, rejected frames
   journeys.py, history_all.py, stations.py, trains_api.py, export.py
   stats*.py, seasons.py, predict.py, line_prediction.py, peron_predict.py, peron_api.py
-  admin*.py, system_*.py, security_status.py, visitors.py, perf.py, nvme_status.py, ocr_alt_api.py
+  admin*.py, totp.py, system_*.py, security_status.py, visitors.py, perf.py, nvme_status.py, ocr_alt_api.py
+  seo.py                  per-page titles, canonical/hreflang, JSON-LD, plain-HTML content, robots.txt, sitemap.xml
+  infofer_api.py          the admin view of the internal experiment (#infofer)
   dbbackup.py, backup_api.py, restore.py          backups and restore
-  notifier.py, telegram.py, endpoints.py          Web Push, Telegram, push endpoint validation
+  notifier.py, telegram.py, alerts.py, endpoints.py   Web Push, Telegram, alert channels, push endpoint validation
   weather.py, watchdog.py, version.py
 web/                    the PWA: index.html, app.js, sw.js, manifest, page scripts and styles,
                         ui2.* (shared visual layer), charts3.* (lazy chart layer), stat_*.js (Statistics
-                        sections), i18n/ro.json + en.json, fonts/, icons/
+                        sections), i18n/ro.json + en.json (+ ro/en.admin.json, admin only), fonts/, icons/
 data/                   operators.txt, stations.txt (display names), stations_seed.txt
 deploy/                 install.sh, update.sh, tabela.service, watchdog / shadow-train / NVMe /
-                        security-snapshot units and timers, nginx site + limits, fail2ban/
+                        security-snapshot / ops-alerts / infofer units and timers, nginx site + limits, fail2ban/
 scripts/                maintenance and evaluation: check_release, purge_ghosts, merge_number_dups,
-                        restore_db, dev_seed, ocr_eval, ocr_alt_eval, ocr_digit_clf, nightly_shadow_train,
-                        backtest_delay, backtest_peron, security_snapshot, nvme_collect, make_icons, ...
+                        restore_db, dev_seed, ocr_eval, ocr_alt_eval, ocr_digit_clf, ocr_accuracy_daily,
+                        nightly_shadow_train, backtest_delay, backtest_peron, security_snapshot, nvme_collect,
+                        ops_alerts, admin_totp_setup, make_icons, make_demo_media, ...
 tests/                  pytest suite (unit, API, static, browser, OCR, migrations, deploy) + fixtures
 docs/                   detailed documentation (Romanian), docs/en/ (English), brand/, superpowers/ (historical plans)
 design-system/          design tokens and component rules (MASTER.md)
@@ -553,6 +624,9 @@ counts as one).
 | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` | empty | Web Push keys (the private key is secret); empty = push off |
 | `VAPID_SUBJECT` | `https://tabelagn.online` | the VAPID subject |
 | `ADMIN_TOKEN`, `ADMIN_TOKEN_STRICT` | unset, `0` | the admin key (secret; at least 12 characters, 24 in strict mode) |
+| `ADMIN_TOTP_SECRET` | unset | optional two-step sign-in for the administration (base32 secret; unset = off) |
+| `SITE_URL` | `https://tabelagn.online` | base of the absolute addresses in canonical, hreflang, JSON-LD, `robots.txt`, `sitemap.xml` |
+| `GOOGLE_SITE_VERIFICATION`, `BING_SITE_VERIFICATION` | empty | optional search-engine verification tags |
 | `CAPTURE_ENABLED`, `CAPTURE_DIR`, `CAPTURE_RETENTION_DAYS`, `CAPTURE_MIN_FREE_MB` | `1`, `/var/lib/tabela/captures` or `data/captures`, `7`, `2048` | captures |
 | `BACKUP_DIR` | `<database dir>/backups` | pre-migration backups |
 | `DELAY_THRESHOLDS` | `5,15,30` | delay colour thresholds (minutes) |
@@ -650,6 +724,34 @@ flowchart TD
 
 Every step, the systemd units, nginx, certificates, dynamic DNS and the manual rollback:
 [Deploy and configuration](docs/en/deploy-si-configurare.md).
+
+## Domain and addresses
+
+The official address is **https://tabelagn.online** (since Beta 1.80; until 1.79 the site lived at
+`tabelacfr.ddns.net`).
+
+```mermaid
+flowchart LR
+    U["Visitor"] --> DNS["Cloudflare DNS<br/>DNS only, grey cloud"]
+    DNS -->|"CNAME @ and www"| DDNS["tabelacfr.ddns.net<br/>No-IP, dynamic IP"]
+    DDNS --> NGINX["nginx on the home server"]
+    NGINX -->|"www, old domain, plain HTTP:<br/>301, same path"| CANON["https://tabelagn.online"]
+```
+
+- **DNS.** The domain is registered at GoDaddy with its nameservers at Cloudflare; `@` and `www` are
+  CNAMEs to `tabelacfr.ddns.net`, which No-IP keeps pointed at the home server's dynamic IP.
+- **"DNS only", not proxied.** Behind the Cloudflare proxy nginx would see Cloudflare's IPs instead of
+  the visitors': fail2ban would ban Cloudflare and the `limit_req` limits would be shared by everyone.
+- **Redirects** (`deploy/nginx-tabela.conf`, all `301` with the same path): `www.tabelagn.online`, the
+  old `tabelacfr.ddns.net` and any plain-HTTP request go to `https://tabelagn.online`. On the old domain
+  only page opens and crawlers (clients without `Sec-Fetch-Mode`) are redirected, so old links keep
+  working and an app installed from the old address keeps getting its data, notifications and updates.
+  Exceptions: `/.well-known/acme-challenge/` for certificate renewal and the Google/Bing verification
+  files on the old domain (needed by the Search Console "Change of address" tool).
+- **Certificates:** two Let's Encrypt certificates, one for `tabelagn.online` + `www` and the old one,
+  kept as long as the old domain serves the redirect over HTTPS.
+
+Details: [Deploy and configuration](docs/en/deploy-si-configurare.md) §9.1.
 
 ## Documentation
 
