@@ -71,7 +71,8 @@ html[data-view="panou"] #view-tabela > .tabs,
 html[data-view="panou"] #boards,
 html[data-view="panou"] #banner { display: none !important; }
 
-html[data-view="panou"] main { max-width: 1760px; }
+/* only the board page is wide; other pages keep the header's 1320 px (before route() body has no data-route) */
+html[data-view="panou"] body:is(:not([data-route]), [data-route="tabela"]) main { max-width: 1760px; }
 
 .pnl-root { margin-top: 8px; }
 /* until panel.js builds it: the Panou/Carduri switch's height, so the cards below do not jump (CLS) */
