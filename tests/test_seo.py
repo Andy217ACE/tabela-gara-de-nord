@@ -192,3 +192,10 @@ def test_sitemap(client):
     for u in urls:
         alts = {a.get("hreflang"): a.get("href") for a in u.findall("x:link", ns)}
         assert set(alts) == {"ro", "en", "x-default"} and alts["en"].endswith("lang=en")
+
+
+def test_head_on_seo_routes(client):
+    for path in ("/robots.txt", "/sitemap.xml", "/", "/statistici"):
+        g, h = client.get(path), client.head(path)
+        assert h.status_code == g.status_code == 200, path
+        assert h.headers["content-type"] == g.headers["content-type"], path

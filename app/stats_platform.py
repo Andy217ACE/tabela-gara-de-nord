@@ -116,7 +116,8 @@ def compute(services: list[dict], min_sample: int) -> dict:
 
 # ---- reading --------------------------------------------------------------------------------
 
-def fetch(store, date_from: date | None, date_to: date | None, board: str | None) -> list[dict]:
+def fetch(store, date_from: date | None, date_to: date | None, board: str | None,
+          no_airport: bool = False) -> list[dict]:
     where, args = [], []
     if date_from:
         where.append("s.service_date >= ?")
@@ -127,6 +128,9 @@ def fetch(store, date_from: date | None, date_to: date | None, board: str | None
     if board:
         where.append("s.board = ?")
         args.append(board)
+    if no_airport:
+        where.append("s.station <> ?")
+        args.append(stats.AIRPORT_STATION)
     sql = ("SELECT s.id, s.board, s.train_type, s.train_no, s.station FROM services s"
            + (" WHERE " + " AND ".join(where) if where else ""))
     with overview_v2._reader(store) as c:
@@ -143,8 +147,8 @@ def fetch(store, date_from: date | None, date_to: date | None, board: str | None
     return list(by_id.values())
 
 
-def read_filters(request: Request) -> tuple[date | None, date | None, str | None]:
-    """`perioada` (1|7|30|all) and `board`; 422 on anything else."""
+def read_filters(request: Request) -> tuple[date | None, date | None, str | None, bool]:
+    """`perioada` (1|7|30|all), `board`, `fara_aeroport` (0|1, default 1); 422 on anything else."""
     q = request.query_params
     perioada = q.get("perioada") or "all"
     if perioada not in overview_v2.PERIODS:
@@ -152,18 +156,22 @@ def read_filters(request: Request) -> tuple[date | None, date | None, str | None
     board = q.get("board") or None
     if board is not None and board not in BOARDS:
         raise HTTPException(status_code=422, detail="Panou invalid (arrival sau departure).")
+    air = q.get("fara_aeroport") or "1"
+    if air not in ("0", "1"):
+        raise HTTPException(status_code=422, detail="Parametru „fara_aeroport” invalid (0 sau 1).")
     d0, d1 = overview_v2.period_range(perioada, datetime.now(journeys.TZ).date())
-    return d0, d1, board
+    return d0, d1, board, air == "1"
 
 
 @router.get("/api/stats/platform-changes")
 async def platform_changes(request: Request):
-    d0, d1, board = read_filters(request)
+    d0, d1, board, no_airport = read_filters(request)
     store = request.app.state.store
 
     def run():
-        return compute(fetch(store, d0, d1, board), stats.default_min_sample())
+        return compute(fetch(store, d0, d1, board, no_airport), stats.default_min_sample())
 
     d = await run_in_threadpool(run)
-    d["params"] = {"perioada": request.query_params.get("perioada") or "all", "board": board}
+    d["params"] = {"perioada": request.query_params.get("perioada") or "all", "board": board,
+                   "no_airport": no_airport}
     return d

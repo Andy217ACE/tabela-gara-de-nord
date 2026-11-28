@@ -157,9 +157,14 @@ def test_statistici_two_levels(browser, base_url):  # noqa: F811
         part = page.locator(".ss-part .ss-acc-btn").last
         part.click()
         assert part.get_attribute("aria-expanded") == "true"
-        part.evaluate("b => b.scrollIntoView()")   # still lazy inside the open group: built near the screen
-        page.wait_for_function("""() => [...document.querySelectorAll('.ss-fig svg.ss-svg')]
-          .some(s => s.getClientRects().length > 0)""")
+        # still lazy inside the open group: built near the screen. Scroll (instantly, on every poll) to the
+        # first placeholder, not to the heading: the summary between them is ~2 phone screens tall and
+        # its height follows the data, and a smooth scroll can be cut short by the reveal animations
+        page.wait_for_function("""() => {
+          const p = document.querySelector('.ss-defer-ph');
+          if (p) p.scrollIntoView({ behavior: 'instant', block: 'center' });
+          return [...document.querySelectorAll('.ss-fig svg.ss-svg')].some(s => s.getClientRects().length > 0);
+        }""", polling=250)
         part.click()
         assert part.get_attribute("aria-expanded") == "false"
         # a closed group built on the phone is shown again once the window is wider than 700 px

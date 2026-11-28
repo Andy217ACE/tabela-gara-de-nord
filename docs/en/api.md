@@ -67,6 +67,7 @@ The document describes version **Beta 1.72** (schema 10) (`VERSION`). The interf
 | `from` | `AAAA-LL-ZZ` | — | — | The start date (inclusive). |
 | `to` | `AAAA-LL-ZZ` | — | — | The end date (inclusive). `from` cannot be after `to`. |
 | `doar_confirmate` | `0` / `1` | `0` | — | Only journeys with a confirmed result. |
+| `fara_aeroport` | `0` / `1` | `1` on the `/api/stats*` routes (Statistici page), `0` elsewhere (including `/api/stats/rankings`, the Rankings page) | — | `1`: without the trips to/from the `AEROPORT H COANDA` station (short and almost always on time). Train/station pages, the history and the catalog do not drop them by default. |
 
 The statistics responses always include a `params` block with the effective values (for example
 `"on_time_max_min": 5, "min_sample": 5, "include_low_quality": false, "final_read_max_gap_min": 15`).
