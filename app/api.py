@@ -35,6 +35,7 @@ from app import (admin, captures, corrections, corrections_api, export, history_
                  peron_api, poller, seasons, stats, stats_api, stats_quality_daily, system_api,
                  telegram, trains_api, weather)
 from app import stats_dwell, stats_platform  # noqa: E402  (secțiuni publice noi #statistici)
+from app import stats_read_errors  # noqa: E402  (erori de citire, public #statistici)
 from app import ocr_alt_api  # noqa: E402  (#ocr2, admin)
 from app import infofer_api  # noqa: E402  (#infofer, admin, spike intern)
 from app import line_prediction, stats_overview  # noqa: E402  (Val 5: sezoane CSV, estimare per tren)
@@ -585,6 +586,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     app.include_router(stats_api.router)   # /api/journeys, /api/trains/stats, /api/stats*
     app.include_router(stats_platform.router)  # /api/stats/platform-changes
     app.include_router(stats_dwell.router)     # /api/stats/dwell
+    app.include_router(stats_read_errors.router)  # /api/stats/read-errors
     app.include_router(peron_api.router)       # /api/predict/peron (estimare, read-only)
     app.include_router(trains_api.router)  # /api/trains (public catalog)
     app.include_router(system_api.router)  # /api/system (public, minimal)

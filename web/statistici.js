@@ -2218,6 +2218,7 @@
     later(function () { platformsSection(d, boards); });
     (App.statsExtra || []).forEach(function (x) { if (App.statExport) App.statExport.lazy(x, v.ui.body, v.p); else x(v.ui.body, v.p); });
     later(function () { qualitySection(d); }, "charts.toc.quality");
+    later(readErrorsSection);
     glossary(d);
     if (U()) {
       U().stagger(v.ui.body.querySelector(".ss-prob-list"));
@@ -2228,6 +2229,23 @@
       C3().toc(v.ui.body);
       tocSect();
     }
+  }
+
+  // "Erori de citire" (stat_read_errors.js, lazy, not in the SW shell): the figure now (page order), the file + data then
+  var readErrP = null;
+  function readErrorsSection() {
+    var f = figure({ title: tt("stats.fig.read_err"), key: "erori-de-citire", wide: true, how: tt("stats.fig.read_err.how") });
+    if (!readErrP) readErrP = new Promise(function (resolve) {
+      var sc = document.createElement("script");
+      sc.src = "stat_read_errors.js?v=1";
+      sc.onload = resolve;
+      sc.onerror = function () { readErrP = null; resolve(); };
+      document.head.append(sc);
+    });
+    readErrP.then(function () {
+      if (App.statReadErrors) App.statReadErrors.render(f.host);
+      else f.host.append(el("p", "ss-empty", tt("stats.fig.read_err.error")));
+    });
   }
 
   // RO/EN switch: the filter labels and every chart are drawn again in the new language
