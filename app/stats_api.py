@@ -44,7 +44,9 @@ def _date(raw: str | None, name: str) -> date | None:
         raise _bad(f"Data „{name}” invalidă (AAAA-LL-ZZ).") from None
 
 
-def params(request: Request) -> stats.Params:
+def params(request: Request, airport_default: str = "0") -> stats.Params:
+    """`airport_default`: `fara_aeroport` when absent — "1" (airport out) for the Statistici
+    routes (stats_params), "0" for train/station/journey pages, which keep every journey."""
     q = request.query_params
     board = q.get("board") or None
     if board is not None and board not in stats.BOARDS:
@@ -55,9 +57,18 @@ def params(request: Request) -> stats.Params:
     conf = q.get("doar_confirmate") or "0"
     if conf not in ("0", "1"):
         raise _bad("Parametru „doar_confirmate” invalid (0 sau 1).")
+    air = q.get("fara_aeroport") or airport_default
+    if air not in ("0", "1"):
+        raise _bad("Parametru „fara_aeroport” invalid (0 sau 1).")
     return stats.Params(on_time=_int(q.get("prag"), "prag", 0, 60),
                         min_sample=_int(q.get("min"), "min", 1, 1000),
-                        board=board, date_from=d0, date_to=d1, confirmed_only=conf == "1")
+                        board=board, date_from=d0, date_to=d1, confirmed_only=conf == "1",
+                        no_airport=air == "1")
+
+
+def stats_params(request: Request) -> stats.Params:
+    """params() for the Statistici page routes: the airport is out unless fara_aeroport=0."""
+    return params(request, airport_default="1")
 
 
 def _fmt(request: Request) -> str:
@@ -89,7 +100,7 @@ def _sp3_args(request: Request):
         if len(v) > MAX_QUERY:
             raise _bad(f"Parametru „{name}” prea lung.")
         filters[name] = v or None
-    p = params(request)
+    p = stats_params(request)
     today = datetime.now(journeys.TZ).date()
     if perioada != "all":
         if p.date_from or p.date_to:
@@ -173,7 +184,7 @@ async def train_journeys(request: Request, no: str):
 
 @router.get("/api/stats")
 async def stats_overview(request: Request):
-    p = params(request)
+    p = stats_params(request)
     if _fmt(request) == "csv":
         raise _bad("Pentru export CSV folosiți /api/journeys?format=csv sau /api/trains/stats?format=csv.")
     return await run_in_threadpool(stats.overview, _store(request), p)
@@ -194,7 +205,7 @@ async def stats_overview_v2(request: Request):
         if len(v) > MAX_QUERY:
             raise _bad(f"Parametru „{name}” prea lung.")
         filters[name] = v or None
-    p = params(request)
+    p = stats_params(request)
     today = datetime.now(journeys.TZ).date()
     if perioada != "all":
         if p.date_from or p.date_to:
@@ -244,7 +255,7 @@ async def stats_reliable_route(request: Request):
 
 @router.get("/api/stats/rankings")
 async def stats_rankings(request: Request):
-    p = params(request)
+    p = stats_params(request)
     fmt = _fmt(request)
     limit = _int(request.query_params.get("limit"), "limit", 1, RANK_MAX) or 10
 

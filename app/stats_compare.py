@@ -43,7 +43,8 @@ def window_echo(today: date) -> dict:
 def scoped(p: stats.Params, first: date | None, last: date | None) -> stats.Params:
     """The request's thresholds and board, with another date range."""
     return stats.Params(on_time=p.on_time, min_sample=p.min_sample, board=p.board,
-                        date_from=first, date_to=last, confirmed_only=p.confirmed_only)
+                        date_from=first, date_to=last, confirmed_only=p.confirmed_only,
+                        no_airport=p.no_airport)
 
 
 def load(store, p: stats.Params) -> tuple[list[dict], dict]:

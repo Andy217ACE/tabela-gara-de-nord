@@ -65,6 +65,7 @@ Documentul descrie versiunea **Beta 1.72** (schema 10) (`VERSION`). Pagina de in
 | `from` | `AAAA-LL-ZZ` | — | — | Data de început (inclusiv). |
 | `to` | `AAAA-LL-ZZ` | — | — | Data de sfârșit (inclusiv). `from` nu poate fi după `to`. |
 | `doar_confirmate` | `0` / `1` | `0` | — | Doar călătoriile cu rezultat confirmat. |
+| `fara_aeroport` | `0` / `1` | `1` pe rutele `/api/stats*` (pagina Statistici), `0` în rest | — | `1`: fără cursele spre/dinspre stația `AEROPORT H COANDA` (scurte și aproape mereu la timp). Paginile de tren/stație, istoricul și catalogul nu le scot implicit. |
 
 Răspunsurile statistice includ întotdeauna un bloc `params` cu valorile efective (de exemplu
 `"on_time_max_min": 5, "min_sample": 5, "include_low_quality": false, "final_read_max_gap_min": 15`).

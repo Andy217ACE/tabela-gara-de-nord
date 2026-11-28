@@ -37,7 +37,7 @@
   // the page's filters as a query string; `period` false: the endpoint has its own 7-day window
   function qs(p, period) {
     var q = new URLSearchParams();
-    ["perioada", "board", "operator", "tip", "doar_confirmate"].forEach(function (f) {
+    ["perioada", "board", "operator", "tip", "doar_confirmate", "fara_aeroport"].forEach(function (f) {
       if (!p || !p[f] || (f === "perioada" && (!period || p[f] === "all"))) return;
       q.set(f, p[f]);
     });

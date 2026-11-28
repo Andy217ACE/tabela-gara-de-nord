@@ -39,7 +39,8 @@
   function wdShort(i) { return tt("stats.wds." + i); }
   function periods() { return ["all", "30", "7", "1"].map(function (k) { return [k, tt("stats.period." + k)]; }); }
   function boardOpts() { return [["", tt("stats.board.both")], ["arrival", tt("stats.board.arrival")], ["departure", tt("stats.board.departure")]]; }
-  var FIELDS = ["perioada", "board", "operator", "tip", "doar_confirmate"];
+  // fara_aeroport: "" = airport left out (server default), "0" = included (only then in the URL)
+  var FIELDS = ["perioada", "board", "operator", "tip", "doar_confirmate", "fara_aeroport"];
   var STATE_TEXT = lazy("stats.state.", ["confirmed", "unconfirmed", "unknown", "in_progress"]);
   var OBS_TEXT = lazy("stats.obs.", ["ok", "uncertain", "rejected_low_conf", "incomplete"]);
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -88,6 +89,7 @@
     if (f === "perioada") return ["all", "30", "7", "1"].indexOf(v) >= 0 ? v : "all";
     if (f === "board") return v === "arrival" || v === "departure" ? v : "";
     if (f === "doar_confirmate") return v === "1" ? "1" : "";
+    if (f === "fara_aeroport") return v === "0" ? "0" : "";
     return v.slice(0, 40);
   }
 
@@ -127,7 +129,7 @@
   function presetsApply(filters) {
     var opts = (v.data && v.data.options) || {};
     function known(list, val) { return (list || []).some(function (o) { return o.name === val; }); }
-    var p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    var p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "", fara_aeroport: "" };
     FIELDS.forEach(function (f) {
       var val = clean(f, filters[f]);
       if (f === "operator" && v.data && !known(opts.operators, val)) val = "";  // before data: keep, validated on load
@@ -401,13 +403,19 @@
     ci.type = "checkbox";
     ci.id = "ss-confirmate";
     chk.append(ci, el("span", null, tt("stats.filters.confirmed_only")));
+    var achk = el("label", "ss-check");
+    var ai = el("input");
+    ai.type = "checkbox";
+    ai.id = "ss-fara-aeroport";
+    ai.checked = true;
+    achk.append(ai, el("span", null, tt("stats.filters.no_airport")));
     var rs = el("button", "btn btn-ghost btn-sm ss-reset", tt("stats.reset"));
     rs.type = "button";
     rs.hidden = true;
     rs.addEventListener("click", function () { resetFilters(); });
     // < 600 px: fields collapse behind „Filtre (n)”
     var fields = el("div", "ss-fields");
-    fields.append(per.node, brd.node, op.node, tp.node, chk);
+    fields.append(per.node, brd.node, op.node, tp.node, chk, achk);
     var ft = el("button", "btn btn-ghost btn-sm ss-filters-toggle", "");
     ft.type = "button";
     ft.setAttribute("aria-expanded", "false");
@@ -438,7 +446,7 @@
     }
     function read() {
       return { perioada: per.get() || "all", board: brd.get(), operator: op.input.value,
-               tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "" };
+               tip: tp.input.value, doar_confirmate: ci.checked ? "1" : "", fara_aeroport: ai.checked ? "" : "0" };
     }
     form.addEventListener("change", function () {
       v.p = read();
@@ -450,7 +458,7 @@
     var body = el("div", "ss-body");
     var quick = el("div", "ss-quick-host");
     root.replaceChildren(form, quick, body);
-    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci,
+    v.ui = { form: form, quick: quick, body: body, reset: rs, toggle: ft, fields: fields, applyPanel: applyPanel, per: per, brd: brd, op: op, tp: tp, ci: ci, ai: ai,
              later: [], queue: [], io: null, out: null };
     if (!resizeOn) {   // once: ensure() runs again after hide()
       resizeOn = true;
@@ -490,16 +498,17 @@
     v.ui.op.fill(v.data && v.data.options ? v.data.options.operators : [], p.operator);
     v.ui.tp.fill(v.data && v.data.options ? v.data.options.types : [], p.tip);
     v.ui.ci.checked = p.doar_confirmate === "1";
+    v.ui.ai.checked = p.fara_aeroport !== "0";
     syncReset();
   }
 
   // „Resetează filtrele” shows only while a filter differs from its default
   function isDefault(p) {
-    return !p || (p.perioada === "all" && !p.board && !p.operator && !p.tip && !p.doar_confirmate);
+    return !p || (p.perioada === "all" && !p.board && !p.operator && !p.tip && !p.doar_confirmate && !p.fara_aeroport);
   }
   function activeCount(p) {
     if (!p) return 0;
-    return (p.perioada && p.perioada !== "all" ? 1 : 0) + (p.board ? 1 : 0) + (p.operator ? 1 : 0) + (p.tip ? 1 : 0) + (p.doar_confirmate ? 1 : 0);
+    return (p.perioada && p.perioada !== "all" ? 1 : 0) + (p.board ? 1 : 0) + (p.operator ? 1 : 0) + (p.tip ? 1 : 0) + (p.doar_confirmate ? 1 : 0) + (p.fara_aeroport ? 1 : 0);
   }
   function syncReset() {
     if (v.ui && v.ui.reset) v.ui.reset.hidden = isDefault(v.p);
@@ -1061,6 +1070,11 @@
       (p.operator ? tt("stats.summary.operator", { v: p.operator }) : "") + (p.tip ? tt("stats.summary.type", { v: p.tip }) : "") +
       (p.confirmed_only ? tt("stats.summary.confirmed_only") : "");
     sec.append(cov);
+    if (p.no_airport) {
+      var an = el("p", "ss-coverage ss-airport-note", tt("stats.summary.no_airport"));
+      an.setAttribute("role", "note");
+      sec.append(an);
+    }
 
     if (!h.sufficient) {
       var w = el("p", "st-warn ss-history");
@@ -2131,7 +2145,7 @@
   }
 
   function resetFilters() {
-    v.p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "" };
+    v.p = { perioada: "all", board: "", operator: "", tip: "", doar_confirmate: "", fara_aeroport: "" };
     v.sect = "";
     setForm(v.p);
     syncHash(v.p);
@@ -2165,7 +2179,7 @@
     if (!d.coverage || !d.coverage.journeys) {
       summary(d);
       var msg = tt("stats.empty.none");
-      var filtered = !!(v.p && (v.p.perioada !== "all" || v.p.board || v.p.operator || v.p.tip || v.p.doar_confirmate));
+      var filtered = !!(v.p && (v.p.perioada !== "all" || v.p.board || v.p.operator || v.p.tip || v.p.doar_confirmate || v.p.fara_aeroport));
       if (U() && U().empty) {
         v.ui.body.append(U().empty({ art: "search", title: tt("stats.empty.title"), text: msg,
           action: filtered ? { label: tt("stats.empty.clear"), run: resetFilters } : null }));

@@ -91,18 +91,25 @@ def distribution(values) -> list[dict]:
 
 # ---- journey sets ---------------------------------------------------------------------
 
+# Airport shuttles/trains: very short and almost always on time, so the Statistici page
+# leaves them out by default (stats_api.stats_params, `fara_aeroport`). Stored station key.
+AIRPORT_STATION = "AEROPORT H COANDA"
+
+
 class Params:
     """Validated request parameters (see stats_api.parse_params)."""
 
     def __init__(self, on_time: int | None = None, min_sample: int | None = None,
                  board: str | None = None, date_from: date | None = None,
-                 date_to: date | None = None, confirmed_only: bool = False):
+                 date_to: date | None = None, confirmed_only: bool = False,
+                 no_airport: bool = False):
         self.on_time = default_on_time() if on_time is None else on_time
         self.min_sample = default_min_sample() if min_sample is None else min_sample
         self.board = board
         self.date_from = date_from
         self.date_to = date_to
         self.confirmed_only = confirmed_only
+        self.no_airport = no_airport
 
     def where(self) -> tuple[list[str], list]:
         # never ghosts; the reduced-quality (beta) period only with STATS_INCLUDE_LOW_QUALITY=1
@@ -116,6 +123,9 @@ class Params:
         if self.date_to:
             w.append("s.service_date <= ?")
             a.append(self.date_to.isoformat())
+        if self.no_airport:
+            w.append(f"{journeys.STATION_SQL} <> ?")
+            a.append(AIRPORT_STATION)
         return w, a
 
     def echo(self) -> dict:
@@ -124,6 +134,7 @@ class Params:
                 "from": self.date_from.isoformat() if self.date_from else None,
                 "to": self.date_to.isoformat() if self.date_to else None,
                 "confirmed_only": self.confirmed_only,
+                "no_airport": self.no_airport,
                 "include_low_quality": dq.include_low_quality(),
                 "final_read_max_gap_min": journeys.final_gap_min()}
 

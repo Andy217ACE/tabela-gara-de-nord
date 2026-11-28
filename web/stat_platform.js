@@ -108,7 +108,8 @@
     sec.append(el("p", "ss-n", tt("stats.pc.loading")));
     body.append(sec);
     var q = "perioada=" + encodeURIComponent((p && p.perioada) || "all") +
-      (p && p.board ? "&board=" + encodeURIComponent(p.board) : "");
+      (p && p.board ? "&board=" + encodeURIComponent(p.board) : "") +
+      (p && p.fara_aeroport === "0" ? "&fara_aeroport=0" : "");
     if (cache.key === q && cache.data && Date.now() - cache.at < TTL) {
       sec.removeAttribute("aria-busy");
       fill(sec, cache.data);

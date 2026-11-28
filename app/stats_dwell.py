@@ -67,7 +67,8 @@ def compute(rows: list[dict], min_group: int) -> dict:
     }
 
 
-def fetch(store, date_from: date | None, date_to: date | None, board: str | None) -> list[dict]:
+def fetch(store, date_from: date | None, date_to: date | None, board: str | None,
+          no_airport: bool = False) -> list[dict]:
     where, args = ["s.status = 'gone'"], []
     if date_from:
         where.append("s.service_date >= ?")
@@ -78,6 +79,9 @@ def fetch(store, date_from: date | None, date_to: date | None, board: str | None
     if board:
         where.append("s.board = ?")
         args.append(board)
+    if no_airport:
+        where.append("s.station <> ?")
+        args.append(stats.AIRPORT_STATION)
     sql = ("SELECT s.board, s.train_type, s.train_no, s.station, s.first_seen, s.last_seen"
            " FROM services s WHERE " + " AND ".join(where))
     out = []
@@ -92,12 +96,13 @@ def fetch(store, date_from: date | None, date_to: date | None, board: str | None
 
 @router.get("/api/stats/dwell")
 async def dwell(request: Request):
-    d0, d1, board = read_filters(request)
+    d0, d1, board, no_airport = read_filters(request)
     store = request.app.state.store
 
     def run():
-        return compute(fetch(store, d0, d1, board), stats.default_min_sample())
+        return compute(fetch(store, d0, d1, board, no_airport), stats.default_min_sample())
 
     d = await run_in_threadpool(run)
-    d["params"] = {"perioada": request.query_params.get("perioada") or "all", "board": board}
+    d["params"] = {"perioada": request.query_params.get("perioada") or "all", "board": board,
+                   "no_airport": no_airport}
     return d

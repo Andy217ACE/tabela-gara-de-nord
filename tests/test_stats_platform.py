@@ -144,7 +144,9 @@ def client(store):
 
 
 def test_api_platform_changes(client):
-    r = client.get("/api/stats/platform-changes")
+    # default: the Airport trip (7911) left out, as on the whole Statistici page
+    assert client.get("/api/stats/platform-changes").json()["n_with_platform"] == 3
+    r = client.get("/api/stats/platform-changes?fara_aeroport=0")
     assert r.status_code == 200
     d = r.json()
     assert d["n_with_platform"] == 4 and d["n_changed"] == 3
