@@ -137,7 +137,9 @@ def test_top_menu_visible_and_reachable(browser, base_url, case, theme):  # noqa
         # every link navigates; the active one is visible inside the bar
         for href, label in reversed(NAV):
             page.locator(f'.mainnav .nav-item[href="{href}"]').click()
-            page.wait_for_timeout(120)
+            # lazy pages (statistici, …) can mark aria-current after >120 ms on CI: wait for the state
+            page.wait_for_selector(f'.mainnav .nav-item[href="{href}"][aria-current="page"]', state="attached", timeout=5000)
+            page.wait_for_timeout(120)   # scrollIntoView of the active item
             act = page.evaluate(ACTIVE_VISIBLE)
             assert act and act["href"] == href and act["inside"], (href, act)
             assert not page.evaluate(STATE)["hscroll"], href
