@@ -1,9 +1,25 @@
 # Istoric versiuni — Tabela Gara de Nord
 
 Schema versiunilor: `Beta 1.NN`, unde NN crește cu 1 la fiecare deploy pe
-tabelacfr.ddns.net. Cele mai noi versiuni sunt sus.
+tabelagn.online (până la 1.79: tabelacfr.ddns.net). Cele mai noi versiuni sunt sus.
 
 © 2026 Andy217Ace · Date preluate de la CFR (cfr.ro) — proiect independent, neafiliat CFR
+
+## Beta 1.80 — 2026-11-28
+### Schimbat
+- **Adresa oficială devine https://tabelagn.online.** `www.tabelagn.online` trimite permanent (301) la ea, cu aceeași cale.
+- **Vechiul tabelacfr.ddns.net trimite la noul domeniu** paginile deschise în browser și roboții motoarelor de căutare, cu aceeași cale; linkurile vechi merg în continuare.
+- **Aplicația instalată de pe vechea adresă continuă să funcționeze:** datele, notificările și actualizările ei sunt servite în continuare, ca nimeni să nu rămână cu o tabelă goală.
+- **Adresele din SEO** (adresa canonică, harta site-ului, previzualizările pentru rețele sociale), subiectul notificărilor push, alertele de server și documentația folosesc noul domeniu.
+- **Documentație nouă despre domeniu:** DNS la Cloudflare („DNS only”, ca fail2ban și limitele să vadă IP-urile reale), nameserverele la GoDaddy, cele două certificate și redirecționările.
+- Fișierele de verificare Google și Bing rămân pe vechea adresă, pentru „Schimbarea adresei” din Search Console.
+### English
+- **The official address is now https://tabelagn.online.** `www.tabelagn.online` redirects permanently (301) to it, keeping the path.
+- **The old tabelacfr.ddns.net sends page opens and search-engine crawlers to the new domain**, keeping the path; old links still work.
+- **The app installed from the old address keeps working:** its data, notifications and updates are still served, so nobody is left with an empty board.
+- **SEO addresses** (canonical address, sitemap, social previews), the push subject, the server alerts and the docs use the new domain.
+- **New domain documentation:** DNS at Cloudflare ("DNS only", so fail2ban and the limits see real visitor IPs), the GoDaddy nameservers, the two certificates and the redirects.
+- The Google and Bing verification files stay on the old address, for Search Console's "Change of address".
 
 ## Beta 1.79 — 2026-11-28
 ### Adăugat
