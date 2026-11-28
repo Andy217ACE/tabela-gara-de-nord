@@ -219,7 +219,7 @@
     var name = t.station ? window.I18N.station(t.station) : "";   // display name; the key stays in the URL
     c.stationLink.textContent = name || "—";
     if (t.station) {
-      var href = "#statie?nume=" + encodeURIComponent(t.station);
+      var href = routeHref("#statie?nume=" + encodeURIComponent(t.station));
       if (c.stationLink.getAttribute("href") !== href) c.stationLink.setAttribute("href", href);
       c.stationLink.setAttribute("aria-label", T(fromBoard ? "board.stationPageFrom" : "board.stationPageTo",
         { name: name + (unsure ? " (" + unsureText() + ")" : "") }));
@@ -458,6 +458,7 @@
         }
         state.data = data;
         state.receivedAt = performance.now();
+        dropSsr();   // the API answers: the interactive views have real data now
         state.failed = !!data.sw_offline; // served from the service worker cache
 
         BOARDS.forEach(function (b) { renderBoard(b, data[b]); markPanelStale(b, data); });
@@ -465,7 +466,7 @@
       .catch(function () {
         if (state.inflight !== ctrl) return; // superseded (e.g. visibilitychange): not an outage
         state.failed = true;
-        if (!state.data) showLoadFailure();
+        if (!state.data) { showLoadFailure(); ssrFallback(); }
       })
       .then(function () {
         clearTimeout(to);
@@ -643,6 +644,14 @@
     var s = params.toString();
     return path + (s ? "?" + s : "");
   }
+  // The href shown for a route link: its final address ("#tren?nr=1636" → "/tren/1636", "?lang=en" in
+  // English), so crawlers, a new tab and middle-click get the page itself; a click stays in-app (initLinks).
+  function routeHref(h) {
+    var u = hashToUrl(h);
+    if (!u || u.charAt(0) !== "/" || u.indexOf("#") >= 0) return h;   // private (#admin…) or not a route
+    if (pageLang() === "en" && !/[?&]lang=/.test(u)) u += (u.indexOf("?") >= 0 ? "&" : "?") + "lang=en";
+    return u;
+  }
   function parseHash() {
     var h = location.hash || "", q = h.indexOf("?");
     var base = q >= 0 ? h.slice(0, q) : h, params;
@@ -806,9 +815,63 @@
       : (TITLES.indexOf(name) >= 0 ? T("title." + name) : "Tabela Gara de Nord") + " · Tabela Gara de Nord";
   }
 
+  // The head (title, description, canonical, hreflang, og/twitter, robots, JSON-LD) of a public page
+  // has one source: app/seo.py. The server puts it in the HTML on a direct visit; after an in-app
+  // navigation, back/forward or a language change the same values come from /api/meta.
+  var headKey = null;   // "path|lang" whose head is in the document (set in init: the server-rendered one)
+  var headSeq = 0;
+  function pageLang() { return window.I18N && window.I18N.lang() === "en" ? "en" : "ro"; }
+  function headTag(sel, tag, attrs) {
+    var n = document.head.querySelector(sel);
+    if (!n) {
+      n = document.createElement(tag);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      document.head.appendChild(n);
+    }
+    return n;
+  }
+  function applyHead(m, keepTitle) {
+    if (!keepTitle) document.title = m.title;   // tren/statie: stats.js sets the title from the data
+    [["name", "description", m.description], ["property", "og:title", m.title], ["property", "og:description", m.description],
+     ["property", "og:url", m.url], ["name", "twitter:title", m.title], ["name", "twitter:description", m.description]
+    ].forEach(function (x) {
+      var n = document.head.querySelector("meta[" + x[0] + '="' + x[1] + '"]');
+      if (n) n.setAttribute("content", x[2]);
+    });
+    document.head.querySelectorAll('link[rel="canonical"], link[rel="alternate"][hreflang], meta[name="robots"], script[type="application/ld+json"]')
+      .forEach(function (n) { n.remove(); });
+    if (m.canonical) headTag('link[rel="canonical"]', "link", { rel: "canonical" }).setAttribute("href", m.canonical);
+    Object.keys(m.alternates || {}).forEach(function (code) {
+      var l = document.createElement("link");
+      l.rel = "alternate";
+      l.setAttribute("hreflang", code);
+      l.href = m.alternates[code];
+      document.head.appendChild(l);
+    });
+    if (m.robots) headTag('meta[name="robots"]', "meta", { name: "robots" }).setAttribute("content", m.robots);
+    if (m.jsonld) headTag('script[type="application/ld+json"]', "script", { type: "application/ld+json" }).textContent = JSON.stringify(m.jsonld);
+  }
+  function syncHead(name, changed) {
+    if (name !== "tabela" && PATHS.indexOf(name) < 0) { setTitle(name); headKey = null; return; }   // private (#admin…): hash-only, never indexed
+    var key = location.pathname + "|" + pageLang();
+    if (key === headKey) return;   // already the head of this address (e.g. the server-rendered one)
+    var detail = name === "tren" || name === "statie", seq = ++headSeq;
+    if (!detail || changed) setTitle(name);   // until /api/meta (tren/statie: stats.js) answers; offline it stays
+    fetch("/api/meta?path=" + encodeURIComponent(location.pathname) + "&lang=" + pageLang(),
+          { headers: { Accept: "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (m) {
+        if (seq !== headSeq || location.pathname + "|" + pageLang() !== key) return;   // superseded
+        applyHead(m, detail);
+        headKey = key;
+      })
+      .catch(function () { /* offline: the short title stays */ });
+  }
+
   function route() {
     var r = parseHash();
     var name = r.name;
+    if (location.pathname !== ssrPath) dropSsr();   // the server copy is of another page
     routedHref = location.href;
     currentRoute = name;
     if (!pageCssReady(name)) {   // route() runs again when the stylesheet is in
@@ -839,7 +902,7 @@
     revealActiveNav();
     document.body.setAttribute("data-route", name);   // Beta 1.26: page canvas (ui2.css)
     // a view may refine the title later (stats.js: „Tren 1636 · …”)
-    setTitle(name);
+    syncHead(name, changed);
     var view = window.TabelaApp.views[name];
     if (view && typeof view.show === "function") view.show(r.params);
     if (changed) {
@@ -877,6 +940,7 @@
   }
   window.TabelaApp.toast = toast;
   window.TabelaApp.syncUrl = syncUrl;
+  window.TabelaApp.routeHref = routeHref;
   window.TabelaApp.config = loadConfig;   // Promise of the validated /api/config
   // the "uncertain reading" marker follows the active language
   Object.defineProperty(window.TabelaApp, "UNSURE", { get: unsureText, configurable: true, enumerable: true });
@@ -1011,7 +1075,7 @@
     }
     renderLive();
     renderThemeButtons();
-    setTitle(currentRoute || "tabela");
+    syncHead(currentRoute || "tabela", false);
   }
   document.addEventListener("i18n:change", relocalize);
 
@@ -1039,9 +1103,20 @@
     });
   }
 
+  // The server-rendered copy of the page (app/seo.py, section.ssr) stays in the DOM, hidden by
+  // style.css, until the API answers; if the first board load fails it is shown (ssr-fallback),
+  // so the last reading and its time stay readable. It describes the address it was served for:
+  // gone once the API works or the user moves to another page.
+  var ssrPath = location.pathname;
+  function dropSsr() { var s = document.querySelector(".ssr"); if (s) s.remove(); }
+  function ssrFallback() {
+    var s = document.querySelector(".ssr");
+    if (s && location.pathname === ssrPath) s.classList.add("ssr-fallback");
+    else dropSsr();
+  }
+
   function init() {
-    var ssr = document.querySelector(".ssr");   // the server-rendered copy for crawlers (app/seo.py)
-    if (ssr) ssr.remove();
+    headKey = location.pathname + "|" + (curLang() === "en" ? "en" : "ro");   // what the server rendered
     initMoreNav();   // before initLang: its links get the dictionary texts too
     initLang();
     initPeronEst();

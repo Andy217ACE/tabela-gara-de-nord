@@ -1,6 +1,7 @@
 # © 2026 Andy217Ace
 """SEO (app/seo.py): path URLs with their own head, canonical/hreflang, JSON-LD, server-rendered
 content, 404 + noindex, redirects, robots.txt and sitemap.xml."""
+import html
 import json
 import re
 import subprocess
@@ -50,7 +51,7 @@ def _types(ld):
     return {n["@type"] for n in ld["@graph"]}
 
 
-@pytest.mark.parametrize("path", ["/"] + ["/" + p for p in seo.PUBLIC])
+@pytest.mark.parametrize("path", ["/"] + ["/" + p for p in seo.PUBLIC if p not in seo.NOINDEX])
 def test_public_pages_have_own_head(client, path):
     r = client.get(path)
     assert r.status_code == 200 and "text/html" in r.headers["content-type"]
@@ -199,3 +200,59 @@ def test_head_on_seo_routes(client):
         g, h = client.get(path), client.head(path)
         assert h.status_code == g.status_code == 200, path
         assert h.headers["content-type"] == g.headers["content-type"], path
+
+
+def test_followed_page_is_noindex_and_not_in_sitemap(client):
+    r = client.get("/urmarite")
+    assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
+    h = r.text
+    assert '<meta name="robots" content="noindex">' in h
+    assert 'rel="canonical"' not in h and "application/ld+json" not in h
+    sm = client.get("/sitemap.xml").text
+    assert "/urmarite" not in sm
+    assert client.get("/api/meta", params={"path": "/urmarite"}).json()["robots"] == "noindex"
+
+
+def test_sitemap_board_lastmod_is_last_capture(client):
+    st = client.app.state.store
+    with st._lock:
+        last = st._last_ok_ts()
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    root = ET.fromstring(client.get("/sitemap.xml").content)
+    home = next(u for u in root.findall("s:url", ns) if u.find("s:loc", ns).text == f"{SITE}/")
+    mod = home.find("s:lastmod", ns)
+    assert (mod.text if mod is not None else "?") == seo._day(last)
+
+
+@pytest.mark.parametrize("path", ["/tren/999999", "/statie/NUEXISTA"])
+def test_unknown_detail_pages_are_404_noindex(client, path):
+    r = client.get(path, follow_redirects=False)
+    assert r.status_code == 404 and r.headers["x-robots-tag"] == "noindex"
+    assert '<meta name="robots" content="noindex">' in r.text and 'rel="canonical"' not in r.text
+    m = client.get("/api/meta", params={"path": path}).json()
+    assert m["status"] == 404 and m["robots"] == "noindex" and m["canonical"] is None and m["jsonld"] is None
+
+
+def _head(h):
+    """The head values the SPA keeps in sync, read from a server-rendered page."""
+    def one(pat):
+        m = re.search(pat, h)
+        return html.unescape(m.group(1)) if m else None
+    alts = {c: html.unescape(u) for c, u in re.findall(r'<link rel="alternate" hreflang="([^"]+)" href="([^"]+)">', h)}
+    ld = re.search(r'<script type="application/ld\+json">(.*?)</script>', h, re.S)
+    return {"title": one(r"<title>([^<]*)</title>"), "description": one(r'<meta name="description" content="([^"]*)">'),
+            "url": one(r'<meta property="og:url" content="([^"]*)">'),
+            "canonical": one(r'<link rel="canonical" href="([^"]*)">'), "alternates": alts or None,
+            "robots": one(r'<meta name="robots" content="([^"]*)">'),
+            "jsonld": json.loads(ld.group(1)) if ld else None}
+
+
+@pytest.mark.parametrize("path", ["/", "/statistici", "/urmarite", "/tren/1636", "/statie/BRASOV", "/tren/999999",
+                                  "/statie/NUEXISTA", "/nu-exista"])
+@pytest.mark.parametrize("lang", ["ro", "en"])
+def test_api_meta_equals_the_rendered_head(client, path, lang):
+    """/api/meta (what app.js applies after an in-app navigation) = the head of a direct visit."""
+    page = client.get(path + ("?lang=en" if lang == "en" else ""), follow_redirects=False)
+    m = client.get("/api/meta", params={"path": path, "lang": lang}).json()
+    assert m["status"] == page.status_code
+    assert {k: m[k] for k in _head("")} == _head(page.text)

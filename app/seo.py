@@ -26,6 +26,7 @@ SITE = os.environ.get("SITE_URL", "https://tabelagn.online").rstrip("/")
 NAME = "Tabela Gara de Nord"
 PUBLIC = ("istoric", "urmarite", "trenuri", "statistici", "clasamente", "statii", "versiuni", "cum")
 PRIVATE = ("admin", "ocr", "ocr2", "infofer", "sistem", "setari")  # hash-only, noindex
+NOINDEX = ("urmarite",)  # served at its path, but personal (this browser's follows): noindex, not in the sitemap
 BOARD_ROWS = 20
 SITEMAP_DAYS = 90
 SITEMAP_TRAINS_MAX = 5000
@@ -130,6 +131,7 @@ class Page:
     jsonld: list = field(default_factory=list)
     status: int = 200
     crumbs: list = field(default_factory=list)  # [(name, path)] after the home crumb
+    noindex: bool = False
 
 
 def esc(s) -> str:
@@ -248,7 +250,7 @@ def static_page(name: str, lang: str, store, cache) -> Page:
         body = (f'<h2>{esc(t["recent"])}</h2><ul>' + "".join(
             f'<li><a href="/tren/{no}">{esc(t["train"])} {no}</a></li>' for no, _ in items) + "</ul>")
     crumbs = [] if name == "tabela" else [(title.split(" · ")[0], path)]
-    return Page(path, name, title, desc, body, crumbs=crumbs)
+    return Page(path, name, title, desc, body, crumbs=crumbs, noindex=name in NOINDEX)
 
 
 def train_page(no: int, lang: str, store, cache) -> Page | None:
@@ -326,6 +328,10 @@ def _set(html_: str, pattern: str, value: str) -> str:
     return re.sub(pattern, lambda m: m.group(1) + esc(value) + m.group(2), html_, count=1)
 
 
+def indexable_page(page: Page) -> bool:
+    return page.status == 200 and not page.noindex
+
+
 def render(shell: str, page: Page, lang: str) -> str:
     """index.html (already in `lang`) with the page's head and content."""
     me = url(page.path, lang)
@@ -337,7 +343,7 @@ def render(shell: str, page: Page, lang: str) -> str:
                             ("name", "twitter:description", page.description)):
         h = _set(h, rf'(<meta {attr}="{re.escape(name)}" content=")[^"]*(">)', val)
     head = []
-    indexable = page.status == 200
+    indexable = indexable_page(page)
     if indexable:
         head.append(f'<link rel="canonical" href="{esc(me)}">')
         for code in ("ro", "en"):
@@ -367,8 +373,9 @@ def robots_txt() -> str:
 
 
 def sitemap_xml(store) -> str:
-    today = datetime.now(TZ).date().isoformat()
-    entries = [("/", today)] + [("/" + p, None) for p in PUBLIC]
+    with store._lock:
+        last = store._last_ok_ts()   # the board changes with each capture, not with each request
+    entries = [("/", _day(last))] + [("/" + p, None) for p in PUBLIC if p not in NOINDEX]
     entries += [(f"/tren/{no}", _day(seen)) for no, seen in recent_trains(store)]
     entries += [(station_path(s["name"]), s["last_date"]) for s in station_list(store)]
     out = ['<?xml version="1.0" encoding="UTF-8"?>',

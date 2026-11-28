@@ -749,7 +749,7 @@
   // Numele stației = link spre pagina ei (#statie?nume=, stats.js); aspectul e moștenit.
   function stationLink(name, t) {
     var a = el("a", "station-link station-link-plain");
-    a.href = "#statie?nume=" + encodeURIComponent(name);
+    a.href = window.TabelaApp.routeHref("#statie?nume=" + encodeURIComponent(name));
     a.appendChild(nameNode(window.I18N.station(name), t));
     return a;
   }

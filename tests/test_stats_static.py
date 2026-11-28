@@ -125,7 +125,7 @@ def test_station_views_wired():
 
 
 def test_station_links_everywhere_and_safe():
-    href = 'href = "#statie?nume=" + encodeURIComponent('
+    href = 'routeHref("#statie?nume=" + encodeURIComponent('   # the final /statie/<key> URL (app.js routeHref)
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert '"#statie?nume=" + encodeURIComponent(t.station)' in app
     assert "station-link station-link-plain" in app
