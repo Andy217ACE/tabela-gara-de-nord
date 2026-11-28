@@ -68,8 +68,8 @@ def test_response_carries_label_threshold_and_backtest_figures(client):
     d = client.get("/api/predict/peron").json()
     assert "estimare" in d["note"].lower() and "nu informație oficială CFR" in d["note"]
     assert d["threshold"] == {"min_n": 5, "min_share_pct": 80}
-    assert d["backtest"]["accuracy_pct"] < 80  # cifra reală, nu inventată
-    assert d["backtest"]["n"] >= 50
+    assert d["backtest"]["accuracy_pct"] == 86.4  # cifrele măsurate (backtest 18-27.11.2026)
+    assert d["backtest"]["n"] == 206
 
 
 def test_endpoint_is_get_only_and_writes_nothing(client):
@@ -78,3 +78,24 @@ def test_endpoint_is_get_only_and_writes_nothing(client):
     before = s._conn.total_changes
     client.get("/api/predict/peron")
     assert s._conn.total_changes == before
+
+
+def _announce(client, sid, board, platform, no=400):
+    """Un tren cu peron anunțat pe panoul `board`, ora programată 10:00."""
+    c = client.app.state.store._conn
+    day = datetime.now(TZ).date().isoformat()
+    _svc(c, sid, no, day, platform, status="listed", board=board)
+    c.commit()
+
+
+def _dep(client):
+    return client.get("/api/predict/peron").json()["estimates"]["departures"]
+
+
+def test_occupied_line_on_other_board_hides_estimate_and_is_not_cached(client):
+    assert len(_dep(client)) == 1                      # linia liberă: estimarea apare
+    _announce(client, 950, "arrival", 4)               # sosire pe peron 4, aceeași oră
+    assert _dep(client) == []                          # panou schimbat: fără rezultat vechi
+    client.app.state.store._conn.execute("UPDATE services SET status='gone' WHERE id=950")
+    client.app.state.store._conn.commit()
+    assert len(_dep(client)) == 1                      # linia s-a eliberat

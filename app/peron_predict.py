@@ -38,6 +38,7 @@ MIN_LIFT = 5.0  # puncte peste linia de bază „ultimul peron citit”
 # putut măsura (zero cazuri pe 7 zile de date), deci nu se afișează.
 DISPLAY_MIN_N = 5
 DISPLAY_MIN_SHARE_PCT = 80
+OCCUPIED_WINDOW_MIN = 10  # linie ocupată: backtest 18-27.11.2026, ±10 min: acuratețe 83,0% -> 86,4%, 218 -> 206 estimări
 CONFUSION_PAIRS = (frozenset({5, 6}), frozenset({3, 8}))  # confuzii OCR, doar numărate
 
 
@@ -240,11 +241,28 @@ def gate(rep: dict) -> Gate:
     return Gate(True, f"publicat: acuratețe {acc} %, avantaj {diff:.1f} puncte")
 
 
-def estimate_board(cases: list[Case], board: str, trains: list[dict]) -> list[dict]:
+def _minutes(hhmm: str) -> int:
+    h, m = hhmm.split(":")[:2]
+    return int(h) * 60 + int(m)
+
+
+def _near(a: str, b: str) -> bool:
+    """Ore programate la cel mult OCCUPIED_WINDOW_MIN minute, circular peste miezul nopții."""
+    d = abs(_minutes(a) - _minutes(b))
+    return min(d, 1440 - d) <= OCCUPIED_WINDOW_MIN
+
+
+def estimate_board(cases: list[Case], board: str, trains: list[dict],
+                   occupied=()) -> list[dict]:
     """Estimări de AFIȘAT pentru trenurile de pe panou (``board``: arrival | departure).
 
     Doar trenuri fără peron anunțat, doar nivelul (a), doar peste pragul de afișare
-    (DISPLAY_MIN_N, DISPLAY_MIN_SHARE_PCT). Procentul se rotunjește în jos. Funcție pură."""
+    (DISPLAY_MIN_N, DISPLAY_MIN_SHARE_PCT). Procentul se rotunjește în jos.
+    ``occupied``: iterabil de ``(peron:int, ora_programată:"HH:MM")`` ale trenurilor care au
+    peron anunțat acum, de pe AMBELE panouri; estimarea se ascunde dacă un tren din ``occupied``
+    are același peron și ora programată la cel mult OCCUPIED_WINDOW_MIN minute (linie
+    ocupată). Funcție pură."""
+    occupied = list(occupied)
     pool = Pool()
     for c in cases:
         if c.board == board:
@@ -261,6 +279,8 @@ def estimate_board(cases: list[Case], board: str, trains: list[dict]) -> list[di
         pct = int(pred.share * 100 + 1e-9)
         if pct < DISPLAY_MIN_SHARE_PCT:
             continue
+        if any(p == pred.platform and _near(st, t["sched_time"]) for p, st in occupied):
+            continue  # linia e ocupată de alt tren în fereastră
         out.append({"train_no": probe.train_no, "station": t["station"],
                     "service_date": t["service_date"], "sched_time": t["sched_time"],
                     "platform": pred.platform, "n": pred.n, "share_pct": pct})
