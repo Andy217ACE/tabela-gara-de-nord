@@ -100,7 +100,7 @@ def test_more_menu_keyboard(browser, base_url):  # noqa: F811
         # a link of the menu: navigates, closes the menu, marks itself and the „Mai mult” button
         btn.click()
         menu.locator(".nav-more-link[data-route='clasamente']").click()
-        page.wait_for_function("location.hash === '#clasamente'")
+        page.wait_for_function("() => location.pathname === '/clasamente'")
         assert not menu.is_visible()
         # (the page stylesheet loads first, then route() marks the item)
         page.wait_for_selector("#nav-more-menu .nav-more-link[data-route='clasamente'][aria-current='page']", state="attached")

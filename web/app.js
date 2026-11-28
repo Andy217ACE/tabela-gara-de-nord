@@ -513,7 +513,7 @@
 
   // ---- routing: #istoric[?query] / #urmarite, views register in TabelaApp.views ---
 
-  var ROUTES = { "": "tabela", "#": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
+  var ROUTES = { "": "tabela", "#": "tabela", "#tabela": "tabela", "#istoric": "istoric", "#urmarite": "urmarite",
     "#ocr": "ocr", "#ocr2": "ocr2", "#admin": "admin", "#versiuni": "versiuni", "#trenuri": "trenuri", "#tren": "tren",
     "#statistici": "statistici", "#clasamente": "clasamente", "#statii": "statii", "#statie": "statie",
     "#sistem": "sistem", "#setari": "setari", "#cum": "cum", "#infofer": "infofer" };

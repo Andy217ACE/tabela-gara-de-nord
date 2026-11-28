@@ -37,7 +37,8 @@ def test_path_routes(browser, base_url, path, view):  # noqa: F811
         assert _shown(page) == [view]
         assert page.locator(".ssr").is_hidden()            # the crawler copy is hidden while the app runs
         assert _where(page) == path
-        assert page.locator('script[type="application/ld+json"]').count() == 1
+        # the seed has no trains catalog: /tren/1636 is a 404 shell there (no JSON-LD), tested in test_seo.py
+        assert page.locator('script[type="application/ld+json"]').count() == (0 if path.startswith("/tren/") else 1)
         assert not [m for m in msgs if "Content Security Policy" in m], msgs
         assert not [m for m in msgs if "404" not in m], msgs   # unknown-train page answers 404 by design
     finally:
@@ -73,28 +74,29 @@ def test_links_navigate_in_page_and_back_forward(browser, base_url):  # noqa: F8
     ctx, page, msgs = _ctx(browser, base_url)
     try:
         page.goto(base_url + "/")
-        page.wait_for_function("document.body.dataset.route === 'tabela'")
+        page.wait_for_function("() => document.body.dataset.route === 'tabela'")
         page.evaluate("window.__same = 1")
         page.click('.mainnav a[href="/statistici"]')
-        page.wait_for_function("document.body.dataset.route === 'statistici'")
+        page.wait_for_function("() => document.body.dataset.route === 'statistici'")
         assert _where(page) == "/statistici"
         page.click('.mainnav a[href="/statii"]')
-        page.wait_for_function("document.body.dataset.route === 'statii'")
+        page.wait_for_function("() => document.body.dataset.route === 'statii'")
         page.evaluate("location.hash = '#tren?nr=1636'")   # how stats.js rows navigate
-        page.wait_for_function("document.body.dataset.route === 'tren'")
+        page.wait_for_function("() => document.body.dataset.route === 'tren'")
         assert _where(page) == "/tren/1636"
         page.go_back()
-        page.wait_for_function("document.body.dataset.route === 'statii'")
+        page.wait_for_function("() => document.body.dataset.route === 'statii'")
         assert _where(page) == "/statii"
         page.go_back()
-        page.wait_for_function("document.body.dataset.route === 'statistici'")
+        page.wait_for_function("() => document.body.dataset.route === 'statistici'")
         page.go_forward()
-        page.wait_for_function("document.body.dataset.route === 'statii'")
+        page.wait_for_function("() => document.body.dataset.route === 'statii'")
         assert page.evaluate("window.__same") == 1        # never reloaded
-        page.keyboard.press("Tab")                        # skip link: stays on the page
+        page.focus(".skip-link")                          # in-page anchor: stays on the page
         page.keyboard.press("Enter")
         page.wait_for_timeout(200)
         assert page.evaluate("window.__same") == 1 and _where(page) == "/statii"
+        assert page.evaluate("document.activeElement.id") == "main"
         assert not msgs, msgs
     finally:
         ctx.close()
@@ -106,10 +108,10 @@ def test_offline_shell_on_a_path(browser, base_url):  # noqa: F811
         page.goto(base_url + "/")
         page.evaluate("navigator.serviceWorker.ready.then(() => true)")
         page.reload()
-        page.wait_for_function("!!navigator.serviceWorker.controller")
+        page.wait_for_function("() => !!navigator.serviceWorker.controller")
         ctx.set_offline(True)
         page.goto(base_url + "/clasamente")
-        page.wait_for_function("document.body.dataset.route === 'clasamente'")
+        page.wait_for_function("() => document.body.dataset.route === 'clasamente'")
         assert not page.locator("#view-clasamente").is_hidden()
     finally:
         ctx.set_offline(False)

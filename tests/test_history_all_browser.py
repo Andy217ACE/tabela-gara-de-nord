@@ -26,6 +26,9 @@ BUC = ZoneInfo("Europe/Bucharest")
 LAST = date(2026, 10, 20)
 DAYS = 210  # > several pages of 50 (Phase 1: „Încarcă încă 50”)
 
+# the route as an old-style #hash (pages have path URLs now: /istoric?date=…)
+ROUTE_JS = "location.hash || '#' + location.pathname.slice(1) + location.search"
+
 
 def _journey(c, board, no, day, t, delay, *, read=True, gone=True, station="BRASOV"):
     hh, mm = (int(x) for x in t.split(":"))
@@ -169,14 +172,14 @@ def test_day_then_train_then_all_days(browser, base_url):
         expect(page.locator("#h-results .h-row")).to_have_count(3)  # 1621 ×2 + 1731
         page.fill("#h-train", "1621")
         expect(page.locator("#h-results .h-row")).to_have_count(2)
-        assert "date=2026-10-20" in page.evaluate("location.hash")
+        assert "date=2026-10-20" in page.evaluate(ROUTE_JS)
         # combinable with the board/station filters
         page.select_option("#h-board", "departure")
         expect(page.locator("#h-results .h-row")).to_have_count(1)
         page.click("#h-alldays")
         expect(page.locator("#h-results .h-row")).to_have_count(3)  # 3 departures of 1621
         assert page.input_value("#h-date") == ""
-        assert "date=" not in page.evaluate("location.hash")
+        assert "date=" not in page.evaluate(ROUTE_JS)
         assert errors == []
     finally:
         ctx.close()
