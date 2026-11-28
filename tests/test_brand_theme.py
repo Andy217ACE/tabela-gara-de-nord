@@ -105,8 +105,8 @@ def test_manifest_icons_and_colours():
 def test_og_and_twitter_tags():
     h = html()
     want = {
-        'property="og:image" content="https://tabelacfr.ddns.net/icons/og-image.png"',
-        'property="og:url" content="https://tabelacfr.ddns.net/"',
+        'property="og:image" content="https://tabelagn.online/icons/og-image.png"',
+        'property="og:url" content="https://tabelagn.online/"',
         'property="og:locale" content="ro_RO"',
         'name="twitter:card" content="summary_large_image"',
     }

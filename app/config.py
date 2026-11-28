@@ -30,7 +30,7 @@ def get_settings() -> Settings:
         ),
         vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
         vapid_public_key=os.environ.get("VAPID_PUBLIC_KEY", ""),
-        vapid_subject=os.environ.get("VAPID_SUBJECT", "https://tabelacfr.ddns.net"),
+        vapid_subject=os.environ.get("VAPID_SUBJECT", "https://tabelagn.online"),
         tesseract_cmd=os.environ.get("TESSERACT_CMD", "tesseract"),
         poller_restart_backoff=float(os.environ.get("POLLER_RESTART_BACKOFF", "5")),
         poller_enabled=os.environ.get("POLLER_ENABLED", "1").strip().lower()

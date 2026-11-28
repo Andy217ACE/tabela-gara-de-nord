@@ -43,7 +43,7 @@ Componentele, cu fișierele lor:
 | Spike intern Infofer (temporar) | `deploy/tabela-infofer.service`, `deploy/tabela-infofer.timer` | La 3 minute, o cerere la harta Infofer într-o bază separată (`docs/administrare-operare.md`, secțiunea 16) |
 | fail2ban | `deploy/fail2ban/` | Jail-uri, filtre și scriptul `ignorecommand` (secțiunea 7.1) |
 | DNS dinamic | nu e în repo; vezi [secțiunea 9](#9-dns-dinamic-no-ip) | Ține hostname-ul pe IP-ul public curent |
-| Certificate | Let's Encrypt prin certbot; vezi [secțiunea 8](#8-certificate-tls-lets-encrypt) | TLS pentru `tabelacfr.ddns.net` |
+| Certificate | Let's Encrypt prin certbot; vezi [secțiunea 8](#8-certificate-tls-lets-encrypt) | TLS pentru `tabelagn.online` (și `tabelacfr.ddns.net`, pentru redirect); vezi [secțiunea 9.1](#91-domeniul-tabelagnonline) |
 
 Fluxul de deploy, de la commit până la verificarea de sănătate:
 
@@ -86,7 +86,7 @@ Funcția `get_settings()` din `app/config.py` construiește obiectul `Settings`.
 | `SOURCE_URL` | șir (URL) | `https://cfr.ro/gari/camereweb/index.php?statie=BucurestiNord` | Adresa de unde poller-ul ia imaginea tablei (`app/poller.py`, `fetch_board_image`). | URL HTTP(S) valid. | Se folosește implicitul, care este sursa de producție. |
 | `VAPID_PRIVATE_KEY` | **Secret** (șir base64url) | `""` | Cheia privată VAPID pentru notificările push. Format: scalarul P-256 de 32 de octeți, codat base64url fără padding (așa cum îl citesc `py_vapid` și `pywebpush`). | Ambele chei VAPID trebuie să fie setate. | Notificările push sunt dezactivate. Aplicația se pornește și scrie un avertisment în log: „VAPID keys not configured; push notifications are disabled”. |
 | `VAPID_PUBLIC_KEY` | șir (base64url) | `""` | Cheia publică VAPID, trimisă browserului pentru abonare de `GET /api/push/key` (`app/api.py`; fără cheie, ruta răspunde 404). Nu e secretă, dar se ține împreună cu cea privată. | Punctul public necomprimat P-256, codat base64url. | Ca mai sus: push dezactivat. |
-| `VAPID_SUBJECT` | șir | `https://tabelacfr.ddns.net` | Subiectul din JWT-ul VAPID. `install.sh` scrie aceeași valoare pe serverul nou. | `mailto:` sau URL `https:`. | Implicitul din cod, `.env.example` și `install.sh` au aceeași valoare; `tests/test_deploy_static.py` verifică asta. |
+| `VAPID_SUBJECT` | șir | `https://tabelagn.online` | Subiectul din JWT-ul VAPID. `install.sh` scrie aceeași valoare pe serverul nou. | `mailto:` sau URL `https:`. | Implicitul din cod, `.env.example` și `install.sh` au aceeași valoare; `tests/test_deploy_static.py` verifică asta. |
 | `TESSERACT_CMD` | șir (cale sau nume) | `tesseract` | Executabilul Tesseract, folosit prin `pytesseract` (`app/ocr/engine.py`). | Nume în `PATH` sau cale absolută. Timeout de 10 s per apel (`TESSERACT_TIMEOUT`). | Se caută `tesseract` în `PATH`. Dacă nu există, citirea OCR eșuează cu `OcrError`, iar verificarea Tesseract din administrare (`tesseract_status`, `app/admin.py`) o arată. |
 | `POLLER_RESTART_BACKOFF` | real (secunde) | `5` | Prima pauză înainte de repornirea poller-ului după un crash. Se dublează la fiecare eșec, până la `POLLER_MAX_BACKOFF` = 300 s (`app/api.py`). | Orice număr; valorile negative sunt aduse la 0 la utilizare. | Se folosește 5 s. Dacă valoarea există, dar nu e număr, `float()` ridică eroare la `get_settings()` și aplicația nu pornește. |
 | `POLLER_ENABLED` | booleană | `1` | `0` sau `false`, `no`, `off` (fără diferență între majuscule și minuscule) oprește poller-ul: aplicația servește doar ultima stare stocată. Folosit pentru dezvoltare. | `1` pornește, `0` oprește. | Poller pornit. |
@@ -97,7 +97,7 @@ Funcția `get_settings()` din `app/config.py` construiește obiectul `Settings`.
 | `WEATHER_LAT` | real (grade) | `44.4323` | Latitudinea punctului pentru prognoză. | Între `-90` și `90`. În afara intervalului se folosește implicitul. | Se folosește `44.4323`. |
 | `WEATHER_LON` | real (grade) | `26.1063` | Longitudinea punctului pentru prognoză. | Între `-180` și `180`. În afara intervalului se folosește implicitul. | Se folosește `26.1063`. |
 | `WEATHER_INTERVAL_S` | întreg (secunde) | `900` | Cât de des se cere prognoza. | Doar cifre. Minimul este `300` (`MIN_INTERVAL_S`): valorile mai mici sunt ridicate la 300. | Se folosește `900`. Valorile care nu sunt doar cifre se ignoră și se folosește implicitul. |
-| `SITE_URL` | șir (URL) | `https://tabelacfr.ddns.net` | Baza adreselor absolute din `canonical`, `hreflang`, JSON-LD, `robots.txt` și `sitemap.xml` (`app/seo.py`). | URL fără bară finală. | Se folosește implicitul. |
+| `SITE_URL` | șir (URL) | `https://tabelagn.online` | Baza adreselor absolute din `canonical`, `hreflang`, JSON-LD, `robots.txt` și `sitemap.xml` (`app/seo.py`). | URL fără bară finală. | Se folosește implicitul. |
 | `GOOGLE_SITE_VERIFICATION` | șir | gol | Adaugă `<meta name="google-site-verification">` pe pagini (Search Console, vezi [arhitectura.md](arhitectura.md) §11). | Doar valoarea `content` dată de Google. | Fără meta tag. |
 | `BING_SITE_VERIFICATION` | șir | gol | Adaugă `<meta name="msvalidate.01">` (Bing Webmaster Tools). | Doar valoarea `content` dată de Bing. | Fără meta tag. |
 
@@ -156,7 +156,7 @@ Trei surse dau valori pentru aceleași variabile. Tabelul arată diferențele.
 | `DB_PATH` | `tabela.db` (relativ) | `/var/lib/tabela/tabela.db` | `/var/lib/tabela/tabela.db` |
 | `LAST_IMAGE_PATH` | `data/last.jpg` | `/var/lib/tabela/last.jpg` | `/var/lib/tabela/last.jpg` |
 | `POLLER_ENABLED` | `1` | `1` | `1` |
-| `VAPID_SUBJECT` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` | `https://tabelacfr.ddns.net` |
+| `VAPID_SUBJECT` | `https://tabelagn.online` | `https://tabelagn.online` | `https://tabelagn.online` |
 | `REJECTED_DIR` | `/var/lib/tabela/rejected` | absentă (se folosește implicitul) | `/var/lib/tabela/rejected` |
 | `CAPTURE_DIR` | `/var/lib/tabela/captures` (dacă directorul există) | absentă; `update.sh` o adaugă | `/var/lib/tabela/captures` |
 | `CAPTURE_RETENTION_DAYS` | `7` | absentă | `7` |
@@ -199,7 +199,7 @@ Pașii, în ordinea din cod:
 4. **Utilizator și directoare.** Creează utilizatorul de sistem `tabela` (fără login, `nologin`, directorul home `/var/lib/tabela`), dacă nu există. Creează `/opt/tabela` (`root:root`, `755`) și `/var/lib/tabela` (`tabela:tabela`, `750`).
 5. **Codul.** Dacă `/opt/tabela/app` nu e un repo git, face `git clone --branch <branch>`. Dacă există, face `git fetch --prune origin <branch>` și `git checkout -B <branch> origin/<branch>`. Afișează ultimul commit.
 6. **Venv.** Creează `/opt/tabela/venv` dacă nu există, face upgrade la `pip`, apoi `pip install -r requirements.txt`.
-7. **Fișierul de configurare.** Dacă `/etc/tabela.env` nu există, îl creează cu `umask 077` și patru linii: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED=1`, `VAPID_SUBJECT=https://tabelacfr.ddns.net`. Apoi setează `root:root` și `600`.
+7. **Fișierul de configurare.** Dacă `/etc/tabela.env` nu există, îl creează cu `umask 077` și patru linii: `DB_PATH`, `LAST_IMAGE_PATH`, `POLLER_ENABLED=1`, `VAPID_SUBJECT=https://tabelagn.online`. Apoi setează `root:root` și `600`.
 8. **Migrarea unei instalări vechi.** Dacă lipsește `LAST_IMAGE_PATH`, o adaugă (cu rescriere atomă a fișierului).
 9. **Chei VAPID.** Dacă nu există `VAPID_PRIVATE_KEY` cu valoare, generează o pereche P-256 și scrie ambele chei. Dacă există cheia privată, dar lipsește cea publică, o derivă din cea privată. Cheia privată existentă nu se regenerează niciodată, pentru că ar invalida toate abonările push existente (motivul este scris în comentariul scriptului și în README). Din tot scriptul, doar cheia publică se afișează.
 10. **systemd, serviciul principal.** Copiază `deploy/tabela.service` în `/etc/systemd/system/`, face `daemon-reload`, `enable`, apoi `restart` pe `tabela`.
@@ -210,7 +210,7 @@ Pașii, în ordinea din cod:
     - Dacă eșuează, restaurează copiile de backup (sau șterge fișierele, la prima instalare), rulează din nou `nginx -t` și reîncarcă, apoi iese cu cod `1`.
 13. **Verificarea de sănătate.** Până la 90 de încercări, la fiecare 2 secunde (în total, cam 180 s), cere `http://127.0.0.1:8000/api/health` și caută `"ok":true`. Dacă reușește, afișează „healthy after ... s” și iese cu `0`. Dacă nu, afișează „not healthy after 180 s; see: journalctl -u tabela -n 100” și iese cu `1`. Spre deosebire de `update.sh`, **nu** face rollback.
 
-Concluzie practică: primul `install.sh` cere ca certificatele Let's Encrypt să existe deja, pentru că fișierul nginx din repo referă `/etc/letsencrypt/live/tabelacfr.ddns.net/`. Fără ele, `nginx -t` eșuează și scriptul șterge site-ul pe care tocmai l-a instalat.
+Concluzie practică: primul `install.sh` cere ca certificatele Let's Encrypt să existe deja, pentru că fișierul nginx din repo referă `/etc/letsencrypt/live/tabelagn.online/` și `/etc/letsencrypt/live/tabelacfr.ddns.net/`. Fără ele, `nginx -t` eșuează și scriptul șterge site-ul pe care tocmai l-a instalat.
 
 ## 4. update.sh, pas cu pas
 
@@ -401,8 +401,9 @@ Valorile pentru `tabela.service` sunt alese cu rezervă, fără o măsurătoare 
 
 Fișier: `deploy/nginx-tabela.conf`, instalat ca `/etc/nginx/sites-available/tabela` și legat în `sites-enabled`. Blocurile de server:
 
-- **Serverul HTTPS** (`listen 443 ssl` și `listen [::]:443 ssl ipv6only=on`), pentru `tabelacfr.ddns.net`. Certificatele sunt în `/etc/letsencrypt/live/tabelacfr.ddns.net/`. Include `/etc/letsencrypt/options-ssl-nginx.conf` și `ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem`, deci versiunile de TLS și cifrurile sunt cele din fișierele certbot. Nesigur: conținutul acestor fișiere nu e în repo; verifică pe server cu `cat /etc/letsencrypt/options-ssl-nginx.conf`.
-- **Serverul HTTP** (`listen 80`, `server_name tabelacfr.ddns.net`): redirecționează cu `301` spre HTTPS când `Host` este `tabelacfr.ddns.net`; în rest răspunde `404` (`return 404`). Cererile cu alt `Host` nu ajung la acest bloc decât dacă nginx le alege ca server implicit. Liniile sunt marcate „managed by Certbot”.
+- **Serverul HTTPS** (`listen 443 ssl` și `listen [::]:443 ssl ipv6only=on`), pentru `tabelagn.online`. Certificatele sunt în `/etc/letsencrypt/live/tabelagn.online/`. Include `/etc/letsencrypt/options-ssl-nginx.conf` și `ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem`, deci versiunile de TLS și cifrurile sunt cele din fișierele certbot. Nesigur: conținutul acestor fișiere nu e în repo; verifică pe server cu `cat /etc/letsencrypt/options-ssl-nginx.conf`.
+- **Redirect-urile HTTPS**: `www.tabelagn.online` și `tabelacfr.ddns.net` răspund `301` spre `https://tabelagn.online` cu aceeași cale (vechiul domeniu păstrează fișierele de verificare Google/Bing; vezi secțiunea 9.1).
+- **Serverul HTTP** (`listen 80`, toate numele și IP-urile LAN): `301` spre `https://tabelagn.online`, cu excepția `/.well-known/acme-challenge/` (reînnoirea certificatelor).
 
 Setări în serverul HTTPS:
 
@@ -465,7 +466,7 @@ Serverul de producție este serverul de acasă (Ubuntu 26.04 LTS), nu o mașină
 
 | Port | Cine are acces | Motiv |
 |---|---|---|
-| 80 (TCP) | internetul | Redirecționare spre HTTPS pentru `tabelacfr.ddns.net` și `404` pentru restul cererilor HTTP din acest bloc (`listen 80` în `nginx-tabela.conf`) |
+| 80 (TCP) | internetul | Redirecționare `301` spre `https://tabelagn.online` și provocările ACME (`listen 80` în `nginx-tabela.conf`) |
 | 443 (TCP) | internetul | Site-ul HTTPS |
 | 22 (TCP, SSH) | doar rețeaua locală `192.168.1.0/24` | Administrare |
 | 3389 (TCP, RDP) | doar rețeaua locală `192.168.1.0/24` | Administrare |
@@ -483,13 +484,24 @@ HSTS (`max-age=31536000`) și limitele `limit_req` (`tabela_api` 10 cereri/s, bu
 
 ## 8. Certificate TLS (Let's Encrypt)
 
-- Certificatele sunt emise de Let's Encrypt, cu certbot. Calea lor este `/etc/letsencrypt/live/tabelacfr.ddns.net/` (`fullchain.pem` și `privkey.pem`).
+- Certificatele sunt emise de Let's Encrypt, cu certbot. Sunt două: `/etc/letsencrypt/live/tabelagn.online/` și `/etc/letsencrypt/live/tabelacfr.ddns.net/` (`fullchain.pem` și `privkey.pem`); vezi secțiunea 9.1.
 - Liniile marcate „managed by Certbot” din `deploy/nginx-tabela.conf` sunt scrise de certbot. Comentariul din fișier cere să rămână așa: `certbot renew` modifică doar fișierele din `/etc/letsencrypt`.
 - Reînnoirea este automată, prin `certbot.timer`, unitatea pe care o instalează pachetul certbot. README spune asta. Nesigur: frecvența exactă și comanda de verificare nu sunt în repo. Verifică cu `systemctl list-timers | grep certbot` și cu `sudo certbot renew --dry-run`.
 - Dacă reînnoirea eșuează, certificatul expiră după aproximativ 90 de zile de la emitere (regula Let's Encrypt). Nesigur: nu există în repo o alertă pentru expirare.
 - Schimbarea certificatului nu cere `update.sh`. Pentru a reîncărca nginx după o reînnoire manuală: `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## 9. DNS dinamic (No-IP)
+
+### 9.1 Domeniul tabelagn.online
+
+Adresa oficială este `https://tabelagn.online`. Numele vechi `tabelacfr.ddns.net` rămâne în funcțiune, doar ca țintă DNS și ca redirect.
+
+- **DNS.** Domeniul e înregistrat la GoDaddy, cu nameserverele schimbate pe Cloudflare. În Cloudflare: `CNAME @ → tabelacfr.ddns.net` și `CNAME www → tabelacfr.ddns.net` (Cloudflare aplatizează CNAME-ul de la apex). `tabelacfr.ddns.net` e actualizat în continuare de No-IP (mai jos), deci domeniul nou urmează IP-ul dinamic fără altă configurare.
+- **„DNS only” (norișor gri), nu proxy.** Cu proxy-ul Cloudflare (norișor portocaliu), nginx ar vedea IP-urile Cloudflare în loc de ale vizitatorilor: fail2ban ar bana Cloudflare, iar limitele `limit_req` (pe `$binary_remote_addr`) ar fi comune tuturor vizitatorilor.
+- **Certificate.** Două certificate Let's Encrypt: `/etc/letsencrypt/live/tabelagn.online/` (pentru `tabelagn.online` și `www.tabelagn.online`) și cel vechi, `/etc/letsencrypt/live/tabelacfr.ddns.net/`, care trebuie păstrat cât timp vechiul domeniu servește redirect-ul pe HTTPS. Reînnoirea trece prin portul 80: blocul HTTP lasă `/.well-known/acme-challenge/` servit din `/var/www/html` (webroot); certificatul emis cu pluginul nginx își face singur configurația temporară. Verificare: `sudo certbot renew --dry-run`.
+- **Redirect-uri** (`deploy/nginx-tabela.conf`, toate `301`, cu aceeași cale): `www.tabelagn.online` → `https://tabelagn.online`; `tabelacfr.ddns.net` (80 și 443) → `https://tabelagn.online`; orice cerere HTTP (inclusiv pe IP-urile LAN `192.168.1.150`/`.149`) → `https://tabelagn.online`. Excepții: `/.well-known/acme-challenge/` (pe 80) și fișierele de verificare `/googled34693806887f80a.html` și `/BingSiteAuth.xml`, servite în continuare pe vechiul domeniu, pentru că „Schimbarea adresei” din Search Console cere ca vechiul site să rămână verificat.
+
+### 9.2 Updaterul No-IP
 
 Stare: updaterul DNS dinamic (unitatea numită `tabela-noip` în notele de operare, de verificat pe server) **nu este în repo** și **nu este instalat de `update.sh`**. A fost instalat manual pe server. Nu există nimic în repo despre el: nici fișier de unitate, nici script, nici credențiale. Acest lucru este deliberat, pentru că un updater de DNS are nevoie de credențiale care nu se pun în git.
 
@@ -523,7 +535,7 @@ Fiecare deploy aduce o versiune nouă. Schema versiunilor: `Beta 1.NN`, unde `NN
 8. **Tag**: `beta-1.NN` pe commit-ul publicat (convenția e folosită de la `beta-1.01`). Niciun script sau workflow din repo nu creează tag-ul; se creează manual.
 9. **Release pe GitHub**: fiecare versiune are un Release `Beta 1.NN` pe tag-ul `beta-1.NN`, cu notele din CHANGELOG. Se publică manual (de exemplu `gh release create`); niciun workflow nu îl creează.
 10. **Deploy pe server**: `sudo bash /opt/tabela/app/deploy/update.sh [branch]`. La final, scriptul afișează `OK: <PREV> -> <NEW> (Beta 1.NN)`.
-11. **Verificare post-deploy**: `curl -s http://127.0.0.1:8000/api/health` pe server, câmpul `version` trebuie să fie noua versiune, iar `ok` trebuie să fie `true`. Verificarea din exterior: `https://tabelacfr.ddns.net`, footerul afișează versiunea.
+11. **Verificare post-deploy**: `curl -s http://127.0.0.1:8000/api/health` pe server, câmpul `version` trebuie să fie noua versiune, iar `ok` trebuie să fie `true`. Verificarea din exterior: `https://tabelagn.online`, footerul afișează versiunea.
 
 Ce teste protejează regulile de release:
 

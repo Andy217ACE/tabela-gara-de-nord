@@ -10,7 +10,7 @@ from app.config import get_settings
 
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY = ROOT / "deploy"
-PROD_VAPID_SUBJECT = "https://tabelacfr.ddns.net"
+PROD_VAPID_SUBJECT = "https://tabelagn.online"
 
 
 def _read(p: Path) -> str:
@@ -171,3 +171,20 @@ def test_ops_alerts_timer_runs_every_five_minutes():
     svc = _unit_section(_read(DEPLOY / "tabela-ops-alerts.service"), "Service")
     assert "User=tabela" in svc and "EnvironmentFile=/etc/tabela.env" in svc
     assert any(l.startswith("ExecStart=") and "scripts/ops_alerts.py" in l for l in svc)
+
+
+# -- domeniul oficial tabelagn.online; vechiul domeniu doar redirecționează ------------------
+def test_nginx_redirects_to_official_domain():
+    conf = _read(DEPLOY / "nginx-tabela.conf")
+    blocks = conf.split("\nserver {")
+    by_name = {re.search(r"server_name ([^;]+);", b).group(1): b for b in blocks[1:]}
+    assert "proxy_pass" in by_name["tabelagn.online"]
+    for name in ("www.tabelagn.online", "tabelacfr.ddns.net"):
+        assert "return 301 https://tabelagn.online$request_uri;" in by_name[name], name
+    old = by_name["tabelacfr.ddns.net"]
+    for f in ("/googled34693806887f80a.html", "/BingSiteAuth.xml"):  # Search Console: vechiul site rămâne verificat
+        assert f"location = {f} {{" in old, f
+    http = next(b for b in by_name.values() if "listen 80;" in b)
+    assert "location /.well-known/acme-challenge/ {" in http
+    assert "return 301 https://tabelagn.online$request_uri;" in http
+    assert conf.count("ipv6only=on") == 1  # nginx refuză opțiunea dublată pe [::]:443

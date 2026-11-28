@@ -137,7 +137,7 @@ celelalte greutăți se încarcă la cerere. Bugetul de precache: ≤ 650 KB nec
 
 ## 9. Verificare
 
-- `python scripts/contrast_audit.py <url> [--api-from https://tabelacfr.ddns.net]` — toate
+- `python scripts/contrast_audit.py <url> [--api-from https://tabelagn.online]` — toate
   ecranele, ambele teme; ieșire ≠ 0 la orice text sub prag.
 - `tests/test_contrast_browser.py` — același audit în suita de teste (1280 și 390 px, dark+light).
 - `node …/validate-tokens.cjs -d web` — culori brute doar în stratul primitiv.

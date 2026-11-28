@@ -6,7 +6,7 @@ and composes the effective background from the element up to <html> (background-
 alpha, element opacity included), then computes the contrast ratio. Normal text needs
 >= 4.5:1, large text (>= 24 px, or >= 18.66 px bold) >= 3:1.
 
-    python scripts/contrast_audit.py https://tabelacfr.ddns.net            # all routes, both themes
+    python scripts/contrast_audit.py https://tabelagn.online            # all routes, both themes
     python scripts/contrast_audit.py http://127.0.0.1:8000 --routes "#,#istoric" --themes dark
 
 Exit code 1 when anything fails. Requires Playwright + Chromium (dev dependency).

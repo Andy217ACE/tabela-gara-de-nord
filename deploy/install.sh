@@ -72,7 +72,7 @@ if [ ! -f "$ENV_FILE" ]; then
 DB_PATH=$DATA_DIR/tabela.db
 LAST_IMAGE_PATH=$DATA_DIR/last.jpg
 POLLER_ENABLED=1
-VAPID_SUBJECT=https://tabelacfr.ddns.net
+VAPID_SUBJECT=https://tabelagn.online
 ENV
 fi
 chown root:root "$ENV_FILE"
