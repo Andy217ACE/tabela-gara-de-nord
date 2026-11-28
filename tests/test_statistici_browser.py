@@ -197,6 +197,16 @@ def test_filters_go_to_url_and_reload(browser, base_url):
         page.wait_for_selector(".ss-kpi")
         assert page.is_checked(".ss-seg-opt:has-text('Plecări') input")
         assert page.input_value("#ss-tip") == "IR"
+        # „Fără aeroport”: on by default (not in the URL, note shown); off -> fara_aeroport=0
+        assert page.is_checked("#ss-fara-aeroport")
+        expect(page.locator(".ss-airport-note")).to_have_count(1)
+        assert "fara_aeroport" not in page.evaluate(ROUTE_JS)
+        page.uncheck("#ss-fara-aeroport")
+        expect(page.locator(".ss-airport-note")).to_have_count(0)
+        assert "fara_aeroport=0" in page.evaluate(ROUTE_JS)
+        page.reload()
+        page.wait_for_selector(".ss-kpi")
+        assert not page.is_checked("#ss-fara-aeroport")
         assert errors == []
     finally:
         ctx.close()

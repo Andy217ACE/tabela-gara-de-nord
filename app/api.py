@@ -622,7 +622,7 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     @app.get("/api/stats/seasons", include_in_schema=False)
     async def stats_seasons(request: Request, format: str = "json"):
         # Comparație sezoane și meteo (Val 5a); parametrii ca la /api/stats/overview.
-        p = stats_api.params(request)
+        p = stats_api.stats_params(request)
         d = await run_in_threadpool(seasons.overview, store_of(request), p)
         if format == "csv":
             return Response(content=("﻿" + seasons.to_csv(d)).encode("utf-8"),
@@ -738,11 +738,11 @@ def create_app(settings: Settings | None = None, start_poller: bool = True) -> F
     def _query(request: Request) -> str:
         return "?" + request.url.query if request.url.query else ""
 
-    @app.get("/robots.txt", include_in_schema=False)
+    @app.api_route("/robots.txt", methods=["GET", "HEAD"], include_in_schema=False)
     def robots():
         return Response(seo.robots_txt(), media_type="text/plain; charset=utf-8")
 
-    @app.get("/sitemap.xml", include_in_schema=False)
+    @app.api_route("/sitemap.xml", methods=["GET", "HEAD"], include_in_schema=False)
     def sitemap(request: Request):
         body = seo.cached(seo_cache, ("sitemap",), seo.TTL_DATA, lambda: seo.sitemap_xml(store_of(request)))
         return Response(body, media_type="application/xml; charset=utf-8")
