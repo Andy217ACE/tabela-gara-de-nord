@@ -184,7 +184,7 @@ def test_nginx_redirects_to_official_domain():
     old = by_name["tabelacfr.ddns.net"]
     for f in ("/googled34693806887f80a.html", "/BingSiteAuth.xml"):  # Search Console: vechiul site rămâne verificat
         assert f"location = {f} {{" in old, f
-    http = next(b for n, b in by_name.items() if "tabelacfr.ddns.net" in n.split() and "listen 80;" in b)
+    http = next(b for b in by_name.values() if "listen 80;" in b)
     assert "location /.well-known/acme-challenge/ {" in http
     assert "return 301 https://tabelagn.online$request_uri;" in http
     assert conf.count("ipv6only=on") == 1  # nginx refuză opțiunea dublată pe [::]:443
