@@ -754,7 +754,7 @@
     return a;
   }
 
-  // Butonul „urmărește" (notificări) din rând — logica e în follows.js (TabelaApp.onFollow).
+  // Butonul „Alertă" (notificări) din rând — logica e în follows.js (TabelaApp.onFollow).
   function followButton(t) {
     var App = window.TabelaApp;
     if (!App || typeof App.onFollow !== "function") return null;
@@ -1002,8 +1002,9 @@
     acts.append(hist, favBtn);
     if (window.TabelaApp && typeof window.TabelaApp.onFollow === "function") {
       var on = !!(fst && fst.followed);
-      var follow = button("", on ? "panel.followBtn.on" : "panel.followBtn.off", ICONS.bell);
+      var follow = button("pnl-alert", on ? "panel.followBtn.on" : "panel.followBtn.off", ICONS.bell);
       follow.setAttribute("aria-pressed", on ? "true" : "false");
+      follow.setAttribute("aria-label", T(on ? "panel.followAria.on" : "panel.followAria.off", { no: t.train_no }));
       if (fst && fst.unsupported) { follow.setAttribute("aria-disabled", "true"); follow.title = fst.reason; }
       follow.addEventListener("click", function () { window.TabelaApp.onFollow(t, follow); });
       acts.appendChild(follow);

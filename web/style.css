@@ -1108,7 +1108,7 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
   padding: 4px 10px 4px 8px;
   border: 1px solid var(--btn-border);
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--border);
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-sm);
@@ -1116,7 +1116,7 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
 }
-.follow:hover { color: var(--text); border-color: var(--field-border); background: var(--btn-hover); }
+.follow:hover { color: var(--text); border-color: var(--field-border); background: var(--border-strong); }
 .follow svg {
   width: 15px;
   height: 15px;
@@ -1126,9 +1126,14 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.follow[aria-pressed="true"] {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+/* „Alertă" pornită: verdele de „la timp" (--ok) plin + clopoțel plin; oprită: gri plin, clopoțel gol */
+.follow[aria-pressed="true"],
+.follow[aria-pressed="true"]:hover { color: var(--surface); background: var(--ok); border-color: var(--ok); }
+.follow[aria-pressed="true"] svg { fill: currentColor; }
+/* telefoane foarte înguste: rămâne doar clopoțelul (aria-label îl descrie) */
+@media (max-width: 339px) {
+  .follow { justify-content: center; padding-inline: 8px; }
+  .follow > span { display: none; }
 }
 /* phone: touch target ≥ 44 px; the extra height is taken back with negative margins so the
    card keeps its layout */
@@ -1940,6 +1945,7 @@ html[data-deeplink] #view-tabela { display: none; }   /* theme-init.js: another 
 
 @media (forced-colors: active) {
   .live-dot, .plat, .type, .delay, .follow, .tab[aria-selected="true"] { border: 1px solid CanvasText; }
+  .follow[aria-pressed="true"] { background: Highlight; color: HighlightText; }
   .nav-item[aria-current="page"] { border-bottom: 2px solid CanvasText; }
 }
 
