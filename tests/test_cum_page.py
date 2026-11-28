@@ -49,7 +49,7 @@ def test_cum_page_in_both_languages(browser, base_url, lang, title, h2):  # noqa
         page.goto(base_url + "/?lang=" + lang + "#cum")
         page.wait_for_selector("#view-cum:not([hidden]) h2")
         assert page.evaluate(VISIBLE_H1) == [title]
-        assert page.title().startswith(title)
+        page.wait_for_function("t => document.title === t", arg=page.request.get(base_url + "/api/meta?path=/cum&lang=" + lang).json()["title"])  # titlul serverului (/api/meta)
         assert h2 in page.inner_text("#view-cum")
         assert page.locator("#view-cum h2").count() == 7
         assert page.locator("#view-cum .cum-step").count() == 4
