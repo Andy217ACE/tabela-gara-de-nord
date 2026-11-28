@@ -1040,6 +1040,8 @@
   }
 
   function init() {
+    var ssr = document.querySelector(".ssr");   // the server-rendered copy for crawlers (app/seo.py)
+    if (ssr) ssr.remove();
     initMoreNav();   // before initLang: its links get the dictionary texts too
     initLang();
     initPeronEst();

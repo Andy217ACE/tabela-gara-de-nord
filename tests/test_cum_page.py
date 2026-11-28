@@ -16,7 +16,7 @@ def test_static_route_lazy_footer_and_i18n():
     for name in ("VIEWS", "TITLES"):  # registered last, as a view and with a page title
         assert re.search(r'var %s = \[[^\]]*"cum"\]' % name, app), name
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    assert 'href="#cum" data-i18n="footer.how"' in html
+    assert 'href="/cum" data-i18n="footer.how"' in html
     js = (WEB / "cum.js").read_text(encoding="utf-8")
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", ".style.", "cssText"):
         assert bad not in js, bad
@@ -55,7 +55,7 @@ def test_cum_page_in_both_languages(browser, base_url, lang, title, h2):  # noqa
         assert page.locator("#view-cum .cum-step").count() == 4
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
         # leaving the page hides it again (route in VIEWS)
-        page.goto(base_url + "/?lang=" + lang + "#sistem")
+        page.evaluate("() => { location.hash = '#sistem'; }")   # in-app (the page is at /cum now)
         page.wait_for_function("() => document.getElementById('view-cum').hidden")
         assert errors == []
     finally:
@@ -68,7 +68,7 @@ def test_footer_link_opens_cum(browser, base_url):  # noqa: F811
     page = ctx.new_page()
     try:
         page.goto(base_url + "/")
-        page.click("footer a[href='#cum']")
+        page.click("footer a[href='/cum']")
         page.wait_for_selector("#view-cum:not([hidden]) h1")
         assert page.evaluate(VISIBLE_H1) == ["Cum funcționează?"]
     finally:
